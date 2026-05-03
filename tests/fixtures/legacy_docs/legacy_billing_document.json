@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "title": "Legacy Billing"
+  },
+  "roles": [
+    {
+      "id": "R9",
+      "name": "财务"
+    }
+  ],
+  "processes": [
+    {
+      "id": "P1",
+      "name": "结算",
+      "tasks": [
+        {
+          "id": "T1",
+          "name": "对账",
+          "role_id": "R9",
+          "steps": [
+            {
+              "name": "拉取流水",
+              "type": "Query"
+            }
+          ],
+          "entity_ops": [
+            {
+              "entity_id": "E1",
+              "ops": [
+                "R"
+              ]
+            }
+          ],
+          "rules_note": "需要复核"
+        }
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "id": "E1",
+      "name": "对账单",
+      "fields": [
+        {
+          "name": "账单号",
+          "type": "id",
+          "pk": true
+        },
+        {
+          "name": "结算状态",
+          "type": "enum",
+          "is_status": true,
+          "note": "待处理/已完成"
+        }
+      ],
+      "state_transitions": [
+        {
+          "from": "待处理",
+          "to": "已完成",
+          "action": "确认结算"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "from": "E1",
+      "to": "E1",
+      "type": "1:1",
+      "label": "关联"
+    }
+  ],
+  "rules": [
+    {
+      "name": "必须复核",
+      "description": "结算前必须复核"
+    }
+  ],
+  "language": [
+    {
+      "term": "结算",
+      "definition": "完成账务确认"
+    }
+  ]
+}

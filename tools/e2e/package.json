@@ -1,0 +1,13 @@
+{
+  "name": "blm-e2e",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:demo": "playwright test --config=playwright.demo.config.js",
+    "install:browser": "playwright install chromium",
+    "capture:docs": "node scripts/capture-doc-screenshots.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}

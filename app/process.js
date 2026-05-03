@@ -1,0 +1,4842 @@
+'use strict';
+
+const DEFAULT_PROC_ROLE_COLOR = {
+  fill: '#ffffff',
+  stroke: '#cbd5e1',
+  color: '#334155',
+};
+
+function buildTaskRoleColorMap(tasks) {
+  const roleMap = {};
+  let colorIdx = 0;
+  for(const task of tasks) {
+    for(const roleName of getTaskRoleNames(task)) {
+      if(roleName && !(roleName in roleMap)) {
+        roleMap[roleName] = colorIdx % ROLE_COLORS.length;
+        colorIdx += 1;
+      }
+    }
+  }
+  return roleMap;
+}
+
+function getTaskPrimaryRoleStyle(task, roleMap) {
+  const primaryRoleName = getTaskRoleNames(task)[0] || '';
+  if(primaryRoleName && roleMap[primaryRoleName] !== undefined) {
+    return ROLE_COLORS[roleMap[primaryRoleName]];
+  }
+  return DEFAULT_PROC_ROLE_COLOR;
+}
+
+function renderTaskRoleChips(roleNames, roleMap, className = 'pf-role-chip') {
+  return roleNames.map((roleName) => {
+    const color = roleMap[roleName] !== undefined ? ROLE_COLORS[roleMap[roleName]] : DEFAULT_PROC_ROLE_COLOR;
+    return `<span class="${className}"
+      style="background:${color.fill};border-color:${color.stroke};color:${color.color}">${esc(roleName)}</span>`;
+  }).join('');
+}
+
+function buildProcMermaid(proc) {
+  const tasks = getProcNodes(proc);
+  if(!tasks.length) return null;
+
+  const roleMap = buildTaskRoleColorMap(tasks);
+
+  const lines = ['flowchart LR'];
+  Object.values(roleMap).forEach(idx => {
+    const c = ROLE_COLORS[idx];
+    lines.push(`  classDef rc${idx} fill:${c.fill},stroke:${c.stroke},color:${c.color},stroke-width:2px`);
+  });
+  lines.push(`  classDef rcDefault fill:${DEFAULT_PROC_ROLE_COLOR.fill},stroke:${DEFAULT_PROC_ROLE_COLOR.stroke},color:${DEFAULT_PROC_ROLE_COLOR.color},stroke-width:2px`);
+  lines.push('  classDef startEnd fill:#f1f5f9,stroke:#94a3b8,color:#475569');
+  lines.push('  classDef entTag fill:#f8fafc,stroke:#cbd5e1,color:#64748b,font-size:11px');
+  lines.push('  Start([开始]):::startEnd');
+
+  for(const [index, t] of tasks.entries()) {
+    const name = (t.name||'').replace(/"/g,"'");
+    const roleNames = getTaskRoleNames(t);
+    let label = `${name}`;
+    if(roleNames.length) label += `\\n(${roleNames.join(' / ')})`;
+    const primaryRoleName = roleNames[0] || '';
+    const ci = primaryRoleName ? roleMap[primaryRoleName] : undefined;
+    lines.push(`  ${t.id}["${label}"]:::${ci === undefined ? 'rcDefault' : `rc${ci}`}`);
+    if(t.repeatable && index > 0) {
+      lines.push(`  ${t.id} -.-> ${tasks[index - 1].id}`);
+    }
+    /* 实体标签：横向附注（MD 导出用，不影响 app 内实时图） */
+    const eops = (t.entity_ops||[]).filter(eo=>eo.ops?.length);
+    if(eops.length) {
+      const tag = eops.map(eo=>`${getEntityName(eo.entity_id).replace(/"/g,"'")}·${(eo.ops||[]).join('')}`).join('  ');
+      lines.push(`  et_${t.id}(["${tag}"]):::entTag`);
+      lines.push(`  ${t.id} -.-> et_${t.id}`);
+    }
+  }
+
+  lines.push('  End([结束]):::startEnd');
+  lines.push('  '+['Start',...tasks.map(t=>t.id),'End'].join(' --> '));
+  return lines.join('\n');
+}
+
+const PROC_RETURN_LINE_OFFSET = 20;
+const PROC_RETURN_START_RATIO = 0.25;
+const PROC_RETURN_END_RATIO = 0.75;
+
+function renderProcReturnLines(wrap, tasks, overlayKey) {
+  if(!wrap) return;
+  const hasReturn = tasks.some((task, index) => index > 0 && task?.repeatable);
+  if(!hasReturn) {
+    wrap.classList.remove('pf-wrap-has-return');
+    return;
+  }
+  wrap.classList.add('pf-wrap-has-return');
+  const wrapRect = wrap.getBoundingClientRect();
+  if(!wrapRect.width || !wrapRect.height) return;
+
+  const cols = Array.from(wrap.querySelectorAll('.pf-col[data-id]'));
+  const returnSpecs = [];
+
+  for(let index = 1; index < tasks.length; index++) {
+    const task = tasks[index];
+    if(!task?.repeatable) continue;
+    const currentCol = cols[index];
+    const prevCol = cols[index - 1];
+    const currentTask = currentCol?.querySelector('.pf-task');
+    const prevTask = prevCol?.querySelector('.pf-task');
+    if(!currentTask || !prevTask) continue;
+
+    const currentRect = currentTask.getBoundingClientRect();
+    const prevRect = prevTask.getBoundingClientRect();
+    const startX = currentRect.left - wrapRect.left + currentRect.width * PROC_RETURN_START_RATIO;
+    const startY = currentRect.top - wrapRect.top;
+    const endX = prevRect.left - wrapRect.left + prevRect.width * PROC_RETURN_END_RATIO;
+    const endY = prevRect.top - wrapRect.top;
+    const laneY = Math.max(10, Math.min(startY, endY) - PROC_RETURN_LINE_OFFSET);
+    returnSpecs.push({
+      from: task.id,
+      to: tasks[index - 1].id,
+      points: [
+        `${startX},${startY}`,
+        `${startX},${laneY}`,
+        `${endX},${laneY}`,
+        `${endX},${endY}`,
+      ].join(' '),
+    });
+  }
+
+  if(!returnSpecs.length) {
+    wrap.classList.remove('pf-wrap-has-return');
+    return;
+  }
+
+  const markerId = `pf-return-arrow-${String(overlayKey || 'default').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const overlay = document.createElementNS(svgNs, 'svg');
+  overlay.setAttribute('class', 'pf-return-overlay');
+  overlay.setAttribute('width', String(wrap.scrollWidth));
+  overlay.setAttribute('height', String(wrap.scrollHeight));
+  overlay.setAttribute('viewBox', `0 0 ${wrap.scrollWidth} ${wrap.scrollHeight}`);
+  overlay.setAttribute('aria-hidden', 'true');
+
+  const defs = document.createElementNS(svgNs, 'defs');
+  const marker = document.createElementNS(svgNs, 'marker');
+  marker.setAttribute('id', markerId);
+  marker.setAttribute('markerWidth', '10');
+  marker.setAttribute('markerHeight', '8');
+  marker.setAttribute('refX', '8');
+  marker.setAttribute('refY', '4');
+  marker.setAttribute('orient', 'auto');
+  marker.setAttribute('markerUnits', 'strokeWidth');
+  const arrowPath = document.createElementNS(svgNs, 'path');
+  arrowPath.setAttribute('d', 'M0,0 L8,4 L0,8');
+  arrowPath.setAttribute('fill', 'none');
+  arrowPath.setAttribute('stroke', '#94a3b8');
+  arrowPath.setAttribute('stroke-width', '1.7');
+  arrowPath.setAttribute('stroke-linecap', 'round');
+  arrowPath.setAttribute('stroke-linejoin', 'round');
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  overlay.appendChild(defs);
+
+  for(const spec of returnSpecs) {
+    const line = document.createElementNS(svgNs, 'polyline');
+    line.setAttribute('class', 'pf-return-line');
+    line.setAttribute('data-from', spec.from);
+    line.setAttribute('data-to', spec.to);
+    line.setAttribute('points', spec.points);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('marker-end', `url(#${markerId})`);
+    overlay.appendChild(line);
+  }
+
+  wrap.appendChild(overlay);
+}
+
+function syncTaskReturnableToggle(root = document) {
+  const toggle = root.querySelector('[data-testid="task-returnable-toggle"]');
+  if(!toggle) return;
+  const label = toggle.closest('label');
+  if(!label) return;
+
+  for(const node of Array.from(label.childNodes)) {
+    if(node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+      node.textContent = ' ';
+    }
+  }
+
+  let title = label.querySelector('.task-returnable-label');
+  if(!title) {
+    title = document.createElement('span');
+    title.className = 'task-returnable-label';
+    label.insertBefore(title, toggle);
+  }
+  title.textContent = '\u53ef\u9000\u56de';
+
+  const helper = Array.from(label.querySelectorAll('span'))
+    .find((item) => !item.classList.contains('task-returnable-label'));
+  if(helper) {
+    helper.classList.add('task-returnable-hint');
+    helper.textContent = '\u5f53\u524d\u8282\u70b9\u5141\u8bb8\u9000\u56de\u4e0a\u4e00\u8282\u70b9\u91cd\u65b0\u5904\u7406';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROCESS FLOW — 自定义 HTML 渲染器（不依赖 Mermaid）
+   布局：任务横向直线 + 实体在任务正下方垂直虚线连接
+═══════════════════════════════════════════════════════════ */
+function renderProcFlow(containerId, proc, onClickMap) {
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const tasks = getProcNodes(proc);
+  if(!tasks.length) { el.innerHTML=`<div class="diag-empty">暂无节点，点击上方"添加节点"</div>`; initZoom(containerId); return; }
+
+  /* 角色→颜色 */
+  const roleMap = buildTaskRoleColorMap(tasks);
+
+  let h = '<div class="pf-wrap">';
+  h += `<div class="pf-se">开始</div>`;
+
+  for(const t of tasks) {
+    const roleNames = getTaskRoleNames(t);
+    const c = getTaskPrimaryRoleStyle(t, roleMap);
+    const eops = (t.entity_ops||[]).filter(eo=>eo.ops?.length);
+    const clickable = onClickMap?.[t.id] ? ' pf-clickable' : '';
+    const multiRoleClass = roleNames.length > 1 ? ' pf-task-multi-role' : '';
+
+    h += `<div class="pf-arrow">→</div>`;
+    h += `<div class="pf-col" data-id="${t.id}">`;
+    /* 流程节点 */
+    h += `<div class="pf-task${clickable}${multiRoleClass}" data-id="${t.id}"
+      style="background:${c.fill};border-color:${c.stroke};color:${c.color}">`;
+    h += `<div class="pf-tn">${esc(t.name||'')}</div>`;
+    if(roleNames.length) {
+      h += `<div class="pf-role-list">${renderTaskRoleChips(roleNames, roleMap)}</div>`;
+    }
+    h += `</div>`;
+    /* 实体标签（正下方） */
+    if(eops.length) {
+      h += `<div class="pf-vline"></div>`;
+      h += `<div class="pf-tags">`;
+      for(const eo of eops) {
+        const en  = getEntityName(eo.entity_id);
+        const ops = (eo.ops||[]).join('');
+        h += `<span class="pf-tag">${esc(en)}·${esc(ops)}</span>`;
+      }
+      h += `</div>`;
+    }
+    h += `</div>`; /* pf-col */
+  }
+
+  h += `<div class="pf-arrow">→</div>`;
+  h += `<div class="pf-se">结束</div>`;
+  h += '</div>';
+
+  el.innerHTML = h;
+  const wrap = el.querySelector('.pf-wrap');
+  renderProcReturnLines(wrap, tasks, containerId);
+
+  /* 绑定点击 */
+  if(onClickMap) {
+    for(const [taskId, handler] of Object.entries(onClickMap)) {
+      const node = el.querySelector(`.pf-task[data-id="${taskId}"]`);
+      if(node) { node.style.cursor='pointer'; node.addEventListener('click', handler); }
+    }
+  }
+
+  /* 流程图背景拖动平移（mousedown 在 .pf-wrap 空白处） */
+  el.addEventListener('mousedown', ev => {
+    if(ev.target.closest('.pf-task,.pf-tag,.pf-se')) return;
+    ev.preventDefault();
+    startEfPan(el, ev);
+  });
+
+  initZoom(containerId);
+  if(ZOOM[containerId] && ZOOM[containerId]!==1) applyZoom(containerId);
+}
+
+function getTaskRolePickerCollapsedMap(procId) {
+  if (!S.ui.procRolePickerCollapsed || typeof S.ui.procRolePickerCollapsed !== 'object') {
+    S.ui.procRolePickerCollapsed = {};
+  }
+  const scopeKey = `${S.currentFile || 'draft'}:${procId}`;
+  if (!S.ui.procRolePickerCollapsed[scopeKey] || typeof S.ui.procRolePickerCollapsed[scopeKey] !== 'object') {
+    S.ui.procRolePickerCollapsed[scopeKey] = {};
+  }
+  return S.ui.procRolePickerCollapsed[scopeKey];
+}
+
+function isTaskRolePickerCollapsed(procId, task) {
+  const collapsedMap = getTaskRolePickerCollapsedMap(procId);
+  const explicit = collapsedMap[task?.id];
+  if (typeof explicit === 'boolean') return explicit;
+  return getTaskRoleIds(task).length > 0;
+}
+
+function toggleTaskRolePicker(procId, taskId) {
+  const collapsedMap = getTaskRolePickerCollapsedMap(procId);
+  const task = getProcNodes(S.doc?.processes?.find((item) => item.id === procId)).find((item) => item.id === taskId);
+  const currentCollapsed = typeof collapsedMap[taskId] === 'boolean'
+    ? collapsedMap[taskId]
+    : getTaskRoleIds(task).length > 0;
+  collapsedMap[taskId] = !currentCollapsed;
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-role-toggle"][data-task-role-toggle="${String(taskId || '').replace(/"/g, '&quot;')}"]`,
+  });
+}
+
+function renderTaskRoleCollapsedSummary(selectedRoleNames) {
+  if(!selectedRoleNames.length) {
+    return `<span class="task-role-collapsed-empty">当前未选择角色</span>`;
+  }
+
+  const previewNames = selectedRoleNames.slice(0, 3);
+  const remainingCount = Math.max(0, selectedRoleNames.length - previewNames.length);
+  return `<div class="task-role-collapsed-list">
+    ${previewNames.map((roleName) => `<span class="task-role-collapsed-chip">${esc(roleName)}</span>`).join('')}
+    ${remainingCount ? `<span class="task-role-collapsed-more">+${remainingCount}</span>` : ''}
+  </div>`;
+}
+
+function renderTaskRolePicker(proc, task) {
+  const roles = getRoles();
+  if(!roles.length) {
+    return `<div class="task-role-picker-empty">
+      <span class="no-refs">暂无角色词典，请先到业务域页添加角色</span>
+      <button class="btn btn-outline btn-sm" type="button" onclick="navigate('domain')">前往角色管理</button>
+    </div>`;
+  }
+
+  const selectedRoleIds = getTaskRoleIds(task);
+  const selectedRoleNames = getTaskRoleNames(task);
+  const groupedRoles = getGroupedRoles();
+  const collapsed = isTaskRolePickerCollapsed(proc.id, task);
+  return `<div class="task-role-picker" data-testid="task-role-picker" data-task-role-picker="${esc(task.id)}">
+    <div class="task-role-head">
+      <div class="task-role-toggle-main" data-testid="task-role-summary">
+        <span class="task-role-toggle-label">执行角色</span>
+        <span class="task-role-toggle-count">${selectedRoleNames.length ? `已选 ${selectedRoleNames.length} 个` : '未选择'}</span>
+      </div>
+      <button class="task-role-toggle" type="button" data-testid="task-role-toggle" data-task-role-toggle="${esc(task.id)}"
+        aria-expanded="${collapsed ? 'false' : 'true'}"
+        onclick="toggleTaskRolePicker('${esc(proc.id)}','${esc(task.id)}')">
+        <span class="task-role-toggle-text">${collapsed ? '展开角色' : '收起角色'}</span>
+        <span class="task-role-toggle-caret ${collapsed ? 'is-collapsed' : 'is-expanded'}">▾</span>
+      </button>
+    </div>
+    <div class="task-role-collapsed-preview${collapsed ? '' : ' hidden'}" data-testid="task-role-collapsed-preview">
+      ${renderTaskRoleCollapsedSummary(selectedRoleNames)}
+    </div>
+    <div class="task-role-picker-body${collapsed ? ' hidden' : ''}" data-testid="task-role-picker-body">
+      <div class="task-role-group-list" data-testid="task-role-groups">
+        ${groupedRoles.map((group) => `<div class="task-role-group">
+          <div class="task-role-group-head">
+            <span class="task-role-group-name">${esc(group.name)}</span>
+            <span class="task-role-group-count">${group.roles.length}</span>
+          </div>
+          <div class="task-role-option-list">
+            ${group.roles.map((role) => {
+              const active = selectedRoleIds.includes(role.id);
+              return `<label class="task-role-option${active ? ' active' : ''}" data-task-role-id="${esc(role.id)}">
+                <input type="checkbox" data-testid="task-role-checkbox" data-role-id="${esc(role.id)}"
+                  ${active ? 'checked' : ''}
+                  onchange="toggleTaskRoleSelection('${esc(proc.id)}','${esc(task.id)}','${esc(role.id)}',this.checked)">
+                <span class="task-role-option-name">${esc(role.name)}</span>
+              </label>`;
+            }).join('')}
+          </div>
+        </div>`).join('')}
+      </div>
+      <div class="task-role-selected${selectedRoleNames.length ? '' : ' is-empty'}" data-testid="task-role-selected">
+        ${selectedRoleNames.length
+          ? `<span class="task-role-selected-count">已选 ${selectedRoleNames.length} 个角色</span>
+             <div class="task-role-selected-list">${selectedRoleNames.map((roleName) => `<span class="task-role-selected-chip">${esc(roleName)}</span>`).join('')}</div>`
+          : '<span class="task-role-selected-empty">可同时选择多个角色，流程图会按角色标签并排展示</span>'}
+      </div>
+      <div class="task-role-picker-actions">
+        <button class="btn btn-ghost-sm" type="button" onclick="navigate('domain')">管理角色</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleTaskRoleSelection(procId, taskId, roleId, checked) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  const task = getProcNodes(proc).find((item) => item.id === taskId);
+  if(!task) return;
+
+  const nextRoleIds = getTaskRoleIds(task).filter((item) => item !== roleId);
+  if(checked) nextRoleIds.push(roleId);
+  setTaskRoles(procId, taskId, nextRoleIds);
+  renderSidebar();
+  rerenderProcessEditor({
+    anchorSelector: `[data-task-role-id="${String(roleId || '').replace(/"/g, '&quot;')}"]`,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ENTITY FLOW — 自定义 HTML swimlane 渲染（不依赖 Mermaid）
+   布局：每个 group 一行（swimlane），SVG overlay 画关系线
+═══════════════════════════════════════════════════════════ */
+/* ── ER 图工具函数 ──────────────────────────────────────── */
+/* 按连通度排序实体（组内连接多的靠前），并按跨组连接数排序组顺序 */
+
+let stageDragState = null;
+
+
+/* ── 侧边栏移动：流程（同业务组件内上下移） ── */
+function moveProcInSd(procId, dir, e) {
+  if(e) e.stopPropagation();
+  const procs = S.doc.processes;
+  const proc = procs.find(p=>p.id===procId); if(!proc) return;
+  const sd = proc.subDomain||'';
+  const sdList = procs.filter(p=>(p.subDomain||'')===sd);
+  const idx = sdList.findIndex(p=>p.id===procId);
+  const nidx = idx + dir;
+  if(nidx < 0 || nidx >= sdList.length) return;
+  const fi = procs.indexOf(sdList[idx]);
+  const ti = procs.indexOf(sdList[nidx]);
+  [procs[fi], procs[ti]] = [procs[ti], procs[fi]];
+  markModified(); renderSidebar(); renderProcessTab();
+}
+
+/* ── 侧边栏移动：业务组件（整组移） ── */
+function moveSdGroup(sd, dir, e) {
+  if(e) e.stopPropagation();
+  const procs = S.doc.processes;
+  const sds = [...new Set(procs.map(p=>p.subDomain||''))];
+  const idx = sds.indexOf(sd);
+  const nidx = idx + dir;
+  if(nidx < 0 || nidx >= sds.length) return;
+  const blocks = sds.map(s => procs.filter(p=>(p.subDomain||'')===s));
+  [blocks[idx], blocks[nidx]] = [blocks[nidx], blocks[idx]];
+  S.doc.processes = blocks.flat();
+  markModified(); renderSidebar(); renderProcessTab();
+}
+
+function addProcess(subDomain, stageId = '') {
+  const id  = nextId('P', S.doc.processes);
+  const pos = _nextFreePos(S.doc.processes, null); /* 自动填补空缺格子 */
+  const stage = findStage(stageId, S.doc);
+  const nextSubDomain = String(subDomain || stage?.subDomain || '').trim();
+  S.doc.processes.push({id, name:'\u65b0\u6d41\u7a0b', subDomain:nextSubDomain, flowGroup:'', stageId:'', stagePos:{ x: 0, y: 0 }, trigger:'', outcome:'', prototypeFiles:[], nodes:[], pos});
+  hydrateDocumentForUi(S.doc);
+  if (stage?.id) addStageProcessRef(stage.id, id, { silent: true });
+  markModified();
+  navigate('process',{procId:id, taskId:null});
+}
+
+function addStageFlowNode(stageId) {
+  const stage = findStage(stageId, S.doc);
+  if (!stage) return;
+  const id = nextId('P', S.doc.processes || []);
+  const pos = _nextFreePos(S.doc.processes || [], null);
+  S.doc.processes.push({
+    id,
+    name: '\u65b0\u6d41\u7a0b',
+    subDomain: String(stage.subDomain || '').trim(),
+    flowGroup: '',
+    stageId: '',
+    stagePos: { x: 0, y: 0 },
+    trigger: '',
+    outcome: '',
+    prototypeFiles: [],
+    nodes: [],
+    pos,
+  });
+  hydrateDocumentForUi(S.doc);
+  addStageProcessRef(stage.id, id, { silent: true });
+  S.ui.procView = 'stage';
+  S.ui.stageViewMode = 'detail';
+  S.ui.stageId = stage.id;
+  S.ui.stageEditorCollapsed = false;
+  markModified();
+  renderSidebar();
+  rerenderStageWorkbench({ focusSelector: `[data-testid="stage-flow-name-input"][data-process-id="${id}"]` });
+}
+async function removeProcess(id) {
+  if(!await showAppConfirm('确认删除此流程及所有任务？', {
+    title: '删除流程',
+    confirmLabel: '删除',
+  })) return;
+  const removedRefIds = new Set(getProcessStageRefs(id, S.doc).map((ref) => ref.id));
+  S.doc.processes = S.doc.processes.filter(p=>p.id!==id);
+  getStages(S.doc).forEach((stage) => {
+    stage.processLinks = getStageProcessLinks(stage).filter((link) => link.fromProcessId !== id && link.toProcessId !== id);
+  });
+  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => ref.processId !== id);
+  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => !removedRefIds.has(link.fromRefId) && !removedRefIds.has(link.toRefId));
+  if(S.ui.procId===id){S.ui.procId=S.doc.processes[0]?.id||null; S.ui.taskId=null;}
+  markModified(); render();
+}
+function setProc(procId,key,val) {
+  const p=S.doc.processes.find(p=>p.id===procId);
+  if(p){p[key]=val; markModified();}
+}
+
+function formatPrototypeInputId(procId) {
+  return `proc-prototype-input-${String(procId || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+}
+
+function getProcessPrototypeExpandedMap(procId) {
+  if (!S.ui.procPrototypeExpanded || typeof S.ui.procPrototypeExpanded !== 'object') {
+    S.ui.procPrototypeExpanded = {};
+  }
+  const scopeKey = `${S.currentFile || 'draft'}:${procId}`;
+  if (!S.ui.procPrototypeExpanded[scopeKey] || typeof S.ui.procPrototypeExpanded[scopeKey] !== 'object') {
+    S.ui.procPrototypeExpanded[scopeKey] = {};
+  }
+  return S.ui.procPrototypeExpanded[scopeKey];
+}
+
+function isProcessPrototypeExpanded(procId, prototypeUid) {
+  return !!getProcessPrototypeExpandedMap(procId)[prototypeUid];
+}
+
+function toggleProcessPrototypeVersions(procId, prototypeUid) {
+  const expandedMap = getProcessPrototypeExpandedMap(procId);
+  expandedMap[prototypeUid] = !expandedMap[prototypeUid];
+  S.ui.procEditorFocusSelector = `[data-prototype-toggle="${String(prototypeUid || '').replace(/"/g, '&quot;')}"]`;
+  rerenderProcessEditor({ focusSelector: S.ui.procEditorFocusSelector });
+}
+
+function findProcessPrototypeFile(proc, prototypeUid) {
+  return getProcPrototypeFiles(proc).find((file) => file.uid === prototypeUid) || null;
+}
+
+function findProcessPrototypeVersion(prototypeFile, versionUid = '') {
+  if (!prototypeFile) return null;
+  const versions = Array.isArray(prototypeFile.versions) ? prototypeFile.versions : [];
+  if (!versions.length) return null;
+  const targetVersionUid = String(versionUid || prototypeFile.versionUid || '').trim();
+  return versions.find((version) => version.uid === targetVersionUid) || versions[versions.length - 1] || null;
+}
+
+function createProcessPrototypeObjectUrl(prototypeVersion) {
+  const contentType = String(prototypeVersion?.contentType || 'text/html').trim() || 'text/html';
+  const blob = new Blob([prototypeVersion?.content || ''], {
+    type: /charset=/i.test(contentType) ? contentType : `${contentType};charset=utf-8`,
+  });
+  return URL.createObjectURL(blob);
+}
+
+function syncProcessPrototypeCurrentVersion(prototypeFile, versionUid = '') {
+  const normalized = normalizePrototypeFileEntry({
+    ...prototypeFile,
+    versionUid: String(versionUid || prototypeFile?.versionUid || '').trim(),
+  });
+  Object.assign(prototypeFile, normalized);
+  return prototypeFile;
+}
+
+async function addProcessPrototypeFiles(procId, inputId) {
+  const proc = S.doc.processes.find((item) => item.id === procId);
+  const input = document.getElementById(inputId);
+  if (!proc || !input?.files?.length) return;
+
+  const selectedFiles = Array.from(input.files);
+  const invalidFiles = selectedFiles.filter((file) => {
+    const fileName = String(file?.name || '');
+    return !/\.html?$/i.test(fileName) && String(file?.type || '').toLowerCase() !== 'text/html';
+  });
+  if (invalidFiles.length) {
+    alert(`仅支持上传 HTML 原型文件：${invalidFiles.map((file) => file.name).join('、')}`);
+    input.value = '';
+    return;
+  }
+
+  const uploadedVersions = await Promise.all(selectedFiles.map(async (file) => ({
+    uid: createUiUid('protover'),
+    name: String(file.name || '').trim() || '未命名原型.html',
+    content: await file.text(),
+    contentType: String(file.type || 'text/html').trim() || 'text/html',
+    uploadedAt: formatPrototypeUploadedAt(),
+  })));
+  const prototypeFiles = getProcPrototypeFiles(proc);
+  const expandedMap = getProcessPrototypeExpandedMap(procId);
+  for (const uploadedVersion of uploadedVersions) {
+    const existingFile = prototypeFiles.find((file) => String(file.name || '').trim() === uploadedVersion.name);
+    if (existingFile) {
+      existingFile.versions = [
+        ...(Array.isArray(existingFile.versions) ? existingFile.versions : []),
+        {
+          ...uploadedVersion,
+          number: (Array.isArray(existingFile.versions) ? existingFile.versions.length : 0) + 1,
+        },
+      ];
+      syncProcessPrototypeCurrentVersion(existingFile, uploadedVersion.uid);
+      expandedMap[existingFile.uid] = true;
+      continue;
+    }
+    prototypeFiles.push(normalizePrototypeFileEntry({
+      uid: createUiUid('proto'),
+      name: uploadedVersion.name,
+      versionUid: uploadedVersion.uid,
+      versions: [
+        {
+          ...uploadedVersion,
+          number: 1,
+        },
+      ],
+    }, prototypeFiles.length + 1));
+  }
+  proc.prototypeFiles = prototypeFiles.map((file, index) => normalizePrototypeFileEntry(file, index + 1));
+  input.value = '';
+  S.ui.procEditorFocusSelector = '[data-testid="proc-prototype-upload-button"]';
+  markModified();
+  rerenderProcessEditor({ focusSelector: '[data-testid="proc-prototype-upload-button"]' });
+}
+
+function removeProcessPrototypeFile(procId, prototypeUid) {
+  const proc = S.doc.processes.find((item) => item.id === procId);
+  if (!proc) return;
+  const prototypeFiles = getProcPrototypeFiles(proc);
+  const nextFiles = prototypeFiles.filter((file) => file.uid !== prototypeUid);
+  if (nextFiles.length === prototypeFiles.length) return;
+  proc.prototypeFiles = nextFiles;
+  delete getProcessPrototypeExpandedMap(procId)[prototypeUid];
+  S.ui.procEditorFocusSelector = '[data-testid="proc-prototype-upload-button"]';
+  markModified();
+  rerenderProcessEditor({ focusSelector: '[data-testid="proc-prototype-upload-button"]' });
+}
+
+function openProcessPrototypeFile(procId, prototypeUid, versionUid = '') {
+  const proc = S.doc.processes.find((item) => item.id === procId);
+  const prototypeFile = findProcessPrototypeFile(proc, prototypeUid);
+  if (!prototypeFile) return;
+  const prototypeVersion = findProcessPrototypeVersion(prototypeFile, versionUid);
+  if (!prototypeVersion) return;
+  const objectUrl = createProcessPrototypeObjectUrl(prototypeVersion);
+  const popup = window.open(objectUrl, '_blank');
+  if (!popup) {
+    URL.revokeObjectURL(objectUrl);
+    alert('浏览器拦截了原型预览窗口，请允许弹窗后重试。');
+    return;
+  }
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
+function downloadProcessPrototypeFile(procId, prototypeUid, versionUid = '') {
+  const proc = S.doc.processes.find((item) => item.id === procId);
+  const prototypeFile = findProcessPrototypeFile(proc, prototypeUid);
+  if (!prototypeFile) return;
+  const prototypeVersion = findProcessPrototypeVersion(prototypeFile, versionUid);
+  if (!prototypeVersion) return;
+  const objectUrl = createProcessPrototypeObjectUrl(prototypeVersion);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = String(prototypeVersion.name || prototypeFile.name || '').trim() || 'prototype.html';
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MUTATIONS — Tasks
+═══════════════════════════════════════════════════════════ */
+function applyTaskDefinitionToNodeTask(item, definition) {
+  if (!item || !definition) return;
+  item.taskDefinitionId = definition.id || item.taskDefinitionId || '';
+  item.name = definition.name || item.name || '';
+  item.type = definition.type || item.type || 'Service';
+  item.querySourceKind = item.type === 'Query' ? (definition.querySourceKind || item.querySourceKind || 'Dictionary') : '';
+  item.target = definition.target || '';
+  item.note = definition.note || '';
+  item.constructId = definition.constructId || '';
+  item.businessConstructId = definition.constructId || '';
+  item.constructName = definition.constructName || '';
+  item.capabilityUnitId = definition.capabilityUnitId || '';
+  item.capabilityUnit = definition.capabilityUnit || '';
+}
+
+function ensureTaskDefinitionForNodeTask(item) {
+  if (!item) return null;
+  if (item.taskDefinitionId) {
+    const existing = findTaskDefinitionRef(item.taskDefinitionId);
+    if (existing) {
+      applyTaskDefinitionToNodeTask(item, existing);
+      return existing;
+    }
+  }
+  const defs = ensureDocumentArray('taskDefinitions');
+  const knownTypes = new Set((typeof ORCHESTRATION_TYPES !== 'undefined' ? ORCHESTRATION_TYPES : []).map((option) => option.value));
+  const rawType = knownTypes.has(item.type) ? item.type : 'Service';
+  const definition = {
+    id: nextId('TD', defs),
+    name: getUniqueTaskDefinitionName(item.name || '新任务定义'),
+    type: rawType,
+    querySourceKind: rawType === 'Query' ? (item.querySourceKind || 'Dictionary') : '',
+    target: item.target || '',
+    note: item.note || '',
+    entityIds: [],
+    processIds: [],
+    usedBy: [],
+  };
+  const constructId = item.constructId || item.businessConstructId || '';
+  if (constructId) syncTaskDefinitionConstruct(definition, findBusinessConstructRef(constructId));
+  defs.push(definition);
+  applyTaskDefinitionToNodeTask(item, definition);
+  return definition;
+}
+
+function setProcessNodeName(procId, taskId, value) {
+  const node = getProcNodes(S.doc.processes.find((p) => p.id === procId)).find((item) => item.id === taskId);
+  if (!node) return;
+  node.name = value;
+  markModified();
+  renderSidebar();
+  renderProcDiagramNow();
+}
+
+function setProcessTaskName(procId, taskId, value) {
+  setProcessNodeName(procId, taskId, value);
+}
+
+function setProcessTaskConstruct(procId, taskId, constructId) {
+  const task = getProcNodes(S.doc.processes.find((p) => p.id === procId)).find((item) => item.id === taskId);
+  if (!task) return;
+  task.businessConstructId = constructId || '';
+  markModified();
+  renderSidebar();
+  rerenderProcessEditor();
+}
+
+function renderTaskConstructOptions(selectedConstructId = '') {
+  const constructs = getBusinessConstructItems(S.doc);
+  return `<option value="">未归属构件</option>${constructs.map((construct) => {
+    const id = String(construct.id || construct.name || '');
+    return `<option value="${esc(id)}" ${id === selectedConstructId ? 'selected' : ''}>${esc(construct.name || id)}</option>`;
+  }).join('')}`;
+}
+
+function addTask(procId) {
+  const proc=S.doc.processes.find(p=>p.id===procId); if(!proc) return;
+  const allTasks=S.doc.processes.flatMap(p=>getProcNodes(p));
+  const id=nextId('T',allTasks);
+  const node = {id, name:'\u65b0\u8282\u70b9', role_ids:[], roles:[], role_id:'', role:'', userSteps:[], orchestrationTasks:[], forms:[], entity_ops:[], repeatable:false, rules_note:'', businessRules:[]};
+  getProcNodes(proc).push(node);
+  hydrateDocumentForUi(S.doc);
+  markModified();
+  navigate('process',{procId, taskId:id});
+}
+function removeTask(procId,taskId) {
+  const proc=S.doc.processes.find(p=>p.id===procId); if(!proc) return;
+  proc.nodes=getProcNodes(proc).filter(t=>t.id!==taskId);
+  if(S.ui.taskId===taskId) S.ui.taskId=null;
+  markModified(); render();
+}
+function setTask(procId,taskId,key,val) {
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  if(!t) return;
+  if (key === 'name') {
+    setProcessTaskName(procId, taskId, val);
+    return;
+  }
+  t[key]=val; markModified();
+}
+
+const TASK_RULE_TEMPLATE_NAMES = ['前置条件', '后置条件', '输入', '输出', '交互规则', '非功能需求'];
+
+function getTaskBusinessRule(procId, taskId, ruleId) {
+  const { task } = getTaskByIds(procId, taskId);
+  if (!task) return { task: null, rule: null, rules: [] };
+  const rules = getNodeBusinessRules(task);
+  return { task, rules, rule: rules.find((item) => item.id === ruleId) || null };
+}
+
+function syncTaskBusinessRulesNote(task) {
+  if (!task) return;
+  task.rules_note = formatBusinessRulesText(getNodeBusinessRules(task));
+}
+
+function addTaskBusinessRule(procId, taskId, presetName = '') {
+  const { task } = getTaskByIds(procId, taskId);
+  if (!task) return;
+  const rules = getNodeBusinessRules(task);
+  const rule = {
+    id: createUiUid('rule'),
+    name: String(presetName || `规则${rules.length + 1}`).trim(),
+    content: '',
+  };
+  rules.push(rule);
+  syncTaskBusinessRulesNote(task);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-rule-content"][data-rule-id="${rule.id}"]`,
+    revealFocus: true,
+  });
+}
+
+function ensureTaskBusinessRuleTemplates(procId, taskId) {
+  const { task } = getTaskByIds(procId, taskId);
+  if (!task) return;
+  const rules = getNodeBusinessRules(task);
+  const existingNames = new Set(rules.map((rule) => String(rule.name || '').trim()).filter(Boolean));
+  let firstAddedId = '';
+  TASK_RULE_TEMPLATE_NAMES.forEach((name) => {
+    if (existingNames.has(name)) return;
+    const rule = { id: createUiUid('rule'), name, content: '' };
+    rules.push(rule);
+    existingNames.add(name);
+    if (!firstAddedId) firstAddedId = rule.id;
+  });
+  if (!firstAddedId) return;
+  syncTaskBusinessRulesNote(task);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-rule-content"][data-rule-id="${firstAddedId}"]`,
+    revealFocus: true,
+  });
+}
+
+function removeTaskBusinessRule(procId, taskId, ruleId) {
+  const { task, rules } = getTaskBusinessRule(procId, taskId, ruleId);
+  if (!task) return;
+  task.businessRules = rules.filter((rule) => rule.id !== ruleId);
+  syncTaskBusinessRulesNote(task);
+  markModified();
+  rerenderProcessEditor({ anchorSelector: '[data-testid="task-business-rules-section"]' });
+}
+
+function moveTaskBusinessRule(procId, taskId, ruleId, dir) {
+  const { task, rules } = getTaskBusinessRule(procId, taskId, ruleId);
+  if (!task) return;
+  const index = rules.findIndex((rule) => rule.id === ruleId);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= rules.length) return;
+  [rules[index], rules[targetIndex]] = [rules[targetIndex], rules[index]];
+  syncTaskBusinessRulesNote(task);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-rule-name"][data-rule-id="${ruleId}"]`,
+  });
+}
+
+function setTaskBusinessRule(procId, taskId, ruleId, key, value) {
+  const { task, rule } = getTaskBusinessRule(procId, taskId, ruleId);
+  if (!task || !rule || !['name', 'content'].includes(key)) return;
+  rule[key] = value;
+  syncTaskBusinessRulesNote(task);
+  markModified();
+}
+
+function rerenderProcessEditor(options = {}) {
+  const currentDrawerBody = document.querySelector('.proc-drawer .drawer-body');
+  const drawerScrollTop = currentDrawerBody?.scrollTop || 0;
+  const anchorSelector = options.anchorSelector || null;
+  const anchorViewportTop = currentDrawerBody && anchorSelector
+    ? (() => {
+        const anchor = currentDrawerBody.querySelector(anchorSelector);
+        if (!anchor) return null;
+        return anchor.getBoundingClientRect().top - currentDrawerBody.getBoundingClientRect().top;
+      })()
+    : null;
+  renderProcessTab();
+  requestAnimationFrame(() => {
+    const drawerBody = document.querySelector('.proc-drawer .drawer-body');
+    if (typeof initAutoResize === 'function') initAutoResize();
+    let finalScrollTop = options.drawerScrollTop ?? drawerScrollTop;
+    if (drawerBody) drawerBody.scrollTop = finalScrollTop;
+    if (options.focusSelector) {
+      const field = document.querySelector(options.focusSelector);
+      if (field) {
+        if (typeof field.focus === 'function') {
+          try {
+            field.focus({ preventScroll: true });
+          } catch (error) {
+            field.focus();
+          }
+        }
+        if (options.selectText !== false && typeof field.select === 'function') field.select();
+        if (options.revealFocus) {
+          field.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+      }
+    }
+    if (drawerBody && anchorSelector && anchorViewportTop !== null) {
+      const anchor = drawerBody.querySelector(anchorSelector);
+      if (anchor) {
+        const nextAnchorViewportTop = anchor.getBoundingClientRect().top - drawerBody.getBoundingClientRect().top;
+        finalScrollTop = Math.max(0, finalScrollTop + (nextAnchorViewportTop - anchorViewportTop));
+        drawerBody.scrollTop = finalScrollTop;
+      }
+    }
+    requestAnimationFrame(() => {
+      const latestDrawerBody = document.querySelector('.proc-drawer .drawer-body');
+      if (latestDrawerBody) latestDrawerBody.scrollTop = finalScrollTop;
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MUTATIONS — Steps
+═══════════════════════════════════════════════════════════ */
+function addStep(procId,taskId,afterIdx) {
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  if(!t) return;
+  const steps = getNodeUserSteps(t);
+  const insertIndex = Number.isInteger(afterIdx) ? afterIdx + 1 : steps.length;
+  steps.splice(insertIndex, 0, {name:'',type:'Query',note:''});
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `.step-row[data-step-index="${insertIndex}"] .step-name`,
+  });
+}
+function removeStep(procId,taskId,idx) {
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  if(!t) return;
+  getNodeUserSteps(t).splice(idx,1);
+  markModified();
+  rerenderProcessEditor();
+}
+function setStep(procId,taskId,idx,key,val) {
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  if(getNodeUserSteps(t)[idx]!==undefined){getNodeUserSteps(t)[idx][key]=val; markModified();}
+}
+function getStepNoteEditKey(procId, taskId, idx) {
+  return `${procId}::${taskId}::${idx}`;
+}
+function startStepNoteEdit(procId, taskId, idx) {
+  S.ui.stepNoteEditKey = getStepNoteEditKey(procId, taskId, idx);
+  rerenderProcessEditor({
+    focusSelector: `.step-row[data-step-index="${idx}"] .step-note`,
+    revealFocus: true,
+  });
+}
+function cancelStepNoteEdit(procId, taskId, idx) {
+  if (S.ui.stepNoteEditKey === getStepNoteEditKey(procId, taskId, idx)) S.ui.stepNoteEditKey = '';
+  rerenderProcessEditor({
+    anchorSelector: `.step-row[data-step-index="${idx}"]`,
+  });
+}
+function saveStepNote(procId, taskId, idx, value) {
+  setStep(procId, taskId, idx, 'note', value);
+  S.ui.stepNoteEditKey = '';
+  rerenderProcessEditor({
+    anchorSelector: `.step-row[data-step-index="${idx}"]`,
+  });
+}
+function getOrchestrationNoteEditKey(procId, taskId, idx) {
+  return `${procId}::${taskId}::orch::${idx}`;
+}
+function startOrchestrationNoteEdit(procId, taskId, idx) {
+  S.ui.orchestrationNoteEditKey = getOrchestrationNoteEditKey(procId, taskId, idx);
+  rerenderProcessEditor({
+    focusSelector: `.orch-card[data-orch-index="${idx}"] .step-note`,
+    revealFocus: true,
+  });
+}
+function cancelOrchestrationNoteEdit(procId, taskId, idx) {
+  if (S.ui.orchestrationNoteEditKey === getOrchestrationNoteEditKey(procId, taskId, idx)) {
+    S.ui.orchestrationNoteEditKey = '';
+  }
+  rerenderProcessEditor({
+    anchorSelector: `.orch-card[data-orch-index="${idx}"]`,
+  });
+}
+function saveOrchestrationNote(procId, taskId, idx, value) {
+  setOrchestrationTask(procId, taskId, idx, 'note', value);
+  S.ui.orchestrationNoteEditKey = '';
+  rerenderProcessEditor({
+    anchorSelector: `.orch-card[data-orch-index="${idx}"]`,
+  });
+}
+function moveStep(procId,taskId,idx,dir) {
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  if(!t) return;
+  const steps = getNodeUserSteps(t);
+  const targetIdx = idx + dir;
+  if(targetIdx < 0 || targetIdx >= steps.length) return;
+  [steps[idx], steps[targetIdx]] = [steps[targetIdx], steps[idx]];
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `.step-row[data-step-index="${targetIdx}"] .step-name`,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MUTATIONS — Entity Ops
+═══════════════════════════════════════════════════════════ */
+function addEntityOp(procId,taskId,entityId) {
+  if(!entityId) return;
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  if(!t) return;
+  if(!t.entity_ops) t.entity_ops=[];
+  if(t.entity_ops.some(eo=>eo.entity_id===entityId)) return;
+  t.entity_ops.push({entity_id:entityId, ops:['R']});
+  markModified();
+  rerenderProcessEditor({
+    anchorSelector: `#eop-sel-${taskId}`,
+    focusSelector: `#eop-sel-${taskId}`,
+  });
+}
+function removeEntityOp(procId,taskId,entityId) {
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  if(!t) return; t.entity_ops=(t.entity_ops||[]).filter(eo=>eo.entity_id!==entityId);
+  markModified();
+  rerenderProcessEditor({
+    anchorSelector: `#eop-sel-${taskId}`,
+    focusSelector: `#eop-sel-${taskId}`,
+  });
+}
+function toggleEntityOp(procId,taskId,entityId,op,checked) {
+  const t=getProcNodes(S.doc.processes.find(p=>p.id===procId)).find(t=>t.id===taskId);
+  const eo=t?.entity_ops?.find(eo=>eo.entity_id===entityId);
+  if(!eo) return;
+  if(checked){if(!eo.ops.includes(op))eo.ops.push(op);}
+  else{eo.ops=eo.ops.filter(o=>o!==op);}
+  markModified();
+}
+
+const FORM_FIELD_TYPES = [
+  { value: 'Text', label: '输入框' },
+  { value: 'Select', label: '下拉选择' },
+  { value: 'Date', label: '日期' },
+  { value: 'Number', label: '数字' },
+  { value: 'File', label: '附件' },
+  { value: 'Readonly', label: '只读展示' },
+  { value: 'Note', label: '说明文本' },
+];
+const FORM_FIELD_TYPE_LABELS = Object.fromEntries(FORM_FIELD_TYPES.map((item) => [item.value, item.label]));
+
+function getTaskByIds(procId, taskId) {
+  const proc = (S.doc?.processes || []).find((item) => item.id === procId);
+  const task = getProcNodes(proc).find((item) => item.id === taskId);
+  return { proc, task };
+}
+
+function getTaskForms(task) {
+  const forms = getNodeForms(task);
+  forms.forEach((form, formIndex) => {
+    if (!form.id) form.id = createUiUid('form');
+    form.name = String(form.name || '');
+    form.purpose = String(form.purpose || '');
+    form.entity_id = String(form.entity_id || form.entityId || '').trim();
+    if (!Array.isArray(form.sections)) form.sections = [];
+    if (!form.sections.length) {
+      form.sections.push({ id: `SEC${formIndex + 1}`, name: '基本信息', note: '', fields: [] });
+    }
+    form.sections.forEach((section, sectionIndex) => {
+      if (!section.id) section.id = createUiUid('formsec');
+      section.name = String(section.name || `分组${sectionIndex + 1}`);
+      section.note = String(section.note || '');
+      if (!Array.isArray(section.fields)) section.fields = [];
+      section.fields.forEach((field) => {
+        if (!field.id) field.id = createUiUid('formfield');
+        field.name = String(field.name || '');
+        field.type = FORM_FIELD_TYPE_LABELS[field.type] ? field.type : 'Text';
+        field.required = !!field.required;
+        field.entity_field = String(field.entity_field || field.entityField || '').trim();
+        field.note = String(field.note || '');
+      });
+    });
+  });
+  return forms;
+}
+
+function findTaskForm(task, formId) {
+  return getTaskForms(task).find((form) => form.id === formId) || null;
+}
+
+function findTaskFormSection(form, sectionId) {
+  return (form?.sections || []).find((section) => section.id === sectionId) || null;
+}
+
+function getEntityFieldsForForm(form) {
+  const entityId = String(form?.entity_id || '').trim();
+  const entity = (S.doc?.entities || []).find((item) => item.id === entityId);
+  return Array.isArray(entity?.fields) ? entity.fields : [];
+}
+
+function nextTaskFormId(task) {
+  return nextId('F', getTaskForms(task));
+}
+
+function nextTaskFormSectionId(form) {
+  return nextId('SEC', form?.sections || []);
+}
+
+function nextTaskFormFieldId(section) {
+  return nextId('FLD', section?.fields || []);
+}
+
+function addTaskForm(procId, taskId) {
+  const { task } = getTaskByIds(procId, taskId);
+  if (!task) return;
+  const forms = getTaskForms(task);
+  const form = {
+    id: nextTaskFormId(task),
+    name: '',
+    entity_id: '',
+    purpose: '',
+    sections: [{ id: 'SEC1', name: '基本信息', note: '', fields: [] }],
+  };
+  forms.push(form);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-name"][data-form-id="${form.id}"]`,
+  });
+}
+
+function removeTaskForm(procId, taskId, formId) {
+  const { task } = getTaskByIds(procId, taskId);
+  if (!task) return;
+  task.forms = getTaskForms(task).filter((form) => form.id !== formId);
+  markModified();
+  rerenderProcessEditor({ anchorSelector: '[data-testid="task-forms-section"]' });
+}
+
+function setTaskForm(procId, taskId, formId, key, value) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  if (!form || !['name', 'entity_id', 'purpose'].includes(key)) return;
+  form[key] = value;
+  if (key === 'entity_id') {
+    const availableFields = new Set(getEntityFieldsForForm(form).map((field) => String(field.name || '').trim()).filter(Boolean));
+    form.sections.forEach((section) => {
+      (section.fields || []).forEach((field) => {
+        if (field.entity_field && !availableFields.has(field.entity_field)) field.entity_field = '';
+      });
+    });
+  }
+  markModified();
+}
+
+function addTaskFormSection(procId, taskId, formId, afterSectionId = '') {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  if (!form) return;
+  const section = { id: nextTaskFormSectionId(form), name: '', note: '', fields: [] };
+  const sections = form.sections || (form.sections = []);
+  const sourceIndex = afterSectionId ? sections.findIndex((item) => item.id === afterSectionId) : -1;
+  const insertIndex = sourceIndex >= 0 ? sourceIndex + 1 : sections.length;
+  sections.splice(insertIndex, 0, section);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-section-name"][data-section-id="${section.id}"]`,
+  });
+}
+
+function moveTaskFormSection(procId, taskId, formId, sectionId, dir) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  const sections = form?.sections || [];
+  const index = sections.findIndex((section) => section.id === sectionId);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= sections.length) return;
+  [sections[index], sections[targetIndex]] = [sections[targetIndex], sections[index]];
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-section-name"][data-section-id="${sectionId}"]`,
+  });
+}
+
+function removeTaskFormSection(procId, taskId, formId, sectionId) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  if (!form) return;
+  form.sections = (form.sections || []).filter((section) => section.id !== sectionId);
+  if (!form.sections.length) form.sections.push({ id: 'SEC1', name: '基本信息', note: '', fields: [] });
+  markModified();
+  rerenderProcessEditor({ anchorSelector: `[data-form-id="${formId}"]` });
+}
+
+function setTaskFormSection(procId, taskId, formId, sectionId, key, value) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  const section = findTaskFormSection(form, sectionId);
+  if (!section || !['name', 'note'].includes(key)) return;
+  section[key] = value;
+  markModified();
+}
+
+function addTaskFormField(procId, taskId, formId, sectionId, afterFieldId = '') {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  const section = findTaskFormSection(form, sectionId);
+  if (!section) return;
+  const field = { id: nextTaskFormFieldId(section), name: '', type: 'Text', required: false, entity_field: '', note: '' };
+  const fields = section.fields || (section.fields = []);
+  const sourceIndex = afterFieldId ? fields.findIndex((item) => item.id === afterFieldId) : -1;
+  const insertIndex = sourceIndex >= 0 ? sourceIndex + 1 : fields.length;
+  fields.splice(insertIndex, 0, field);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-field-name"][data-field-id="${field.id}"]`,
+  });
+}
+
+function removeTaskFormField(procId, taskId, formId, sectionId, fieldId) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  const section = findTaskFormSection(form, sectionId);
+  if (!section) return;
+  section.fields = (section.fields || []).filter((field) => field.id !== fieldId);
+  markModified();
+  rerenderProcessEditor({ anchorSelector: `[data-section-id="${sectionId}"]` });
+}
+
+function moveTaskFormField(procId, taskId, formId, sectionId, fieldId, dir) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  const section = findTaskFormSection(form, sectionId);
+  const fields = section?.fields || [];
+  const index = fields.findIndex((field) => field.id === fieldId);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= fields.length) return;
+  [fields[index], fields[targetIndex]] = [fields[targetIndex], fields[index]];
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-field-name"][data-field-id="${fieldId}"]`,
+  });
+}
+
+function setTaskFormField(procId, taskId, formId, sectionId, fieldId, key, value) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = findTaskForm(task, formId);
+  const section = findTaskFormSection(form, sectionId);
+  const field = (section?.fields || []).find((item) => item.id === fieldId);
+  if (!field || !['name', 'type', 'required', 'entity_field', 'note'].includes(key)) return;
+  field[key] = key === 'required' ? !!value : value;
+  markModified();
+}
+
+function setNodePerspective(view) {
+  if(view !== 'user' && view !== 'engineering') return;
+  S.ui.nodePerspective = view;
+  rerenderProcessEditor({
+    focusSelector: view === 'engineering'
+      ? '[data-testid="orchestration-section"] .orch-name, [data-testid="orchestration-section"]'
+      : '[data-testid="user-steps-section"] .step-name, [data-testid="user-steps-section"]',
+  });
+}
+
+function openBusinessAsset(kind, procId, taskId, indexOrEmpty, formId, sectionId) {
+  const proc = (S.doc?.processes || []).find((item) => item.id === procId);
+  const task = getProcNodes(proc).find((item) => item.id === taskId);
+  if (!proc || !task) return;
+  S.ui.tab = 'process';
+  S.ui.procView = 'list';
+  S.ui.procId = procId;
+  S.ui.taskId = taskId;
+  S.ui.nodePerspective = kind === 'task' ? 'engineering' : 'user';
+
+  let targetSelector = '';
+  if (kind === 'task') {
+    const index = Number(indexOrEmpty);
+    targetSelector = Number.isInteger(index)
+      ? `.orch-card[data-orch-index="${index}"] .orch-name`
+      : '[data-testid="orchestration-section"]';
+  } else if (kind === 'formFragment') {
+    targetSelector = sectionId
+      ? `[data-section-id="${sectionId}"] [data-testid="task-form-section-name"]`
+      : '[data-testid="task-forms-section"]';
+  }
+
+  render();
+  requestAnimationFrame(() => {
+    const target = targetSelector ? document.querySelector(targetSelector) : null;
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    if (typeof target.focus === 'function') {
+      try {
+        target.focus({ preventScroll: true });
+      } catch (error) {
+        target.focus();
+      }
+    }
+    const card = target.closest('.orch-card, .task-form-section-card');
+    if (card) {
+      card.classList.add('asset-focus-flash');
+      setTimeout(() => card.classList.remove('asset-focus-flash'), 1600);
+    }
+  });
+}
+
+function encodeReuseTaskKey(procId, taskId, index) {
+  return [procId, taskId, String(index)].map((item) => encodeURIComponent(String(item || ''))).join('|');
+}
+
+function encodeReuseTaskDefinitionKey(taskDefinitionId) {
+  return `td|${encodeURIComponent(String(taskDefinitionId || ''))}`;
+}
+
+function decodeReuseTaskKey(key) {
+  const parts = String(key || '').split('|').map((item) => decodeURIComponent(item));
+  if (parts.length !== 3) return null;
+  return { procId: parts[0], taskId: parts[1], index: Number(parts[2]) };
+}
+
+function getOrchestrationReuseStateKey(procId, taskId) {
+  return `${String(procId || '')}::${String(taskId || '')}`;
+}
+
+function getOrchestrationReuseFilter(procId, taskId) {
+  if (!S.ui.orchestrationReuseFilters || typeof S.ui.orchestrationReuseFilters !== 'object') {
+    S.ui.orchestrationReuseFilters = {};
+  }
+  const key = getOrchestrationReuseStateKey(procId, taskId);
+  const current = S.ui.orchestrationReuseFilters[key] || {};
+  return {
+    capabilityId: String(current.capabilityId || ''),
+    constructId: String(current.constructId || ''),
+    query: String(current.query || ''),
+  };
+}
+
+function setOrchestrationReuseFilter(procId, taskId, key, value) {
+  if (!['capabilityId', 'constructId', 'query'].includes(key)) return;
+  const stateKey = getOrchestrationReuseStateKey(procId, taskId);
+  const next = { ...getOrchestrationReuseFilter(procId, taskId), [key]: String(value || '') };
+  if (key === 'capabilityId') next.constructId = '';
+  S.ui.orchestrationReuseFilters[stateKey] = next;
+  const focusSelector = key === 'query'
+    ? '[data-testid="orchestration-reuse-search"]'
+    : `[data-testid="${key === 'capabilityId' ? 'orchestration-reuse-capability-select' : 'orchestration-reuse-construct-select'}"]`;
+  rerenderProcessEditor({ focusSelector });
+}
+
+function normalizeReuseSearchText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getReusableOrchestrationTaskItems(currentProcId, currentTaskId, filters = {}) {
+  const result = [];
+  const capabilities = typeof getCapabilityItems === 'function' ? getCapabilityItems(S.doc) : [];
+  const capabilityById = new Map(capabilities.map((capability) => [String(capability.id || capability.name || ''), capability]));
+  const capabilityByName = new Map(capabilities.map((capability) => [String(capability.name || capability.id || ''), capability]));
+  const constructs = typeof getBusinessConstructItems === 'function' ? getBusinessConstructItems(S.doc) : [];
+  const constructById = new Map(constructs.map((construct) => [String(construct.id || construct.name || ''), construct]));
+  const hasTaskDefinitions = Array.isArray(S.doc?.taskDefinitions) && S.doc.taskDefinitions.length;
+  const addItem = (item) => {
+    const queryText = normalizeReuseSearchText(filters.query);
+    if (filters.capabilityId && item.capabilityId !== filters.capabilityId) return;
+    if (filters.constructId && item.constructId !== filters.constructId) return;
+    if (queryText && !normalizeReuseSearchText(item.searchText).includes(queryText)) return;
+    result.push(item);
+  };
+
+  if (hasTaskDefinitions) {
+    (S.doc.taskDefinitions || []).forEach((taskDefinition) => {
+      const name = String(taskDefinition?.name || taskDefinition?.target || '').trim();
+      if (!name) return;
+      const usedBy = Array.isArray(taskDefinition.usedBy) ? taskDefinition.usedBy : [];
+      if (usedBy.length && usedBy.every((usage) => usage.processId === currentProcId && usage.nodeId === currentTaskId)) {
+        return;
+      }
+      const capability = capabilityById.get(String(taskDefinition.capabilityUnitId || ''))
+        || capabilityByName.get(String(taskDefinition.capabilityUnit || ''));
+      const construct = constructById.get(String(taskDefinition.constructId || ''));
+      const capabilityId = String(capability?.id || taskDefinition.capabilityUnitId || taskDefinition.capabilityUnit || '__ungrouped_capability__');
+      const capabilityName = String(capability?.name || taskDefinition.capabilityUnit || taskDefinition.capabilityUnitId || '未归属组件');
+      const constructId = String(construct?.id || taskDefinition.constructId || '__ungrouped_construct__');
+      const constructName = String(construct?.name || taskDefinition.constructName || taskDefinition.constructId || '未归属构件');
+      addItem({
+        key: encodeReuseTaskDefinitionKey(taskDefinition.id),
+        label: `${name} · ${constructName} / ${capabilityName}`,
+        capabilityId,
+        capabilityName,
+        constructId,
+        constructName,
+        task: taskDefinition,
+        sourceKind: 'definition',
+        searchText: [name, taskDefinition.target, taskDefinition.note, capabilityName, constructName].join(' '),
+      });
+    });
+    return result.sort((left, right) => (
+      left.capabilityName.localeCompare(right.capabilityName, 'zh-CN')
+      || left.constructName.localeCompare(right.constructName, 'zh-CN')
+      || left.label.localeCompare(right.label, 'zh-CN')
+    ));
+  }
+
+  return result.sort((left, right) => (
+    left.capabilityName.localeCompare(right.capabilityName, 'zh-CN')
+    || left.constructName.localeCompare(right.constructName, 'zh-CN')
+    || left.label.localeCompare(right.label, 'zh-CN')
+  ));
+}
+
+function findReusableOrchestrationTask(key) {
+  const text = String(key || '');
+  if (text.startsWith('td|')) {
+    const taskDefinitionId = decodeURIComponent(text.slice(3));
+    const taskDefinition = (S.doc?.taskDefinitions || []).find((item) => item.id === taskDefinitionId);
+    if (!taskDefinition) return null;
+    return {
+      taskDefinitionId: taskDefinition.id,
+      name: taskDefinition.name || '',
+      type: taskDefinition.type === 'Process' ? 'Service' : (taskDefinition.type || 'Query'),
+      querySourceKind: taskDefinition.type === 'Query' ? (taskDefinition.querySourceKind || 'Dictionary') : '',
+      target: taskDefinition.target || '',
+      note: taskDefinition.note || '',
+      constructId: taskDefinition.constructId || '',
+      businessConstructId: taskDefinition.constructId || '',
+      constructName: taskDefinition.constructName || '',
+      capabilityUnitId: taskDefinition.capabilityUnitId || '',
+      capabilityUnit: taskDefinition.capabilityUnit || '',
+    };
+  }
+  const decoded = decodeReuseTaskKey(key);
+  if (!decoded || !Number.isInteger(decoded.index)) return null;
+  const proc = (S.doc?.processes || []).find((item) => item.id === decoded.procId);
+  const node = getProcNodes(proc).find((item) => item.id === decoded.taskId);
+  return getNodeOrchestrationTasks(node)[decoded.index] || null;
+}
+
+function cloneReusableOrchestrationTask(item) {
+  const clone = JSON.parse(JSON.stringify(item || {}));
+  delete clone.id;
+  return {
+    taskDefinitionId: clone.taskDefinitionId || '',
+    name: clone.name || '',
+    type: clone.type || 'Query',
+    querySourceKind: clone.type === 'Query' ? (clone.querySourceKind || 'Dictionary') : (clone.querySourceKind || ''),
+    target: clone.target || '',
+    note: clone.note || '',
+    constructId: clone.constructId || clone.businessConstructId || '',
+    businessConstructId: clone.constructId || clone.businessConstructId || '',
+    constructName: clone.constructName || '',
+    capabilityUnitId: clone.capabilityUnitId || '',
+    capabilityUnit: clone.capabilityUnit || '',
+  };
+}
+
+function addOrchestrationTask(procId, taskId, afterIdx) {
+  const node = getProcNodes(S.doc.processes.find(p => p.id === procId)).find(t => t.id === taskId);
+  if (!node) return;
+  const orchestrationTasks = getNodeOrchestrationTasks(node);
+  const insertIndex = Number.isInteger(afterIdx) ? afterIdx + 1 : orchestrationTasks.length;
+  const item = {
+    name: getUniqueTaskDefinitionName('新任务定义'),
+    type: 'Service',
+    querySourceKind: '',
+    target: '',
+    note: '',
+  };
+  ensureTaskDefinitionForNodeTask(item);
+  orchestrationTasks.splice(insertIndex, 0, item);
+  markModified();
+  renderSidebar();
+  rerenderProcessEditor({
+    focusSelector: `.orch-card[data-orch-index="${insertIndex}"] .orch-name`,
+  });
+}
+function reuseOrchestrationTask(procId, taskId, key, afterIdx) {
+  const node = getProcNodes(S.doc.processes.find(p => p.id === procId)).find(t => t.id === taskId);
+  const source = findReusableOrchestrationTask(key);
+  if (!node || !source) return;
+  const orchestrationTasks = getNodeOrchestrationTasks(node);
+  const insertIndex = Number.isInteger(afterIdx) ? afterIdx + 1 : orchestrationTasks.length;
+  const item = cloneReusableOrchestrationTask(source);
+  if (!item.taskDefinitionId) ensureTaskDefinitionForNodeTask(item);
+  orchestrationTasks.splice(insertIndex, 0, item);
+  markModified();
+  renderSidebar();
+  rerenderProcessEditor({
+    focusSelector: `.orch-card[data-orch-index="${insertIndex}"] .orch-name`,
+  });
+}
+function removeOrchestrationTask(procId, taskId, idx) {
+  const node = getProcNodes(S.doc.processes.find(p => p.id === procId)).find(t => t.id === taskId);
+  if (!node) return;
+  getNodeOrchestrationTasks(node).splice(idx, 1);
+  markModified();
+  renderSidebar();
+  rerenderProcessEditor();
+}
+function setOrchestrationTask(procId, taskId, idx, key, val) {
+  const node = getProcNodes(S.doc.processes.find(p => p.id === procId)).find(t => t.id === taskId);
+  const item = getNodeOrchestrationTasks(node)[idx];
+  if (!item) return;
+  const definition = ensureTaskDefinitionForNodeTask(item);
+  const normalizedKey = key === 'businessConstructId' ? 'constructId' : key;
+  if (definition && ['name', 'type', 'querySourceKind', 'target', 'note', 'constructId'].includes(normalizedKey)) {
+    setTaskDefinition(definition.id, normalizedKey, val);
+    applyTaskDefinitionToNodeTask(item, findTaskDefinitionRef(definition.id));
+  } else {
+    item[key] = val;
+  }
+  if (normalizedKey === 'type' && val !== 'Query') item.querySourceKind = '';
+  if (normalizedKey === 'type' && val === 'Query' && !item.querySourceKind) item.querySourceKind = 'Dictionary';
+  markModified();
+  if ((S.ui.nodePerspective || 'user') === 'engineering') {
+    renderProcDiagramNow();
+  }
+}
+function moveOrchestrationTask(procId, taskId, idx, dir) {
+  const node = getProcNodes(S.doc.processes.find(p => p.id === procId)).find(t => t.id === taskId);
+  if (!node) return;
+  const orchestrationTasks = getNodeOrchestrationTasks(node);
+  const targetIdx = idx + dir;
+  if(targetIdx < 0 || targetIdx >= orchestrationTasks.length) return;
+  [orchestrationTasks[idx], orchestrationTasks[targetIdx]] = [orchestrationTasks[targetIdx], orchestrationTasks[idx]];
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `.orch-card[data-orch-index="${targetIdx}"] .orch-name`,
+  });
+}
+
+/* 找第一个空位（不与任何现有流程重叠） */
+function _nextFreePos(procs, excludeId) {
+  const occ = new Set(procs.filter(p=>p.id!==excludeId && p.pos)
+                           .map(p=>`${p.pos.r},${p.pos.c}`));
+  for(let r=1;r<=20;r++)
+    for(let c=1;c<=8;c++)
+      if(!occ.has(`${r},${c}`)) return {r, c};
+  return {r:1, c:procs.length+1};
+}
+
+function ensureProcPos(doc) {
+  (doc.processes||[]).forEach(p => {
+    if(!p.pos) p.pos = _nextFreePos(doc.processes, p.id);
+  });
+}
+
+function clampStageGraphZoom(zoom) {
+  return Math.max(0.6, Math.min(1.8, Math.round(Number(zoom || 1) * 100) / 100));
+}
+
+function getStageGraphZoom() {
+  return clampStageGraphZoom(S.ui.stageGraphZoom || 1);
+}
+
+function setStageGraphZoom(nextZoom) {
+  const normalized = clampStageGraphZoom(nextZoom);
+  if (normalized === getStageGraphZoom()) return;
+  S.ui.stageGraphZoom = normalized;
+  renderProcessTab();
+}
+
+function nudgeStageGraphZoom(delta) {
+  setStageGraphZoom(getStageGraphZoom() + delta);
+}
+
+function resetStageGraphZoom() {
+  setStageGraphZoom(1);
+}
+
+function getCurrentStageItem() {
+  return getStageItems(S.doc).find((stage) => stage.id === S.ui.stageId) || null;
+}
+
+function openStagePanorama(stageId = S.ui.stageId || getStageItems(S.doc)[0]?.id || null, navOptions = {}) {
+  queueUiNavigationHistoryFor((next) => {
+    next.tab = 'process';
+    next.procView = 'stage';
+    next.stageViewMode = 'panorama';
+    next.stageId = stageId;
+    next.stageEditorCollapsed = true;
+    next.taskId = null;
+    return next;
+  }, navOptions);
+  S.ui.procView = 'stage';
+  S.ui.stageViewMode = 'panorama';
+  S.ui.stageId = stageId;
+  S.ui.stageEditorCollapsed = true;
+  S.ui.stageNameEditId = '';
+  renderProcessTab();
+}
+
+function openStageDetail(stageId = S.ui.stageId || getStageItems(S.doc)[0]?.id || null, navOptions = {}) {
+  queueUiNavigationHistoryFor((next) => {
+    next.tab = 'process';
+    next.procView = 'stage';
+    next.stageViewMode = 'detail';
+    next.stageId = stageId;
+    next.stageEditorCollapsed = true;
+    next.taskId = null;
+    return next;
+  }, navOptions);
+  S.ui.procView = 'stage';
+  S.ui.stageViewMode = 'detail';
+  S.ui.stageId = stageId;
+  S.ui.stageEditorCollapsed = true;
+  S.ui.stageNameEditId = '';
+  renderProcessTab();
+}
+
+function navigateStageView(stageId, mode = 'detail', navOptions = {}) {
+  queueUiNavigationHistoryFor((next) => {
+    next.tab = 'process';
+    next.procView = 'stage';
+    next.stageViewMode = mode === 'panorama' ? 'panorama' : 'detail';
+    next.stageId = stageId || getStageItems(S.doc)[0]?.id || null;
+    next.taskId = null;
+    next.stageEditorCollapsed = true;
+    return next;
+  }, navOptions);
+  S.ui.tab = 'process';
+  S.ui.procView = 'stage';
+  S.ui.stageViewMode = mode === 'panorama' ? 'panorama' : 'detail';
+  S.ui.stageId = stageId || getStageItems(S.doc)[0]?.id || null;
+  S.ui.stageEditorCollapsed = true;
+  S.ui.stageNameEditId = '';
+  S.ui.taskId = null;
+  render();
+}
+
+function ensureStageSelection() {
+  const items = getStageItems(S.doc);
+  if (!items.some((stage) => stage.id === S.ui.stageId)) {
+    S.ui.stageId = items[0]?.id || null;
+  }
+}
+
+function nextStageFlowRefId() {
+  const usedIds = new Set(getStageFlowRefs(S.doc).map((ref) => String(ref.id || '').trim()).filter(Boolean));
+  let index = 1;
+  while (usedIds.has(`SFR${index}`)) index += 1;
+  return `SFR${index}`;
+}
+
+function nextStageFlowLinkId() {
+  const usedIds = new Set(getStageFlowLinks(S.doc).map((link) => String(link.id || '').trim()).filter(Boolean));
+  let index = 1;
+  while (usedIds.has(`SFL${index}`)) index += 1;
+  return `SFL${index}`;
+}
+
+function syncLegacyStageIdForProcess(procId) {
+  const proc = (S.doc.processes || []).find((item) => item.id === procId);
+  if (!proc) return;
+  const refs = getProcessStageRefs(procId, S.doc);
+  proc.stageId = refs[0]?.stageId || '';
+  if (!refs.length) proc.stagePos = normalizeGraphOffset(proc.stagePos);
+}
+
+function addStageProcessRef(stageId, procId, options = {}) {
+  const normalizedStageId = isVirtualStageId(stageId) ? '' : String(stageId || '').trim();
+  const normalizedProcId = String(procId || '').trim();
+  if (!normalizedStageId || !normalizedProcId) return null;
+  const existing = getStageFlowRefs(S.doc).find((ref) => ref.stageId === normalizedStageId && ref.processId === normalizedProcId);
+  if (existing) return existing;
+  const order = getStageProcessRefs(normalizedStageId, S.doc).length + 1;
+  const ref = normalizeStageFlowRefEntry({
+    id: nextStageFlowRefId(),
+    stageId: normalizedStageId,
+    processId: normalizedProcId,
+    order,
+    pos: { x: 0, y: 0 },
+  }, getStageFlowRefs(S.doc).length + 1);
+  getStageFlowRefs(S.doc).push(ref);
+  syncLegacyStageIdForProcess(normalizedProcId);
+  if (!options.silent) markModified();
+  return ref;
+}
+
+function removeStageProcessRef(stageId, procId, options = {}) {
+  const normalizedStageId = isVirtualStageId(stageId) ? '' : String(stageId || '').trim();
+  const normalizedProcId = String(procId || '').trim();
+  const removedRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageId === normalizedStageId && ref.processId === normalizedProcId);
+  if (!removedRefs.length) return false;
+  const removedRefIds = new Set(removedRefs.map((ref) => ref.id));
+  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => !removedRefIds.has(ref.id));
+  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => !removedRefIds.has(link.fromRefId) && !removedRefIds.has(link.toRefId));
+  getStageProcessRefs(normalizedStageId, S.doc).forEach((ref, index) => { ref.order = index + 1; });
+  syncLegacyStageIdForProcess(normalizedProcId);
+  if (!options.silent) markModified();
+  return true;
+}
+
+function moveStageProcessRef(stageId, procId, dir) {
+  const refs = getStageProcessRefs(stageId, S.doc);
+  const index = refs.findIndex((ref) => ref.processId === procId);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= refs.length) return;
+  [refs[index], refs[targetIndex]] = [refs[targetIndex], refs[index]];
+  refs.forEach((ref, orderIndex) => { ref.order = orderIndex + 1; });
+  markModified();
+}
+
+function addStage(subDomain = '', afterStageId = '', options = {}) {
+  const stages = getStages(S.doc);
+  const id = nextId('S', stages);
+  const row = normalizeStageEntry({
+    id,
+    name: `业务阶段${stages.length + 1}`,
+    subDomain: String(subDomain || '').trim(),
+    pos: { x: 0, y: 0 },
+    processLinks: [],
+  }, stages.length + 1, S.doc.processes || []);
+  const insertIndex = stages.findIndex((stage) => stage.id === afterStageId);
+  if (insertIndex >= 0) stages.splice(insertIndex + 1, 0, row);
+  else stages.push(row);
+  S.ui.stageId = id;
+  S.ui.procView = 'stage';
+  S.ui.stageViewMode = options.keepPanorama ? 'panorama' : 'detail';
+  if (options.keepPanorama) S.ui.stageEditorCollapsed = false;
+  markModified();
+  renderProcessTab();
+}
+
+function addStageFromPanorama(afterStageId = '') {
+  const sourceStage = findStage(afterStageId, S.doc);
+  addStage(sourceStage?.subDomain || '', afterStageId, { keepPanorama: true });
+}
+
+function moveStage(stageId, dir) {
+  const stages = getStages(S.doc);
+  const index = stages.findIndex((stage) => stage.id === stageId);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= stages.length) return;
+  [stages[index], stages[targetIndex]] = [stages[targetIndex], stages[index]];
+  S.ui.stageId = stageId;
+  markModified();
+  renderSidebar();
+  rerenderStageWorkbench();
+}
+
+async function removeStage(stageId) {
+  if (isVirtualStageId(stageId)) return;
+  const stage = findStage(stageId, S.doc);
+  if (!stage) return;
+  if (!await showAppConfirm(`确认删除业务阶段 ${stage.name || stage.id} 吗？阶段内流程不会删除，但会变成未设置业务阶段。`, {
+    title: '删除业务阶段',
+    confirmLabel: '删除',
+  })) return;
+  if (String(S.ui.stageNameEditId || '') === String(stageId || '')) S.ui.stageNameEditId = '';
+  S.doc.stages = getStages(S.doc).filter((item) => item.id !== stageId);
+  S.doc.stageLinks = getStageLinks(S.doc).filter((link) => link.fromStageId !== stageId && link.toStageId !== stageId);
+  const removedRefIds = new Set(getStageProcessRefs(stageId, S.doc).map((ref) => ref.id));
+  const removedProcIds = new Set(getStageProcessRefs(stageId, S.doc).map((ref) => ref.processId));
+  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageId !== stageId);
+  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => link.stageId !== stageId && !removedRefIds.has(link.fromRefId) && !removedRefIds.has(link.toRefId));
+  removedProcIds.forEach((procId) => syncLegacyStageIdForProcess(procId));
+  if (S.ui.stageLinkFocusId === stageId) S.ui.stageLinkFocusId = '';
+  ensureStageSelection();
+  S.ui.stageViewMode = 'panorama';
+  markModified();
+  renderProcessTab();
+}
+
+function renameStageId(stageId, nextStageId) {
+  const stage = findStage(stageId, S.doc);
+  if (!stage) return;
+  const normalizedId = String(nextStageId || '').trim();
+  if (!normalizedId || normalizedId === stage.id) return;
+  if (findStage(normalizedId, S.doc)) return;
+  const previousId = stage.id;
+  stage.id = normalizedId;
+  (S.doc.processes || []).forEach((proc) => {
+    if (String(proc.stageId || '').trim() === previousId) proc.stageId = normalizedId;
+  });
+  getStageFlowRefs(S.doc).forEach((ref) => {
+    if (ref.stageId === previousId) ref.stageId = normalizedId;
+  });
+  getStageFlowLinks(S.doc).forEach((link) => {
+    if (link.stageId === previousId) link.stageId = normalizedId;
+  });
+  getStageLinks(S.doc).forEach((link) => {
+    if (link.fromStageId === previousId) link.fromStageId = normalizedId;
+    if (link.toStageId === previousId) link.toStageId = normalizedId;
+  });
+  if (S.ui.stageId === previousId) S.ui.stageId = normalizedId;
+  markModified();
+}
+
+function setStage(stageId, key, value) {
+  const stage = findStage(stageId, S.doc);
+  if (!stage) return;
+  if (key === 'id') {
+    renameStageId(stageId, value);
+    return;
+  }
+  if (key === 'pos') {
+    stage.pos = normalizeGraphOffset(value);
+  } else if (key === 'panoramaPos') {
+    stage.panoramaPos = normalizeGraphOffset(value);
+  } else if (key === 'panoramaSlot') {
+    stage.panoramaSlot = normalizeGridSlot(value);
+  } else {
+    stage[key] = typeof value === 'string' ? value : value;
+  }
+  markModified();
+}
+
+function isStageNameInlineEditing(stageId) {
+  return S.ui.stageEditorCollapsed === false && String(S.ui.stageNameEditId || '') === String(stageId || '');
+}
+
+function startStageNameEdit(stageId, event = null) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  if (S.ui.stageEditorCollapsed !== false) return;
+  const stage = findStage(stageId, S.doc);
+  if (!stage) return;
+  S.ui.stageNameEditId = stage.id;
+  rerenderStageWorkbench({
+    focusSelector: '[data-testid="stage-name-inline-input"]',
+    selectText: true,
+  });
+}
+
+function finishStageNameEdit(stageId, nextName, options = {}) {
+  const normalizedStageId = String(stageId || '');
+  if (String(S.ui.stageNameEditId || '') !== normalizedStageId) return;
+  const stage = findStage(normalizedStageId, S.doc);
+  S.ui.stageNameEditId = '';
+  const normalizedName = String(nextName || '').trim();
+  if (stage && normalizedName && normalizedName !== String(stage.name || '')) {
+    stage.name = normalizedName;
+    markModified();
+    renderSidebar();
+  }
+  if (!options.skipRender) rerenderStageWorkbench();
+}
+
+function cancelStageNameEdit(stageId) {
+  if (String(S.ui.stageNameEditId || '') !== String(stageId || '')) return;
+  S.ui.stageNameEditId = '';
+  rerenderStageWorkbench();
+}
+
+function handleStageNameEditKeydown(event, stageId) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    finishStageNameEdit(stageId, event.currentTarget.value);
+    return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelStageNameEdit(stageId);
+  }
+}
+
+function renderStageNameInlineEditor(stageId, label, canEdit, className = 'stage-graph-node-title') {
+  const stageLabel = String(label || stageId || '');
+  if (canEdit && isStageNameInlineEditing(stageId)) {
+    return `<input class="stage-name-inline-input ${className}" data-testid="stage-name-inline-input" data-stage-id="${esc(stageId)}"
+      aria-label="阶段名称" type="text" value="${esc(stageLabel)}"
+      onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" ondblclick="event.stopPropagation()"
+      onkeydown="handleStageNameEditKeydown(event,'${esc(stageId)}')"
+      onblur="finishStageNameEdit('${esc(stageId)}',this.value)">`;
+  }
+  return `<span class="${className}"${canEdit ? ` title="双击修改阶段名称" ondblclick="startStageNameEdit('${esc(stageId)}',event)"` : ''}>${esc(stageLabel)}</span>`;
+}
+
+function nextPanoramaColumnId(model = getPanoramaModel(S.doc)) {
+  const usedIds = new Set((model?.columns || []).map((column) => column.id));
+  let index = 1;
+  while (usedIds.has(`C${index}`)) index += 1;
+  return `C${index}`;
+}
+
+function nextPanoramaLaneId(model = getPanoramaModel(S.doc)) {
+  const usedIds = new Set((model?.lanes || []).map((lane) => lane.id));
+  let index = 1;
+  while (usedIds.has(`L${index}`)) index += 1;
+  return `L${index}`;
+}
+
+function setPanoramaColumn(columnId, key, value) {
+  const model = getPanoramaModel(S.doc);
+  const column = model.columns.find((item) => item.id === columnId);
+  if (!column || !['name', 'scope', 'badge'].includes(key)) return;
+  column[key] = String(value || '');
+  markModified();
+}
+
+function addPanoramaColumn(afterColumnId = '') {
+  const model = getPanoramaModel(S.doc);
+  const column = { id: nextPanoramaColumnId(model), name: '', scope: '', badge: '' };
+  const insertIndex = model.columns.findIndex((item) => item.id === afterColumnId);
+  if (insertIndex >= 0) model.columns.splice(insertIndex + 1, 0, column);
+  else model.columns.push(column);
+  getPanoramaModel(S.doc);
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function movePanoramaColumn(columnId, dir) {
+  const model = getPanoramaModel(S.doc);
+  const index = model.columns.findIndex((item) => item.id === columnId);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= model.columns.length) return;
+  [model.columns[index], model.columns[targetIndex]] = [model.columns[targetIndex], model.columns[index]];
+  markModified();
+  rerenderStageWorkbench();
+}
+
+async function removePanoramaColumn(columnId) {
+  const model = getPanoramaModel(S.doc);
+  if (model.columns.length <= 1) return;
+  const nextColumns = model.columns.filter((column) => column.id !== columnId);
+  if (nextColumns.length === model.columns.length) return;
+  const column = model.columns.find((item) => item.id === columnId);
+  const affectedStages = getStages(S.doc).filter((stage) => stage.panoramaColumnId === columnId);
+  const message = affectedStages.length
+    ? `确认删除价值流「${column?.name || columnId}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他单元格。`
+    : `确认删除价值流「${column?.name || columnId}」吗？`;
+  if (!await showAppConfirm(message, {
+    title: '删除价值流',
+    confirmLabel: '删除',
+  })) return;
+  model.columns = nextColumns;
+  model.cells = model.cells.filter((cell) => cell.columnId !== columnId);
+  getStages(S.doc).forEach((stage) => {
+    if (stage.panoramaColumnId === columnId) stage.panoramaColumnId = '';
+  });
+  getPanoramaModel(S.doc);
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function setPanoramaLane(laneId, key, value) {
+  const model = getPanoramaModel(S.doc);
+  const lane = model.lanes.find((item) => item.id === laneId);
+  if (!lane || !['name', 'badge', 'note'].includes(key)) return;
+  lane[key] = String(value || '');
+  markModified();
+}
+
+function addPanoramaLane(afterLaneId = '') {
+  const model = getPanoramaModel(S.doc);
+  const lane = { id: nextPanoramaLaneId(model), name: '', badge: '', note: '' };
+  const insertIndex = model.lanes.findIndex((item) => item.id === afterLaneId);
+  if (insertIndex >= 0) model.lanes.splice(insertIndex + 1, 0, lane);
+  else model.lanes.push(lane);
+  getPanoramaModel(S.doc);
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function movePanoramaLane(laneId, dir) {
+  const model = getPanoramaModel(S.doc);
+  const index = model.lanes.findIndex((item) => item.id === laneId);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= model.lanes.length) return;
+  [model.lanes[index], model.lanes[targetIndex]] = [model.lanes[targetIndex], model.lanes[index]];
+  markModified();
+  rerenderStageWorkbench();
+}
+
+async function removePanoramaLane(laneId) {
+  const model = getPanoramaModel(S.doc);
+  if (model.lanes.length <= 1) return;
+  const nextLanes = model.lanes.filter((lane) => lane.id !== laneId);
+  if (nextLanes.length === model.lanes.length) return;
+  const lane = model.lanes.find((item) => item.id === laneId);
+  const affectedStages = getStages(S.doc).filter((stage) => stage.panoramaLaneId === laneId);
+  const message = affectedStages.length
+    ? `确认删除业务域「${lane?.name || laneId}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他单元格。`
+    : `确认删除业务域「${lane?.name || laneId}」吗？`;
+  if (!await showAppConfirm(message, {
+    title: '删除业务域',
+    confirmLabel: '删除',
+  })) return;
+  model.lanes = nextLanes;
+  model.cells = model.cells.filter((cell) => cell.laneId !== laneId);
+  getStages(S.doc).forEach((stage) => {
+    if (stage.panoramaLaneId === laneId) stage.panoramaLaneId = '';
+  });
+  getPanoramaModel(S.doc);
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function setPanoramaCell(laneId, columnId, key, value) {
+  const model = getPanoramaModel(S.doc);
+  const cell = model.cells.find((item) => item.laneId === laneId && item.columnId === columnId);
+  if (!cell || !['status', 'text'].includes(key)) return;
+  cell[key] = String(value || '');
+  markModified();
+}
+
+async function addStageFromMatrixCell(laneId, columnId) {
+  const model = getPanoramaModel(S.doc);
+  if (!hasPanoramaLane(model, laneId) || !hasPanoramaColumn(model, columnId)) return;
+  const name = await showAppPrompt('请输入业务阶段名称', '', {
+    title: '新增业务阶段',
+  });
+  if (name === null) return;
+  const stageName = String(name || '').trim();
+  if (!stageName) return;
+  const stages = getStages(S.doc);
+  const id = nextId('S', stages);
+  stages.push(normalizeStageEntry({
+    id,
+    name: stageName,
+    subDomain: '',
+    panoramaColumnId: columnId,
+    panoramaLaneId: laneId,
+    panoramaPos: null,
+    pos: { x: 0, y: 0 },
+    processLinks: [],
+  }, stages.length + 1, S.doc.processes || []));
+  S.ui.stageId = id;
+  S.ui.procView = 'stage';
+  S.ui.stageViewMode = 'panorama';
+  S.ui.stageEditorCollapsed = false;
+  markModified();
+  renderSidebar();
+  rerenderStageWorkbench();
+}
+
+function addProcessToStage(stageId, procId) {
+  if (!procId) return;
+  addStageProcessRef(stageId, procId);
+  rerenderStageWorkbench({ focusSelector: '[data-testid="stage-process-select"]' });
+}
+
+function moveProcInStage(stageId, procId, dir) {
+  moveStageProcessRef(stageId, procId, dir);
+  renderSidebar();
+  rerenderStageWorkbench();
+}
+
+function removeProcessFromStage(stageId, procId) {
+  if (!procId) return;
+  removeStageProcessRef(stageId, procId);
+  rerenderStageWorkbench();
+}
+
+function pickDefaultStageLinkPair(stages, preferredStageId = '') {
+  const preferredIndex = stages.findIndex((stage) => stage.id === preferredStageId);
+  const fromIndex = preferredIndex >= 0 ? preferredIndex : 0;
+  const toIndex = fromIndex < stages.length - 1 ? fromIndex + 1 : Math.max(0, fromIndex - 1);
+  return {
+    fromStageId: stages[fromIndex]?.id || '',
+    toStageId: stages[toIndex]?.id || stages[fromIndex]?.id || '',
+  };
+}
+
+function addStageLink(afterUid = '', preferredStageId = '') {
+  const stages = getStages(S.doc).filter((stage) => !stage.virtual);
+  if (stages.length < 2) return;
+  const links = getStageLinks(S.doc);
+  const row = normalizeStageLinkEntry(pickDefaultStageLinkPair(stages, preferredStageId || S.ui.stageLinkFocusId || ''));
+  const insertIndex = links.findIndex((link) => link.uid === afterUid);
+  if (insertIndex >= 0) links.splice(insertIndex + 1, 0, row);
+  else links.push(row);
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function setStageLink(linkUid, key, value) {
+  const link = getStageLinks(S.doc).find((item) => item.uid === linkUid);
+  if (!link) return;
+  link[key] = String(value || '').trim();
+  markModified();
+}
+
+function removeStageLink(linkUid) {
+  const links = getStageLinks(S.doc);
+  const nextLinks = links.filter((item) => item.uid !== linkUid);
+  if (nextLinks.length === links.length) return;
+  S.doc.stageLinks = nextLinks;
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function moveStageLink(linkUid, dir) {
+  const links = getStageLinks(S.doc);
+  const index = links.findIndex((item) => item.uid === linkUid);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= links.length) return;
+  [links[index], links[targetIndex]] = [links[targetIndex], links[index]];
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function revealStageLinkEditor(drawerBody) {
+  if (!drawerBody) return;
+  const target = drawerBody.querySelector('[data-testid="stage-link-row"]')
+    || drawerBody.querySelector('[data-testid="stage-link-focus-note"]')
+    || drawerBody.querySelector('.stage-link-list');
+  if (!target) return;
+  const drawerRect = drawerBody.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const buffer = 12;
+  if (targetRect.top < drawerRect.top + buffer) {
+    drawerBody.scrollTop += targetRect.top - drawerRect.top - buffer;
+  } else if (targetRect.bottom > drawerRect.bottom - buffer) {
+    drawerBody.scrollTop += targetRect.bottom - drawerRect.bottom + buffer;
+  }
+}
+
+function selectStageForPanorama(stageId) {
+  if (!findStage(stageId, S.doc)) return;
+  S.ui.procView = 'stage';
+  S.ui.stageViewMode = 'panorama';
+  S.ui.stageId = stageId;
+  S.ui.stageLinkFocusId = stageId;
+  S.ui.stageEditorCollapsed = false;
+  rerenderStageWorkbench({ revealStageLinks: true });
+}
+
+function clearStageLinkFocus() {
+  S.ui.stageLinkFocusId = '';
+  rerenderStageWorkbench();
+}
+
+function addStageProcessLink(stageId, afterUid = '') {
+  const stage = findStage(stageId, S.doc);
+  if (!stage) return;
+  const refs = getStageProcessRefs(stageId, S.doc);
+  if (refs.length < 2) return;
+  const linkId = nextStageFlowLinkId();
+  const links = getStageFlowLinks(S.doc).filter((link) => link.stageId === stageId);
+  const row = normalizeStageFlowLinkEntry({
+    id: linkId,
+    stageId,
+    fromRefId: refs[0].id,
+    toRefId: refs[Math.min(1, refs.length - 1)].id,
+  }, getStageFlowLinks(S.doc).length + 1);
+  const insertIndex = links.findIndex((link) => link.id === afterUid);
+  if (insertIndex >= 0) links.splice(insertIndex + 1, 0, row);
+  else links.push(row);
+  const others = getStageFlowLinks(S.doc).filter((link) => link.stageId !== stageId);
+  S.doc.stageFlowLinks = [...others, ...links];
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function addStageProcessLinkBetweenRefs(stageId, fromRefId, toRefId) {
+  const stage = findStage(stageId, S.doc);
+  if (!stage) return;
+  const normalizedFrom = String(fromRefId || '').trim();
+  const normalizedTo = String(toRefId || '').trim();
+  if (!normalizedFrom || !normalizedTo || normalizedFrom === normalizedTo) return;
+  const refs = new Set(getStageProcessRefs(stageId, S.doc).map((ref) => ref.id));
+  if (!refs.has(normalizedFrom) || !refs.has(normalizedTo)) return;
+  const linkId = nextStageFlowLinkId();
+  const links = getStageFlowLinks(S.doc);
+  const duplicate = links.some((link) => (
+    link.stageId === stageId
+    && link.fromRefId === normalizedFrom
+    && link.toRefId === normalizedTo
+  ));
+  if (duplicate) return;
+  links.push(normalizeStageFlowLinkEntry({
+    id: linkId,
+    stageId,
+    fromRefId: normalizedFrom,
+    toRefId: normalizedTo,
+  }, links.length + 1));
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function getStageFlowLinkDraft(stageId) {
+  const draft = S.ui.stageFlowLinkDraft || {};
+  return draft.stageId === stageId ? String(draft.fromRefId || '').trim() : '';
+}
+
+function startStageFlowLinkDraft(stageId, fromRefId) {
+  if (!findStage(stageId, S.doc)) return;
+  if (!findStageProcessRef(fromRefId, S.doc)) return;
+  S.ui.stageFlowLinkDraft = { stageId, fromRefId };
+  rerenderStageWorkbench();
+}
+
+function clearStageFlowLinkDraft() {
+  S.ui.stageFlowLinkDraft = null;
+  rerenderStageWorkbench();
+}
+
+function setStageProcessLink(stageId, linkUid, key, value) {
+  const link = getStageFlowLinks(S.doc).find((item) => item.stageId === stageId && item.id === linkUid);
+  if (!link) return;
+  link[key] = String(value || '').trim();
+  markModified();
+}
+
+function removeStageProcessLink(stageId, linkUid) {
+  const links = getStageFlowLinks(S.doc);
+  const removedLink = links.find((item) => item.stageId === stageId && item.id === linkUid);
+  const nextLinks = links.filter((item) => !(item.stageId === stageId && item.id === linkUid));
+  if (nextLinks.length === links.length) return;
+  S.doc.stageFlowLinks = nextLinks;
+  if (removedLink) {
+    const fromRef = findStageProcessRef(removedLink.fromRefId, S.doc);
+    const toRef = findStageProcessRef(removedLink.toRefId, S.doc);
+    const stage = findStage(stageId, S.doc);
+    if (stage && fromRef?.processId && toRef?.processId) {
+      stage.processLinks = getStageProcessLinks(stage).filter((link) => (
+        !(link.fromProcessId === fromRef.processId && link.toProcessId === toRef.processId)
+      ));
+    }
+  }
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function moveStageProcessLink(stageId, linkUid, dir) {
+  const links = getStageFlowLinks(S.doc).filter((item) => item.stageId === stageId);
+  const index = links.findIndex((item) => item.id === linkUid);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= links.length) return;
+  [links[index], links[targetIndex]] = [links[targetIndex], links[index]];
+  const others = getStageFlowLinks(S.doc).filter((item) => item.stageId !== stageId);
+  S.doc.stageFlowLinks = [...others, ...links];
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function rerenderStageWorkbench(options = {}) {
+  const mainShell = document.querySelector('.stage-main-shell');
+  const drawerBody = document.querySelector('.stage-drawer .drawer-body');
+  const pageRoot = document.scrollingElement || document.documentElement;
+  const mainScrollTop = mainShell?.scrollTop || 0;
+  const mainScrollLeft = mainShell?.scrollLeft || 0;
+  const drawerScrollTop = drawerBody?.scrollTop || 0;
+  const pageTop = pageRoot?.scrollTop || 0;
+  const pageLeft = pageRoot?.scrollLeft || 0;
+  renderProcessTab();
+  requestAnimationFrame(() => {
+    const nextMainShell = document.querySelector('.stage-main-shell');
+    const nextDrawerBody = document.querySelector('.stage-drawer .drawer-body');
+    const nextPageRoot = document.scrollingElement || document.documentElement;
+    if (nextMainShell) {
+      nextMainShell.scrollTop = options.mainScrollTop ?? mainScrollTop;
+      nextMainShell.scrollLeft = options.mainScrollLeft ?? mainScrollLeft;
+    }
+    if (nextDrawerBody) nextDrawerBody.scrollTop = options.drawerScrollTop ?? drawerScrollTop;
+    if (options.revealStageLinks && nextDrawerBody) revealStageLinkEditor(nextDrawerBody);
+    if (nextPageRoot) {
+      nextPageRoot.scrollTop = pageTop;
+      nextPageRoot.scrollLeft = pageLeft;
+    }
+    if (options.focusSelector) {
+      const field = document.querySelector(options.focusSelector);
+      if (field?.focus) {
+        try {
+          field.focus({ preventScroll: true });
+        } catch (_) {
+          field.focus();
+        }
+        if (options.selectText && typeof field.select === 'function') {
+          field.select();
+        }
+      }
+    }
+  });
+}
+
+function setStageEditorCollapsed(nextValue) {
+  const normalized = Boolean(nextValue);
+  if (Boolean(S.ui.stageEditorCollapsed) === normalized) return;
+  if (!normalized && S.ui.procView === 'stage' && S.ui.stageViewMode === 'detail' && !getCurrentStageItem()) {
+    S.ui.stageViewMode = 'panorama';
+  }
+  S.ui.stageEditorCollapsed = normalized;
+  if (normalized) S.ui.stageNameEditId = '';
+  renderProcessTab();
+}
+
+function toggleStageEditorDrawer(forceOpen = null) {
+  if (typeof forceOpen === 'boolean') {
+    setStageEditorCollapsed(!forceOpen);
+    return;
+  }
+  setStageEditorCollapsed(!S.ui.stageEditorCollapsed);
+}
+
+function getStageNodeOffset(kind, nodeId) {
+  if (kind === 'stage') {
+    return normalizeGraphOffset(findStage(nodeId, S.doc)?.pos);
+  }
+  if (kind === 'stage-ref') {
+    return normalizeGraphOffset(findStageProcessRef(nodeId, S.doc)?.pos);
+  }
+  return normalizeGraphOffset((S.doc.processes || []).find((proc) => proc.id === nodeId)?.stagePos);
+}
+
+function setStageNodeOffset(kind, nodeId, nextOffset) {
+  if (kind === 'stage') {
+    const stage = findStage(nodeId, S.doc);
+    if (!stage) return;
+    stage.pos = normalizeGraphOffset(nextOffset);
+    return;
+  }
+  if (kind === 'stage-ref') {
+    const ref = findStageProcessRef(nodeId, S.doc);
+    if (!ref) return;
+    ref.pos = normalizeGraphOffset(nextOffset);
+    return;
+  }
+  const proc = (S.doc.processes || []).find((item) => item.id === nodeId);
+  if (!proc) return;
+  proc.stagePos = normalizeGraphOffset(nextOffset);
+}
+
+function startStageNodeDrag(kind, nodeId, event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  stageDragState = {
+    kind,
+    nodeId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startOffset: getStageNodeOffset(kind, nodeId),
+  };
+  document.addEventListener('mousemove', onStageNodeDrag);
+  document.addEventListener('mouseup', endStageNodeDrag);
+}
+
+function onStageNodeDrag(event) {
+  if (!stageDragState) return;
+  const dx = event.clientX - stageDragState.startX;
+  const dy = event.clientY - stageDragState.startY;
+  const zoom = getStageGraphZoom() || 1;
+  const graphDx = dx / zoom;
+  const graphDy = dy / zoom;
+  const node = document.querySelector(`.stage-graph-node[data-node-id="${stageDragState.nodeId}"]`);
+  if (node) {
+    node.style.transform = `translate(${graphDx}px,${graphDy}px)`;
+    node.style.zIndex = '5';
+  }
+  if (stageDragState.kind === 'stage-ref') {
+    updateStageFlowDragLinks(stageDragState.nodeId, graphDx, graphDy);
+  }
+}
+
+function endStageNodeDrag(event) {
+  if (!stageDragState) return;
+  const { kind, nodeId, startX, startY, startOffset } = stageDragState;
+  const dx = event.clientX - startX;
+  const dy = event.clientY - startY;
+  document.removeEventListener('mousemove', onStageNodeDrag);
+  document.removeEventListener('mouseup', endStageNodeDrag);
+  stageDragState = null;
+  if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+    if (kind === 'stage') {
+      if (S.ui.stageEditorCollapsed === false && event.detail >= 2) {
+        startStageNameEdit(nodeId, event);
+        return;
+      }
+      if ((S.ui.stageViewMode || 'panorama') === 'panorama' && S.ui.stageEditorCollapsed === false) {
+        selectStageForPanorama(nodeId);
+      } else {
+        openStageDetail(nodeId);
+      }
+    }
+    else if (kind === 'stage-ref') {
+      const ref = findStageProcessRef(nodeId, S.doc);
+      const currentStage = getCurrentStageItem();
+      if (S.ui.procView === 'stage' && S.ui.stageViewMode === 'detail' && S.ui.stageEditorCollapsed === false && currentStage && !currentStage.virtual) return;
+      if (ref?.processId) navigate('process', { procId: ref.processId, taskId: null });
+    } else navigate('process', { procId: nodeId, taskId: null });
+    return;
+  }
+  if (kind === 'stage' && isStagePanoramaEditing()) {
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    const cell = target?.closest?.('.value-stream-cell');
+    const stage = findStage(nodeId, S.doc);
+    if (cell && stage) {
+      const laneId = String(cell.dataset.laneId || '').trim();
+      const columnId = String(cell.dataset.columnId || '').trim();
+      const board = cell.querySelector('.value-stream-stage-board');
+      const boardRect = board?.getBoundingClientRect();
+      stage.panoramaLaneId = laneId;
+      stage.panoramaColumnId = columnId;
+      if (boardRect) {
+        stage.panoramaSlot = {
+          row: Math.max(0, Math.round((event.clientY - boardRect.top - MATRIX_STAGE_CARD_H / 2 - MATRIX_STAGE_BOARD_PAD) / MATRIX_STAGE_SLOT_H)),
+          col: Math.max(0, Math.round((event.clientX - boardRect.left - MATRIX_STAGE_CARD_W / 2 - MATRIX_STAGE_BOARD_PAD) / MATRIX_STAGE_SLOT_W)),
+        };
+        stage.panoramaPos = null;
+      }
+      markModified();
+      rerenderStageWorkbench();
+      return;
+    }
+  }
+  const zoom = getStageGraphZoom() || 1;
+  setStageNodeOffset(kind, nodeId, {
+    x: startOffset.x + Math.round(dx / zoom),
+    y: startOffset.y + Math.round(dy / zoom),
+  });
+  markModified();
+  rerenderStageWorkbench();
+}
+
+function buildOrderedGraphLayers(nodes, links) {
+  const nodeIds = nodes.map((node) => node.id);
+  const indegree = new Map(nodeIds.map((id) => [id, 0]));
+  const nextMap = new Map(nodeIds.map((id) => [id, []]));
+  for (const link of links) {
+    if (!indegree.has(link.from) || !indegree.has(link.to)) continue;
+    indegree.set(link.to, (indegree.get(link.to) || 0) + 1);
+    nextMap.get(link.from).push(link.to);
+  }
+  const queue = nodeIds.filter((id) => (indegree.get(id) || 0) === 0);
+  if (!queue.length && nodeIds.length) queue.push(nodeIds[0]);
+  const layers = new Map(nodeIds.map((id) => [id, 0]));
+  const ordered = [];
+  const seen = new Set();
+  while (queue.length) {
+    const id = queue.shift();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ordered.push(id);
+    const nextIds = nextMap.get(id) || [];
+    for (const nextId of nextIds) {
+      layers.set(nextId, Math.max(layers.get(nextId) || 0, (layers.get(id) || 0) + 1));
+      indegree.set(nextId, (indegree.get(nextId) || 0) - 1);
+      if ((indegree.get(nextId) || 0) <= 0) queue.push(nextId);
+    }
+  }
+  nodeIds.forEach((id) => {
+    if (seen.has(id)) return;
+    ordered.push(id);
+    layers.set(id, Math.max(...Array.from(layers.values()), 0) + 1);
+  });
+  return { layers, ordered };
+}
+
+function measureStageGraphNodeWidth(label) {
+  const text = String(label || '').trim();
+  return Math.max(132, Math.min(220, 48 + text.length * 14));
+}
+
+function routeStageGraphLink(fromPos, toPos, laneIndex = 0) {
+  const sx = fromPos.x + fromPos.w / 2;
+  const sy = fromPos.y + fromPos.h;
+  const tx = toPos.x + toPos.w / 2;
+  const ty = toPos.y;
+  if (ty > sy) {
+    const midY = sy + Math.max(28, ((ty - sy) / 2) + laneIndex * 10);
+    return `M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty}`;
+  }
+  const laneX = Math.max(sx, tx) + 48 + laneIndex * 18;
+  const startY = fromPos.y + fromPos.h / 2;
+  const endY = toPos.y + toPos.h / 2;
+  return `M ${sx} ${startY} L ${laneX} ${startY} L ${laneX} ${endY} L ${tx} ${endY}`;
+}
+
+function buildStageGraphLayout(nodes, links, kind) {
+  const { layers, ordered } = buildOrderedGraphLayers(nodes, links);
+  const layersMap = new Map();
+  ordered.forEach((id) => {
+    const layerIndex = layers.get(id) || 0;
+    if (!layersMap.has(layerIndex)) layersMap.set(layerIndex, []);
+    layersMap.get(layerIndex).push(nodes.find((node) => node.id === id));
+  });
+  const layerEntries = Array.from(layersMap.entries()).sort((left, right) => left[0] - right[0]);
+  const gapX = 72;
+  const gapY = 138;
+  const padX = 56;
+  const padY = 36;
+  const nodeH = 54;
+  const positions = {};
+  let boardW = 640;
+  layerEntries.forEach(([, layerNodes], layerOrder) => {
+    const widths = layerNodes.map((node) => measureStageGraphNodeWidth(node.label));
+    const totalWidth = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, layerNodes.length - 1) * gapX;
+    boardW = Math.max(boardW, totalWidth + padX * 2);
+    let cursorX = padX + Math.max(0, (boardW - padX * 2 - totalWidth) / 2);
+    const y = padY + layerOrder * gapY;
+    layerNodes.forEach((node, index) => {
+      const width = widths[index];
+      const offset = getStageNodeOffset(kind, node.id);
+      positions[node.id] = {
+        x: cursorX + offset.x,
+        y: y + offset.y,
+        w: width,
+        h: nodeH,
+      };
+      cursorX += width + gapX;
+    });
+  });
+  const boardH = Math.max(260, padY * 2 + Math.max(0, layerEntries.length - 1) * gapY + nodeH);
+  const routedLinks = links
+    .filter((link) => positions[link.from] && positions[link.to])
+    .map((link, index) => ({
+      ...link,
+      path: routeStageGraphLink(positions[link.from], positions[link.to], index % 3),
+    }));
+  return { positions, links: routedLinks, boardW, boardH };
+}
+
+const STAGE_FLOW_NODE_W = 62;
+const STAGE_FLOW_NODE_H = 128;
+const STAGE_FLOW_GAP_X = 46;
+const STAGE_FLOW_ROW_GAP = 34;
+const STAGE_FLOW_PAD_X = 24;
+const STAGE_FLOW_PAD_Y = 38;
+
+function getStageFlowGroupLabel(node) {
+  return String(node?.group || node?.meta || '').trim();
+}
+
+function setFlowGroupForProcesses(processIdsText, nextValue, sourceEl = null) {
+  const ids = new Set(String(processIdsText || '').split('|').map((id) => id.trim()).filter(Boolean));
+  if (!ids.size) return;
+  const normalized = String(nextValue || '').trim();
+  (S.doc.processes || []).forEach((proc) => {
+    if (ids.has(String(proc.id || '').trim())) proc.flowGroup = normalized;
+  });
+  if (sourceEl) {
+    const editor = sourceEl.closest?.('.stage-flow-group-editor');
+    const board = editor?.closest?.('.stage-flow-board');
+    const processIds = editor?.dataset?.processIds || String(processIdsText || '');
+    const groupBox = Array.from(board?.querySelectorAll?.('.stage-flow-group-box[data-process-ids]') || [])
+      .find((box) => box.dataset.processIds === processIds);
+    const title = groupBox?.querySelector?.('.stage-flow-group-title');
+    if (title) {
+      title.textContent = normalized || '未分组';
+      title.classList.toggle('is-placeholder', !normalized);
+    }
+  }
+  markModified();
+}
+
+function clearFlowGroupForProcesses(processIdsText) {
+  setFlowGroupForProcesses(processIdsText, '');
+  rerenderStageWorkbench();
+}
+
+function groupIsolatedStageFlowRows(isolatedNodes) {
+  if (!isolatedNodes.length) return [];
+  const grouped = [];
+  const groupIndexByLabel = new Map();
+  isolatedNodes.forEach((node) => {
+    const label = getStageFlowGroupLabel(node);
+    const key = label || '__ungrouped__';
+    if (!groupIndexByLabel.has(key)) {
+      groupIndexByLabel.set(key, grouped.length);
+      grouped.push([]);
+    }
+    grouped[groupIndexByLabel.get(key)].push(node.id);
+  });
+  return grouped;
+}
+
+function getStageFlowRows(nodes, links) {
+  const nodeOrder = new Map(nodes.map((node, index) => [node.id, index]));
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const linkedIds = new Set();
+  const undirected = new Map(nodes.map((node) => [node.id, []]));
+  links.forEach((link) => {
+    if (!nodeIds.has(link.from) || !nodeIds.has(link.to)) return;
+    linkedIds.add(link.from);
+    linkedIds.add(link.to);
+    undirected.get(link.from).push(link.to);
+    undirected.get(link.to).push(link.from);
+  });
+  if (!linkedIds.size) return groupIsolatedStageFlowRows(nodes);
+
+  const visited = new Set();
+  const rows = [];
+  linkedIds.forEach((startId) => {
+    if (visited.has(startId)) return;
+    const component = [];
+    const stack = [startId];
+    visited.add(startId);
+    while (stack.length) {
+      const id = stack.pop();
+      component.push(id);
+      (undirected.get(id) || []).forEach((nextId) => {
+        if (visited.has(nextId)) return;
+        visited.add(nextId);
+        stack.push(nextId);
+      });
+    }
+    const componentIds = new Set(component);
+    const indegree = new Map(component.map((id) => [id, 0]));
+    const outgoing = new Map(component.map((id) => [id, []]));
+    links.forEach((link) => {
+      if (!componentIds.has(link.from) || !componentIds.has(link.to)) return;
+      outgoing.get(link.from).push(link.to);
+      indegree.set(link.to, (indegree.get(link.to) || 0) + 1);
+    });
+    const queue = component
+      .filter((id) => (indegree.get(id) || 0) === 0)
+      .sort((left, right) => (nodeOrder.get(left) || 0) - (nodeOrder.get(right) || 0));
+    const ordered = [];
+    const seen = new Set();
+    while (queue.length) {
+      const id = queue.shift();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+      (outgoing.get(id) || []).forEach((nextId) => {
+        indegree.set(nextId, (indegree.get(nextId) || 0) - 1);
+        if ((indegree.get(nextId) || 0) <= 0) {
+          queue.push(nextId);
+          queue.sort((left, right) => (nodeOrder.get(left) || 0) - (nodeOrder.get(right) || 0));
+        }
+      });
+    }
+    component
+      .filter((id) => !seen.has(id))
+      .sort((left, right) => (nodeOrder.get(left) || 0) - (nodeOrder.get(right) || 0))
+      .forEach((id) => ordered.push(id));
+    rows.push(ordered);
+  });
+
+  const isolated = nodes
+    .filter((node) => !linkedIds.has(node.id))
+    .sort((left, right) => (nodeOrder.get(left.id) || 0) - (nodeOrder.get(right.id) || 0));
+  rows.push(...groupIsolatedStageFlowRows(isolated));
+  return rows;
+}
+
+function getStageFlowAnchors(fromPos, toPos) {
+  const fromCenterX = fromPos.x + fromPos.w / 2;
+  const toCenterX = toPos.x + toPos.w / 2;
+  const toRight = toCenterX >= fromCenterX;
+  return {
+    sx: toRight ? fromPos.x + fromPos.w : fromPos.x,
+    sy: fromPos.y + fromPos.h / 2,
+    tx: toRight ? toPos.x : toPos.x + toPos.w,
+    ty: toPos.y + toPos.h / 2,
+    dir: toRight ? 1 : -1,
+  };
+}
+
+function routeStageFlowLink(fromPos, toPos, laneIndex = 0) {
+  const { sx, sy, tx, ty, dir } = getStageFlowAnchors(fromPos, toPos);
+  const deltaX = tx - sx;
+  const forwardGap = deltaX * dir;
+  if (Math.abs(sy - ty) < 8 && forwardGap > 0) {
+    const midX = sx + dir * (forwardGap / 2);
+    return `M ${sx} ${sy} C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`;
+  }
+  if (forwardGap > 0) {
+    const midX = sx + dir * (forwardGap / 2);
+    return `M ${sx} ${sy} L ${midX} ${sy} L ${midX} ${ty} L ${tx} ${ty}`;
+  }
+  const fallbackSx = dir > 0 ? fromPos.x + fromPos.w : fromPos.x;
+  const fallbackTx = dir > 0 ? toPos.x + toPos.w : toPos.x;
+  const laneX = dir > 0
+    ? Math.max(fallbackSx, fallbackTx) + 34 + laneIndex * 12
+    : Math.min(fallbackSx, fallbackTx) - 34 - laneIndex * 12;
+  return `M ${fallbackSx} ${sy} L ${laneX} ${sy} L ${laneX} ${ty} L ${fallbackTx} ${ty}`;
+}
+
+function getStageFlowLinkActionPosition(fromPos, toPos) {
+  const { sx, sy, tx, ty } = getStageFlowAnchors(fromPos, toPos);
+  return {
+    x: Math.round((sx + tx) / 2) - 11,
+    y: Math.round((sy + ty) / 2) - 11,
+  };
+}
+
+function buildStageFlowGroupBoxes(rows, nodes, links, positions, options = {}) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const boxes = [];
+  rows.forEach((row, rowIndex) => {
+    let segment = [];
+    let currentLabel = null;
+    const flushSegment = () => {
+      if (!segment.length) return;
+      const label = currentLabel || '';
+      if (!label) {
+        segment = [];
+        return;
+      }
+      const segmentPositions = segment.map((id) => positions[id]).filter(Boolean);
+      if (!segmentPositions.length) {
+        segment = [];
+        return;
+      }
+      const minX = Math.min(...segmentPositions.map((pos) => pos.x));
+      const minY = Math.min(...segmentPositions.map((pos) => pos.y));
+      const maxX = Math.max(...segmentPositions.map((pos) => pos.x + pos.w));
+      const maxY = Math.max(...segmentPositions.map((pos) => pos.y + pos.h));
+      const groupExtraH = options.includeNodeGroupEditors ? 58 : 42;
+      boxes.push({
+        id: `group-${rowIndex}-${boxes.length}`,
+        label,
+        processIds: segment.map((id) => nodeById.get(id)?.processId || '').filter(Boolean),
+        x: Math.max(6, minX - 14),
+        y: Math.max(6, minY - 28),
+        w: Math.max(92, maxX - minX + 28),
+        h: Math.max(STAGE_FLOW_NODE_H + groupExtraH, maxY - minY + groupExtraH),
+      });
+      segment = [];
+    };
+    row.forEach((nodeId) => {
+      const label = getStageFlowGroupLabel(nodeById.get(nodeId));
+      if (currentLabel !== null && label !== currentLabel) flushSegment();
+      currentLabel = label;
+      segment.push(nodeId);
+    });
+    flushSegment();
+  });
+  return boxes;
+}
+
+function renderStageFlowNodeGroupEditor(node, pos) {
+  const processId = String(node?.processId || '').trim();
+  if (!processId || !pos) return '';
+  const editorW = 104;
+  const left = Math.max(4, Math.round(pos.x + pos.w / 2 - editorW / 2));
+  const top = Math.round(pos.y + pos.h + 4);
+  return `<div class="stage-flow-node-group-editor" data-testid="stage-flow-node-group-editor"
+      data-process-id="${esc(processId)}"
+      style="left:${left}px;top:${top}px;width:${editorW}px"
+      onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+      <span>分组</span>
+      <input data-testid="stage-flow-node-group-input" data-process-id="${esc(processId)}"
+        aria-label="流程分组" type="text" value="${esc(node.group || '')}" placeholder="未分组"
+        onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
+        oninput="setFlowGroupForProcesses('${esc(processId)}',this.value)"
+        onblur="rerenderStageWorkbench()"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+      <button type="button" title="清空分组" aria-label="清空分组"
+        onmousedown="event.preventDefault();event.stopPropagation()"
+        onclick="event.stopPropagation();clearFlowGroupForProcesses('${esc(processId)}')">×</button>
+    </div>`;
+}
+
+function readStageFlowDomPositions(dragNodeId = '', graphDx = 0, graphDy = 0) {
+  const positions = {};
+  document.querySelectorAll('.stage-flow-board .stage-flow-node[data-node-id]').forEach((node) => {
+    const nodeId = node.dataset.nodeId || '';
+    const x = Number.parseFloat(node.style.left || '0') + (nodeId === dragNodeId ? graphDx : 0);
+    const y = Number.parseFloat(node.style.top || '0') + (nodeId === dragNodeId ? graphDy : 0);
+    const w = Number.parseFloat(node.style.width || '') || node.offsetWidth || STAGE_FLOW_NODE_W;
+    const h = Number.parseFloat(node.style.height || '') || node.offsetHeight || STAGE_FLOW_NODE_H;
+    positions[nodeId] = { x, y, w, h };
+  });
+  return positions;
+}
+
+function updateStageFlowDragLinks(dragNodeId, graphDx, graphDy) {
+  const board = document.querySelector('.stage-flow-board');
+  if (!board) return;
+  const positions = readStageFlowDomPositions(dragNodeId, graphDx, graphDy);
+  const paths = Array.from(board.querySelectorAll('.stage-flow-link[data-link-from][data-link-to]'));
+  paths.forEach((path, index) => {
+    const fromPos = positions[path.dataset.linkFrom];
+    const toPos = positions[path.dataset.linkTo];
+    if (!fromPos || !toPos) return;
+    path.setAttribute('d', routeStageFlowLink(fromPos, toPos, index % 4));
+  });
+  board.querySelectorAll('.stage-flow-link-remove[data-link-from][data-link-to]').forEach((button) => {
+    const fromPos = positions[button.dataset.linkFrom];
+    const toPos = positions[button.dataset.linkTo];
+    if (!fromPos || !toPos) return;
+    const actionPos = getStageFlowLinkActionPosition(fromPos, toPos);
+    button.style.left = `${actionPos.x}px`;
+    button.style.top = `${actionPos.y}px`;
+  });
+}
+
+function buildStageFlowGuideLayout(nodes, links, options = {}) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const rows = getStageFlowRows(nodes, links);
+  const positions = {};
+  rows.forEach((row, rowIndex) => {
+    const y = STAGE_FLOW_PAD_Y + rowIndex * (STAGE_FLOW_NODE_H + STAGE_FLOW_ROW_GAP);
+    row.forEach((nodeId, colIndex) => {
+      const node = nodeById.get(nodeId);
+      if (!node) return;
+      const offset = getStageNodeOffset('stage-ref', node.id);
+      const pos = {
+        x: STAGE_FLOW_PAD_X + colIndex * (STAGE_FLOW_NODE_W + STAGE_FLOW_GAP_X) + offset.x,
+        y: y + offset.y,
+        w: STAGE_FLOW_NODE_W,
+        h: STAGE_FLOW_NODE_H,
+      };
+      positions[node.id] = pos;
+    });
+  });
+  const positionList = Object.values(positions);
+  const minX = positionList.length ? Math.min(...positionList.map((pos) => pos.x)) : STAGE_FLOW_PAD_X;
+  const minY = positionList.length ? Math.min(...positionList.map((pos) => pos.y)) : STAGE_FLOW_PAD_Y;
+  const shiftX = minX < STAGE_FLOW_PAD_X ? STAGE_FLOW_PAD_X - minX : 0;
+  const shiftY = minY < STAGE_FLOW_PAD_Y ? STAGE_FLOW_PAD_Y - minY : 0;
+  if (shiftX || shiftY) {
+    positionList.forEach((pos) => {
+      pos.x += shiftX;
+      pos.y += shiftY;
+    });
+  }
+  const groups = buildStageFlowGroupBoxes(rows, nodes, links, positions, options);
+  let boardW = 720;
+  let boardH = Math.max(260, STAGE_FLOW_PAD_Y * 2 + rows.length * STAGE_FLOW_NODE_H + Math.max(0, rows.length - 1) * STAGE_FLOW_ROW_GAP);
+  positionList.forEach((pos) => {
+    boardW = Math.max(boardW, pos.x + pos.w + STAGE_FLOW_PAD_X);
+    boardH = Math.max(boardH, pos.y + pos.h + STAGE_FLOW_PAD_Y);
+  });
+  groups.forEach((group) => {
+    boardW = Math.max(boardW, group.x + group.w + STAGE_FLOW_PAD_X);
+    boardH = Math.max(boardH, group.y + group.h + STAGE_FLOW_PAD_Y);
+  });
+  const routedLinks = links
+    .filter((link) => positions[link.from] && positions[link.to])
+    .map((link, index) => ({
+      ...link,
+      path: routeStageFlowLink(positions[link.from], positions[link.to], index % 4),
+    }));
+  return { positions, links: routedLinks, groups, boardW, boardH };
+}
+
+const MATRIX_STAGE_CARD_W = 108;
+const MATRIX_STAGE_CARD_H = 28;
+const MATRIX_STAGE_SLOT_W = 184;
+const MATRIX_STAGE_SLOT_H = 38;
+const MATRIX_STAGE_BOARD_PAD = 8;
+
+function estimateMatrixStageTextWidth(text) {
+  return Array.from(String(text || '')).reduce((width, char) => {
+    return width + (/[\u0000-\u00ff]/.test(char) ? 6 : 12);
+  }, 0);
+}
+
+function getMatrixStageNodeWidth(node) {
+  const flowCount = Math.max(0, Number(node?._processCount || 0) || 0);
+  const countWidth = flowCount > 0 ? 24 : 6;
+  return Math.max(MATRIX_STAGE_CARD_W, estimateMatrixStageTextWidth(node?.label || '') + countWidth + 28);
+}
+
+function hasPanoramaColumn(model, columnId) {
+  return (model?.columns || []).some((column) => column.id === columnId);
+}
+
+function hasPanoramaLane(model, laneId) {
+  return (model?.lanes || []).some((lane) => lane.id === laneId);
+}
+
+function getFallbackPanoramaColumnId(model, index = 0) {
+  const columns = model?.columns || [];
+  if (!columns.length) return '';
+  const fallbackIndex = Math.max(0, Math.min(columns.length - 1, Number.isFinite(index) ? index : 0));
+  return columns[fallbackIndex]?.id || columns[0]?.id || '';
+}
+
+function getFallbackPanoramaLaneId(model) {
+  return model?.lanes?.[0]?.id || '';
+}
+
+function findPanoramaLaneId(model, laneId) {
+  return hasPanoramaLane(model, laneId) ? laneId : '';
+}
+
+function inferDeliveryLane(node, model) {
+  const text = `${node.label || ''} ${node.meta || ''} ${node.searchText || ''}`;
+  const receiptLaneId = findPanoramaLaneId(model, 'receipt-system');
+  const smartLaneId = findPanoramaLaneId(model, 'smart-platform-phase2');
+  if (receiptLaneId && /示例仓单|存量系统|结算部|已有系统|既有职责|维护品种信息|维护合约信息/.test(text)) return receiptLaneId;
+  if (smartLaneId) return smartLaneId;
+  return getFallbackPanoramaLaneId(model);
+}
+
+function inferDeliveryValueStream(node, index, model) {
+  const label = String(node.label || '');
+  const text = `${label} ${node.meta || ''} ${node.searchText || ''}`;
+  const hasAny = (...words) => words.some((word) => text.includes(word));
+  const labelHasAny = (...words) => words.some((word) => label.includes(word));
+  const known = (columnId) => (hasPanoramaColumn(model, columnId) ? columnId : getFallbackPanoramaColumnId(model, index));
+  const knownOne = (columnIds) => columnIds.find((columnId) => hasPanoramaColumn(model, columnId)) || getFallbackPanoramaColumnId(model, index);
+  const handling = () => knownOne(['businessHandling', 'inStock', 'inbound', 'outbound']);
+  const risk = () => knownOne(['riskSupervision', 'other']);
+  if (labelHasAny('监管', '风控', '风险', '预警', '异常', '核验', '监测', '查询', '追溯', '统计', '报表', '视频', '物联网', '摄像头', '环境采集', '大屏')) return risk();
+  if (hasAny('仓单', '示例预报', '仓库仓单注册', '厂库仓单注册', '仓单注册', '仓单注销', '仓单流转', '仓单分配', '同步仓单', '入库管理', '出库管理', '厂库出库', '预报配对', '现场示例')) return handling();
+  if (hasAny('会员', '客户', '用户', '账号', '账户', '主体', '主体管理', '服务机构', '示例机构', '机构维护', '仓库信息', '仓库管理', '示例仓库', '仓库', '厂库', '质检机构')) return known('participants');
+  if (hasAny('参数', '参数管理', '品种参数', '品种', '合约', '商品', '规则', '标准', '升贴水', '费率', '费用', '基础数据', '基础档案', '数据字典', '品牌', '等级规格')) return known('parameters');
+  if (hasAny('入库', '出库', '在库', '业务办理', '预约', '预报', '质检', '检验', '验收', '仓单', '仓单注册', '注册', '注销', '生成仓单', '配对', '交收', '履约', '示例办理', '仓单分配', '过户', '转让', '抵押', '质押', '冻结', '解冻', '货转', '流转', '同步仓单')) return handling();
+  if (hasAny('风控', '风险', '预警', '异常', '核验', '监测', '库存', '查询', '追溯', '统计', '报表', '监管')) return risk();
+  return hasPanoramaColumn(model, 'businessHandling')
+    ? known('businessHandling')
+    : getFallbackPanoramaColumnId(model, Number.isFinite(node._valueStreamIndex) ? node._valueStreamIndex : index);
+}
+
+function inferCoarsePanoramaStageName(node) {
+  const label = String(node?.label || '');
+  const text = `${label} ${node?.meta || ''} ${node?.searchText || ''}`;
+  if (/仓库仓单注册|厂库仓单注册|仓单注册|示例预报|入库预约|入库管理|入库/.test(text)) return '仓单注册';
+  if (/仓单注销|出库管理|厂库出库|出库/.test(text)) return '仓单注销';
+  if (/仓单流转|仓单事件|过户|转让|抵押|质押|冻结|解冻|示例配对|配对|交收|履约/.test(text)) return '仓单流转';
+  if (/监管|风控|风险|预警|异常|核验|监测|库存|查询|追溯|统计|报表|视频|物联网|摄像头|环境采集|大屏/.test(label)) return '风险监管';
+  if (/基础档案|基础数据|数据字典|参数|品种|合约|商品|品牌|等级规格|规格|规则|标准|升贴水|费率|费用/.test(text)) return '品种参数管理';
+  if (/仓库主体|仓库资质|仓房|垛位|提货地点|点位|仓库信息|示例仓库|仓库管理/.test(text)) return '仓库管理';
+  if (/质检机构|检验机构/.test(text)) return '质检机构管理';
+  if (/登录|接入|账号|账户|角色|菜单|权限|鉴权|用户|会员|客户|平台协同/.test(text)) return '账号管理';
+  return '';
+}
+
+function coarsenPanoramaStageNodes(stageNodes) {
+  const grouped = [];
+  const groupIndexByName = new Map();
+  stageNodes.forEach((node) => {
+    const coarseName = inferCoarsePanoramaStageName(node);
+    if (!coarseName) {
+      grouped.push(node);
+      return;
+    }
+    const groupIndex = groupIndexByName.get(coarseName);
+    if (groupIndex === undefined) {
+      const groupNode = {
+        ...node,
+        label: coarseName,
+        _memberCount: 1,
+        _processCount: Math.max(0, Number(node._processCount || 0) || 0),
+        _memberNodeIds: [node.id],
+        _valueStreamIndex: Number.isFinite(node._valueStreamIndex) ? node._valueStreamIndex : 0,
+      };
+      grouped.push(groupNode);
+      groupIndexByName.set(coarseName, grouped.length - 1);
+      return;
+    }
+    const groupNode = grouped[groupIndex];
+    groupNode._memberCount = (groupNode._memberCount || 1) + 1;
+    groupNode._processCount = Math.max(0, Number(groupNode._processCount || 0) || 0)
+      + Math.max(0, Number(node._processCount || 0) || 0);
+    groupNode._memberNodeIds = [...(groupNode._memberNodeIds || [groupNode.id]), node.id];
+    groupNode._linked = !!groupNode._linked || !!node._linked;
+    groupNode._valueStreamIndex = Math.min(
+      Number.isFinite(groupNode._valueStreamIndex) ? groupNode._valueStreamIndex : 0,
+      Number.isFinite(node._valueStreamIndex) ? node._valueStreamIndex : 0
+    );
+    if (node.label === coarseName) groupNode.id = node.id;
+  });
+  return grouped;
+}
+
+function resolveStagePanoramaPlacement(node, index, model) {
+  const stage = node?.stage || node || {};
+  const stageColumnId = String(stage.panoramaColumnId || '').trim();
+  const stageLaneId = String(stage.panoramaLaneId || '').trim();
+  return {
+    columnId: hasPanoramaColumn(model, stageColumnId) ? stageColumnId : inferDeliveryValueStream(node, index, model),
+    laneId: hasPanoramaLane(model, stageLaneId) ? stageLaneId : inferDeliveryLane(node, model),
+  };
+}
+
+function getStageBusinessDomainLabel(stage) {
+  if (!stage || isVirtualStageId(stage.id)) return '未归属业务域';
+  const model = getPanoramaModel(S.doc);
+  const stageIndex = getStages(S.doc).findIndex((item) => item.id === stage.id);
+  const placement = resolveStagePanoramaPlacement({
+    ...stage,
+    stage,
+    label: stage.name || stage.id,
+    meta: '',
+    searchText: '',
+  }, stageIndex >= 0 ? stageIndex : 0, model);
+  const lane = (model.lanes || []).find((item) => item.id === placement.laneId);
+  return lane?.name || '未归属业务域';
+}
+
+function groupStagesByPanoramaCell(nodes, model, coarsen = true) {
+  const groups = new Map();
+  (model?.lanes || []).forEach((lane) => {
+    (model?.columns || []).forEach((column) => groups.set(`${lane.id}::${column.id}`, []));
+  });
+  nodes.forEach((node, index) => {
+    const placement = resolveStagePanoramaPlacement(node, index, model);
+    const key = `${placement.laneId}::${placement.columnId}`;
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(node);
+  });
+  if (coarsen) {
+    groups.forEach((stageNodes, key) => {
+      groups.set(key, coarsenPanoramaStageNodes(stageNodes));
+    });
+  }
+  return groups;
+}
+
+function isStagePanoramaEditing() {
+  return (S.ui.stageViewMode || 'panorama') === 'panorama' && S.ui.stageEditorCollapsed === false;
+}
+
+function renderMatrixFieldInput({ testId, value, ariaLabel, caption, scope, oninput, extraAttrs = '' }) {
+  return `<label class="matrix-edit-field" data-field-scope="${esc(scope || testId)}" ${extraAttrs}>
+    <span class="matrix-field-caption" data-testid="matrix-field-caption">${esc(caption || ariaLabel || '')}</span>
+    <input class="matrix-inline-input" type="text" value="${esc(value || '')}" data-testid="${testId}" aria-label="${esc(ariaLabel)}" placeholder="${esc(caption || ariaLabel || '')}" ${extraAttrs} oninput="${oninput}">
+  </label>`;
+}
+
+function renderMatrixHeaderCell(column, index, totalColumns, editing) {
+  if (editing) {
+    return `<div class="value-stream-header is-editing" data-testid="value-stream-header" data-column-id="${esc(column.id)}" data-stream-id="${esc(column.id)}">
+      <div class="matrix-cell-actions">
+        <button class="matrix-mini-btn" type="button" data-testid="matrix-column-add-after" data-column-id="${esc(column.id)}" onclick="addPanoramaColumn('${esc(column.id)}')" title="新增右侧价值流">＋</button>
+        <button class="matrix-mini-btn" type="button" data-testid="matrix-column-move-left" data-column-id="${esc(column.id)}" onclick="movePanoramaColumn('${esc(column.id)}',-1)" ${index === 0 ? 'disabled' : ''} title="左移">←</button>
+        <button class="matrix-mini-btn" type="button" data-testid="matrix-column-move-right" data-column-id="${esc(column.id)}" onclick="movePanoramaColumn('${esc(column.id)}',1)" ${index === totalColumns - 1 ? 'disabled' : ''} title="右移">→</button>
+        <button class="matrix-mini-btn danger" type="button" data-testid="matrix-column-delete" data-column-id="${esc(column.id)}" onclick="removePanoramaColumn('${esc(column.id)}')" ${totalColumns <= 1 ? 'disabled' : ''} title="删除价值流">✕</button>
+      </div>
+      ${renderMatrixFieldInput({
+        testId: 'matrix-column-badge',
+        value: column.badge || '',
+        ariaLabel: '价值流标签',
+        caption: '标签',
+        scope: 'column-badge',
+        extraAttrs: `data-column-id="${esc(column.id)}"`,
+        oninput: `setPanoramaColumn('${esc(column.id)}','badge',this.value)`,
+      })}
+      ${renderMatrixFieldInput({
+        testId: 'matrix-column-name',
+        value: column.name || '',
+        ariaLabel: '价值流正文',
+        caption: '正文',
+        scope: 'column-name',
+        extraAttrs: `data-column-id="${esc(column.id)}"`,
+        oninput: `setPanoramaColumn('${esc(column.id)}','name',this.value)`,
+      })}
+      ${renderMatrixFieldInput({
+        testId: 'matrix-column-scope',
+        value: column.scope || '',
+        ariaLabel: '价值流备注',
+        caption: '备注',
+        scope: 'column-scope',
+        extraAttrs: `data-column-id="${esc(column.id)}"`,
+        oninput: `setPanoramaColumn('${esc(column.id)}','scope',this.value)`,
+      })}
+    </div>`;
+  }
+  return `<div class="value-stream-header" data-testid="value-stream-header" data-column-id="${esc(column.id)}" data-stream-id="${esc(column.id)}">
+    ${column.badge ? `<span class="value-stream-lane-badge">${esc(column.badge)}</span>` : ''}
+    <strong>${esc(column.name)}</strong>
+    ${column.scope ? `<span>${esc(column.scope)}</span>` : ''}
+  </div>`;
+}
+
+function renderMatrixLaneCell(lane, index, totalLanes, editing) {
+  if (editing) {
+    return `<div class="value-stream-lane is-editing" data-lane-id="${esc(lane.id)}">
+      <div class="matrix-cell-actions">
+        <button class="matrix-mini-btn" type="button" data-testid="matrix-lane-add-after" data-lane-id="${esc(lane.id)}" onclick="addPanoramaLane('${esc(lane.id)}')" title="新增下方业务域">＋</button>
+        <button class="matrix-mini-btn" type="button" data-testid="matrix-lane-move-up" data-lane-id="${esc(lane.id)}" onclick="movePanoramaLane('${esc(lane.id)}',-1)" ${index === 0 ? 'disabled' : ''} title="上移">↑</button>
+        <button class="matrix-mini-btn" type="button" data-testid="matrix-lane-move-down" data-lane-id="${esc(lane.id)}" onclick="movePanoramaLane('${esc(lane.id)}',1)" ${index === totalLanes - 1 ? 'disabled' : ''} title="下移">↓</button>
+        <button class="matrix-mini-btn danger" type="button" data-testid="matrix-lane-delete" data-lane-id="${esc(lane.id)}" onclick="removePanoramaLane('${esc(lane.id)}')" ${totalLanes <= 1 ? 'disabled' : ''} title="删除业务域">✕</button>
+      </div>
+      ${renderMatrixFieldInput({
+        testId: 'matrix-lane-badge',
+        value: lane.badge || '',
+        ariaLabel: '业务域标签',
+        caption: '标签',
+        scope: 'lane-badge',
+        extraAttrs: `data-lane-id="${esc(lane.id)}"`,
+        oninput: `setPanoramaLane('${esc(lane.id)}','badge',this.value)`,
+      })}
+      ${renderMatrixFieldInput({
+        testId: 'matrix-lane-name',
+        value: lane.name || '',
+        ariaLabel: '业务域正文',
+        caption: '正文',
+        scope: 'lane-name',
+        extraAttrs: `data-lane-id="${esc(lane.id)}"`,
+        oninput: `setPanoramaLane('${esc(lane.id)}','name',this.value)`,
+      })}
+      ${renderMatrixFieldInput({
+        testId: 'matrix-lane-note',
+        value: lane.note || '',
+        ariaLabel: '业务域备注',
+        caption: '备注',
+        scope: 'lane-note',
+        extraAttrs: `data-lane-id="${esc(lane.id)}"`,
+        oninput: `setPanoramaLane('${esc(lane.id)}','note',this.value)`,
+      })}
+    </div>`;
+  }
+  return `<div class="value-stream-lane">
+    ${lane.badge ? `<span class="value-stream-lane-badge">${esc(lane.badge)}</span>` : ''}
+    <strong>${esc(lane.name)}</strong>
+    ${lane.note ? `<span>${esc(lane.note)}</span>` : ''}
+  </div>`;
+}
+
+function getMatrixStageSlot(node, index) {
+  const slot = normalizeGridSlot(node?.stage?.panoramaSlot);
+  if (slot) return slot;
+  const pos = node?.stage?.panoramaPos;
+  if (pos && typeof pos === 'object') {
+    const normalizedPos = normalizeGraphOffset(pos);
+    return {
+      row: Math.max(0, Math.round((normalizedPos.y - MATRIX_STAGE_BOARD_PAD) / MATRIX_STAGE_SLOT_H)),
+      col: Math.max(0, Math.round((normalizedPos.x - MATRIX_STAGE_BOARD_PAD) / MATRIX_STAGE_SLOT_W)),
+    };
+  }
+  return { row: Math.floor(index / 2), col: index % 2 };
+}
+
+function getMatrixStageNodePosition(node, index) {
+  const slot = getMatrixStageSlot(node, index);
+  return {
+    x: MATRIX_STAGE_BOARD_PAD + slot.col * MATRIX_STAGE_SLOT_W,
+    y: MATRIX_STAGE_BOARD_PAD + slot.row * MATRIX_STAGE_SLOT_H,
+  };
+}
+
+function getMatrixStageBoardHeight(stageNodes, editing = false) {
+  if (!stageNodes.length) return editing ? 48 : 42;
+  const maxBottom = stageNodes.reduce((maxY, node, index) => {
+    const pos = getMatrixStageNodePosition(node, index);
+    return Math.max(maxY, pos.y + MATRIX_STAGE_CARD_H + 8);
+  }, 0);
+  return Math.max(editing ? 82 : 54, maxBottom + (editing ? 30 : 0));
+}
+
+function getMatrixStageBoardWidth(stageNodes, editing = false) {
+  if (!stageNodes.length) return editing ? 132 : 120;
+  const maxRight = stageNodes.reduce((maxX, node, index) => {
+    const pos = getMatrixStageNodePosition(node, index);
+    return Math.max(maxX, pos.x + getMatrixStageNodeWidth(node) + MATRIX_STAGE_BOARD_PAD);
+  }, 0);
+  return Math.max(editing ? 250 : 132, maxRight);
+}
+
+function renderMatrixStageBoard(lane, column, stageNodes, editing) {
+  const focusedStageId = String(S.ui.stageLinkFocusId || '').trim();
+  const cellId = `${lane.id}::${column.id}`;
+  const boardH = getMatrixStageBoardHeight(stageNodes, editing);
+  const boardW = getMatrixStageBoardWidth(stageNodes, editing);
+  return `<div class="value-stream-stage-board" data-testid="value-stream-stage-board" style="height:${boardH}px;min-width:${boardW}px">
+    ${stageNodes.map((node, index) => {
+      const pos = getMatrixStageNodePosition(node, index);
+      const slot = getMatrixStageSlot(node, index);
+      const flowCount = Math.max(0, Number(node._processCount || 0) || 0);
+      const nodeTitle = flowCount ? `${node.label}（${flowCount} 个流程）` : (node.label || '');
+      const canRenameStage = Boolean(editing && !node.stage?.virtual);
+      const nodeW = getMatrixStageNodeWidth(node);
+      return `<div class="stage-graph-node stage-kind stage-matrix-stage${focusedStageId && node.id === focusedStageId ? ' is-selected' : ''}" role="button" tabindex="0"
+        style="left:${pos.x}px;top:${pos.y}px;width:${nodeW}px"
+        data-node-id="${esc(node.id)}" data-testid="stage-graph-node" title="${esc(nodeTitle)}"
+        data-member-count="${flowCount}" data-flow-count="${flowCount}"
+        data-grid-row="${slot.row}" data-grid-col="${slot.col}"
+        ondblclick="startStageNameEdit('${esc(node.id)}',event)"
+        onmousedown="startStageNodeDrag('stage','${esc(node.id)}',event)">
+        ${renderStageNameInlineEditor(node.id, node.label, canRenameStage)}
+        ${flowCount > 0 ? `<span class="stage-node-count" aria-label="流程数量">${flowCount}</span>` : ''}
+        ${editing ? `<span class="matrix-stage-delete" data-testid="matrix-stage-delete" title="删除阶段" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();removeStage('${esc(node.id)}')">✕</span>` : ''}
+      </div>`;
+    }).join('')}
+    ${editing ? `<button class="matrix-stage-add" type="button" data-testid="matrix-stage-add" data-cell-id="${esc(cellId)}" onclick="addStageFromMatrixCell('${esc(lane.id)}','${esc(column.id)}')">＋ 阶段</button>` : ''}
+  </div>`;
+}
+
+function renderValueStreamCell(lane, column, cell, stageNodes, editing = false) {
+  const sortedStages = [...stageNodes].sort((left, right) => {
+    const linkedDelta = Number(!!right._linked) - Number(!!left._linked);
+    if(linkedDelta) return linkedDelta;
+    return (left._valueStreamIndex || 0) - (right._valueStreamIndex || 0);
+  });
+  const cellId = `${lane.id}::${column.id}`;
+  return `<div class="value-stream-cell${sortedStages.length ? ' has-stages' : ''}${editing ? ' is-editing' : ''}" data-cell-id="${esc(cellId)}" data-lane-id="${esc(lane.id)}" data-column-id="${esc(column.id)}">
+    ${editing ? `<div class="matrix-body-editors">
+      ${renderMatrixFieldInput({
+        testId: 'matrix-cell-status',
+        value: cell.status || '',
+        ariaLabel: '单元格标签',
+        caption: '标签',
+        scope: 'cell-status',
+        extraAttrs: `data-cell-id="${esc(cellId)}"`,
+        oninput: `setPanoramaCell('${esc(lane.id)}','${esc(column.id)}','status',this.value)`,
+      })}
+      ${renderMatrixFieldInput({
+        testId: 'matrix-cell-text',
+        value: cell.text || '',
+        ariaLabel: '单元格备注',
+        caption: '备注',
+        scope: 'cell-text',
+        extraAttrs: `data-cell-id="${esc(cellId)}"`,
+        oninput: `setPanoramaCell('${esc(lane.id)}','${esc(column.id)}','text',this.value)`,
+      })}
+    </div>` : `
+      ${cell.status ? `<div class="value-stream-cell-status">${esc(cell.status)}</div>` : ''}
+      ${cell.text ? `<div class="value-stream-cell-text">${esc(cell.text)}</div>` : ''}
+    `}
+    ${renderMatrixStageBoard(lane, column, sortedStages, editing)}
+  </div>`;
+}
+
+function getValueStreamGridStyle(model, editing = false) {
+  const count = Math.max(1, (model?.columns || []).length);
+  const axisMin = editing ? 220 : 154;
+  const columnMin = editing ? 220 : 210;
+  if (editing) return `grid-template-columns:minmax(${axisMin}px,.8fr) repeat(${count},minmax(${columnMin}px,1fr))`;
+  return `grid-template-columns:minmax(${axisMin}px,.9fr) repeat(${count},minmax(${columnMin}px,1fr))`;
+}
+
+function getValueStreamMatrixBaseWidth(model, editing = false) {
+  const count = Math.max(1, (model?.columns || []).length);
+  const axisMin = editing ? 220 : 154;
+  const columnMin = editing ? 220 : 210;
+  return axisMin + count * columnMin;
+}
+
+function renderStagePanoramaMatrixMarkup({ nodes, links, emptyText = '暂无内容', testId = 'stage-graph' }) {
+  const model = getPanoramaModel(S.doc);
+  const linkedStageIds = new Set();
+  links.forEach((link) => {
+    linkedStageIds.add(link.from);
+    linkedStageIds.add(link.to);
+  });
+  const indexedNodes = nodes.map((node, index) => ({
+    ...node,
+    _valueStreamIndex: index,
+    _linked: linkedStageIds.has(node.id),
+  }));
+  const editing = isStagePanoramaEditing();
+  const groupedStages = groupStagesByPanoramaCell(indexedNodes, model, false);
+  const gridStyle = getValueStreamGridStyle(model, editing);
+  const zoom = getStageGraphZoom();
+  const matrixBaseWidth = getValueStreamMatrixBaseWidth(model, editing);
+  const matrixStyle = `width:max(100%, ${matrixBaseWidth}px);min-width:${matrixBaseWidth}px;zoom:${editing ? zoom : 1}`;
+  return `<div class="stage-graph value-stream-graph" data-testid="${testId}">
+    <div class="value-stream-scroll" data-testid="value-stream-scroll">
+    <div class="value-stream-matrix${editing ? ' is-editing' : ''}" data-testid="value-stream-matrix" data-editing="${editing ? 'true' : 'false'}" style="${matrixStyle}">
+      <div class="value-stream-header-row" style="${gridStyle}">
+        <div class="value-stream-axis">业务域 / 价值流</div>
+        ${model.columns.map((column, index) => renderMatrixHeaderCell(column, index, model.columns.length, editing)).join('')}
+      </div>
+      <div class="value-stream-body">
+        ${model.lanes.map((lane, index) => `<div class="value-stream-row" data-testid="value-stream-row" data-lane-id="${esc(lane.id)}" style="${gridStyle}">
+          ${renderMatrixLaneCell(lane, index, model.lanes.length, editing)}
+          ${model.columns.map((column) => renderValueStreamCell(lane, column, getPanoramaCell(model, lane.id, column.id), groupedStages.get(`${lane.id}::${column.id}`) || [], editing)).join('')}
+        </div>`).join('')}
+      </div>
+    </div>
+    </div>
+  </div>`;
+}
+
+function renderStageFlowCanvasTools(stageItem, processRefs) {
+  const stage = stageItem && !stageItem.virtual ? findStage(stageItem.id, S.doc) : null;
+  if (!stage) {
+    return `<div class="stage-flow-canvas-tools is-muted" data-testid="stage-flow-canvas-tools">
+      <span>未设置业务阶段仅用于承接待归类流程，不能维护阶段内连线。</span>
+    </div>`;
+  }
+  const allProcesses = S.doc.processes || [];
+  const availableProcesses = allProcesses.filter((proc) => !processRefs.some((item) => item.processId === proc.id));
+  const businessDomain = getStageBusinessDomainLabel(stage);
+  return `<div class="stage-flow-canvas-tools" data-testid="stage-flow-canvas-tools">
+    <div class="stage-flow-domain-readonly" data-testid="stage-business-domain-readonly">
+      <span>所属业务域</span>
+      <strong>${esc(businessDomain)}</strong>
+    </div>
+    <div class="stage-flow-tool-group stage-flow-node-tools">
+      <select data-testid="stage-process-select" id="stage-process-select" onchange="addProcessToStage('${esc(stage.id)}',this.value);this.value=''">
+        <option value="">选择已有流程加入当前阶段...</option>
+        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</option>`).join('')}
+      </select>
+    </div>
+  </div>`;
+}
+
+function renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText = '暂无内容', testId = 'stage-graph', editing = false, processRefs = [] }) {
+  const showTools = editing && stageItem;
+  const canEditStage = editing && stageItem && !stageItem.virtual;
+  if (!nodes.length) {
+    return `<div class="stage-graph stage-flow-guide${editing ? ' is-editing' : ''}" data-testid="${testId}">
+      ${showTools ? renderStageFlowCanvasTools(stageItem, processRefs) : ''}
+      <div class="diag-empty stage-flow-empty" data-testid="${testId}-empty">
+        <span>${emptyText}</span>
+        ${canEditStage ? `<button class="btn btn-outline btn-sm" type="button" data-testid="stage-flow-node-add-button" onclick="addStageFlowNode('${esc(stageItem.id)}')">+ 新流程</button>` : ''}
+      </div>
+    </div>`;
+  }
+  const graph = buildStageFlowGuideLayout(nodes, links, { includeNodeGroupEditors: canEditStage });
+  const zoom = getStageGraphZoom();
+  const zoomedW = Math.max(240, Math.round(graph.boardW * zoom));
+  const zoomedH = Math.max(180, Math.round(graph.boardH * zoom));
+  const draftFromRefId = canEditStage ? getStageFlowLinkDraft(stageItem.id) : '';
+  return `<div class="stage-graph stage-flow-guide${editing ? ' is-editing' : ''}" data-testid="${testId}">
+    ${showTools ? renderStageFlowCanvasTools(stageItem, processRefs) : ''}
+    <div class="stage-graph-zoom-shell stage-flow-zoom-shell" style="width:${zoomedW}px;height:${zoomedH}px">
+      <div class="stage-graph-zoom-target" style="width:${graph.boardW}px;height:${graph.boardH}px;transform:scale(${zoom});transform-origin:0 0;">
+        <div class="stage-graph-board stage-flow-board" style="width:${graph.boardW}px;height:${graph.boardH}px">
+          ${canEditStage ? `<button class="stage-flow-board-add" type="button" data-testid="stage-flow-node-add-button"
+            onmousedown="event.stopPropagation()" onclick="event.stopPropagation();addStageFlowNode('${esc(stageItem.id)}')">+ 流程</button>` : ''}
+          ${graph.groups.map((group) => `<div class="stage-flow-group-box" data-testid="stage-flow-group" aria-label="流程分组"
+              data-process-ids="${esc((group.processIds || []).join('|'))}"
+              style="left:${group.x}px;top:${group.y}px;width:${group.w}px;height:${group.h}px">
+              <div class="stage-flow-group-title${group.label ? '' : ' is-placeholder'}">${esc(group.label || '未分组')}</div>
+            </div>`).join('')}
+          <svg class="stage-graph-svg" width="${graph.boardW}" height="${graph.boardH}" viewBox="0 0 ${graph.boardW} ${graph.boardH}" aria-hidden="true">
+            <defs>
+              <marker id="stage-flow-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+                <path d="M0,0 L0,8 L8,4 z" fill="#52677f"></path>
+              </marker>
+            </defs>
+            ${graph.links.map((link) => `<path class="stage-graph-link stage-flow-link"
+              data-link-from="${esc(link.from)}" data-link-to="${esc(link.to)}"
+              d="${link.path}" fill="none" stroke="#52677f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#stage-flow-arrow)"></path>`).join('')}
+          </svg>
+          ${canEditStage ? graph.links.map((link) => {
+            const fromPos = graph.positions[link.from];
+            const toPos = graph.positions[link.to];
+            if (!fromPos || !toPos || !link.id) return '';
+            const actionPos = getStageFlowLinkActionPosition(fromPos, toPos);
+            return `<button class="stage-flow-link-remove" type="button" data-testid="stage-process-link-remove-button"
+              data-link-from="${esc(link.from)}" data-link-to="${esc(link.to)}"
+              title="删除连线" aria-label="删除连线"
+              style="left:${actionPos.x}px;top:${actionPos.y}px"
+              onmousedown="event.stopPropagation()" onclick="event.stopPropagation();removeStageProcessLink('${esc(stageItem.id)}','${esc(link.id)}')">×</button>`;
+          }).join('') : ''}
+          ${nodes.map((node) => {
+            const pos = graph.positions[node.id];
+            const procId = node.processId || '';
+            if (canEditStage) {
+              const isDraftSource = draftFromRefId === node.id;
+              const isDraftTarget = draftFromRefId && draftFromRefId !== node.id;
+              const linkButton = isDraftSource
+                ? `<button class="stage-quick-btn warning" type="button" data-testid="stage-flow-link-cancel-button" title="取消连线" aria-label="取消连线" onclick="clearStageFlowLinkDraft()">↺</button>`
+                : (isDraftTarget
+                  ? `<button class="stage-quick-btn success" type="button" data-testid="stage-flow-link-target-button" title="连到这里" aria-label="连到这里" onclick="S.ui.stageFlowLinkDraft=null;addStageProcessLinkBetweenRefs('${esc(stageItem.id)}','${esc(draftFromRefId)}','${esc(node.id)}')">↦</button>`
+                  : `<button class="stage-quick-btn" type="button" data-testid="stage-flow-link-source-button" title="从这里连线" aria-label="从这里连线" onclick="startStageFlowLinkDraft('${esc(stageItem.id)}','${esc(node.id)}')">→</button>`);
+              return `<div class="stage-graph-node process-kind stage-flow-node is-editable${isDraftSource ? ' is-link-source' : ''}${isDraftTarget ? ' is-link-target' : ''}" data-node-id="${esc(node.id)}" data-testid="stage-graph-node" data-process-id="${esc(procId)}"
+                onmousedown="startStageNodeDrag('stage-ref','${esc(node.id)}',event)"
+                style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
+                <textarea class="stage-flow-name-input" data-testid="stage-flow-name-input" data-process-id="${esc(procId)}" aria-label="流程名称"
+                  onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
+                  oninput="setProc('${esc(procId)}','name',this.value);renderSidebar()">${esc(node.label)}</textarea>
+                <div class="stage-flow-node-actions" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+                  <button class="stage-quick-btn" type="button" data-testid="stage-member-view-button" title="查看流程" aria-label="查看流程" onclick="navigate('process',{procId:'${esc(procId)}',taskId:null})">↗</button>
+                  ${linkButton}
+                  <button class="stage-quick-btn danger" type="button" data-testid="stage-member-remove-button" title="移出阶段" aria-label="移出阶段" onclick="removeProcessFromStage('${esc(stageItem.id)}','${esc(procId)}')">−</button>
+                  <button class="stage-quick-btn danger" type="button" data-testid="stage-member-delete-button" title="删除流程" aria-label="删除流程" onclick="removeProcess('${esc(procId)}')">×</button>
+                </div>
+              </div>`;
+            }
+            return `<div class="stage-graph-node process-kind stage-flow-node" data-node-id="${esc(node.id)}" data-testid="stage-graph-node" data-process-id="${esc(procId)}"
+              onmousedown="startStageNodeDrag('stage-ref','${esc(node.id)}',event)"
+              style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
+              <span class="stage-flow-node-title">${esc(node.label)}</span>
+            </div>`;
+          }).join('')}
+          ${canEditStage ? nodes.map((node) => renderStageFlowNodeGroupEditor(node, graph.positions[node.id])).join('') : ''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderStageGraphMarkup({ nodes, links, kind = 'stage', emptyText = '暂无内容', testId = 'stage-graph', stageItem = null, editing = false, processRefs = [] }) {
+  if (kind === 'stage') {
+    return renderStagePanoramaMatrixMarkup({ nodes, links, emptyText, testId });
+  }
+  if (kind === 'stage-ref') {
+    return renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText, testId, editing, processRefs });
+  }
+  if (!nodes.length) return `<div class="diag-empty" data-testid="${testId}-empty">${emptyText}</div>`;
+  const graph = buildStageGraphLayout(nodes, links, kind);
+  const focusedStageId = kind === 'stage' ? String(S.ui.stageLinkFocusId || '').trim() : '';
+  const zoom = getStageGraphZoom();
+  const zoomedW = Math.max(240, Math.round(graph.boardW * zoom));
+  const zoomedH = Math.max(180, Math.round(graph.boardH * zoom));
+  return `<div class="stage-graph" data-testid="${testId}">
+    <div class="stage-graph-zoom-shell" style="width:${zoomedW}px;height:${zoomedH}px">
+      <div class="stage-graph-zoom-target" style="width:${graph.boardW}px;height:${graph.boardH}px;transform:scale(${zoom});transform-origin:0 0;">
+        <div class="stage-graph-board" style="width:${graph.boardW}px;height:${graph.boardH}px">
+          <svg class="stage-graph-svg" width="${graph.boardW}" height="${graph.boardH}" viewBox="0 0 ${graph.boardW} ${graph.boardH}" aria-hidden="true">
+            <defs>
+              <marker id="stage-graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+                <path d="M0,0 L0,8 L8,4 z" fill="#64748b"></path>
+              </marker>
+            </defs>
+            ${graph.links.map((link) => {
+              const related = focusedStageId && (link.from === focusedStageId || link.to === focusedStageId);
+              const muted = focusedStageId && !related;
+              return `<path class="stage-graph-link${related ? ' is-related' : ''}${muted ? ' is-muted' : ''}"
+                data-link-from="${esc(link.from)}" data-link-to="${esc(link.to)}"
+                d="${link.path}" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#stage-graph-arrow)"></path>`;
+            }).join('')}
+          </svg>
+          ${nodes.map((node) => {
+            const pos = graph.positions[node.id];
+            const selected = focusedStageId && node.id === focusedStageId;
+            return `<button class="stage-graph-node ${kind==='stage'?'stage-kind':'process-kind'}${selected ? ' is-selected' : ''}" type="button"
+              data-node-id="${esc(node.id)}" data-testid="stage-graph-node"
+              onmousedown="startStageNodeDrag('${kind}','${esc(node.id)}',event)"
+              style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
+              <span class="stage-graph-node-title">${esc(node.label)}</span>
+              ${node.meta ? `<span class="stage-graph-node-meta">${esc(node.meta)}</span>` : ''}
+            </button>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildStagePanoramaGraphData() {
+  const stageItems = getStageItems(S.doc).filter((stage) => !stage.virtual);
+  const nodes = stageItems.map((stage) => {
+    const processRefs = getStageProcessRefs(stage.id, S.doc);
+    const searchText = processRefs.map((ref) => {
+      const proc = getStageRefProcess(ref, S.doc);
+      const taskNames = getProcNodes(proc).map((task) => task.name || '').join(' ');
+      return `${proc?.name || ''} ${proc?.subDomain || ''} ${proc?.flowGroup || ''} ${taskNames}`;
+    }).join(' ');
+    return {
+      id: stage.id,
+      label: stage.name || stage.id,
+      meta: stage.subDomain || '',
+      searchText,
+      _processCount: processRefs.length,
+      stage,
+    };
+  });
+  const stageIdSet = new Set(stageItems.map((stage) => stage.id));
+  const links = getStageLinks(S.doc)
+    .filter((link) => stageIdSet.has(link.fromStageId) && stageIdSet.has(link.toStageId))
+    .map((link) => ({ from: link.fromStageId, to: link.toStageId }));
+  return { nodes, links };
+}
+
+function buildStageDetailGraphData(stageId) {
+  const processRefs = getStageProcessRefs(stageId, S.doc);
+  const processes = processRefs.map((ref) => getStageRefProcess(ref, S.doc)).filter(Boolean);
+  const nodes = processRefs.map((ref) => {
+      const proc = getStageRefProcess(ref, S.doc);
+    return {
+      id: ref.id,
+      label: proc?.name || proc?.id || ref.processId,
+      meta: '',
+      group: proc?.flowGroup || '',
+      processId: proc?.id || ref.processId,
+    };
+  });
+  const links = getStageFlowLinks(S.doc)
+    .filter((link) => link.stageId === stageId)
+    .map((link) => ({ id: link.id, from: link.fromRefId, to: link.toRefId }));
+  return { nodes, links, processes, processRefs };
+}
+
+function renderStageLinkEditor(stageItems) {
+  const realStages = stageItems.filter((stage) => !stage.virtual);
+  const links = getStageLinks(S.doc);
+  const focusedStage = realStages.find((stage) => stage.id === S.ui.stageLinkFocusId) || null;
+  const visibleLinks = focusedStage
+    ? links.filter((link) => link.fromStageId === focusedStage.id || link.toStageId === focusedStage.id)
+    : links;
+  const selectionNote = focusedStage
+    ? `<div class="stage-link-focus-note" data-testid="stage-link-focus-note">
+        <span>已选中：${esc(focusedStage.name || focusedStage.id)}，仅显示相关连线 ${visibleLinks.length} / ${links.length}</span>
+        <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="stage-link-clear-focus" onclick="clearStageLinkFocus()">显示全部</button>
+      </div>`
+    : '<div class="stage-link-focus-note muted">点击左侧全景图中的阶段节点，可只查看它的相关连线。</div>';
+  return `<div class="stage-editor-section">
+    <div class="stage-editor-section-head">
+      <h5>阶段连线</h5>
+      <button class="btn btn-outline btn-sm" type="button" onclick="addStageLink('', '${esc(focusedStage?.id || '')}')">＋ 添加连线</button>
+    </div>
+    ${selectionNote}
+    ${visibleLinks.length ? `<div class="stage-link-list">
+      ${visibleLinks.map((link) => {
+        const linkIndex = links.findIndex((item) => item.uid === link.uid);
+        const related = focusedStage && (link.fromStageId === focusedStage.id || link.toStageId === focusedStage.id);
+        return `<div class="stage-link-row${related ? ' is-related' : ''}" data-testid="stage-link-row">
+        <select onchange="setStageLink('${esc(link.uid)}','fromStageId',this.value)">
+          ${realStages.map((stage) => `<option value="${esc(stage.id)}" ${link.fromStageId===stage.id?'selected':''}>${esc(stage.name || stage.id)}</option>`).join('')}
+        </select>
+        <span class="stage-link-arrow">→</span>
+        <select onchange="setStageLink('${esc(link.uid)}','toStageId',this.value)">
+          ${realStages.map((stage) => `<option value="${esc(stage.id)}" ${link.toStageId===stage.id?'selected':''}>${esc(stage.name || stage.id)}</option>`).join('')}
+        </select>
+        <div class="row-actions">
+          <button class="stage-quick-btn" type="button" data-testid="stage-link-add-button" onclick="addStageLink('${esc(link.uid)}','${esc(focusedStage?.id || '')}')">＋</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-link-move-up" onclick="moveStageLink('${esc(link.uid)}',-1)" ${linkIndex <= 0 ? 'disabled' : ''}>↑</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-link-move-down" onclick="moveStageLink('${esc(link.uid)}',1)" ${linkIndex === links.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="stage-quick-btn danger" type="button" data-testid="stage-link-remove-button" onclick="removeStageLink('${esc(link.uid)}')">✕</button>
+        </div>
+      </div>`;
+      }).join('')}
+    </div>` : `<p class="no-refs">${focusedStage ? '该阶段暂无相关连线，可点击“添加连线”补一条。' : '暂无阶段连线，先添加一条。'}</p>`}
+  </div>`;
+}
+
+function renderStageProcessLinkEditor(stage, processRefs) {
+  const links = stage ? getStageFlowLinks(S.doc).filter((link) => link.stageId === stage.id) : [];
+  if (!stage) {
+    return `<div class="stage-editor-section"><h5>阶段内流程连线</h5><p class="no-refs">未设置业务阶段只用于承接旧流程，不在这里维护流程连线。</p></div>`;
+  }
+  return `<div class="stage-editor-section">
+    <div class="stage-editor-section-head">
+      <h5>阶段内流程连线</h5>
+      <button class="btn btn-outline btn-sm" type="button" onclick="addStageProcessLink('${esc(stage.id)}')" ${processRefs.length > 1 ? '' : 'disabled'}>＋ 添加连线</button>
+    </div>
+    ${links.length ? `<div class="stage-link-list">
+      ${links.map((link) => `<div class="stage-link-row" data-testid="stage-process-link-row">
+        <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','fromRefId',this.value)">
+          ${processRefs.map((ref) => {
+            const proc = getStageRefProcess(ref, S.doc);
+            return `<option value="${esc(ref.id)}" ${link.fromRefId===ref.id?'selected':''}>${esc(proc?.name || proc?.id || ref.processId)}</option>`;
+          }).join('')}
+        </select>
+        <span class="stage-link-arrow">→</span>
+        <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','toRefId',this.value)">
+          ${processRefs.map((ref) => {
+            const proc = getStageRefProcess(ref, S.doc);
+            return `<option value="${esc(ref.id)}" ${link.toRefId===ref.id?'selected':''}>${esc(proc?.name || proc?.id || ref.processId)}</option>`;
+          }).join('')}
+        </select>
+        <div class="row-actions">
+          <button class="stage-quick-btn" type="button" data-testid="stage-process-link-add-button" onclick="addStageProcessLink('${esc(stage.id)}','${esc(link.id)}')">＋</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-process-link-move-up" onclick="moveStageProcessLink('${esc(stage.id)}','${esc(link.id)}',-1)">↑</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-process-link-move-down" onclick="moveStageProcessLink('${esc(stage.id)}','${esc(link.id)}',1)">↓</button>
+          <button class="stage-quick-btn danger" type="button" data-testid="stage-process-link-remove-button" onclick="removeStageProcessLink('${esc(stage.id)}','${esc(link.id)}')">✕</button>
+        </div>
+      </div>`).join('')}
+    </div>` : '<p class="no-refs">暂无阶段内流程连线，先添加一条。</p>'}
+  </div>`;
+}
+
+function renderStageProcessMembership(stageItem, processRefs) {
+  const processes = processRefs.map((ref) => getStageRefProcess(ref, S.doc)).filter(Boolean);
+  const allProcesses = S.doc.processes || [];
+  const availableProcesses = allProcesses.filter((proc) => {
+    if (processRefs.some((item) => item.processId === proc.id)) return false;
+    if (stageItem.virtual) return false;
+    return true;
+  });
+  return `<div class="stage-editor-section">
+    <div class="stage-editor-section-head">
+      <h5>成员流程</h5>
+      ${!stageItem.virtual ? `<button class="btn btn-outline btn-sm" type="button" data-testid="stage-member-add-button" onclick="addProcess('${esc(stageItem.subDomain || '')}','${esc(stageItem.id)}')">＋ 新流程</button>` : ''}
+    </div>
+    ${processes.length ? `<div class="stage-member-list">
+      ${processRefs.map((ref, index) => {
+        const proc = getStageRefProcess(ref, S.doc);
+        return `<div class="stage-member-chip" data-testid="stage-member-chip">
+        <span class="stage-member-label">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</span>
+        <div class="stage-member-actions">
+          <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="stage-member-view-button" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})">查看</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-member-move-up" onclick="moveProcInStage('${esc(stageItem.id)}','${esc(proc.id)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-member-move-down" onclick="moveProcInStage('${esc(stageItem.id)}','${esc(proc.id)}',1)" ${index === processRefs.length - 1 ? 'disabled' : ''}>↓</button>
+          ${!stageItem.virtual ? `<button class="stage-quick-btn danger stage-quick-btn-text" type="button" data-testid="stage-member-remove-button" onclick="removeProcessFromStage('${esc(stageItem.id)}','${esc(proc.id)}')">移出</button>` : ''}
+          ${!stageItem.virtual ? `<button class="stage-quick-btn danger stage-quick-btn-text" type="button" data-testid="stage-member-delete-button" onclick="removeProcess('${esc(proc.id)}')">删除</button>` : ''}
+        </div>
+      </div>`;
+      }).join('')}
+    </div>` : '<p class="no-refs">当前阶段还没有流程。</p>'}
+    ${!stageItem.virtual ? `<div class="stage-inline-row">
+      <select data-testid="stage-process-select" id="stage-process-select">
+        <option value="">选择已有流程加入当前阶段...</option>
+        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</option>`).join('')}
+      </select>
+      <button class="btn btn-outline btn-sm" type="button" data-testid="stage-member-join-button" onclick="addProcessToStage('${esc(stageItem.id)}',document.getElementById('stage-process-select').value)">加入</button>
+    </div>` : '<p class="stage-tip">这些流程尚未归入真实业务阶段，可新建阶段后逐步迁移。</p>'}
+  </div>`;
+}
+
+function renderPanoramaTableEditor(model) {
+  const columns = model.columns || [];
+  const lanes = model.lanes || [];
+  return `<div class="stage-editor-section panorama-table-editor" data-testid="panorama-table-editor">
+    <div class="stage-editor-section-head">
+      <h5>全景表格</h5>
+    </div>
+    <div class="panorama-config-block">
+      <div class="panorama-config-title">
+        <span>价值流列</span>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="panorama-column-add" onclick="addPanoramaColumn()">＋ 新增列</button>
+      </div>
+      <div class="panorama-config-list">
+        ${columns.map((column, index) => `<div class="panorama-config-row" data-column-id="${esc(column.id)}">
+          <input type="text" value="${esc(column.name || '')}" data-testid="panorama-column-name" data-column-id="${esc(column.id)}" aria-label="价值流名称"
+            oninput="setPanoramaColumn('${esc(column.id)}','name',this.value);rerenderStageWorkbench({focusSelector:'[data-testid=&quot;panorama-column-name&quot;][data-column-id=&quot;${esc(column.id)}&quot;]'})">
+          <input type="text" value="${esc(column.scope || '')}" data-testid="panorama-column-scope" data-column-id="${esc(column.id)}" aria-label="价值流范围"
+            oninput="setPanoramaColumn('${esc(column.id)}','scope',this.value);rerenderStageWorkbench({focusSelector:'[data-testid=&quot;panorama-column-scope&quot;][data-column-id=&quot;${esc(column.id)}&quot;]'})">
+          <div class="stage-overview-row-actions">
+            <button class="stage-quick-btn" type="button" data-testid="panorama-column-add-after" onclick="addPanoramaColumn('${esc(column.id)}')">＋</button>
+            <button class="stage-quick-btn" type="button" data-testid="panorama-column-move-left" onclick="movePanoramaColumn('${esc(column.id)}',-1)" ${index === 0 ? 'disabled' : ''}>←</button>
+            <button class="stage-quick-btn" type="button" data-testid="panorama-column-move-right" onclick="movePanoramaColumn('${esc(column.id)}',1)" ${index === columns.length - 1 ? 'disabled' : ''}>→</button>
+            <button class="stage-quick-btn danger" type="button" data-testid="panorama-column-delete" onclick="removePanoramaColumn('${esc(column.id)}')" ${columns.length <= 1 ? 'disabled' : ''}>✕</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="panorama-config-block">
+      <div class="panorama-config-title">
+        <span>业务域行</span>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="panorama-lane-add" onclick="addPanoramaLane()">＋ 新增行</button>
+      </div>
+      <div class="panorama-config-list">
+        ${lanes.map((lane, index) => `<div class="panorama-config-row panorama-lane-editor-row" data-lane-id="${esc(lane.id)}">
+          <input type="text" value="${esc(lane.name || '')}" data-testid="panorama-lane-name" data-lane-id="${esc(lane.id)}" aria-label="业务域名称"
+            oninput="setPanoramaLane('${esc(lane.id)}','name',this.value);rerenderStageWorkbench({focusSelector:'[data-testid=&quot;panorama-lane-name&quot;][data-lane-id=&quot;${esc(lane.id)}&quot;]'})">
+          <input type="text" value="${esc(lane.badge || '')}" data-testid="panorama-lane-badge" data-lane-id="${esc(lane.id)}" aria-label="业务域标签"
+            oninput="setPanoramaLane('${esc(lane.id)}','badge',this.value);rerenderStageWorkbench({focusSelector:'[data-testid=&quot;panorama-lane-badge&quot;][data-lane-id=&quot;${esc(lane.id)}&quot;]'})">
+          <input type="text" value="${esc(lane.note || '')}" data-testid="panorama-lane-note" data-lane-id="${esc(lane.id)}" aria-label="业务域说明"
+            oninput="setPanoramaLane('${esc(lane.id)}','note',this.value);rerenderStageWorkbench({focusSelector:'[data-testid=&quot;panorama-lane-note&quot;][data-lane-id=&quot;${esc(lane.id)}&quot;]'})">
+          <div class="stage-overview-row-actions">
+            <button class="stage-quick-btn" type="button" data-testid="panorama-lane-add-after" onclick="addPanoramaLane('${esc(lane.id)}')">＋</button>
+            <button class="stage-quick-btn" type="button" data-testid="panorama-lane-move-up" onclick="movePanoramaLane('${esc(lane.id)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button class="stage-quick-btn" type="button" data-testid="panorama-lane-move-down" onclick="movePanoramaLane('${esc(lane.id)}',1)" ${index === lanes.length - 1 ? 'disabled' : ''}>↓</button>
+            <button class="stage-quick-btn danger" type="button" data-testid="panorama-lane-delete" onclick="removePanoramaLane('${esc(lane.id)}')" ${lanes.length <= 1 ? 'disabled' : ''}>✕</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="panorama-config-block">
+      <div class="panorama-config-title">
+        <span>单元格说明</span>
+      </div>
+      <div class="panorama-cell-editor-grid">
+        ${lanes.flatMap((lane) => columns.map((column) => {
+          const cell = getPanoramaCell(model, lane.id, column.id);
+          const cellId = `${lane.id}::${column.id}`;
+          return `<div class="panorama-cell-editor-row" data-cell-id="${esc(cellId)}">
+            <span class="panorama-cell-coordinate">${esc(lane.name || lane.id)} / ${esc(column.name || column.id)}</span>
+            <input type="text" value="${esc(cell.status || '')}" data-testid="panorama-cell-status" data-cell-id="${esc(cellId)}" aria-label="单元格状态"
+              oninput="setPanoramaCell('${esc(lane.id)}','${esc(column.id)}','status',this.value);rerenderStageWorkbench({focusSelector:'[data-testid=&quot;panorama-cell-status&quot;][data-cell-id=&quot;${esc(cellId)}&quot;]'})">
+            <input type="text" value="${esc(cell.text || '')}" data-testid="panorama-cell-text" data-cell-id="${esc(cellId)}" aria-label="单元格说明"
+              oninput="setPanoramaCell('${esc(lane.id)}','${esc(column.id)}','text',this.value);rerenderStageWorkbench({focusSelector:'[data-testid=&quot;panorama-cell-text&quot;][data-cell-id=&quot;${esc(cellId)}&quot;]'})">
+          </div>`;
+        })).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderStagePanoramaEditor(stageItems) {
+  const realStages = stageItems.filter((stage) => !stage.virtual);
+  const model = getPanoramaModel(S.doc);
+  return `<div class="stage-editor-section" data-testid="stage-panorama-editor">
+    <div class="stage-editor-section-head">
+      <h5>业务阶段</h5>
+      <button class="btn btn-outline btn-sm" type="button" data-testid="stage-overview-add-button" onclick="addStageFromPanorama()">＋ 新建阶段</button>
+    </div>
+    ${realStages.length ? `<div class="stage-overview-editor-list">
+      ${realStages.map((stage, index) => {
+        const focused = S.ui.stageLinkFocusId === stage.id;
+        const placement = resolveStagePanoramaPlacement({ stage, label: stage.name || stage.id, meta: stage.subDomain || '', searchText: '' }, index, model);
+        return `<div class="stage-overview-editor-row${focused ? ' is-focused' : ''}" data-testid="stage-overview-row" data-stage-id="${esc(stage.id)}">
+        <span class="stage-overview-id-badge" data-testid="stage-overview-id-badge">${esc(stage.id)}</span>
+        <input type="text" value="${esc(stage.name || '')}"
+          aria-label="阶段名称"
+          oninput="setStage('${esc(stage.id)}','name',this.value);renderSidebar();rerenderStageWorkbench({focusSelector:'[data-testid=&quot;stage-overview-row&quot;] input[aria-label=&quot;阶段名称&quot;]'})">
+        <input type="text" value="${esc(stage.subDomain || '')}"
+          aria-label="业务组件"
+          oninput="setStage('${esc(stage.id)}','subDomain',this.value);renderSidebar();rerenderStageWorkbench({focusSelector:'[data-testid=&quot;stage-overview-row&quot;] input[aria-label=&quot;业务组件&quot;]'})">
+        <select data-testid="stage-panorama-column-select" aria-label="价值流归属"
+          onchange="setStage('${esc(stage.id)}','panoramaColumnId',this.value);rerenderStageWorkbench({focusSelector:'[data-stage-id=&quot;${esc(stage.id)}&quot;] [data-testid=&quot;stage-panorama-column-select&quot;]'})">
+          ${model.columns.map((column) => `<option value="${esc(column.id)}" ${column.id === placement.columnId ? 'selected' : ''}>${esc(column.name || column.id)}</option>`).join('')}
+        </select>
+        <select data-testid="stage-panorama-lane-select" aria-label="业务域归属"
+          onchange="setStage('${esc(stage.id)}','panoramaLaneId',this.value);rerenderStageWorkbench({focusSelector:'[data-stage-id=&quot;${esc(stage.id)}&quot;] [data-testid=&quot;stage-panorama-lane-select&quot;]'})">
+          ${model.lanes.map((lane) => `<option value="${esc(lane.id)}" ${lane.id === placement.laneId ? 'selected' : ''}>${esc(lane.name || lane.id)}</option>`).join('')}
+        </select>
+        <div class="stage-overview-row-actions">
+          <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="stage-overview-focus-links-button" onclick="selectStageForPanorama('${esc(stage.id)}')">连线</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-overview-add-after-button" onclick="addStageFromPanorama('${esc(stage.id)}')">＋</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-overview-move-up" onclick="moveStage('${esc(stage.id)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-overview-move-down" onclick="moveStage('${esc(stage.id)}',1)" ${index === realStages.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="stage-quick-btn danger" type="button" data-testid="stage-overview-delete-button"
+            onclick="removeStage('${esc(stage.id)}')" title="删除阶段">✕</button>
+        </div>
+      </div>`;
+      }).join('')}
+    </div>` : '<p class="no-refs">暂无业务阶段，先新建一个阶段。</p>'}
+  </div>
+  ${renderPanoramaTableEditor(model)}`;
+}
+
+function renderStageDrawer(stageItem) {
+  const drawerW = getDrawerWidth('process');
+  const stage = stageItem && !stageItem.virtual ? findStage(stageItem.id, S.doc) : null;
+  const processRefs = stageItem ? getStageProcessRefs(stageItem.id, S.doc) : [];
+  const warning = processRefs.length > 7 ? '<div class="stage-warning">当前阶段流程已超过 7 个，建议拆分业务阶段。</div>' : '';
+  const stageItems = getStageItems(S.doc);
+  const panoramaMode = (S.ui.stageViewMode || 'panorama') === 'panorama';
+  const drawerTitle = panoramaMode
+    ? '业务全景编辑'
+    : (stageItem ? `${stageItem.id} ${stageItem.name || ''}`.trim() : '业务阶段');
+  return `<div class="stage-drawer open" style="width:${drawerW}px" data-testid="stage-drawer">
+    <div class="drawer-resize-handle" data-testid="stage-drawer-resize-handle" onmousedown="startDrawerResize(event)"></div>
+    <div class="drawer-head">
+      <div class="drawer-crumb">${esc(drawerTitle)}</div>
+      <div class="drawer-actions">
+        <button class="drawer-close" type="button" data-testid="stage-drawer-close" onclick="toggleStageEditorDrawer(false)" title="关闭抽屉">✕</button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      ${panoramaMode ? `
+        ${renderStagePanoramaEditor(stageItems)}
+        ${renderStageLinkEditor(stageItems)}
+      ` : `
+      ${warning}
+      ${stage ? `<div class="form-grid">
+        <div class="field-group">
+          <label>阶段标识</label>
+          <div class="readonly-token" data-testid="stage-id-badge">${esc(stage.id)}</div>
+        </div>
+        <div class="field-group">
+          <label>阶段名称</label>
+          <input data-testid="stage-name-input" type="text" value="${esc(stage.name || '')}"
+            oninput="setStage('${esc(stage.id)}','name',this.value);renderSidebar();rerenderStageWorkbench({focusSelector:'[data-testid=&quot;stage-name-input&quot;]'})">
+        </div>
+        <div class="field-group">
+          <label>业务组件</label>
+          <input data-testid="stage-subdomain-input" type="text" value="${esc(stage.subDomain || '')}"
+            oninput="setStage('${esc(stage.id)}','subDomain',this.value);renderSidebar();rerenderStageWorkbench({focusSelector:'[data-testid=&quot;stage-subdomain-input&quot;]'})">
+        </div>
+      </div>` : '<div class="stage-tip">当前查看的是“未设置业务阶段”虚拟分组，用于承接还未归类的流程。</div>'}
+      ${renderStageProcessMembership(stageItem || { virtual: true, id: UNASSIGNED_STAGE_ID, subDomain: '' }, processRefs)}
+      ${renderStageProcessLinkEditor(stage, processRefs)}
+      `}
+    </div>
+  </div>`;
+}
+
+function renderStageWorkbench() {
+  ensureStageSelection();
+  const stageItem = getCurrentStageItem();
+  const showDetail = S.ui.stageViewMode === 'detail' && stageItem;
+  const showEditor = S.ui.stageEditorCollapsed === false;
+  const showDrawer = false;
+  const editorOffset = 0;
+  const panoramaGraph = buildStagePanoramaGraphData();
+  const detailGraph = stageItem ? buildStageDetailGraphData(stageItem.id) : { nodes: [], links: [], processes: [], processRefs: [] };
+  const stageWarning = showDetail && detailGraph.processes.length > 7
+    ? '<span class="stage-header-warning">建议拆分阶段</span>'
+    : '';
+  const detailStageName = showDetail
+    ? renderStageNameInlineEditor(stageItem.id, stageItem.name || stageItem.id, showEditor && !stageItem.virtual, 'stage-detail-name-text')
+    : '';
+  const detailHeader = showDetail ? `<div class="stage-compact-head" data-testid="stage-compact-head">
+    <button class="btn btn-ghost-sm" type="button" onclick="openStagePanorama()">业务全景</button>
+    <span class="stage-breadcrumb-sep">/</span>
+    <div class="stage-card-title" data-testid="stage-detail-title">${detailStageName}<span class="stage-detail-title-suffix"> · 阶段详情 ${stageWarning}</span></div>
+  </div>` : '';
+  return `<div class="stage-workbench" data-testid="process-stage-view">
+    <div class="stage-main-shell" style="margin-right:${editorOffset}px">
+      <div class="stage-main">
+        <div class="stage-card">
+          ${detailHeader}
+          ${showDetail
+            ? renderStageGraphMarkup({
+                nodes: detailGraph.nodes,
+                links: detailGraph.links,
+                kind: 'stage-ref',
+                emptyText: '当前阶段还没有流程。打开编辑后，可直接在图上新增流程。',
+                testId: 'stage-detail-graph',
+                stageItem,
+                editing: showEditor,
+                processRefs: detailGraph.processRefs,
+              })
+            : renderStageGraphMarkup({
+                nodes: panoramaGraph.nodes,
+                links: panoramaGraph.links,
+                kind: 'stage',
+                emptyText: '暂无业务阶段，先新建一个阶段。',
+                testId: 'stage-panorama-graph',
+              })}
+        </div>
+      </div>
+    </div>
+    ${showDrawer ? renderStageDrawer(stageItem || { id: UNASSIGNED_STAGE_ID, name: UNASSIGNED_STAGE_NAME, virtual: true, subDomain: '' }) : ''}
+  </div>`;
+}
+
+function buildOrchestrationFlowHtml(task) {
+  const orchestrationTasks = getNodeOrchestrationTasks(task);
+  if(!orchestrationTasks.length) {
+    return `<div class="orch-flow-empty">暂无节点任务，先补充该流程节点下的任务拆解。</div>`;
+  }
+  return `<div class="orch-flow-frame" data-testid="orchestration-flow">
+    <div class="orch-flow-node-label">节点 ${esc(task.id)} · ${esc(task.name || '未命名节点')}</div>
+    <div class="orch-flow-track">
+      ${orchestrationTasks.map((item, index) => `
+        <div class="orch-flow-item">
+          <div class="orch-flow-card tone-${String(item.type || 'Custom').toLowerCase()}">
+            <span class="orch-flow-index">${index + 1}</span>
+            <div class="orch-flow-text">
+              <strong>${esc(item.name || `任务 ${index + 1}`)}</strong>
+              <span>${esc(item.target || (item.type === 'Query' ? '待补充查询目标' : '待补充执行目标'))}</span>
+            </div>
+          </div>
+          ${index < orchestrationTasks.length - 1 ? '<div class="orch-flow-arrow">→</div>' : ''}
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderProcTaskFlow(containerId, proc, activeTaskId, onClickMap) {
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const nodes = getProcNodes(proc);
+  if(!nodes.length) {
+    el.innerHTML = `<div class="diag-empty">暂无节点，先补充流程节点。</div>`;
+    initZoom(containerId);
+    return;
+  }
+
+  let html = `<div class="ptf-wrap" data-testid="global-orchestration-flow">
+    <div class="ptf-se">开始</div>`;
+  for(const node of nodes) {
+    const orchestrationTasks = getNodeOrchestrationTasks(node);
+    html += `<div class="ptf-outer-arrow">→</div>
+      <div class="ptf-node-frame ${node.id === activeTaskId ? 'active' : ''}" data-id="${esc(node.id)}">
+        <div class="ptf-node-head">
+          <span class="ptf-node-id">${esc(node.id)}</span>
+          <span class="ptf-node-name">${esc(node.name || '未命名节点')}</span>
+        </div>
+        <div class="ptf-node-track">`;
+    if(orchestrationTasks.length) {
+      orchestrationTasks.forEach((item, index) => {
+        html += `<div class="ptf-task-item tone-${String(item.type || 'Custom').toLowerCase()}">
+            <span class="ptf-task-index">${index + 1}</span>
+            <div class="ptf-task-text">
+              <strong>${esc(item.name || `任务 ${index + 1}`)}</strong>
+              <span>${esc(item.target || '待补充目标')}</span>
+            </div>
+          </div>`;
+        if(index < orchestrationTasks.length - 1) {
+          html += `<div class="ptf-inner-arrow">→</div>`;
+        }
+      });
+    } else {
+      html += `<div class="ptf-empty">暂无节点任务</div>`;
+    }
+    html += `</div></div>`;
+  }
+  html += `<div class="ptf-outer-arrow">→</div>
+    <div class="ptf-se">结束</div>
+  </div>`;
+
+  el.innerHTML = html;
+
+  if(onClickMap) {
+    for(const [nodeId, handler] of Object.entries(onClickMap)) {
+      const nodeEl = el.querySelector(`.ptf-node-frame[data-id="${nodeId}"]`);
+      if(nodeEl) {
+        nodeEl.style.cursor = 'pointer';
+        nodeEl.addEventListener('click', handler);
+      }
+    }
+  }
+
+  el.addEventListener('mousedown', (ev) => {
+    if(ev.target.closest('.ptf-node-frame,.ptf-task-item,.ptf-se')) return;
+    ev.preventDefault();
+    startEfPan(el, ev);
+  });
+
+  initZoom(containerId);
+  if(ZOOM[containerId] && ZOOM[containerId] !== 1) applyZoom(containerId);
+}
+
+function renderNodePerspectiveSwitch() {
+  const perspective = S.ui.nodePerspective || 'user';
+  return `<div class="node-perspective-switch" data-testid="node-perspective-switch">
+    <button
+      type="button"
+      class="node-perspective-btn ${perspective === 'user' ? 'active' : ''}"
+      data-testid="node-perspective-user"
+      onclick="setNodePerspective('user')"
+    >定义用户步骤</button>
+    <button
+      type="button"
+      class="node-perspective-btn ${perspective === 'engineering' ? 'active' : ''}"
+      data-testid="node-perspective-engineering"
+      onclick="setNodePerspective('engineering')"
+    >节点任务</button>
+  </div>`;
+}
+
+function renderStepNoteEditor(proc, task, step, index) {
+  const editKey = getStepNoteEditKey(proc.id, task.id, index);
+  const isEditing = S.ui.stepNoteEditKey === editKey;
+  const note = String(step.note || '');
+  if (isEditing) {
+    return `<div class="step-note-editor" data-testid="step-note-editor">
+      <textarea class="step-note auto-resize" rows="3" placeholder="备注 / 规则 / 纯文本说明 / 链接"
+        oninput="autoResize(this)">${esc(note)}</textarea>
+      <div class="step-note-actions">
+        <span class="step-note-tip">按纯文本保存；可粘贴链接，暂不渲染 Markdown，也不支持图片上传</span>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="step-note-save"
+          onclick="saveStepNote('${esc(proc.id)}','${esc(task.id)}',${index},this.closest('.step-note-editor').querySelector('.step-note').value)">保存</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="step-note-cancel"
+          onclick="cancelStepNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">取消</button>
+      </div>
+    </div>`;
+  }
+  if (note.trim()) {
+    return `<div class="step-note-preview" data-testid="step-note-preview">
+      <span>${esc(note)}</span>
+      <button class="btn btn-ghost-sm" type="button" data-testid="step-note-edit"
+        onclick="startStepNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">修改备注</button>
+    </div>`;
+  }
+  return `<div class="step-note-empty">
+    <button class="btn btn-ghost-sm" type="button" data-testid="step-note-add"
+      onclick="startStepNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">＋备注/规则</button>
+  </div>`;
+}
+
+function renderUserStepsSection(proc, task) {
+  const userSteps = getNodeUserSteps(task);
+  return `<div class="form-section node-perspective-panel active" data-testid="user-steps-section">
+    <div class="section-toolbar">
+      <h4>定义用户步骤 <span class="section-count">${userSteps.length} 项</span></h4>
+      <button class="btn btn-outline btn-sm" type="button" onclick="addStep('${esc(proc.id)}','${esc(task.id)}')">＋添加步骤</button>
+    </div>
+    <p class="section-hint">面向产品视角，描述页面上的查看、点击、填写、提交等用户动作。</p>
+    ${userSteps.length ? `<div class="step-list">${userSteps.map((s, i) => `
+      <div class="step-row" data-step-index="${i}">
+        <div class="step-row-top">
+          <span class="step-num">${i + 1}</span>
+          <input class="step-name" type="text" value="${esc(s.name || '')}" placeholder="步骤描述"
+            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value)">
+          <select class="step-type" onchange="onStepTypeChange(this,'${esc(proc.id)}','${esc(task.id)}',${i})">
+            ${STEP_TYPES.map((t) => `<option value="${t.value}" ${(t.value === '__other__' ? isCustomStepType(s.type) : s.type === t.value) ? 'selected' : ''}>${t.label}</option>`).join('')}
+          </select>
+          ${isCustomStepType(s.type) ? `<input class="step-type-custom" type="text" value="${esc(s.type)}" placeholder="自定义类型"
+            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'type',this.value)">` : ''}
+          <div class="step-actions">
+            <button class="step-action step-add-after" type="button" title="在下方插入步骤" onclick="addStep('${esc(proc.id)}','${esc(task.id)}',${i})">+</button>
+            <button class="step-action step-move-up" type="button" title="上移" ${i === 0 ? 'disabled' : ''} onclick="moveStep('${esc(proc.id)}','${esc(task.id)}',${i},-1)">↑</button>
+            <button class="step-action step-move-down" type="button" title="下移" ${i === userSteps.length - 1 ? 'disabled' : ''} onclick="moveStep('${esc(proc.id)}','${esc(task.id)}',${i},1)">↓</button>
+            <button class="step-del" type="button" onclick="removeStep('${esc(proc.id)}','${esc(task.id)}',${i})">✕</button>
+          </div>
+        </div>
+        ${renderStepNoteEditor(proc, task, s, i)}
+      </div>`).join('')}</div>` : '<p class="no-refs">暂无用户操作步骤</p>'}
+  </div>`;
+}
+
+function renderOrchestrationNoteEditor(proc, task, item, index) {
+  const editKey = getOrchestrationNoteEditKey(proc.id, task.id, index);
+  const isEditing = S.ui.orchestrationNoteEditKey === editKey;
+  const note = String(item.note || '');
+  if (isEditing) {
+    return `<div class="step-note-editor orchestration-note-editor" data-testid="orchestration-note-editor">
+      <textarea class="step-note auto-resize" rows="3" placeholder="输入输出 / 前置条件 / 异常处理 / 链接"
+        oninput="autoResize(this)">${esc(note)}</textarea>
+      <div class="step-note-actions">
+        <span class="step-note-tip">按纯文本保存；可粘贴链接，暂不渲染 Markdown，也不支持图片上传</span>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="orchestration-note-save"
+          onclick="saveOrchestrationNote('${esc(proc.id)}','${esc(task.id)}',${index},this.closest('.orchestration-note-editor').querySelector('.step-note').value)">保存</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-note-cancel"
+          onclick="cancelOrchestrationNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">取消</button>
+      </div>
+    </div>`;
+  }
+  if (note.trim()) {
+    return `<div class="step-note-preview orchestration-note-preview" data-testid="orchestration-note-preview">
+      <span>${esc(note)}</span>
+      <button class="btn btn-ghost-sm" type="button" data-testid="orchestration-note-edit"
+        onclick="startOrchestrationNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">修改备注</button>
+    </div>`;
+  }
+  return `<div class="step-note-empty orchestration-note-empty">
+    <button class="btn btn-ghost-sm" type="button" data-testid="orchestration-note-add"
+      onclick="startOrchestrationNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">＋备注</button>
+  </div>`;
+}
+
+function renderOrchestrationSection(proc, task) {
+  const orchestrationTasks = getNodeOrchestrationTasks(task);
+  const reuseFilter = getOrchestrationReuseFilter(proc.id, task.id);
+  const allReusableTasks = getReusableOrchestrationTaskItems(proc.id, task.id);
+  const capabilityOptions = Array.from(new Map(allReusableTasks.map((item) => [item.capabilityId, item.capabilityName])).entries())
+    .sort((left, right) => left[1].localeCompare(right[1], 'zh-CN'));
+  const capabilityFilteredTasks = reuseFilter.capabilityId
+    ? allReusableTasks.filter((item) => item.capabilityId === reuseFilter.capabilityId)
+    : allReusableTasks;
+  const constructOptions = Array.from(new Map(capabilityFilteredTasks.map((item) => [item.constructId, item.constructName])).entries())
+    .sort((left, right) => left[1].localeCompare(right[1], 'zh-CN'));
+  const activeConstructId = constructOptions.some(([id]) => id === reuseFilter.constructId) ? reuseFilter.constructId : '';
+  const reusableTasks = getReusableOrchestrationTaskItems(proc.id, task.id, {
+    capabilityId: reuseFilter.capabilityId,
+    constructId: activeConstructId,
+    query: reuseFilter.query,
+  });
+  const reuseSelectId = `orch-reuse-${String(task.id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  const visibleReusableTasks = reusableTasks.slice(0, 120);
+  const reuseDisabled = !visibleReusableTasks.length;
+  return `<div class="form-section node-perspective-panel active" data-testid="orchestration-section">
+    <div class="section-toolbar">
+      <h4>节点任务 <span class="section-count">${orchestrationTasks.length} 项</span></h4>
+      <div class="orch-toolbar-actions">
+        <button class="btn btn-outline btn-sm" type="button" onclick="addOrchestrationTask('${esc(proc.id)}','${esc(task.id)}')">＋添加任务</button>
+      </div>
+    </div>
+    <div class="orch-reuse-panel" data-testid="orchestration-reuse-panel">
+      <select data-testid="orchestration-reuse-capability-select" aria-label="选择业务组件"
+        onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','capabilityId',this.value)" ${allReusableTasks.length ? '' : 'disabled'}>
+        <option value="">全部业务组件</option>
+        ${capabilityOptions.map(([id, name]) => `<option value="${esc(id)}" ${reuseFilter.capabilityId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+      </select>
+      <select data-testid="orchestration-reuse-construct-select" aria-label="选择业务构件"
+        onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','constructId',this.value)" ${capabilityFilteredTasks.length ? '' : 'disabled'}>
+        <option value="">全部业务构件</option>
+        ${constructOptions.map(([id, name]) => `<option value="${esc(id)}" ${activeConstructId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+      </select>
+      <input type="search" data-testid="orchestration-reuse-search" aria-label="搜索任务定义"
+        value="${esc(reuseFilter.query)}" placeholder="搜索任务名称 / 服务 / 备注"
+        oninput="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','query',this.value)" ${allReusableTasks.length ? '' : 'disabled'}>
+      <select id="${esc(reuseSelectId)}" data-testid="orchestration-reuse-select" aria-label="选择任务定义" ${reuseDisabled ? 'disabled' : ''}>
+        <option value="">选择任务...</option>
+        ${visibleReusableTasks.map((item) => `<option value="${esc(item.key)}">${esc(item.label)}</option>`).join('')}
+      </select>
+      <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-reuse-button" ${reuseDisabled ? 'disabled' : ''}
+        onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">复用</button>
+      ${reusableTasks.length > visibleReusableTasks.length ? `<span class="orch-reuse-more">还有 ${reusableTasks.length - visibleReusableTasks.length} 项，继续搜索缩小范围</span>` : ''}
+    </div>
+    <p class="section-hint">节点下的任务会沉淀为任务定义，可被多个流程节点复用；修改名称和构件会同步到所有引用。</p>
+    ${buildOrchestrationFlowHtml(task)}
+    ${orchestrationTasks.length ? `<div class="orch-list">${orchestrationTasks.map((item, index) => `
+      <div class="orch-card" data-orch-index="${index}">
+        <div class="orch-row orch-row-main">
+          <span class="orch-index">${index + 1}</span>
+          <input class="orch-name" type="text" value="${esc(item.name || '')}" placeholder="如：校验账户状态"
+            oninput="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'name',this.value)">
+          <select onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'type',this.value);rerenderProcessEditor()">
+            ${ORCHESTRATION_TYPES.map((option) => `<option value="${option.value}" ${item.type === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+          </select>
+          <select data-testid="orchestration-task-construct-select"
+            onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'constructId',this.value);rerenderProcessEditor({ focusSelector: '.orch-card[data-orch-index=&quot;${index}&quot;] [data-testid=&quot;orchestration-task-construct-select&quot;]', selectText: false })">
+            ${renderTaskConstructOptions(item.constructId || item.businessConstructId || '')}
+          </select>
+          <div class="step-actions orch-actions">
+            <button class="step-action" type="button" title="在下方插入任务" onclick="addOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index})">+</button>
+            <button class="step-action" type="button" title="上移" ${index === 0 ? 'disabled' : ''} onclick="moveOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},-1)">↑</button>
+            <button class="step-action" type="button" title="下移" ${index === orchestrationTasks.length - 1 ? 'disabled' : ''} onclick="moveOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},1)">↓</button>
+            <button class="step-del" type="button" onclick="removeOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index})">✕</button>
+          </div>
+        </div>
+        <div class="orch-row orch-row-secondary">
+          ${item.type === 'Query' ? `<select onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'querySourceKind',this.value)">
+            ${QUERY_SOURCE_KINDS.map((option) => `<option value="${option.value}" ${item.querySourceKind === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+          </select>` : ''}
+          <label class="orch-tech-field ${item.type === 'Query' ? '' : 'orch-tech-field-wide'}">
+            <span>技术承接</span>
+            <input type="text" data-testid="orchestration-task-target-input" value="${esc(item.target || '')}" placeholder="目标服务 / 字典 / 枚举"
+              oninput="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'target',this.value)">
+          </label>
+        </div>
+        ${renderOrchestrationNoteEditor(proc, task, item, index)}
+      </div>`).join('')}</div>` : '<p class="no-refs">暂无节点任务</p>'}
+  </div>`;
+}
+
+function renderTaskFormEntityOptions(selectedEntityId) {
+  const entities = S.doc?.entities || [];
+  return `<option value="">不绑定实体</option>${entities.map((entity) => (
+    `<option value="${esc(entity.id)}" ${entity.id === selectedEntityId ? 'selected' : ''}>${esc(entity.id)} ${esc(entity.name || '')}</option>`
+  )).join('')}`;
+}
+
+function renderTaskFormFieldOptions(form, selectedFieldName) {
+  const fields = getEntityFieldsForForm(form);
+  if (!form.entity_id) return '<option value="">先绑定实体</option>';
+  if (!fields.length) return '<option value="">实体暂无字段</option>';
+  return `<option value="">不映射</option>${fields.map((field) => {
+    const fieldName = String(field.name || '').trim();
+    return `<option value="${esc(fieldName)}" ${fieldName === selectedFieldName ? 'selected' : ''}>${esc(fieldName)}</option>`;
+  }).join('')}`;
+}
+
+function renderTaskFormFieldRow(proc, task, form, section, field, fieldIndex) {
+  const fieldOptions = renderTaskFormFieldOptions(form, field.entity_field || '');
+  const entityFieldDisabled = !form.entity_id || !getEntityFieldsForForm(form).length ? 'disabled' : '';
+  const fieldCount = (section.fields || []).length;
+  return `<tr class="task-form-field-row" data-testid="task-form-field-row" data-field-id="${esc(field.id)}">
+    <td>
+      <input type="text" data-testid="task-form-field-name" data-field-id="${esc(field.id)}"
+        value="${esc(field.name || '')}" placeholder="字段名称"
+        oninput="setTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}','name',this.value)">
+    </td>
+    <td>
+      <select data-testid="task-form-field-type" data-field-id="${esc(field.id)}"
+        onchange="setTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}','type',this.value)">
+        ${FORM_FIELD_TYPES.map((type) => `<option value="${type.value}" ${field.type === type.value ? 'selected' : ''}>${type.label}</option>`).join('')}
+      </select>
+    </td>
+    <td class="task-form-required-cell">
+      <input type="checkbox" data-testid="task-form-field-required" data-field-id="${esc(field.id)}" ${field.required ? 'checked' : ''}
+        onchange="setTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}','required',this.checked)">
+    </td>
+    <td>
+      <select data-testid="task-form-entity-field" data-field-id="${esc(field.id)}" ${entityFieldDisabled}
+        onchange="setTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}','entity_field',this.value)">
+        ${fieldOptions}
+      </select>
+    </td>
+    <td>
+      <input type="text" data-testid="task-form-field-note" data-field-id="${esc(field.id)}"
+        value="${esc(field.note || '')}" placeholder="校验规则 / 展示说明"
+        oninput="setTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}','note',this.value)">
+    </td>
+    <td class="task-form-action-cell">
+      <div class="step-actions task-form-inline-actions">
+        <button class="step-action" type="button" data-testid="task-form-field-add-after" title="在下方插入字段"
+          onclick="addTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}')">+</button>
+        <button class="step-action" type="button" data-testid="task-form-field-move-up" title="上移" ${fieldIndex === 0 ? 'disabled' : ''}
+          onclick="moveTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}',-1)">↑</button>
+        <button class="step-action" type="button" data-testid="task-form-field-move-down" title="下移" ${fieldIndex === fieldCount - 1 ? 'disabled' : ''}
+          onclick="moveTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}',1)">↓</button>
+        <button class="step-del" type="button" data-testid="task-form-field-delete" title="删除字段"
+        onclick="removeTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}')">✕</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderTaskFormSectionCard(proc, task, form, section, sectionIndex) {
+  const fields = section.fields || [];
+  const onlySection = (form.sections || []).length <= 1;
+  return `<div class="task-form-section-card" data-testid="task-form-section-card" data-section-id="${esc(section.id)}">
+    <div class="task-form-section-head">
+      <input type="text" data-testid="task-form-section-name" data-section-id="${esc(section.id)}"
+        value="${esc(section.name || '')}" placeholder="分组名称，如：基本信息"
+        oninput="setTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','name',this.value)">
+      <input type="text" data-testid="task-form-section-note" data-section-id="${esc(section.id)}"
+        value="${esc(section.note || '')}" placeholder="分组说明"
+        oninput="setTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','note',this.value)">
+      <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-field-add"
+        onclick="addTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}')">＋字段</button>
+      <div class="step-actions task-form-inline-actions">
+        <button class="step-action" type="button" data-testid="task-form-section-add-after" title="在下方插入分组"
+          onclick="addTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}')">+</button>
+        <button class="step-action" type="button" data-testid="task-form-section-move-up" title="上移" ${sectionIndex === 0 ? 'disabled' : ''}
+          onclick="moveTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}',-1)">↑</button>
+        <button class="step-action" type="button" data-testid="task-form-section-move-down" title="下移" ${sectionIndex === (form.sections || []).length - 1 ? 'disabled' : ''}
+          onclick="moveTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}',1)">↓</button>
+        <button class="step-del" type="button" data-testid="task-form-section-delete" title="删除分组" ${onlySection ? 'disabled' : ''}
+          onclick="removeTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}')">✕</button>
+      </div>
+    </div>
+    ${fields.length ? `<div class="task-form-field-table-wrap">
+      <table class="task-form-field-table">
+        <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>实体字段</th><th>说明</th><th></th></tr></thead>
+        <tbody>${fields.map((field, fieldIndex) => renderTaskFormFieldRow(proc, task, form, section, field, fieldIndex)).join('')}</tbody>
+      </table>
+    </div>` : `<p class="no-refs task-form-empty">分组 ${sectionIndex + 1} 暂无字段</p>`}
+  </div>`;
+}
+
+function renderTaskFormCard(proc, task, form, index) {
+  return `<div class="task-form-card" data-testid="task-form-card" data-form-id="${esc(form.id)}">
+    <div class="task-form-card-head">
+      <span class="task-form-index">F${index + 1}</span>
+      <input type="text" data-testid="task-form-name" data-form-id="${esc(form.id)}"
+        value="${esc(form.name || '')}" placeholder="表单名称，如：仓库管理列表"
+        oninput="setTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','name',this.value)">
+      <select data-testid="task-form-entity" data-form-id="${esc(form.id)}"
+        onchange="setTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','entity_id',this.value);rerenderProcessEditor({focusSelector:'[data-testid=&quot;task-form-entity&quot;][data-form-id=&quot;${esc(form.id)}&quot;]'})">
+        ${renderTaskFormEntityOptions(form.entity_id || '')}
+      </select>
+      <button class="step-del" type="button" title="删除表单"
+        onclick="removeTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">✕</button>
+    </div>
+    <input class="task-form-purpose" type="text" data-testid="task-form-purpose" data-form-id="${esc(form.id)}"
+      value="${esc(form.purpose || '')}" placeholder="表单用途，如：筛选、列表、新增、详情、输出说明"
+      oninput="setTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','purpose',this.value)">
+    <div class="task-form-sections">
+      ${(form.sections || []).map((section, sectionIndex) => renderTaskFormSectionCard(proc, task, form, section, sectionIndex)).join('')}
+    </div>
+    <button class="btn btn-ghost-sm task-form-section-add" type="button" data-testid="task-form-section-add"
+      onclick="addTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">＋添加分组</button>
+  </div>`;
+}
+
+function renderTaskFormsSection(proc, task) {
+  const forms = getTaskForms(task);
+  return `<div class="form-section task-forms-section" data-testid="task-forms-section">
+    <div class="section-toolbar">
+      <h4>表单模型 <span class="section-count">${forms.length} 个表单</span></h4>
+      <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-add"
+        onclick="addTaskForm('${esc(proc.id)}','${esc(task.id)}')">＋添加表单</button>
+    </div>
+    <p class="section-hint">表单是节点办理时看到或填写的界面载体；实体是沉淀后的业务数据。一个节点可绑定多个表单，表单字段可按需映射到实体字段。</p>
+    ${forms.length ? `<div class="task-form-list">${forms.map((form, index) => renderTaskFormCard(proc, task, form, index)).join('')}</div>` : '<p class="no-refs">暂无表单模型</p>'}
+  </div>`;
+}
+
+function renderTaskBusinessRuleCard(proc, task, rule, index, total) {
+  return `<div class="task-rule-card" data-rule-id="${esc(rule.id)}">
+    <div class="task-rule-head">
+      <span class="task-form-index">${index + 1}</span>
+      <input type="text" data-testid="task-rule-name" data-rule-id="${esc(rule.id)}"
+        value="${esc(rule.name || '')}" placeholder="规则名称，如：前置条件 / 输出 / 交互规则"
+        oninput="setTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}','name',this.value)">
+      <div class="task-form-inline-actions">
+        <button class="step-action" type="button" title="上移" ${index === 0 ? 'disabled' : ''}
+          onclick="moveTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}',-1)">↑</button>
+        <button class="step-action" type="button" title="下移" ${index >= total - 1 ? 'disabled' : ''}
+          onclick="moveTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}',1)">↓</button>
+        <button class="step-del" type="button"
+          onclick="removeTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}')">删除</button>
+      </div>
+    </div>
+    <textarea class="auto-resize task-rule-content" rows="3" data-testid="task-rule-content" data-rule-id="${esc(rule.id)}"
+      placeholder="规则内容可多行记录，适合沉淀输入、输出、前置条件、后置条件、交互规则等"
+      oninput="setTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}','content',this.value)"
+      >${esc(rule.content || '')}</textarea>
+  </div>`;
+}
+
+function renderTaskBusinessRulesSection(proc, task) {
+  const rules = getNodeBusinessRules(task);
+  return `<div class="form-section task-rules-section" data-testid="task-business-rules-section">
+    <div class="section-toolbar">
+      <h4>业务规则 <span class="section-count">${rules.length} 条规则</span></h4>
+      <div class="task-rule-actions">
+        <button class="btn btn-ghost-sm" type="button" data-testid="task-rule-templates"
+          onclick="ensureTaskBusinessRuleTemplates('${esc(proc.id)}','${esc(task.id)}')">补常用项</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="task-rule-add"
+          onclick="addTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}')">＋添加规则</button>
+      </div>
+    </div>
+    <p class="section-hint">用于结构化沉淀前置条件、后置条件、输入、输出、交互规则、非功能需求等，也可以自定义规则名称。</p>
+    ${rules.length
+      ? `<div class="task-rule-list">${rules.map((rule, index) => renderTaskBusinessRuleCard(proc, task, rule, index, rules.length)).join('')}</div>`
+      : '<p class="no-refs">暂无业务规则</p>'}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER — Process Tab  (上：实时图 | 下：编辑)
+═══════════════════════════════════════════════════════════ */
+function buildRoleUsecaseMap(selectedRole, options = {}) {
+  const usageByProcess = selectedRole ? getRoleUsageByProcess(selectedRole.id) : new Map();
+  const participatingOnly = Boolean(options.participatingOnly && selectedRole);
+  const roleGroups = participatingOnly
+    ? [{ name: getRoleGroupName(selectedRole), roles: [selectedRole] }]
+    : getGroupedRoles();
+  const processes = participatingOnly
+    ? Array.from(usageByProcess.values()).map(({ proc }) => proc)
+    : (S.doc?.processes || []);
+  const subdomainGroups = Array.from(
+    processes.reduce((map, proc) => {
+      const subDomain = (proc.subDomain || '未归类业务组件').trim();
+      if(!map.has(subDomain)) map.set(subDomain, []);
+      map.get(subDomain).push(proc);
+      return map;
+    }, new Map()).entries(),
+  ).map(([name, items]) => ({ name, items }));
+
+  const roleFrames = [];
+  const roleNodes = [];
+  let roleY = 24;
+  for(const group of roleGroups) {
+    const frameHeight = 48 + group.roles.length * 46;
+    roleFrames.push({ name: group.name, x: 24, y: roleY, width: 250, height: frameHeight });
+    group.roles.forEach((role, index) => {
+      roleNodes.push({
+        role,
+        x: 42,
+        y: roleY + 34 + index * 42,
+        width: 214,
+        height: 32,
+      });
+    });
+    roleY += frameHeight + 18;
+  }
+
+  const processFrames = [];
+  const processNodes = [];
+  const columnX = [340, 650];
+  const columnHeights = [24, 24];
+  for(const group of subdomainGroups) {
+    const frameHeight = 52 + group.items.length * 40;
+    const columnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+    const frameX = columnX[columnIndex];
+    const frameY = columnHeights[columnIndex];
+    processFrames.push({ name: group.name, x: frameX, y: frameY, width: 270, height: frameHeight });
+    group.items.forEach((proc, index) => {
+      processNodes.push({
+        proc,
+        x: frameX + 18,
+        y: frameY + 34 + index * 36,
+        width: 234,
+        height: 28,
+      });
+    });
+    columnHeights[columnIndex] += frameHeight + 18;
+  }
+
+  const canvasHeight = Math.max(roleY, ...columnHeights) + 24;
+  const selectedNode = selectedRole ? roleNodes.find((node) => node.role.id === selectedRole.id) : null;
+
+  const lines = selectedNode ? processNodes
+    .filter((node) => usageByProcess.has(node.proc.id))
+    .map((node) => {
+      const taskCount = usageByProcess.get(node.proc.id).tasks.length;
+      const startX = selectedNode.x + selectedNode.width;
+      const startY = selectedNode.y + selectedNode.height / 2;
+      const endX = node.x;
+      const endY = node.y + node.height / 2;
+      const midX = startX + (endX - startX) / 2;
+      return {
+        path: `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`,
+        taskCount,
+        labelX: midX + 4,
+        labelY: endY - 6,
+      };
+    })
+    : [];
+
+  return `<div class="role-usecase-map-wrap${participatingOnly ? ' focused' : ''}" data-testid="role-usecase-map">
+    <div class="role-usecase-map-canvas" style="min-width:980px;height:${canvasHeight}px">
+      <svg class="role-usecase-map-svg" width="980" height="${canvasHeight}" viewBox="0 0 980 ${canvasHeight}" preserveAspectRatio="none">
+        ${lines.map((line) => `
+          <path d="${line.path}" class="role-usecase-line"></path>
+          <text x="${line.labelX}" y="${line.labelY}" class="role-usecase-line-label">${line.taskCount}N</text>
+        `).join('')}
+      </svg>
+      ${roleFrames.map((frame) => `
+        <div class="role-usecase-group role-side-group" style="left:${frame.x}px;top:${frame.y}px;width:${frame.width}px;height:${frame.height}px">
+          <div class="role-usecase-group-title">${esc(frame.name)}</div>
+        </div>
+      `).join('')}
+      ${processFrames.map((frame) => `
+        <div class="role-usecase-group role-proc-group" style="left:${frame.x}px;top:${frame.y}px;width:${frame.width}px;height:${frame.height}px">
+          <div class="role-usecase-group-title">${esc(frame.name)}</div>
+        </div>
+      `).join('')}
+      ${roleNodes.map((node) => {
+        const active = selectedRole?.id === node.role.id ? ' active' : '';
+        const usage = getRoleUsageSummary(node.role.id);
+        return `<button class="role-usecase-role${active}" data-role-id="${esc(node.role.id)}"
+          style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"
+          onclick="S.ui.roleId='${esc(node.role.id)}';renderProcessTab()">
+          <span class="role-usecase-role-name">${esc(node.role.name)}</span>
+          <span class="role-usecase-role-meta">${usage.processCount}P · ${usage.taskCount}N</span>
+        </button>`;
+      }).join('')}
+      ${processNodes.map((node) => {
+        const linked = usageByProcess.has(node.proc.id) ? ' linked' : '';
+        const taskCount = usageByProcess.has(node.proc.id) ? usageByProcess.get(node.proc.id).tasks.length : 0;
+        return `<button class="role-usecase-process${linked}" data-process-id="${esc(node.proc.id)}"
+          style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"
+          onclick="navigate('process',{procId:'${esc(node.proc.id)}',taskId:null})">
+          <span class="role-usecase-process-name">${esc(node.proc.id)} ${esc(node.proc.name || '未命名流程')}</span>
+          ${taskCount ? `<span class="role-usecase-process-count">${taskCount}N</span>` : ''}
+        </button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderProcessRoleView() {
+  const roles = getRoles();
+  ensureSelectedRole();
+  const selectedRole = getRoleById(S.ui.roleId);
+  if(!roles.length) {
+    return `<div class="proc-role-empty" data-testid="process-role-view">
+      <p>暂无角色词典，请先到业务域页新增角色。</p>
+      <button class="btn btn-outline btn-sm" onclick="navigate('domain')">前往角色管理</button>
+    </div>`;
+  }
+
+  const usageByProcess = selectedRole ? getRoleUsageByProcess(selectedRole.id) : new Map();
+  const selectedSummary = selectedRole ? getRoleUsageSummary(selectedRole.id) : { processCount: 0, taskCount: 0 };
+  const participatingOnly = Boolean(S.ui.roleParticipatingOnly);
+
+  const detail = selectedRole ? `
+    <div class="proc-role-detail-head">
+      <div>
+        <div class="proc-role-detail-title">${esc(selectedRole.name)}</div>
+        <div class="proc-role-detail-subtitle">${selectedRole.desc ? esc(selectedRole.desc) : '当前角色参与的流程与节点'} · 分组：${esc(getRoleGroupName(selectedRole))}</div>
+      </div>
+      <div class="proc-role-detail-badges">
+        <span class="proc-role-badge">流程 ${selectedSummary.processCount}</span>
+        <span class="proc-role-badge">节点 ${selectedSummary.taskCount}</span>
+      </div>
+    </div>
+    ${usageByProcess.size ? Array.from(usageByProcess.values()).map(({ proc, tasks }) => `
+      <div class="proc-role-usage-card">
+        <div class="proc-role-usage-head">
+          <div>
+            <span class="proc-role-usage-proc">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</span>
+            ${proc.subDomain ? `<span class="proc-role-usage-subdomain">${esc(proc.subDomain)}</span>` : ''}
+          </div>
+          <button class="btn btn-ghost-sm" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})">查看流程</button>
+        </div>
+        <div class="proc-role-task-list">
+          ${tasks.map((task) => {
+            const nodeTaskCount = getNodeOrchestrationTasks(task).length;
+            return `<button class="role-task-chip" data-testid="role-view-task-chip"
+            onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:'${esc(task.id)}'})">
+            节点 ${esc(task.id)} ${esc(task.name || '未命名节点')}${nodeTaskCount ? ` · ${nodeTaskCount} 任务` : ''}
+          </button>`;
+          }).join('')}
+        </div>
+      </div>
+    `).join('') : '<p class="no-refs">当前角色尚未被任何节点引用</p>'}
+  ` : '<p class="no-refs">请选择一个角色查看参与的流程</p>';
+
+  return `<div class="proc-role-view" data-testid="process-role-view">
+    <div class="proc-role-map-panel">
+      <div class="proc-role-map-head">
+        <div class="proc-role-map-title">
+          角色用例图
+          <span class="inline-help" tabindex="0" data-tip="全局展示角色参与的流程模板。点击左侧角色可高亮它参与的流程，点击流程可进入编辑。">?</span>
+        </div>
+        <div class="proc-role-map-tools">
+          ${selectedRole ? `<label class="role-focus-toggle">
+            <input type="checkbox" data-testid="role-participating-only-toggle"
+              ${participatingOnly ? 'checked' : ''}
+              onchange="S.ui.roleParticipatingOnly=this.checked;renderProcessTab()">
+            <span>只看参与流程</span>
+          </label>` : ''}
+          ${selectedRole ? `<div class="proc-role-map-focus" data-testid="role-projection-summary">当前角色：${esc(selectedRole.name)} · 涉及流程 ${selectedSummary.processCount} · 涉及节点 ${selectedSummary.taskCount}${participatingOnly ? ' · 只显示参与流程' : ' · 全局视图'}</div>` : ''}
+        </div>
+      </div>
+      ${buildRoleUsecaseMap(selectedRole, { participatingOnly })}
+    </div>
+    <div class="proc-role-detail">${detail}</div>
+  </div>`;
+}
+
+function getFirstRoleIdForProcess(proc) {
+  if (!proc) return '';
+  for (const node of getProcNodes(proc)) {
+    const roleId = getTaskRoleIds(node)[0];
+    if (roleId && getRoleById(roleId)) return roleId;
+  }
+  return '';
+}
+
+function openRoleProjection() {
+  const roleId = getFirstRoleIdForProcess(currentProc());
+  if (roleId) S.ui.roleId = roleId;
+  setProcView('role');
+}
+
+function getDefaultTaskIdForProc(proc, preferredTaskId = S.ui.taskId) {
+  const nodes = getProcNodes(proc);
+  if (!nodes.length) return null;
+  if (preferredTaskId && nodes.some((node) => node.id === preferredTaskId)) return preferredTaskId;
+  return nodes[0].id;
+}
+
+function openProcessFlowView(navOptions = {}) {
+  const proc = currentProc() || S.doc?.processes?.[0] || null;
+  const taskId = getDefaultTaskIdForProc(proc);
+  queueUiNavigationHistoryFor((next) => {
+    next.tab = 'process';
+    next.procView = 'flow';
+    next.procId = proc?.id || null;
+    next.taskId = taskId;
+    return next;
+  }, navOptions);
+  S.ui.tab = 'process';
+  S.ui.procView = 'flow';
+  S.ui.procId = proc?.id || null;
+  S.ui.taskId = taskId;
+  render();
+}
+
+function selectProcessFlow(procId) {
+  const proc = (S.doc?.processes || []).find((item) => item.id === procId) || S.doc?.processes?.[0] || null;
+  S.ui.procId = proc?.id || null;
+  S.ui.taskId = getDefaultTaskIdForProc(proc, S.ui.taskId);
+  S.ui.procView = 'flow';
+  renderProcessTab();
+}
+
+function closeProcessEditor() {
+  if (!S.ui.procId && S.doc?.processes?.length) {
+    S.ui.procId = S.doc.processes[0].id;
+  }
+  S.ui.procView = 'flow';
+  const proc = currentProc() || S.doc?.processes?.[0] || null;
+  S.ui.taskId = getDefaultTaskIdForProc(proc, S.ui.taskId);
+  renderProcessTab();
+}
+
+function renderProcessZoomControls(containerId, primary = false) {
+  const prefix = primary ? ' data-testid="process-flow-' : '';
+  const suffix = primary ? '"' : '';
+  return `<div class="diagram-floating-tools">
+    <div class="zoom-controls">
+      <button class="zoom-btn" type="button"${prefix}zoom-in${suffix} onclick="zoomBy('${containerId}',0.2)">＋</button>
+      <button class="zoom-btn" type="button"${prefix}zoom-reset${suffix} onclick="resetZoom('${containerId}')">◎</button>
+      <button class="zoom-btn" type="button"${prefix}zoom-out${suffix} onclick="zoomBy('${containerId}',-0.2)">－</button>
+    </div>
+  </div>`;
+}
+
+function renderProcessFlowStage(proc, { editing = false, task = null, drawerW = 0 } = {}) {
+  const procs = S.doc?.processes || [];
+  const offsetStyle = editing ? ` style="margin-right:${drawerW}px"` : '';
+  const taskLevelMode = !!task && (!editing || (S.ui.nodePerspective || 'user') === 'engineering');
+  const diagMode = taskLevelMode ? ' taskflow-mode' : '';
+  return `<div class="process-flow-view${taskLevelMode ? ' has-tasklevel' : ''}" data-testid="process-flow-view"${offsetStyle}>
+    <div class="process-flow-card${taskLevelMode ? ' has-tasklevel' : ''}">
+      <div class="process-flow-head">
+        <div class="process-flow-actions">
+          ${procs.length ? `<select data-testid="process-flow-select" onchange="selectProcessFlow(this.value)">
+            ${procs.map((item) => `<option value="${esc(item.id)}" ${proc?.id===item.id?'selected':''}>${esc(item.id)} ${esc(item.name || '未命名流程')}</option>`).join('')}
+          </select>` : ''}
+        </div>
+      </div>
+      ${taskLevelMode ? `<div class="process-diagram-stack" data-testid="process-tasklevel-stack">
+        <div class="process-diagram-panel" data-testid="process-context-flow" aria-label="流程图">
+          <div class="drawer-diag process-main-diag process-context-diag process-context-main-diag">
+            ${renderProcessZoomControls('proc-context-diagram')}
+            <div id="proc-context-diagram" class="live-diagram" style="padding:8px 14px"></div>
+          </div>
+        </div>
+        <div class="process-diagram-panel" data-testid="process-tasklevel-flow" aria-label="节点任务">
+          <div class="drawer-diag process-main-diag${diagMode}">
+            ${renderProcessZoomControls('proc-diagram', true)}
+            <div id="proc-diagram" class="live-diagram" style="padding:10px 16px"></div>
+          </div>
+        </div>
+      </div>` : `<div class="drawer-diag process-main-diag${diagMode}">
+        ${renderProcessZoomControls('proc-diagram', true)}
+        <div id="proc-diagram" class="live-diagram" style="padding:10px 16px"></div>
+      </div>`}
+    </div>
+  </div>`;
+}
+
+function renderProcessFlowDiagram(proc, task) {
+  if (!proc) return;
+  const clickMap = {};
+  for (const node of getProcNodes(proc)) {
+    clickMap[node.id] = () => navigate('process', { procId: proc.id, taskId: node.id });
+  }
+  if (task && document.getElementById('proc-context-diagram')) {
+    renderProcFlow('proc-context-diagram', proc, clickMap);
+    renderProcTaskFlow('proc-diagram', proc, task.id, clickMap);
+  } else if (task) {
+    renderProcFlow('proc-diagram', proc, clickMap);
+  } else {
+    renderProcFlow('proc-diagram', proc, clickMap);
+  }
+}
+
+function renderProcessTab() {
+  ensureProcPos(S.doc);
+  const procs=S.doc.processes||[];
+  const proc=currentProc();
+  const task=currentTask();
+  const view=S.ui.procView||'stage';
+  const stageItem = view === 'stage' ? getCurrentStageItem() : null;
+  const realStageDetail = view === 'stage' && S.ui.stageViewMode === 'detail' && stageItem && !stageItem.virtual;
+  const panoramaActive = view === 'stage' && (S.ui.stageViewMode || 'panorama') === 'panorama';
+  const stageDetailActive = view === 'stage' && S.ui.stageViewMode === 'detail';
+  const flowViewActive = view === 'flow' || view === 'list';
+  const stageEditing = view === 'stage' && S.ui.stageEditorCollapsed === false;
+  const displayProc = proc || procs[0] || null;
+  if (view === 'list' && !proc && displayProc) {
+    S.ui.procId = displayProc.id;
+    S.ui.procView = 'flow';
+    renderProcessTab();
+    return;
+  }
+  const toolbarOffset = view === 'list' && proc
+    ? getDrawerWidth('process')
+    : 0;
+  const helpText = panoramaActive
+    ? (stageEditing
+      ? '直接在矩阵里维护业务域、价值流、单元格说明和阶段卡片；横向摆放表达大致先后，纵向摆放表达并列。'
+      : '横轴是价值流，纵轴是业务域或产品边界；点击阶段可钻取详情，打开编辑可直接维护全景表格。')
+    : (stageDetailActive
+      ? (stageEditing
+        ? '在图上直接维护流程名称和连线；横向表示大致先后，未连接或并列流程会放在下方，也可拖动节点微调位置。'
+        : '当前节点就是流程，连线表达阶段内流程的先后与分支关系。点击流程节点可进入流程编辑。')
+      : (flowViewActive
+        ? '按办理顺序查看当前流程，节点表示业务人员需要关注的关键环节。'
+        : '按角色查看参与的流程和任务，点击流程可进入对应流程编辑。'));
+  const toolbarActions = [
+    `<span class="inline-help toolbar-help" tabindex="0" data-testid="process-view-help" data-tip="${esc(helpText)}">?</span>`,
+    (stageDetailActive || (panoramaActive && stageEditing)) ? `<div class="zoom-controls">
+      <button class="zoom-btn" type="button" data-testid="stage-zoom-in" onclick="nudgeStageGraphZoom(0.1)">＋</button>
+      <button class="zoom-btn zoom-reset-btn" type="button" data-testid="stage-zoom-reset" onclick="resetStageGraphZoom()">${Math.round(getStageGraphZoom() * 100)}%</button>
+      <button class="zoom-btn" type="button" data-testid="stage-zoom-out" onclick="nudgeStageGraphZoom(-0.1)">－</button>
+    </div>` : '',
+    (panoramaActive || stageDetailActive) ? (stageEditing
+      ? '<button class="btn btn-ghost-sm" type="button" data-testid="stage-editor-hide" onclick="toggleStageEditorDrawer(false)">关闭编辑</button>'
+      : '<button class="btn btn-outline btn-sm" type="button" data-testid="stage-editor-open" onclick="toggleStageEditorDrawer(true)">打开编辑</button>') : '',
+    view === 'flow' && displayProc ? `<button class="btn btn-outline btn-sm" type="button" data-testid="process-editor-open" onclick="navigate('process',{procId:'${esc(displayProc.id)}',taskId:${task ? `'${esc(task.id)}'` : 'null'}})">打开编辑</button>` : '',
+  ].filter(Boolean).join('');
+
+  /* ── 视图切换工具栏 ── */
+  let h=`<div class="proc-view-toolbar">
+    <div class="proc-view-toolbar-main" ${toolbarOffset ? `style="margin-right:${toolbarOffset}px"` : ''}>
+      <div class="view-toggle-group">
+        <button class="vtb ${panoramaActive?'active':''}" data-testid="process-switch-panorama" onclick="openStagePanorama()">全景视图</button>
+        <button class="vtb ${stageDetailActive?'active':''}" data-testid="process-switch-stage" onclick="openStageDetail()">阶段视图</button>
+        <button class="vtb ${flowViewActive?'active':''}" data-testid="process-switch-card" onclick="openProcessFlowView()">流程视图</button>
+        <button class="vtb ${view==='role'?'active':''}" data-testid="process-switch-role" onclick="openRoleProjection()">角色视图</button>
+      </div>
+      <div class="proc-view-actions">${toolbarActions}</div>
+    </div>
+  </div>`;
+
+  if(!procs.length && view!=='stage') {
+    h+=`<div style="padding:24px;color:var(--text-m)">暂无流程，点击右上角新建</div>`;
+    document.getElementById('tab-content').innerHTML=h;
+    return;
+  }
+
+  if(view==='stage') {
+    h += renderStageWorkbench();
+    document.getElementById('tab-content').innerHTML = h;
+    return;
+  }
+
+  /* ══ 流程视图 ══ */
+  if(view==='flow') {
+    if (displayProc && !S.ui.procId) S.ui.procId = displayProc.id;
+    h+=renderProcessFlowStage(displayProc, { editing: false, task });
+    const tabContent = document.getElementById('tab-content');
+    tabContent.innerHTML=h;
+    renderProcessFlowDiagram(displayProc, task);
+    return;
+  }
+
+  if(view==='role') {
+    h += renderProcessRoleView();
+    document.getElementById('tab-content').innerHTML = h;
+    return;
+  }
+
+  /* ══ 流程编辑模式：中间流程图 + 右侧抽屉编辑 ══ */
+  const drawerW = getDrawerWidth('process');
+  h+=renderProcessFlowStage(proc || procs[0] || null, { editing: !!proc, task, drawerW });
+
+  /* ── 右侧抽屉（只承载编辑表单） ── */
+  h+=`<div class="proc-drawer${proc?' open':''}" style="width:${drawerW}px">
+    <div class="drawer-resize-handle" data-testid="process-drawer-resize-handle" onmousedown="startDrawerResize(event)"></div>`;
+
+  if(proc) {
+    /* 抽屉头部 */
+    h+=`<div class="drawer-head">
+      <div class="drawer-crumb">
+        <span class="drawer-crumb-proc" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})"
+          title="回到流程">${esc(proc.id)} ${esc(proc.name||'')}</span>
+        ${task?`<span class="dc-sep">›</span>
+          <span>节点 ${esc(task.id)} ${esc(task.name||'')}</span>`:''}
+      </div>
+      <div class="drawer-actions">
+        ${!task?`<button class="btn btn-outline btn-sm" onclick="addTask('${esc(proc.id)}')">\uff0b\u8282\u70b9</button>`:''}
+        ${task?`<button class="btn btn-danger btn-sm" onclick="removeTask('${esc(proc.id)}','${esc(task.id)}')">\u5220\u9664\u8282\u70b9</button>`:''}
+        <button class="drawer-close" type="button" data-testid="process-editor-close" onclick="closeProcessEditor()" title="关闭编辑">✕</button>
+      </div>
+    </div>`;
+
+    /* 流程图（小图） */
+    /* 编辑表单 */
+    h+=`<div class="drawer-body">`;
+
+    if(task) {
+      /* ── 节点编辑 ── */
+      h+=`<div class="form-grid" style="margin-bottom:16px">
+        <div class="field-group">
+          <label>节点名称</label>
+          <input type="text" data-testid="process-task-name-input" value="${esc(task.name||'')}" placeholder="如：新增仓库"
+            oninput="setTask('${esc(proc.id)}','${esc(task.id)}','name',this.value)">
+          <label class="task-returnable-inline">
+            <span class="task-returnable-label">\u53ef\u9000\u56de</span>
+            <input type="checkbox" data-testid="task-returnable-toggle" ${task.repeatable?'checked':''}
+              onchange="setTask('${esc(proc.id)}','${esc(task.id)}','repeatable',this.checked);rerenderProcessEditor({ focusSelector: '[data-testid=&quot;task-returnable-toggle&quot;]' })">
+            <span class="task-returnable-note">\u5f53\u524d\u8282\u70b9\u5141\u8bb8\u9000\u56de\u4e0a\u4e00\u8282\u70b9\u91cd\u65b0\u5904\u7406</span>
+          </label>
+        </div>
+        <div class="field-group field-group-wide">
+          <label>执行角色</label>`;
+
+      h+=renderTaskRolePicker(proc, task);
+      h+=`</div>
+      </div>`;
+
+      /* 步骤 */
+      h+=renderNodePerspectiveSwitch();
+      if ((S.ui.nodePerspective || 'user') === 'engineering') {
+        h+=renderOrchestrationSection(proc, task);
+      } else {
+        h+=renderUserStepsSection(proc, task);
+      }
+
+      /* 涉及实体 */
+      const eops=task.entity_ops||[];
+      h+=`<div class="form-section"><h4>涉及实体</h4>`;
+      if(eops.length){
+        h+=`<div class="eop-list">`;
+        for(const eo of eops){
+          const en=getEntityName(eo.entity_id);
+          h+=`<div class="eop-tag">
+            <span class="eop-name" onclick="navigate('data',{entityId:'${eo.entity_id}'})" title="→ 实体详情">${esc(en)}</span>
+            <div class="eop-ops">`;
+          for(const op of ['C','R','U','D']){
+            const chk=eo.ops?.includes(op)?'checked':'';
+            const cls=op==='C'?'op-c':op==='U'?'op-u':op==='D'?'op-d':'';
+            h+=`<label class="op-cb">
+              <input type="checkbox" ${chk}
+                onchange="toggleEntityOp('${esc(proc.id)}','${esc(task.id)}','${eo.entity_id}','${op}',this.checked)">
+              <span class="${cls}">${op}</span></label>`;
+          }
+          h+=`</div><button class="eop-del" onclick="removeEntityOp('${esc(proc.id)}','${esc(task.id)}','${eo.entity_id}')">✕</button></div>`;
+        }
+        h+=`</div>`;
+      } else { h+=`<p class="no-refs" style="margin-bottom:8px">尚未关联实体</p>`; }
+      const avail=(S.doc.entities||[]).filter(e=>!eops.some(eo=>eo.entity_id===e.id));
+      if(avail.length){
+        h+=`<div class="add-eop-row">
+          <select id="eop-sel-${task.id}">
+            <option value="">选择实体...</option>
+            ${avail.map(e=>`<option value="${e.id}">${e.id} ${esc(e.name)}</option>`).join('')}
+          </select>
+          <button class="btn btn-outline btn-sm"
+            onclick="addEntityOp('${esc(proc.id)}','${esc(task.id)}',document.getElementById('eop-sel-${task.id}').value)">关联</button>
+        </div>`;
+      }
+      h+=`</div>`;
+
+      h+=renderTaskFormsSection(proc, task);
+      h+=renderTaskBusinessRulesSection(proc, task);
+
+    } else {
+      /* ── 流程信息 ── */
+      const prototypeFiles = getProcPrototypeFiles(proc);
+      const prototypeInputId = formatPrototypeInputId(proc.id);
+      const processStageRefs = getProcessStageRefs(proc.id, S.doc);
+      const processStageRefChips = processStageRefs
+        .map((ref) => {
+          const stageName = getStageDisplayName(ref.stageId, S.doc);
+          return `<button class="proc-stage-ref-chip" type="button" data-testid="proc-stage-ref-chip" onclick="openStageDetail('${esc(ref.stageId)}')">${esc(stageName)}</button>`;
+        })
+        .join('');
+      h+=`<div class="form-grid">
+        <div class="field-group">
+          <label>流程名称</label>
+          <input type="text" id="proc-name-input" value="${esc(proc.name||'')}"
+            placeholder="如：采购入库流程"
+            oninput="setProc('${esc(proc.id)}','name',this.value);renderSidebar()">
+        </div>
+        <div class="field-group field-group-wide">
+          <label>涉及业务阶段</label>
+          <div class="proc-stage-ref-list" data-testid="proc-stage-ref-list">
+            ${processStageRefChips || '<span class="no-refs">暂未涉及业务阶段</span>'}
+          </div>
+          <div class="field-hint">阶段与流程的关系请在阶段视图中维护</div>
+        </div>
+        <div class="field-group">
+          <label>触发条件</label>
+          <input type="text" value="${esc(proc.trigger||'')}" placeholder="什么事件触发此流程"
+            oninput="setProc('${esc(proc.id)}','trigger',this.value)">
+        </div>
+        <div class="field-group">
+          <label>预期结果</label>
+          <input type="text" value="${esc(proc.outcome||'')}" placeholder="流程完成后达成的状态"
+            oninput="setProc('${esc(proc.id)}','outcome',this.value)">
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="section-toolbar">
+          <h4>流程原型${prototypeFiles.length ? `<span class="section-count">${prototypeFiles.length}项</span>` : ''}</h4>
+        </div>
+        ${prototypeFiles.length ? `<div class="prototype-file-list" data-testid="proc-prototype-list">
+          ${prototypeFiles.map((file) => {
+            const currentVersion = findProcessPrototypeVersion(file);
+            const versionCount = Array.isArray(file.versions) ? file.versions.length : 0;
+            const expanded = isProcessPrototypeExpanded(proc.id, file.uid);
+            return `<div class="prototype-file-item" data-testid="proc-prototype-item">
+            <div class="prototype-file-meta">
+              <strong class="prototype-file-name">${esc(file.name || '')}</strong>
+              <span class="prototype-file-version">当前 v${currentVersion?.number || 1} · 共${versionCount || 1}版${currentVersion?.uploadedAt ? ` · ${esc(currentVersion.uploadedAt)}` : ''}</span>
+              <span class="prototype-file-kind">HTML 原型</span>
+            </div>
+            <div class="prototype-file-actions">
+              <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-toggle" data-prototype-toggle="${esc(file.uid)}"
+                onclick="toggleProcessPrototypeVersions('${esc(proc.id)}','${esc(file.uid)}')">${expanded ? '收起' : '展开'}版本</button>
+              <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-open"
+                onclick="openProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}')">打开</button>
+              <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-download"
+                onclick="downloadProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}')">下载</button>
+              <button class="btn btn-ghost-sm prototype-file-remove" type="button" data-testid="proc-prototype-remove"
+                onclick="removeProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}')">删除</button>
+            </div>
+            ${expanded ? `<div class="prototype-version-list" data-testid="proc-prototype-version-list">
+              ${file.versions.map((version) => `<div class="prototype-version-item" data-testid="proc-prototype-version-item">
+                <div class="prototype-version-meta">
+                  <strong class="prototype-version-label">v${version.number}${version.uid === file.versionUid ? ' · 当前引用' : ''}</strong>
+                  <span class="prototype-version-time">${esc(version.uploadedAt || '未记录上传时间')}</span>
+                </div>
+                <div class="prototype-version-actions">
+                  <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-open"
+                    onclick="openProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}','${esc(version.uid)}')">打开</button>
+                  <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-download"
+                    onclick="downloadProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}','${esc(version.uid)}')">下载</button>
+                </div>
+              </div>`).join('')}
+            </div>` : ''}
+          </div>`;
+          }).join('')}
+        </div>` : `<p class="no-refs" style="margin-bottom:8px">尚未上传流程原型文件</p>`}
+        <div class="prototype-upload-row" data-testid="proc-prototype-upload">
+          <input type="file" id="${prototypeInputId}" data-testid="proc-prototype-input" accept=".html,.htm,text/html" multiple>
+          <button class="btn btn-outline btn-sm" type="button" data-testid="proc-prototype-upload-button"
+            onclick="addProcessPrototypeFiles('${esc(proc.id)}','${prototypeInputId}')">上传 HTML 原型</button>
+        </div>
+        <p class="prototype-upload-hint">支持同一流程上传多个 HTML 原型文件；同名上传会自动新增版本，并把最新上传设为当前引用。</p>
+      </div>
+      <p style="margin-top:14px;font-size:12px;color:var(--text-m)">
+        点击上方流程图中的流程节点可直接进入节点编辑
+      </p>`;
+      const procFocusSelector = S.ui.procEditorFocusSelector || '#proc-name-input';
+      setTimeout(() => {
+        const field = document.querySelector(procFocusSelector);
+        if (!field) return;
+        if (typeof field.focus === 'function') {
+          try {
+            field.focus({ preventScroll: true });
+          } catch (error) {
+            field.focus();
+          }
+        }
+      },40);
+      S.ui.procEditorFocusSelector = '';
+    }
+
+    h+=`</div>`; /* end drawer-body */
+  } else {
+    /* 无选中：提示语 */
+    h+=`<div class="drawer-empty"><p>从流程视图选择流程节点后打开编辑</p></div>`;
+  }
+
+  h+=`</div>`; /* end proc-drawer */
+
+  const tabContent = document.getElementById('tab-content');
+  tabContent.innerHTML = h;
+  syncTaskReturnableToggle(tabContent);
+  if (typeof initAutoResize === 'function') initAutoResize();
+
+  renderProcessFlowDiagram(proc, task);
+}
+
+/* 仅刷新流程图，不重建整个 DOM（输入框连续输入时用） */
+function renderProcDiagramNow() {
+  const proc=currentProc(); if(!proc) return;
+  renderProcessFlowDiagram(proc, currentTask());
+}
+
+function isCustomStepType(type) {
+  if (type === null || type === undefined) return false;
+  return !STEP_TYPES.some(t => t.value !== '__other__' && t.value === type);
+}
+function onStepTypeChange(sel, procId, taskId, idx) {
+  const val = sel.value;
+  if (val === '__other__') {
+    setStep(procId, taskId, idx, 'type', '');
+    render();
+    const rows = document.querySelectorAll('.step-row');
+    const input = rows[idx]?.querySelector('.step-type-custom');
+    if (input) { input.focus(); }
+  } else {
+    setStep(procId, taskId, idx, 'type', val);
+    render();
+  }
+}

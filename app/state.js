@@ -1,0 +1,1277 @@
+﻿'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════ */
+const S = {
+  files: [],
+  currentFile: null,
+  saveDialogMode: 'save',
+  doc: null,
+  modified: false,
+  runtime: {
+    checked: false,
+    apiVersion: 0,
+    supportsDocs: false,
+  },
+  merge: {
+    workspaceFiles: [],
+    workspaceNames: {
+      left: '',
+      right: '',
+    },
+    labels: {
+      left: '',
+      right: '',
+    },
+    documents: {
+      left: null,
+      right: null,
+    },
+    analysis: null,
+    resolutions: {},
+  },
+  recovery: {
+    openTab: 'workspace',
+    historyDocName: '',
+    historyEntries: [],
+    trashEntries: [],
+  },
+  manual: {
+    docs: [],
+    activeDocId: '',
+    activeTitle: '',
+    activeSummary: '',
+    html: '',
+    outline: [],
+    images: [],
+    collapsedGroups: {},
+    loading: false,
+    error: '',
+  },
+  ui: {
+    tab: 'domain',
+    procId: null, taskId: null,
+    stageId: null,
+    stageViewMode: 'panorama',
+    entityId: null,
+    dataView: 'relation',
+    stateFieldName: '',
+    roleId: null,
+    roleQuery: '',
+    roleParticipatingOnly: false,
+    navHistory: [],
+    sbCollapse: {},   // { 'proc-P1': true, 'grp-销售': false }
+    sidebarCollapsed: false,
+    sidebarW: 240,
+    businessDomainFilter: 'all',
+    procView: 'stage',  // 'stage' | 'list'(internal editor) | 'flow' | 'role'
+    nodePerspective: 'user',
+    procPrototypeExpanded: {},
+    procRolePickerCollapsed: {},
+    procEditorFocusSelector: '',
+    stepNoteEditKey: '',
+    orchestrationNoteEditKey: '',
+    procDrawerW: 480,
+    stageGraphZoom: 1,
+    stageEditorCollapsed: true,
+    stageNameEditId: '',
+    entityDrawerW: 620,
+    entityRelationEditorCollapsed: true,
+    stateDiagramZoom: 1,
+    stateEditorCollapsed: false,
+    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '' },
+  }
+};
+
+const UI_PREFS_KEY = 'blm-ui-prefs';
+
+function loadUiPrefs() {
+  try {
+    const raw = window.localStorage?.getItem(UI_PREFS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveUiPrefs(partialPrefs) {
+  try {
+    const prefs = { ...loadUiPrefs(), ...partialPrefs };
+    window.localStorage?.setItem(UI_PREFS_KEY, JSON.stringify(prefs));
+  } catch (_) {
+    // 忽略本地存储不可用的场景
+  }
+}
+
+function getUiPrefNumber(key, fallback) {
+  const value = loadUiPrefs()[key];
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function getDrawerWidth(kind) {
+  return kind === 'process'
+    ? (S.ui.procDrawerW || getUiPrefNumber('procDrawerW', 480))
+    : (S.ui.entityDrawerW || getUiPrefNumber('entityDrawerW', 620));
+}
+
+function getSidebarWidth() {
+  return S.ui.sidebarW || getUiPrefNumber('sidebarW', 240);
+}
+
+function setSidebarWidth(width) {
+  S.ui.sidebarW = width;
+  saveUiPrefs({ sidebarW: width });
+}
+
+function setDrawerWidth(kind, width) {
+  if (kind === 'process') {
+    S.ui.procDrawerW = width;
+    saveUiPrefs({ procDrawerW: width });
+    return;
+  }
+  S.ui.entityDrawerW = width;
+  saveUiPrefs({ entityDrawerW: width });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   API
+═══════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════════ */
+const STEP_TYPES = [
+  {value:'Click',  label:'点击'},
+  {value:'Query',  label:'查询'}, {value:'Check',  label:'校验'},
+  {value:'Fill',   label:'填写'}, {value:'Select', label:'选择'},
+  {value:'Compute',label:'计算'}, {value:'Mutate', label:'变更'},
+  {value:'__other__', label:'其它…'},
+];
+const ORCHESTRATION_TYPES = [
+  {value:'Query', label:'查询'},
+  {value:'Check', label:'校验'},
+  {value:'Compute', label:'计算'},
+  {value:'Service', label:'服务'},
+  {value:'Mutate', label:'变更'},
+  {value:'Custom', label:'自定义'},
+];
+const QUERY_SOURCE_KINDS = [
+  {value:'Dictionary', label:'字典'},
+  {value:'Enum', label:'枚举'},
+  {value:'QueryService', label:'查询服务'},
+  {value:'Custom', label:'自定义'},
+];
+const FIELD_TYPES = [
+  {value:'string',  label:'字符'},  {value:'number',  label:'数值'},
+  {value:'decimal', label:'金额'},  {value:'date',    label:'日期'},
+  {value:'datetime',label:'日期时间'},{value:'boolean',label:'布尔'},
+  {value:'enum',   label:'枚举'},   {value:'text',    label:'长文本'},
+  {value:'id',     label:'标识ID'},
+];
+const ROLE_GROUPS = [
+  '业务参与方',
+  '仓库作业方',
+  '监管与审核方',
+  '平台与运维方',
+  '系统角色',
+  '待分类角色',
+];
+
+/* ═══════════════════════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════════════════════ */
+function nextId(prefix, items) {
+  const used = new Set((items||[]).map(x=>x.id));
+  let i=1; while(used.has(`${prefix}${i}`))i++;
+  return `${prefix}${i}`;
+}
+function createUiUid(prefix = 'uid') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+const UNASSIGNED_STAGE_ID = '__unassigned__';
+const UNASSIGNED_STAGE_NAME = '未设置业务阶段';
+const DEFAULT_PANORAMA_COLUMNS = [
+  { id: 'participants', name: '会员客户', scope: '账号/服务机构/参与方', badge: '' },
+  { id: 'parameters', name: '品种参数', scope: '品种/合约/商品/示例参数', badge: '' },
+  { id: 'businessHandling', name: '业务办理', scope: '仓单同步/入库/在库/出库', badge: '' },
+  { id: 'riskSupervision', name: '风险监管', scope: '监管/查询/预警/追溯', badge: '' },
+];
+const DEFAULT_PANORAMA_LANES = [
+  {
+    id: 'smart-platform-phase2',
+    name: '示例业务域1',
+    badge: '业务域1',
+    note: '示例业务分析主对象，承接账号机构、参数同步、业务办理和监管协同。',
+  },
+  {
+    id: 'receipt-system',
+    name: '示例业务域2',
+    badge: '业务域2',
+    note: '作为关键环节职责参照，帮助识别跨业务域协作边界。',
+  },
+];
+const DEFAULT_PANORAMA_CELLS = [
+  { columnId: 'participants', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '账号管理、仓库管理、质检机构管理等作为大阶段；维护、审核、变更等细节进入阶段内流程' },
+  { columnId: 'parameters', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '品种参数管理作为大阶段；品种、合约、商品和示例参数同步维护进入阶段内流程' },
+  { columnId: 'businessHandling', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '仓单注册、仓单注销、仓单流转等作为大阶段；示例预报、仓库/厂库仓单注册等进入阶段内流程' },
+  { columnId: 'riskSupervision', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '风险监管作为大阶段；库存监管、风险预警、异常核验、查询追溯和统计分析进入阶段内流程' },
+  { columnId: 'parameters', laneId: 'receipt-system', status: '业务域2职责', text: '维护品种信息、维护合约信息，作为示例业务域1同步来源' },
+  { columnId: 'businessHandling', laneId: 'receipt-system', status: '业务域2职责', text: '仓单注册、仓单注销、仓单流转等仓单核心动作可由示例业务域2承载' },
+];
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+/* textarea 自动撑高：绑定在 oninput 或渲染后调用 */
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = (el.scrollHeight) + 'px';
+}
+/* 渲染完后批量撑高页面内所有 auto-resize textarea */
+function initAutoResize() {
+  document.querySelectorAll('textarea.auto-resize').forEach(autoResize);
+}
+function markModified() {
+  if (!S.modified) {
+    S.modified = true;
+    if (typeof renderToolbar === 'function') renderToolbar();
+  }
+}
+function getCurrentDocumentLabel() {
+  return S.doc?.meta?.domain || S.currentFile || '—';
+}
+function getCurrentDocumentTitle() {
+  return getCurrentDocumentLabel();
+}
+function resetMergeState() {
+  S.merge.workspaceFiles = [];
+  S.merge.workspaceNames = { left: '', right: '' };
+  S.merge.labels = { left: '', right: '' };
+  S.merge.documents = { left: null, right: null };
+  S.merge.analysis = null;
+  S.merge.resolutions = {};
+}
+function resetRecoveryState() {
+  S.recovery.openTab = 'workspace';
+  S.recovery.historyDocName = '';
+  S.recovery.historyEntries = [];
+  S.recovery.trashEntries = [];
+}
+function getEntityName(id) { return S.doc?.entities?.find(e=>e.id===id)?.name||id; }
+function getProcNodes(proc) {
+  return Array.isArray(proc?.nodes) ? proc.nodes : (Array.isArray(proc?.tasks) ? proc.tasks : []);
+}
+function getNodeUserSteps(node) {
+  return Array.isArray(node?.userSteps) ? node.userSteps : (Array.isArray(node?.steps) ? node.steps : []);
+}
+function getNodeOrchestrationTasks(node) {
+  return Array.isArray(node?.orchestrationTasks) ? node.orchestrationTasks : [];
+}
+function getNodeForms(node) {
+  if (!node || typeof node !== 'object') return [];
+  if (!Array.isArray(node.forms)) node.forms = [];
+  return node.forms;
+}
+function normalizeBusinessRuleEntry(rule, index = 1) {
+  const source = rule && typeof rule === 'object'
+    ? rule
+    : { content: String(rule || '') };
+  const id = String(source.id || source.uid || '').trim() || createUiUid('rule');
+  const rawName = source.name ?? source.title ?? `规则${index}`;
+  const rawContent = source.content ?? source.description ?? source.note ?? '';
+  return {
+    id,
+    name: String(rawName),
+    content: String(rawContent),
+  };
+}
+function getNodeBusinessRules(node) {
+  if (!node || typeof node !== 'object') return [];
+  const hasExplicitRules = Array.isArray(node.businessRules) || Array.isArray(node.business_rules);
+  const source = Array.isArray(node.businessRules)
+    ? node.businessRules
+    : (Array.isArray(node.business_rules) ? node.business_rules : []);
+  const rules = source.map((rule, index) => normalizeBusinessRuleEntry(rule, index + 1));
+  if (!rules.length && !hasExplicitRules && String(node.rules_note || '').trim()) {
+    rules.push({ id: createUiUid('rule'), name: '业务规则', content: String(node.rules_note || '').trim() });
+  }
+  node.businessRules = rules;
+  return node.businessRules;
+}
+function formatBusinessRulesText(rules) {
+  return (Array.isArray(rules) ? rules : [])
+    .map((rule) => {
+      const name = String(rule?.name || '').trim();
+      const content = String(rule?.content || '').trim();
+      if (!name && !content) return '';
+      if (!name) return content;
+      if (!content) return name;
+      return `${name}：${content}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+function formatPrototypeUploadedAt(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  const second = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+function normalizePrototypeVersionEntry(version, fallbackName, versionIndex = 1) {
+  const normalizedVersion = version && typeof version === 'object' ? version : { name: fallbackName, content: String(version || '') };
+  const versionName = String(normalizedVersion.name || '').trim() || fallbackName;
+  let versionNumber = Number.parseInt(normalizedVersion.number, 10);
+  if (!Number.isFinite(versionNumber) || versionNumber < 1) versionNumber = versionIndex;
+  return {
+    uid: String(normalizedVersion.uid || '').trim() || createUiUid('protover'),
+    number: versionNumber,
+    name: versionName,
+    content: String(normalizedVersion.content || ''),
+    contentType: String(normalizedVersion.contentType || 'text/html').trim() || 'text/html',
+    uploadedAt: String(normalizedVersion.uploadedAt || '').trim(),
+  };
+}
+function normalizePrototypeFileEntry(file, index = 1) {
+  const fallbackName = `原型${index}.html`;
+  if (!file || typeof file !== 'object') {
+    const version = normalizePrototypeVersionEntry({}, fallbackName, 1);
+    return {
+      uid: createUiUid('proto'),
+      name: fallbackName,
+      versionUid: version.uid,
+      content: version.content,
+      contentType: version.contentType,
+      uploadedAt: version.uploadedAt,
+      versions: [version],
+    };
+  }
+  const normalizedName = String(file.name || '').trim() || fallbackName;
+  const versionSources = Array.isArray(file.versions) && file.versions.length
+    ? file.versions
+    : [{
+      uid: String(file.versionUid || file.currentVersionUid || '').trim(),
+      number: 1,
+      name: normalizedName,
+      content: String(file.content || ''),
+      contentType: String(file.contentType || 'text/html').trim() || 'text/html',
+      uploadedAt: String(file.uploadedAt || '').trim(),
+    }];
+  const normalizedVersions = versionSources
+    .map((version, versionIndex) => normalizePrototypeVersionEntry(version, normalizedName, versionIndex + 1))
+    .sort((left, right) => (left.number - right.number) || String(left.uid).localeCompare(String(right.uid)));
+  normalizedVersions.forEach((version, versionIndex) => { version.number = versionIndex + 1; });
+  const versionUid = String(file.versionUid || file.currentVersionUid || '').trim();
+  const currentVersion = normalizedVersions.find((version) => version.uid === versionUid) || normalizedVersions[normalizedVersions.length - 1];
+  return {
+    uid: String(file.uid || '').trim() || createUiUid('proto'),
+    name: normalizedName || currentVersion.name,
+    versionUid: currentVersion.uid,
+    content: currentVersion.content,
+    contentType: currentVersion.contentType,
+    uploadedAt: currentVersion.uploadedAt,
+    versions: normalizedVersions,
+  };
+}
+function normalizeGraphOffset(value) {
+  if (!value || typeof value !== 'object') return { x: 0, y: 0 };
+  const x = Number.isFinite(Number(value.x)) ? Math.round(Number(value.x)) : 0;
+  const y = Number.isFinite(Number(value.y)) ? Math.round(Number(value.y)) : 0;
+  return { x, y };
+}
+function normalizeGridSlot(value) {
+  if (!value || typeof value !== 'object') return null;
+  const row = Math.max(0, Math.round(Number(value.row) || 0));
+  const col = Math.max(0, Math.round(Number(value.col) || 0));
+  return { row, col };
+}
+function createDefaultPanoramaModel() {
+  return {
+    columns: DEFAULT_PANORAMA_COLUMNS.map((column) => ({ ...column })),
+    lanes: DEFAULT_PANORAMA_LANES.map((lane) => ({ ...lane })),
+    cells: DEFAULT_PANORAMA_CELLS.map((cell) => ({ ...cell })),
+  };
+}
+function isLegacyDefaultPanoramaModel(panorama) {
+  if (!panorama || typeof panorama !== 'object') return false;
+  const columns = Array.isArray(panorama.columns) ? panorama.columns : [];
+  const lanes = Array.isArray(panorama.lanes) ? panorama.lanes : [];
+  const legacyColumnNames = ['参与主体', '品种参数', '入库', '在库', '出库', '其他'];
+  const legacyColumnIds = ['participants', 'parameters', 'inbound', 'inStock', 'outbound', 'other'];
+  const columnIds = columns.map((column) => String(column?.id || '').trim());
+  const columnNames = columns.map((column) => String(column?.name || '').trim());
+  if (columnIds.length !== legacyColumnIds.length) return false;
+  if (!legacyColumnIds.every((id, index) => columnIds[index] === id)) return false;
+  if (!legacyColumnNames.every((name, index) => !columnNames[index] || columnNames[index] === name)) return false;
+  const laneIds = lanes.map((lane) => String(lane?.id || '').trim()).sort();
+  return laneIds.length === 2
+    && laneIds[0] === 'receipt-system'
+    && laneIds[1] === 'smart-platform-phase2';
+}
+function normalizePanoramaId(value, prefix, index, usedIds) {
+  const rawId = String(value || '').trim();
+  const baseId = rawId || `${prefix}${index}`;
+  let id = baseId;
+  let suffix = 2;
+  while (usedIds.has(id)) {
+    id = `${baseId}-${suffix}`;
+    suffix += 1;
+  }
+  usedIds.add(id);
+  return id;
+}
+function normalizePanoramaColumnEntry(column, index = 1, usedIds = new Set()) {
+  const normalized = column && typeof column === 'object' ? column : {};
+  const fallback = DEFAULT_PANORAMA_COLUMNS[index - 1] || {};
+  const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
+  return {
+    id: normalizePanoramaId(normalized.id || normalized.key, 'C', index, usedIds),
+    name: hasName ? String(normalized.name || '').trim() : (fallback.name || `价值流${index}`),
+    scope: String(normalized.scope || '').trim(),
+    badge: String(normalized.badge || '').trim(),
+  };
+}
+function normalizePanoramaLaneEntry(lane, index = 1, usedIds = new Set()) {
+  const normalized = lane && typeof lane === 'object' ? lane : {};
+  const fallback = DEFAULT_PANORAMA_LANES[index - 1] || {};
+  const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
+  return {
+    id: normalizePanoramaId(normalized.id || normalized.key, 'L', index, usedIds),
+    name: hasName ? String(normalized.name || '').trim() : (fallback.name || `业务域${index}`),
+    badge: String(normalized.badge || '').trim(),
+    note: String(normalized.note || '').trim(),
+  };
+}
+function normalizePanoramaCellEntry(cell) {
+  const normalized = cell && typeof cell === 'object' ? cell : {};
+  return {
+    columnId: String(normalized.columnId || normalized.streamId || normalized.valueStreamId || '').trim(),
+    laneId: String(normalized.laneId || '').trim(),
+    status: String(normalized.status || '').trim(),
+    text: String(normalized.text || normalized.note || '').trim(),
+  };
+}
+function getPanoramaModel(doc = S.doc) {
+  if (!doc || typeof doc !== 'object') return createDefaultPanoramaModel();
+  if (!doc.panorama || typeof doc.panorama !== 'object') {
+    doc.panorama = createDefaultPanoramaModel();
+  } else if (isLegacyDefaultPanoramaModel(doc.panorama)) {
+    doc.panorama = createDefaultPanoramaModel();
+  }
+  const columnSource = Array.isArray(doc.panorama.columns) && doc.panorama.columns.length
+    ? doc.panorama.columns
+    : createDefaultPanoramaModel().columns;
+  const laneSource = Array.isArray(doc.panorama.lanes) && doc.panorama.lanes.length
+    ? doc.panorama.lanes
+    : createDefaultPanoramaModel().lanes;
+  const columnIds = new Set();
+  const laneIds = new Set();
+  const columns = columnSource.map((column, index) => normalizePanoramaColumnEntry(column, index + 1, columnIds));
+  const lanes = laneSource.map((lane, index) => normalizePanoramaLaneEntry(lane, index + 1, laneIds));
+  const validColumnIds = new Set(columns.map((column) => column.id));
+  const validLaneIds = new Set(lanes.map((lane) => lane.id));
+  const defaultCells = new Map(DEFAULT_PANORAMA_CELLS.map((cell) => [`${cell.laneId}::${cell.columnId}`, cell]));
+  const cells = new Map();
+  (Array.isArray(doc.panorama.cells) ? doc.panorama.cells : []).forEach((cell) => {
+    const normalized = normalizePanoramaCellEntry(cell);
+    if (!validColumnIds.has(normalized.columnId) || !validLaneIds.has(normalized.laneId)) return;
+    cells.set(`${normalized.laneId}::${normalized.columnId}`, normalized);
+  });
+  lanes.forEach((lane) => {
+    columns.forEach((column) => {
+      const cellKey = `${lane.id}::${column.id}`;
+      if (cells.has(cellKey)) return;
+      const defaultCell = defaultCells.get(cellKey);
+      cells.set(cellKey, defaultCell
+        ? { ...defaultCell }
+        : { columnId: column.id, laneId: lane.id, status: '', text: '' });
+    });
+  });
+  doc.panorama = {
+    columns,
+    lanes,
+    cells: Array.from(cells.values()),
+  };
+  return doc.panorama;
+}
+function getPanoramaCell(model, laneId, columnId) {
+  const normalizedLaneId = String(laneId || '').trim();
+  const normalizedColumnId = String(columnId || '').trim();
+  return (model?.cells || []).find((cell) => cell.laneId === normalizedLaneId && cell.columnId === normalizedColumnId)
+    || { laneId: normalizedLaneId, columnId: normalizedColumnId, status: '', text: '' };
+}
+function normalizeStageProcessLinkEntry(link) {
+  const normalized = link && typeof link === 'object' ? link : {};
+  return {
+    uid: String(normalized.uid || '').trim() || createUiUid('stageproc'),
+    fromProcessId: String(normalized.fromProcessId || '').trim(),
+    toProcessId: String(normalized.toProcessId || '').trim(),
+  };
+}
+function normalizeStageLinkEntry(link) {
+  const normalized = link && typeof link === 'object' ? link : {};
+  return {
+    uid: String(normalized.uid || '').trim() || createUiUid('stagelink'),
+    fromStageId: String(normalized.fromStageId || '').trim(),
+    toStageId: String(normalized.toStageId || '').trim(),
+  };
+}
+function normalizeStageFlowRefEntry(ref, index = 1) {
+  const normalized = ref && typeof ref === 'object' ? ref : {};
+  return {
+    uid: String(normalized.uid || '').trim() || createUiUid('stageref'),
+    id: String(normalized.id || '').trim() || `SFR${index}`,
+    stageId: String(normalized.stageId || normalized.stage_id || '').trim(),
+    processId: String(normalized.processId || normalized.process_id || '').trim(),
+    order: Math.max(1, Math.round(Number(normalized.order || index) || index)),
+    pos: normalizeGraphOffset(normalized.pos),
+  };
+}
+function normalizeStageFlowLinkEntry(link, index = 1) {
+  const normalized = link && typeof link === 'object' ? link : {};
+  return {
+    uid: String(normalized.uid || '').trim() || createUiUid('stagereflink'),
+    id: String(normalized.id || '').trim() || `SFL${index}`,
+    stageId: String(normalized.stageId || normalized.stage_id || '').trim(),
+    fromRefId: String(normalized.fromRefId || normalized.from_ref_id || '').trim(),
+    toRefId: String(normalized.toRefId || normalized.to_ref_id || '').trim(),
+  };
+}
+function normalizeStageEntry(stage, index = 1, processes = [], stageFlowRefs = []) {
+  const normalized = stage && typeof stage === 'object' ? stage : {};
+  let subDomain = String(normalized.subDomain || '').trim();
+  if (!subDomain) {
+    const stageId = String(normalized.id || '').trim();
+    const refMembers = (Array.isArray(stageFlowRefs) ? stageFlowRefs : [])
+      .filter((ref) => String(ref?.stageId || '').trim() === stageId)
+      .map((ref) => (processes || []).find((proc) => String(proc?.id || '').trim() === String(ref?.processId || '').trim()))
+      .filter(Boolean);
+    const legacyMember = (processes || [])
+      .find((proc) => String(proc?.stageId || '').trim() === stageId && String(proc?.subDomain || '').trim());
+    const member = refMembers.find((proc) => String(proc?.subDomain || '').trim()) || legacyMember;
+    subDomain = String(member?.subDomain || '').trim();
+  }
+  return {
+    uid: String(normalized.uid || '').trim() || createUiUid('stage'),
+    id: String(normalized.id || '').trim() || `S${index}`,
+    name: String(normalized.name || '').trim() || `业务阶段${index}`,
+    subDomain,
+    panoramaColumnId: String(normalized.panoramaColumnId || normalized.valueStreamId || normalized.valueStreamKey || '').trim(),
+    panoramaLaneId: String(normalized.panoramaLaneId || normalized.valueStreamLaneId || '').trim(),
+    panoramaSlot: normalizeGridSlot(normalized.panoramaSlot),
+    panoramaPos: normalized.panoramaPos && typeof normalized.panoramaPos === 'object'
+      ? normalizeGraphOffset(normalized.panoramaPos)
+      : null,
+    pos: normalizeGraphOffset(normalized.pos),
+    processLinks: (Array.isArray(normalized.processLinks) ? normalized.processLinks : []).map(normalizeStageProcessLinkEntry),
+  };
+}
+function getStages(doc = S.doc) {
+  if (!doc || typeof doc !== 'object') return [];
+  if (!Array.isArray(doc.stages)) doc.stages = [];
+  doc.stages = doc.stages.map((stage, index) => normalizeStageEntry(stage, index + 1, doc.processes || [], doc.stageFlowRefs || []));
+  return doc.stages;
+}
+function getStageLinks(doc = S.doc) {
+  if (!doc || typeof doc !== 'object') return [];
+  if (!Array.isArray(doc.stageLinks)) doc.stageLinks = [];
+  doc.stageLinks = doc.stageLinks.map(normalizeStageLinkEntry);
+  return doc.stageLinks;
+}
+function getStageFlowRefs(doc = S.doc) {
+  if (!doc || typeof doc !== 'object') return [];
+  if (!Array.isArray(doc.stageFlowRefs)) doc.stageFlowRefs = [];
+  let refs = doc.stageFlowRefs.map((ref, index) => normalizeStageFlowRefEntry(ref, index + 1));
+  const existingPairs = new Set(
+    refs
+      .filter((ref) => ref.stageId && ref.processId)
+      .map((ref) => `${ref.stageId}::${ref.processId}`),
+  );
+  const usedIds = new Set(refs.map((ref) => ref.id));
+  const stageOrderMap = {};
+  refs.forEach((ref) => {
+    if (!ref.stageId) return;
+    stageOrderMap[ref.stageId] = Math.max(stageOrderMap[ref.stageId] || 0, ref.order || 1);
+  });
+  (Array.isArray(doc.processes) ? doc.processes : []).forEach((proc) => {
+    const stageId = String(proc?.stageId || '').trim();
+    const processId = String(proc?.id || '').trim();
+    if (!stageId || !processId) return;
+    const pairKey = `${stageId}::${processId}`;
+    if (existingPairs.has(pairKey)) return;
+    stageOrderMap[stageId] = (stageOrderMap[stageId] || 0) + 1;
+    let nextIndex = refs.length + 1;
+    let nextId = `SFR${nextIndex}`;
+    while (usedIds.has(nextId)) {
+      nextIndex += 1;
+      nextId = `SFR${nextIndex}`;
+    }
+    usedIds.add(nextId);
+    refs.push({
+      uid: createUiUid('stageref'),
+      id: nextId,
+      stageId,
+      processId,
+      order: stageOrderMap[stageId],
+      pos: normalizeGraphOffset(proc.stagePos),
+    });
+    existingPairs.add(pairKey);
+  });
+  refs.sort((left, right) => {
+    if (left.stageId !== right.stageId) return left.stageId.localeCompare(right.stageId);
+    if ((left.order || 0) !== (right.order || 0)) return (left.order || 0) - (right.order || 0);
+    return left.id.localeCompare(right.id);
+  });
+  doc.stageFlowRefs = refs;
+  return doc.stageFlowRefs;
+}
+function getStageFlowLinks(doc = S.doc) {
+  if (!doc || typeof doc !== 'object') return [];
+  if (!Array.isArray(doc.stageFlowLinks)) doc.stageFlowLinks = [];
+  let links = doc.stageFlowLinks.map((link, index) => normalizeStageFlowLinkEntry(link, index + 1));
+  if (!links.length) {
+    const refs = getStageFlowRefs(doc);
+    const refByStageProcess = new Map(refs.map((ref) => [`${ref.stageId}::${ref.processId}`, ref.id]));
+    const generated = [];
+    getStages(doc).forEach((stage) => {
+      getStageProcessLinks(stage).forEach((link, index) => {
+        const fromRefId = refByStageProcess.get(`${stage.id}::${link.fromProcessId}`) || '';
+        const toRefId = refByStageProcess.get(`${stage.id}::${link.toProcessId}`) || '';
+        if (!fromRefId || !toRefId) return;
+        generated.push(normalizeStageFlowLinkEntry({
+          id: `SFL${generated.length + 1}`,
+          stageId: stage.id,
+          fromRefId,
+          toRefId,
+        }, generated.length + 1));
+      });
+    });
+    links = generated;
+  }
+  doc.stageFlowLinks = links;
+  return doc.stageFlowLinks;
+}
+function getStageProcessLinks(stage) {
+  if (!stage || typeof stage !== 'object') return [];
+  if (!Array.isArray(stage.processLinks)) stage.processLinks = [];
+  stage.processLinks = stage.processLinks.map(normalizeStageProcessLinkEntry);
+  return stage.processLinks;
+}
+function isVirtualStageId(stageId) {
+  return String(stageId || '').trim() === UNASSIGNED_STAGE_ID;
+}
+function findStage(stageId, doc = S.doc) {
+  const targetStageId = String(stageId || '').trim();
+  if (!targetStageId || isVirtualStageId(targetStageId)) return null;
+  return getStages(doc).find((stage) => stage.id === targetStageId) || null;
+}
+function getStageProcessRefs(stageId, doc = S.doc) {
+  const targetStageId = String(stageId || '').trim();
+  const refs = getStageFlowRefs(doc);
+  if (isVirtualStageId(targetStageId)) {
+    const referencedProcessIds = new Set(refs.map((ref) => ref.processId));
+    return (Array.isArray(doc?.processes) ? doc.processes : [])
+      .filter((proc) => !referencedProcessIds.has(String(proc?.id || '').trim()))
+      .map((proc, index) => ({
+        uid: `virtual-ref-${proc.id}`,
+        id: `virtual-ref-${proc.id}`,
+        stageId: UNASSIGNED_STAGE_ID,
+        processId: proc.id,
+        order: index + 1,
+        pos: normalizeGraphOffset(proc.stagePos),
+        virtual: true,
+      }));
+  }
+  return refs
+    .filter((ref) => ref.stageId === targetStageId)
+    .sort((left, right) => (left.order - right.order) || left.id.localeCompare(right.id));
+}
+function findStageProcessRef(refId, doc = S.doc) {
+  const targetRefId = String(refId || '').trim();
+  if (!targetRefId) return null;
+  return getStageFlowRefs(doc).find((ref) => ref.id === targetRefId) || null;
+}
+function getProcessStageRefs(processId, doc = S.doc) {
+  const targetProcessId = String(processId || '').trim();
+  return getStageFlowRefs(doc)
+    .filter((ref) => ref.processId === targetProcessId)
+    .sort((left, right) => left.stageId.localeCompare(right.stageId) || left.order - right.order);
+}
+function getStageRefProcess(ref, doc = S.doc) {
+  const processId = String(ref?.processId || '').trim();
+  return (Array.isArray(doc?.processes) ? doc.processes : []).find((proc) => String(proc?.id || '').trim() === processId) || null;
+}
+function getStageProcesses(stageId, doc = S.doc) {
+  return getStageProcessRefs(stageId, doc)
+    .map((ref) => getStageRefProcess(ref, doc))
+    .filter(Boolean);
+}
+function getStageItems(doc = S.doc) {
+  const stages = getStages(doc);
+  const items = stages.map((stage) => ({ ...stage, virtual: false }));
+  const unassignedProcesses = getStageProcessRefs(UNASSIGNED_STAGE_ID, doc);
+  if (unassignedProcesses.length) {
+    items.push({
+      uid: 'virtual-unassigned-stage',
+      id: UNASSIGNED_STAGE_ID,
+      name: UNASSIGNED_STAGE_NAME,
+      subDomain: '',
+      pos: { x: 0, y: 0 },
+      processLinks: [],
+      virtual: true,
+    });
+  }
+  return items;
+}
+function getStageDisplayName(stageId, doc = S.doc) {
+  if (isVirtualStageId(stageId)) return UNASSIGNED_STAGE_NAME;
+  return findStage(stageId, doc)?.name || String(stageId || '').trim();
+}
+function getProcPrototypeFiles(proc) {
+  if (!proc || typeof proc !== 'object') return [];
+  if (!Array.isArray(proc.prototypeFiles)) proc.prototypeFiles = [];
+  proc.prototypeFiles = proc.prototypeFiles.map((file, index) => normalizePrototypeFileEntry(file, index + 1));
+  return proc.prototypeFiles;
+}
+function defineUiAlias(target, aliasKey, actualKey) {
+  if (!target || typeof target !== 'object') return;
+  const existing = Object.getOwnPropertyDescriptor(target, aliasKey);
+  if (existing && typeof existing.get === 'function') return;
+  Object.defineProperty(target, aliasKey, {
+    configurable: true,
+    enumerable: false,
+    get() {
+      return this[actualKey];
+    },
+    set(value) {
+      this[actualKey] = value;
+    },
+  });
+}
+function hydrateDocumentForUi(doc) {
+  if (!doc || typeof doc !== 'object') return doc;
+  getStages(doc);
+  getStageLinks(doc);
+  getStageFlowRefs(doc);
+  getStageFlowLinks(doc);
+  getPanoramaModel(doc);
+  (doc.processes || []).forEach((proc) => {
+    if (!Array.isArray(proc.nodes) && Array.isArray(proc.tasks)) proc.nodes = proc.tasks;
+    if (!Array.isArray(proc.nodes)) proc.nodes = [];
+    defineUiAlias(proc, 'tasks', 'nodes');
+    proc.flowGroup = String(proc.flowGroup || '');
+    proc.stageId = String(proc.stageId || '').trim();
+    proc.stagePos = normalizeGraphOffset(proc.stagePos);
+    getProcPrototypeFiles(proc);
+    proc.nodes.forEach((node) => {
+      if (!Array.isArray(node.userSteps) && Array.isArray(node.steps)) node.userSteps = node.steps;
+      if (!Array.isArray(node.userSteps)) node.userSteps = [];
+      if (!Array.isArray(node.orchestrationTasks)) node.orchestrationTasks = [];
+      if (!Array.isArray(node.forms)) node.forms = [];
+      defineUiAlias(node, 'steps', 'userSteps');
+      getNodeBusinessRules(node);
+      syncTaskRole(node);
+    });
+  });
+  return doc;
+}
+function currentStage() { return getStageItems(S.doc).find((stage) => stage.id === S.ui.stageId) || null; }
+function currentProc()  { return (S.doc?.processes||[]).find(p=>p.id===S.ui.procId)||null; }
+function currentNode()  { return getProcNodes(currentProc()).find(t=>t.id===S.ui.taskId)||null; }
+function currentTask()  { return currentNode(); }
+function currentEntity() { return (S.doc?.entities||[]).find(e=>e.id===S.ui.entityId)||null; }
+function normalizeRoleName(name) { return String(name || '').trim(); }
+function normalizeSlashList(value) {
+  return String(value || '')
+    .split('/')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+function normalizeStatusRole(value, fallbackIsStatus = false) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'primary' || raw === 'main' || raw === 'master') return 'primary';
+  if (raw === 'secondary' || raw === 'sub' || raw === 'child') return 'secondary';
+  return fallbackIsStatus ? 'primary' : '';
+}
+function getFieldStatusRole(field) {
+  return normalizeStatusRole(field?.status_role, !!field?.is_status);
+}
+function syncFieldStatusRole(field, preferredRole) {
+  if (!field || typeof field !== 'object') return '';
+  const hasPreferredRole = arguments.length >= 2;
+  const nextRole = hasPreferredRole
+    ? normalizeStatusRole(preferredRole, false)
+    : normalizeStatusRole(field.status_role, !!field.is_status);
+  field.status_role = nextRole;
+  field.is_status = !!nextRole;
+  if (!Object.prototype.hasOwnProperty.call(field, 'state_values')) {
+    field.state_values = '';
+  }
+  return nextRole;
+}
+function isStatusField(field) {
+  return !!getFieldStatusRole(field);
+}
+function getFieldStatusRoleLabel(field, mode = 'long') {
+  const role = getFieldStatusRole(field);
+  if (role === 'primary') return mode === 'short' ? '主' : '主状态';
+  if (role === 'secondary') return mode === 'short' ? '子' : '子状态';
+  return '';
+}
+function inferStateValuesFromNote(note) {
+  const values = normalizeSlashList(note);
+  if (!values.length) return [];
+  const isCompact = values.every((item) => item.length <= 16 && !/[；;,，。]/.test(item));
+  return isCompact ? values : [];
+}
+function getFieldStateValueText(field) {
+  const explicit = String(field?.state_values || '').trim();
+  if (explicit) return explicit;
+  const inferred = inferStateValuesFromNote(field?.note || '');
+  return inferred.join('/');
+}
+function getFieldRuleText(field) {
+  const noteText = String(field?.note || '').trim();
+  const stateValueText = getFieldStateValueText(field);
+  if (!isStatusField(field)) return noteText;
+  const inferredText = inferStateValuesFromNote(noteText).join('/');
+  const noteOnly = noteText && noteText !== stateValueText && inferredText !== stateValueText ? noteText : '';
+  if (stateValueText && noteOnly) return `${stateValueText}；${noteOnly}`;
+  return noteText || stateValueText;
+}
+function getFieldStateValues(field) {
+  return normalizeSlashList(getFieldStateValueText(field));
+}
+function normalizeStateNodeKind(kind) {
+  const raw = String(kind || '').trim().toLowerCase();
+  if (raw === 'initial' || raw === 'start' || raw === 'entry') return 'initial';
+  if (raw === 'terminal' || raw === 'end' || raw === 'finish' || raw === 'final') return 'terminal';
+  return 'intermediate';
+}
+function getStateNodeKindLabel(kind) {
+  const normalized = normalizeStateNodeKind(kind);
+  if (normalized === 'initial') return '初始状态';
+  if (normalized === 'terminal') return '结束状态';
+  return '中间状态';
+}
+function inferDefaultStateNodeKind(index, total) {
+  if (total <= 1) return 'intermediate';
+  if (index === 0) return 'initial';
+  if (index === total - 1) return 'terminal';
+  return 'intermediate';
+}
+function syncFieldStateNodes(field) {
+  if (!field || typeof field !== 'object') return [];
+  const states = getFieldStateValues(field);
+  const rawNodes = Array.isArray(field.state_nodes) ? field.state_nodes : [];
+  const existingKinds = new Map(
+    rawNodes
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => [String(item.name || '').trim(), normalizeStateNodeKind(item.kind)]),
+  );
+  field.state_nodes = states.map((state, index) => ({
+    name: state,
+    kind: existingKinds.get(state) || inferDefaultStateNodeKind(index, states.length),
+  }));
+  return field.state_nodes;
+}
+function getFieldStateNodes(field) {
+  const states = getFieldStateValues(field);
+  const rawNodes = Array.isArray(field?.state_nodes) ? field.state_nodes : [];
+  const existingKinds = new Map(
+    rawNodes
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => [String(item.name || '').trim(), normalizeStateNodeKind(item.kind)]),
+  );
+  return states.map((state, index) => ({
+    name: state,
+    kind: existingKinds.get(state) || inferDefaultStateNodeKind(index, states.length),
+  }));
+}
+function getEntityStateNodes(entity, preferredFieldName = '') {
+  return getFieldStateNodes(getEntityStatusField(entity, preferredFieldName));
+}
+function getEntityStatusFields(entity) {
+  return (entity?.fields || [])
+    .filter(isStatusField)
+    .sort((left, right) => {
+      const leftPriority = getFieldStatusRole(left) === 'primary' ? 0 : 1;
+      const rightPriority = getFieldStatusRole(right) === 'primary' ? 0 : 1;
+      return leftPriority - rightPriority;
+    });
+}
+function getEntityPrimaryStatusField(entity) {
+  return getEntityStatusFields(entity).find((field) => getFieldStatusRole(field) === 'primary') || null;
+}
+function getEntitySecondaryStatusFields(entity) {
+  return getEntityStatusFields(entity).filter((field) => getFieldStatusRole(field) === 'secondary');
+}
+function getEntityStatusField(entity, preferredFieldName = '') {
+  const statusFields = getEntityStatusFields(entity);
+  if (!statusFields.length) return null;
+  const preferred = String(preferredFieldName || '').trim();
+  return statusFields.find((field) => field.name === preferred) || getEntityPrimaryStatusField(entity) || statusFields[0];
+}
+function getEntityStatusValues(entity, preferredFieldName = '') {
+  return getFieldStateValues(getEntityStatusField(entity, preferredFieldName));
+}
+function getEntityStateTransitions(entity, preferredFieldName = '') {
+  const fieldName = getEntityStatusField(entity, preferredFieldName)?.name || '';
+  return (entity?.state_transitions || [])
+    .map((transition, index) => ({ transition, index }))
+    .filter(({ transition }) => {
+      if (!fieldName) return false;
+      return !transition.field_name || transition.field_name === fieldName;
+    });
+}
+function ensureEntityStateShape(entity) {
+  if (!entity) return entity;
+  if (!Array.isArray(entity.fields)) entity.fields = [];
+  if (!Array.isArray(entity.state_transitions)) entity.state_transitions = [];
+  let primaryAssigned = false;
+  entity.fields.forEach((field) => {
+    const role = syncFieldStatusRole(field);
+    syncFieldStateNodes(field);
+    if (role === 'primary') {
+      if (primaryAssigned) {
+        syncFieldStatusRole(field, 'secondary');
+      } else {
+        primaryAssigned = true;
+      }
+    }
+  });
+  entity.state_transitions = entity.state_transitions.map((transition) => ({
+    from: String(transition?.from || ''),
+    to: String(transition?.to || ''),
+    action: String(transition?.action || ''),
+    note: String(transition?.note || ''),
+    field_name: String(transition?.field_name || ''),
+  }));
+  return entity;
+}
+function createStateTransitionDraft(entity, preferredFieldName = '') {
+  const field = getEntityStatusField(entity, preferredFieldName);
+  const stateNodes = getFieldStateNodes(field);
+  const values = stateNodes.map((item) => item.name);
+  const initialState = stateNodes.find((item) => item.kind === 'initial')?.name || values[0] || '';
+  const nextState = stateNodes.find((item) => item.name !== initialState && item.kind !== 'initial')?.name
+    || values.find((item) => item !== initialState)
+    || initialState
+    || '';
+  return {
+    from: initialState,
+    to: nextState,
+    action: '',
+    note: '',
+    field_name: field?.name || '',
+  };
+}
+function inferRoleGroup(role) {
+  const name = normalizeRoleName(role?.name);
+  if (/系统|自动化/.test(name)) return '系统角色';
+  if (/仓库|现场|作业/.test(name)) return '仓库作业方';
+  if (/平台管理员|超级账号|平台管理|账号管理|运维/.test(name)) return '平台与运维方';
+  if (/示例部|机构|品种负责人|监管|审核/.test(name)) return '监管与审核方';
+  if (!name) return '待分类角色';
+  return '业务参与方';
+}
+function getRoleGroupName(role) {
+  const explicitGroup = normalizeRoleName(role?.group);
+  return explicitGroup || inferRoleGroup(role);
+}
+function getGroupedRoles() {
+  const buckets = new Map();
+  for (const groupName of ROLE_GROUPS) {
+    buckets.set(groupName, []);
+  }
+  for (const role of getRoles()) {
+    const groupName = getRoleGroupName(role);
+    if (!buckets.has(groupName)) buckets.set(groupName, []);
+    buckets.get(groupName).push(role);
+  }
+  return Array.from(buckets.entries())
+    .filter(([, roles]) => roles.length)
+    .map(([name, roles]) => ({ name, roles }));
+}
+function getRoles() {
+  return Array.isArray(S.doc?.roles)
+    ? S.doc.roles.filter((role) => role && typeof role === 'object' && !Array.isArray(role))
+    : [];
+}
+function getRoleById(roleId) {
+  const normalizedId = normalizeRoleName(roleId);
+  return getRoles().find((role) => role.id === normalizedId) || null;
+}
+function getRoleByName(roleName) {
+  const normalizedName = normalizeRoleName(roleName);
+  return getRoles().find((role) => role.name === normalizedName) || null;
+}
+function getRoleName(roleOrId) {
+  if (roleOrId && typeof roleOrId === 'object') {
+    return normalizeRoleName(roleOrId.name);
+  }
+  return normalizeRoleName(getRoleById(roleOrId)?.name || roleOrId);
+}
+function getTaskRoleIds(task) {
+  if (!task || typeof task !== 'object') return [];
+
+  const resolvedIds = [];
+  const seen = new Set();
+  const pushRoleId = (roleId) => {
+    const normalizedId = normalizeRoleName(roleId);
+    if (!normalizedId || seen.has(normalizedId) || !getRoleById(normalizedId)) return;
+    seen.add(normalizedId);
+    resolvedIds.push(normalizedId);
+  };
+
+  if (Array.isArray(task.role_ids)) {
+    task.role_ids.forEach(pushRoleId);
+  } else if (task.role_ids !== undefined && task.role_ids !== null) {
+    parseRoleTokens(task.role_ids).forEach(pushRoleId);
+  }
+
+  pushRoleId(task.role_id);
+  if (resolvedIds.length) return resolvedIds;
+
+  const roleTokens = [];
+  if (Array.isArray(task.roles)) roleTokens.push(...task.roles);
+  else if (task.roles !== undefined && task.roles !== null) roleTokens.push(...parseRoleTokens(task.roles));
+  roleTokens.push(...parseRoleTokens(task.role));
+
+  roleTokens
+    .map((token) => getRoleById(token) || getRoleByName(token))
+    .filter(Boolean)
+    .forEach((role) => pushRoleId(role.id));
+
+  return resolvedIds;
+}
+function getTaskRoleNames(task) {
+  const roleIds = getTaskRoleIds(task);
+  if (roleIds.length) return roleIds.map((roleId) => getRoleName(roleId)).filter(Boolean);
+
+  const names = [];
+  if (Array.isArray(task?.roles)) names.push(...task.roles);
+  else if (task?.roles !== undefined && task?.roles !== null) names.push(...parseRoleTokens(task.roles));
+  names.push(...parseRoleTokens(task?.role));
+  return Array.from(new Set(names.map((name) => normalizeRoleName(name)).filter(Boolean)));
+}
+function getTaskRoleName(task) {
+  return getTaskRoleNames(task).join('、');
+}
+function syncTaskRole(task) {
+  if (!task) return;
+  const roleIds = getTaskRoleIds(task);
+  const roleNames = roleIds.length
+    ? roleIds.map((roleId) => getRoleName(roleId)).filter(Boolean)
+    : getTaskRoleNames(task);
+  task.role_ids = roleIds;
+  task.roles = roleNames;
+  task.role_id = roleIds[0] || '';
+  task.role = roleNames.join('、');
+}
+function nextRoleId() {
+  const used = new Set(getRoles().map((role) => role.id));
+  let index = 1;
+  while (used.has(`R${index}`)) index += 1;
+  return `R${index}`;
+}
+function createRoleDraft(name) {
+  return {
+    id: nextRoleId(),
+    name: normalizeRoleName(name) || '新角色',
+    desc: '',
+    group: '业务参与方',
+    subDomains: [],
+  };
+}
+function getUniqueRoleName(baseName) {
+  const base = normalizeRoleName(baseName) || '新角色';
+  const usedNames = new Set(getRoles().map((role) => role.name));
+  if (!usedNames.has(base)) return base;
+  let index = 2;
+  while (usedNames.has(`${base}${index}`)) index += 1;
+  return `${base}${index}`;
+}
+function ensureSelectedRole(preferredRoleId) {
+  const roles = getRoles();
+  if (!roles.length) {
+    S.ui.roleId = null;
+    return null;
+  }
+  const preferred = normalizeRoleName(preferredRoleId || S.ui.roleId);
+  if (preferred && getRoleById(preferred)) {
+    S.ui.roleId = preferred;
+    return preferred;
+  }
+  S.ui.roleId = roles[0].id;
+  return S.ui.roleId;
+}
+function parseRoleTokens(value) {
+  return Array.from(new Set(
+    String(value || '')
+      .split(/[，,]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ));
+}
+const ROLE_GROUP_PRESETS = [
+  '业务参与方',
+  '仓库作业方',
+  '监管与审核方',
+  '平台与运维方',
+  '系统角色',
+  '待分类角色',
+];
+
+function inferRoleGroup(role) {
+  const name = normalizeRoleName(role?.name);
+  if (/系统|自动化/.test(name)) return '系统角色';
+  if (/仓库|现场|作业/.test(name)) return '仓库作业方';
+  if (/平台管理员|超级账号|平台管理|账号管理|运维/.test(name)) return '平台与运维方';
+  if (/示例部|机构|品种负责人|监管|审核/.test(name)) return '监管与审核方';
+  if (!name) return '待分类角色';
+  return '业务参与方';
+}
+
+function getRoleGroupName(role) {
+  const explicitGroup = normalizeRoleName(role?.group);
+  return explicitGroup || inferRoleGroup(role);
+}
+
+function getAvailableRoleGroups() {
+  const groups = [];
+  const seen = new Set();
+  function pushGroup(groupName) {
+    const normalized = normalizeRoleName(groupName);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    groups.push(normalized);
+  }
+
+  ROLE_GROUP_PRESETS.forEach(pushGroup);
+  getRoles().forEach((role) => pushGroup(getRoleGroupName(role)));
+  return groups;
+}
+
+function getDefaultRoleGroup() {
+  return getAvailableRoleGroups()[0] || '业务参与方';
+}
+
+function getGroupedRoles() {
+  const buckets = new Map();
+  for (const groupName of getAvailableRoleGroups()) {
+    buckets.set(groupName, []);
+  }
+  for (const role of getRoles()) {
+    const groupName = getRoleGroupName(role);
+    if (!buckets.has(groupName)) buckets.set(groupName, []);
+    buckets.get(groupName).push(role);
+  }
+  return Array.from(buckets.entries())
+    .filter(([, roles]) => roles.length)
+    .map(([name, roles]) => ({ name, roles }));
+}
+
+function createRoleDraft(name, options = {}) {
+  return {
+    id: nextRoleId(),
+    name: normalizeRoleName(name) || '新角色',
+    desc: '',
+    group: normalizeRoleName(options.group) || getDefaultRoleGroup(),
+    subDomains: [],
+  };
+}
+
+function getUniqueRoleName(baseName) {
+  const base = normalizeRoleName(baseName) || '新角色';
+  const usedNames = new Set(getRoles().map((role) => role.name));
+  if (!usedNames.has(base)) return base;
+  let index = 2;
+  while (usedNames.has(`${base}${index}`)) index += 1;
+  return `${base}${index}`;
+}
+
+function parseRoleTokens(value) {
+  return Array.from(new Set(
+    String(value || '')
+      .split(/[，,、;；/\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ));
+}
+
+function setTaskRoles(procId, taskId, roleIds) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  const task = getProcNodes(proc).find((item) => item.id === taskId);
+  if (!task) return;
+  const nextRoleIds = Array.from(new Set(
+    (Array.isArray(roleIds) ? roleIds : [roleIds])
+      .map((roleId) => normalizeRoleName(roleId))
+      .filter((roleId) => roleId && getRoleById(roleId)),
+  ));
+  task.role_ids = nextRoleIds;
+  task.roles = nextRoleIds.map((roleId) => getRoleName(roleId)).filter(Boolean);
+  task.role_id = nextRoleIds[0] || '';
+  task.role = task.roles.join('、');
+  markModified();
+}
+function getRoleUsage(roleId) {
+  const normalizedRoleId = normalizeRoleName(roleId);
+  const usage = [];
+  for (const proc of (S.doc?.processes || [])) {
+    for (const task of getProcNodes(proc)) {
+      if (!getTaskRoleIds(task).includes(normalizedRoleId)) continue;
+      usage.push({ proc, task });
+    }
+  }
+  return usage;
+}
+function getRoleUsageSummary(roleId) {
+  const usage = getRoleUsage(roleId);
+  const processIds = new Set(usage.map((item) => item.proc.id));
+  const subDomains = new Set(usage.map((item) => normalizeRoleName(item.proc.subDomain)).filter(Boolean));
+  return {
+    taskCount: usage.length,
+    processCount: processIds.size,
+    subDomainCount: subDomains.size,
+  };
+}
+function getRoleUsageByProcess(roleId) {
+  const usageByProcess = new Map();
+  for (const item of getRoleUsage(roleId)) {
+    if (!usageByProcess.has(item.proc.id)) {
+      usageByProcess.set(item.proc.id, { proc: item.proc, tasks: [] });
+    }
+    usageByProcess.get(item.proc.id).tasks.push(item.task);
+  }
+  return usageByProcess;
+}
+
+function getTasksReferencingEntity(entityId) {
+  const result=[];
+  for(const proc of (S.doc?.processes||[])) {
+    for(const task of getProcNodes(proc)) {
+      if((task.entity_ops||[]).some(eo=>eo.entity_id===entityId))
+        result.push({proc,task});
+    }
+  }
+  return result;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MERMAID HELPERS
+═══════════════════════════════════════════════════════════ */
+/* 6色循环色板（pastel，不刺眼） */
+const ROLE_COLORS = [
+  { fill:'#dbeafe', stroke:'#3b82f6', color:'#1e3a8a' }, // 蓝
+  { fill:'#dcfce7', stroke:'#22c55e', color:'#14532d' }, // 绿
+  { fill:'#fef9c3', stroke:'#eab308', color:'#713f12' }, // 黄
+  { fill:'#fce7f3', stroke:'#ec4899', color:'#831843' }, // 粉
+  { fill:'#ede9fe', stroke:'#8b5cf6', color:'#3b0764' }, // 紫
+  { fill:'#ffedd5', stroke:'#f97316', color:'#7c2d12' }, // 橙
+];

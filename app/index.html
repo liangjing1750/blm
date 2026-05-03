@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BLM - Business Language Modeling</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="toolbar-left">
+    <span class="logo">BLM</span>
+    <span id="file-name" class="file-name" data-testid="current-file-name">-</span>
+    <span id="modified-badge" class="modified-badge hidden" data-testid="modified-badge">未保存</span>
+  </div>
+  <div class="toolbar-right">
+    <button onclick="App.cmdNew()" class="btn btn-ghost" data-testid="toolbar-new-button">新建</button>
+    <button onclick="App.cmdOpen()" class="btn btn-ghost" data-testid="toolbar-open-button">打开</button>
+    <button onclick="App.cmdSave()" class="btn btn-primary" id="btn-save" title="保存 (Ctrl+S)">保存</button>
+    <button onclick="App.cmdSaveAs()" class="btn btn-ghost" data-testid="toolbar-save-as-button" id="toolbar-save-as-label">复制</button>
+    <button onclick="App.cmdMerge()" class="btn btn-ghost" data-testid="toolbar-merge-button">合并</button>
+    <button onclick="App.cmdExport()" class="btn btn-ghost" data-testid="toolbar-export-button">导出</button>
+    <button onclick="App.cmdManual()" class="btn btn-ghost" data-testid="toolbar-manual-button" id="toolbar-manual-button">使用手册</button>
+  </div>
+</div>
+
+<div id="save-alert" class="save-alert hidden" data-testid="save-alert">
+  <strong>当前有未保存修改</strong>
+  <span>按 Ctrl+S 或点击“保存”即可落盘。</span>
+</div>
+
+<div id="layout">
+  <aside id="sidebar">
+    <div id="sidebar-content"></div>
+    <div id="sidebar-resize-handle" data-testid="sidebar-resize-handle" onmousedown="startSidebarResize(event)"></div>
+  </aside>
+  <div id="sb-toggle-wrap">
+    <button id="sb-toggle-btn" onclick="toggleSidebar()" title="展开/折叠侧边栏">折叠</button>
+  </div>
+  <main id="content">
+    <div id="tab-bar"></div>
+    <div id="tab-content"></div>
+  </main>
+</div>
+
+<div id="modal-overlay" class="hidden" onclick="App.closeModal()" data-testid="new-doc-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>新建文档</h3>
+    <input
+      id="new-doc-name"
+      type="text"
+      placeholder="输入文档名称，例如：入库流程"
+      data-testid="new-doc-name-input"
+      onkeydown="if(event.key==='Enter') App.confirmNew()"
+    >
+    <div class="modal-footer">
+      <button onclick="App.closeModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.confirmNew()" class="btn btn-primary" data-testid="new-doc-confirm-button">创建</button>
+    </div>
+  </div>
+</div>
+
+<div id="open-modal-overlay" class="hidden" onclick="App.closeOpenModal()">
+  <div class="modal open-modal-shell" onclick="event.stopPropagation()">
+    <h3>打开文档</h3>
+    <div class="open-modal-tabs" data-testid="open-modal-tabs">
+      <button
+        type="button"
+        class="open-modal-tab"
+        data-open-tab="workspace"
+        onclick="App.switchOpenTab('workspace')"
+      >工作区文档</button>
+      <button
+        type="button"
+        class="open-modal-tab"
+        data-open-tab="trash"
+        onclick="App.switchOpenTab('trash')"
+      >回收站</button>
+    </div>
+    <div class="open-modal-body">
+      <section id="open-workspace-panel" class="open-modal-panel">
+        <div class="recovery-subtitle">直接从当前工作区打开文档，历史版本可在每条文档右侧进入。</div>
+        <div id="file-list" class="file-list open-modal-scroll"></div>
+      </section>
+      <section id="open-trash-panel" class="open-modal-panel hidden">
+        <div class="recovery-subtitle">删除的文档会先进入回收站；恢复后回到原工作区名称，覆盖前会先保留快照。</div>
+        <div id="trash-list" class="file-list open-modal-scroll"></div>
+      </section>
+    </div>
+    <div class="modal-footer">
+      <button onclick="App.closeOpenModal()" class="btn btn-ghost">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="history-modal-overlay" class="hidden" onclick="App.closeHistoryModal()" data-testid="history-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>历史版本</h3>
+    <div id="history-modal-subtitle" class="recovery-subtitle"></div>
+    <div id="history-list" class="file-list"></div>
+    <div class="modal-footer">
+      <button onclick="App.closeHistoryModal()" class="btn btn-ghost">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="save-as-modal-overlay" class="hidden" onclick="App.closeSaveAsModal()" data-testid="save-as-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="save-as-modal-title">复制文档</h3>
+    <input
+      id="save-as-name"
+      type="text"
+      placeholder="输入新文档名称，例如：仓储仓单管理-副本"
+      data-testid="save-as-name-input"
+      onkeydown="if(event.key==='Enter') App.confirmSaveAs()"
+    >
+    <div class="modal-footer">
+      <button onclick="App.closeSaveAsModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.confirmSaveAs()" class="btn btn-primary" data-testid="save-as-confirm-button" id="save-as-confirm-label">确认复制</button>
+    </div>
+  </div>
+</div>
+
+<div id="merge-modal-overlay" class="hidden" onclick="App.closeMergeModal()" data-testid="merge-modal">
+  <div class="modal merge-modal" onclick="event.stopPropagation()">
+    <h3>合并文档</h3>
+    <div class="merge-select-grid">
+      <label class="merge-select-field">
+        <span>左侧文档</span>
+        <select id="merge-left-select" onchange="App.selectMergeWorkspace('left', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>右侧文档</span>
+        <select id="merge-right-select" onchange="App.selectMergeWorkspace('right', this.value)"></select>
+      </label>
+    </div>
+    <div class="merge-inline-note">只支持工作区文档合并；左右顺序没有区别，确认后会自动分析并在无冲突时生成合并文档。</div>
+    <div id="merge-analysis" class="merge-analysis"></div>
+    <div class="modal-footer">
+      <button onclick="App.closeMergeModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.confirmMerge()" class="btn btn-primary" data-testid="merge-confirm-button">确认合并</button>
+    </div>
+  </div>
+</div>
+
+<div id="app-dialog-overlay" class="hidden" data-testid="app-dialog" onclick="closeAppDialogFromBackdrop(event)">
+  <div class="modal app-dialog" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title" onclick="event.stopPropagation()">
+    <h3 id="app-dialog-title">提示</h3>
+    <p id="app-dialog-message" class="app-dialog-message" data-testid="app-dialog-message"></p>
+    <input id="app-dialog-input" class="app-dialog-input hidden" type="text" data-testid="app-dialog-input">
+    <div class="modal-footer">
+      <button id="app-dialog-cancel" type="button" class="btn btn-ghost" data-testid="app-dialog-cancel" onclick="resolveAppDialog(false)">取消</button>
+      <button id="app-dialog-confirm" type="button" class="btn btn-primary" data-testid="app-dialog-confirm" onclick="resolveAppDialog(true)">确定</button>
+    </div>
+  </div>
+</div>
+
+<script src="state.js"></script>
+<script src="api.js"></script>
+<script src="render.js"></script>
+<script src="domain.js"></script>
+<script src="process.js"></script>
+<script src="entity.js"></script>
+<script src="preview.js"></script>
+<script src="manual.js"></script>
+<script src="app.js"></script>
+<script src="vendor/mermaid.min.js"></script>
+<script src="vendor/marked.umd.js"></script>
+<script>
+  if (window.mermaid) {
+    window.mermaidLib = window.mermaid;
+    window.mermaid.initialize({ startOnLoad: false, theme: 'default' });
+  }
+  if (window.marked) {
+    window.markedLib = window.marked;
+  }
+</script>
+
+</body>
+</html>

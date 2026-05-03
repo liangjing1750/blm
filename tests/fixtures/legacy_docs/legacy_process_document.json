@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "title": "Legacy Supply",
+    "bounded_context": "old-shape"
+  },
+  "roles": [
+    "仓库管理员"
+  ],
+  "process": {
+    "name": "入库流程",
+    "subDomain": "仓储",
+    "trigger": "到货",
+    "outcome": "入库完成",
+    "tasks": [
+      {
+        "id": "T1",
+        "name": "收货",
+        "role": "仓库管理员",
+        "steps": [
+          {
+            "name": "核验仓单",
+            "type": "Validate"
+          }
+        ],
+        "entity_ops": [
+          {
+            "entity_id": "E1",
+            "ops": [
+              "R",
+              "U"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "entities": [
+    {
+      "id": "E1",
+      "name": "入库单",
+      "fields": [
+        {
+          "name": "单号",
+          "type": "String",
+          "pk": true
+        },
+        {
+          "name": "状态",
+          "type": "Enum",
+          "status": true
+        }
+      ]
+    }
+  ]
+}

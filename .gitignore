@@ -1,0 +1,28 @@
+# Editor / local agent state
+.idea/
+.vscode/
+.claude/
+.codex/
+
+# Sensitive local data. Never push this directory.
+/ignore/
+
+# Local working documents and generated runtime data
+/workspace/
+node_modules/
+playwright-report/
+test-results/
+.tmp/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+*.log
+*.pid
+*.zip
+.coverage
+htmlcov/
+
+.DS_Store
+Thumbs.db
