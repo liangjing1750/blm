@@ -469,8 +469,9 @@ test('business user edits panorama directly in the matrix canvas', async ({ page
   expect(matrixSizing.cellOverflowY).toBe('visible');
   await expect(page.getByTestId('matrix-column-name').first()).toBeVisible();
   await expect(page.getByTestId('matrix-cell-status').first()).toBeVisible();
-  await expect(page.locator('[data-field-scope="column-name"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('正文');
-  await expect(page.locator('[data-field-scope="column-scope"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('备注');
+  await expect(page.locator('[data-field-scope="column-badge"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('价值链环节');
+  await expect(page.locator('[data-field-scope="column-name"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('环节定义/说明');
+  await expect(page.locator('[data-field-scope="column-scope"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('创造价值');
   await expect(page.locator('[data-field-scope="lane-name"][data-lane-id="L1"] [data-testid="matrix-field-caption"]')).toHaveText('正文');
   await expect(page.locator('[data-field-scope="cell-status"][data-cell-id="L1::C1"] [data-testid="matrix-field-caption"]')).toHaveText('标签');
   await page.getByTestId('process-view-help').hover();

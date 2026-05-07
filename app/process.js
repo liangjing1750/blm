@@ -2978,8 +2978,8 @@ function renderMatrixHeaderCell(column, index, totalColumns, editing) {
       ${renderMatrixFieldInput({
         testId: 'matrix-column-badge',
         value: column.badge || '',
-        ariaLabel: '价值流标签',
-        caption: '标签',
+        ariaLabel: '价值链环节',
+        caption: '价值链环节',
         scope: 'column-badge',
         extraAttrs: `data-column-id="${esc(column.id)}"`,
         oninput: `setPanoramaColumn('${esc(column.id)}','badge',this.value)`,
@@ -2987,8 +2987,8 @@ function renderMatrixHeaderCell(column, index, totalColumns, editing) {
       ${renderMatrixFieldInput({
         testId: 'matrix-column-name',
         value: column.name || '',
-        ariaLabel: '价值流正文',
-        caption: '正文',
+        ariaLabel: '环节定义/说明',
+        caption: '环节定义/说明',
         scope: 'column-name',
         extraAttrs: `data-column-id="${esc(column.id)}"`,
         oninput: `setPanoramaColumn('${esc(column.id)}','name',this.value)`,
@@ -2996,8 +2996,8 @@ function renderMatrixHeaderCell(column, index, totalColumns, editing) {
       ${renderMatrixFieldInput({
         testId: 'matrix-column-scope',
         value: column.scope || '',
-        ariaLabel: '价值流备注',
-        caption: '备注',
+        ariaLabel: '创造价值',
+        caption: '创造价值',
         scope: 'column-scope',
         extraAttrs: `data-column-id="${esc(column.id)}"`,
         oninput: `setPanoramaColumn('${esc(column.id)}','scope',this.value)`,
