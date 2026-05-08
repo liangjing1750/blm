@@ -43,9 +43,25 @@ test('数据页支持编辑实体状态字段并实时渲染状态图', async ({
   await page.getByTestId('entity-transition-add-button').click();
   await page.getByTestId('entity-transition-from-0').selectOption('草稿');
   await page.getByTestId('entity-transition-to-0').selectOption('待审核');
-  await page.getByTestId('entity-transition-action-0').fill('提交审核');
-  await expect(page.getByTestId('entity-transition-action-0')).toBeFocused();
-  await expect(page.locator('.entity-state-link-label')).toContainText('提交审核');
+  await page.getByTestId('entity-transition-note-0').fill('submit review / 提交审核');
+  await expect(page.getByTestId('entity-transition-note-0')).toBeFocused();
+  await expect(page.locator('.entity-state-link-label')).toContainText('submit review / 提交审核');
+  await page.getByTestId('entity-transition-note-0').evaluate((input) => {
+    input.focus();
+    input.value = '';
+    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
+    input.value = '中文备注';
+    input.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '中文备注',
+      inputType: 'insertCompositionText',
+      isComposing: true,
+    }));
+    input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '中文备注' }));
+  });
+  await expect(page.getByTestId('entity-transition-note-0')).toHaveValue('中文备注');
+  await expect.poll(() => page.evaluate(() => S.doc.entities[0].state_transitions[0].note)).toBe('中文备注');
+  await page.getByTestId('entity-transition-note-0').fill('submit review / 提交审核');
 
   await expect(page.getByTestId('entity-state-diagram')).toBeVisible();
   await expect(page.getByTestId('entity-state-diagram')).toContainText('草稿');
@@ -56,6 +72,51 @@ test('数据页支持编辑实体状态字段并实时渲染状态图', async ({
   await expect(page.locator('[data-testid="entity-state-start-dot"]')).toHaveCount(1);
   await expect(page.locator('[data-testid="entity-state-end-dot"]')).toHaveCount(1);
   await expect(page.getByTestId('entity-state-overview-field')).toHaveCount(1);
+
+  const firstNode = page.locator('[data-testid^="entity-state-node-"]').first();
+  await firstNode.scrollIntoViewIfNeeded();
+  const nodeBefore = await firstNode.evaluate((node) => ({
+    name: node.dataset.stateName,
+    left: parseFloat(node.style.left || '0'),
+    top: parseFloat(node.style.top || '0'),
+  }));
+  const nodeBox = await firstNode.boundingBox();
+  await page.mouse.move(nodeBox.x + nodeBox.width / 2, nodeBox.y + nodeBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(nodeBox.x + nodeBox.width / 2 + 66, nodeBox.y + nodeBox.height / 2 + 44, { steps: 12 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate((stateName) => {
+    const field = S.doc.entities[0].fields[0];
+    return field.state_nodes.find((item) => item.name === stateName)?.pos || null;
+  }, nodeBefore.name)).toEqual(expect.objectContaining({
+    x: expect.any(Number),
+    y: expect.any(Number),
+  }));
+  const nodeStored = await page.evaluate((stateName) => {
+    const field = S.doc.entities[0].fields[0];
+    return field.state_nodes.find((item) => item.name === stateName)?.pos || null;
+  }, nodeBefore.name);
+  expect(nodeStored.x).toBeGreaterThan(nodeBefore.left + 30);
+  expect(nodeStored.y).toBeGreaterThan(nodeBefore.top + 20);
+
+  const startDot = page.getByTestId('entity-state-start-dot').first();
+  await startDot.scrollIntoViewIfNeeded();
+  const dotBefore = await startDot.evaluate((node) => ({
+    name: node.dataset.stateName,
+    centerX: parseFloat(node.style.left || '0') + node.offsetWidth / 2,
+    centerY: parseFloat(node.style.top || '0') + node.offsetHeight / 2,
+  }));
+  const dotBox = await startDot.boundingBox();
+  await page.mouse.move(dotBox.x + dotBox.width / 2, dotBox.y + dotBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(dotBox.x + dotBox.width / 2 + 55, dotBox.y + dotBox.height / 2 + 33, { steps: 12 });
+  await page.mouse.up();
+  const markerStored = await page.evaluate((stateName) => {
+    const field = S.doc.entities[0].fields[0];
+    return field.state_nodes.find((item) => item.name === stateName)?.markerPos || null;
+  }, dotBefore.name);
+  expect(markerStored.x).toBeGreaterThan(dotBefore.centerX + 20);
+  expect(markerStored.y).toBeGreaterThan(dotBefore.centerY + 10);
 
   const labelPlacement = await page.locator('[data-testid="entity-state-link-label-group"]').first().evaluate((node) => {
     const rect = node.querySelector('rect');
@@ -72,10 +133,31 @@ test('数据页支持编辑实体状态字段并实时渲染状态图', async ({
       text: String(text?.textContent || '').trim(),
     };
   });
-  expect(labelPlacement.text).toBe('提交审核');
+  expect(labelPlacement.text).toBe('submit review / 提交审核');
   expect(labelPlacement.angle).toBe(0);
   expect(Math.abs((labelPlacement.rectY + labelPlacement.rectH / 2) - labelPlacement.lineY)).toBeLessThanOrEqual(0.5);
   expect(Math.abs((labelPlacement.rectX + labelPlacement.rectW / 2) - labelPlacement.lineX)).toBeLessThanOrEqual(40);
+
+  await page.getByTestId('state-editor-hide').click();
+  await expect(page.getByTestId('state-editor-drawer')).toHaveCount(0);
+  const labelGroup = page.locator('[data-testid="entity-state-link-label-group"]').first();
+  const labelBefore = await labelGroup.evaluate((node) => ({
+    transitionIndex: Number(node.dataset.transitionIndex || 0),
+    x: Number(node.dataset.labelX || 0),
+    y: Number(node.dataset.labelY || 0),
+  }));
+  const labelBox = await labelGroup.boundingBox();
+  await page.mouse.move(labelBox.x + labelBox.width / 2, labelBox.y + labelBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(labelBox.x + labelBox.width / 2 + 58, labelBox.y + labelBox.height / 2 + 32, { steps: 12 });
+  await page.mouse.up();
+  const labelStored = await page.evaluate((transitionIndex) => (
+    S.doc.entities[0].state_transitions[transitionIndex]?.labelPos || null
+  ), labelBefore.transitionIndex);
+  expect(labelStored.x).toBeGreaterThan(labelBefore.x + 20);
+  expect(labelStored.y).toBeGreaterThan(labelBefore.y + 10);
+  await expect(labelGroup).toHaveAttribute('data-label-axis', 'manual');
+  await page.getByTestId('state-editor-open').click();
 
   const nodeWidths = await page.locator('[data-testid^="entity-state-node-"]').evaluateAll((nodes) =>
     nodes.map((node) => parseFloat(node.style.width || '0')),
@@ -85,12 +167,14 @@ test('数据页支持编辑实体状态字段并实时渲染状态图', async ({
   await expect(page.getByTestId('entity-state-kind-list')).toBeVisible();
   await expect(page.getByTestId('entity-state-kind-0')).toHaveValue('initial');
   await expect(page.locator('.entity-transition-row select')).toHaveCount(2);
-  await expect(page.locator('[data-testid^="entity-transition-note-"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="entity-transition-note-"]')).toHaveCount(1);
   await expect(page.getByTestId('entity-state-empty')).toHaveCount(0);
 
   await page.getByTestId('tab-preview').click();
   await expect(page.locator('.preview-rendered')).toContainText('状态流转');
-  await expect(page.locator('.preview-rendered')).toContainText('提交审核');
+  await expect(page.locator('.preview-rendered')).toContainText('submit review / 提交审核');
+  await expect(page.getByTestId('preview-entity-state-graph').first()).toBeVisible();
+  await expect(page.locator('.preview-rendered [data-testid="entity-state-link-label-group"]').first()).toContainText('submit review / 提交审核');
 });
 
 test('状态流转支持行内快捷增删和上下移动', async ({ page }) => {
@@ -109,7 +193,7 @@ test('状态流转支持行内快捷增删和上下移动', async ({ page }) => 
 
   await page.getByTestId('data-switch-state').click();
   await page.getByTestId('entity-transition-add-button').click();
-  await page.getByTestId('entity-transition-action-0').fill('提交审核');
+  await page.getByTestId('entity-transition-note-0').fill('提交审核');
 
   const actionCounts = await page.locator('.entity-transition-row').evaluateAll((rows) =>
     rows.map((row) => row.querySelectorAll('.entity-transition-actions button').length),
@@ -118,17 +202,17 @@ test('状态流转支持行内快捷增删和上下移动', async ({ page }) => 
 
   await page.getByTestId('entity-transition-add-after-0').click();
   await expect(page.locator('.entity-transition-row')).toHaveCount(2);
-  await page.getByTestId('entity-transition-action-1').fill('补充审核');
+  await page.getByTestId('entity-transition-note-1').fill('补充审核');
 
   await page.getByTestId('entity-transition-move-up-1').click();
-  let actionValues = await page.locator('[data-testid^="entity-transition-action-"]').evaluateAll((nodes) =>
+  let actionValues = await page.locator('[data-testid^="entity-transition-note-"]').evaluateAll((nodes) =>
     nodes.map((node) => node.value),
   );
   expect(actionValues).toEqual(['补充审核', '提交审核']);
 
   await page.getByTestId('entity-transition-delete-0').click();
   await expect(page.locator('.entity-transition-row')).toHaveCount(1);
-  actionValues = await page.locator('[data-testid^="entity-transition-action-"]').evaluateAll((nodes) =>
+  actionValues = await page.locator('[data-testid^="entity-transition-note-"]').evaluateAll((nodes) =>
     nodes.map((node) => node.value),
   );
   expect(actionValues).toEqual(['提交审核']);

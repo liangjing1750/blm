@@ -19,6 +19,7 @@
     <button onclick="App.cmdOpen()" class="btn btn-ghost" data-testid="toolbar-open-button">打开</button>
     <button onclick="App.cmdSave()" class="btn btn-primary" id="btn-save" title="保存 (Ctrl+S)">保存</button>
     <button onclick="App.cmdSaveAs()" class="btn btn-ghost" data-testid="toolbar-save-as-button" id="toolbar-save-as-label">复制</button>
+    <button onclick="App.cmdCompare()" class="btn btn-ghost" data-testid="toolbar-compare-button">比对</button>
     <button onclick="App.cmdMerge()" class="btn btn-ghost" data-testid="toolbar-merge-button">合并</button>
     <button onclick="App.cmdExport()" class="btn btn-ghost" data-testid="toolbar-export-button">导出</button>
     <button onclick="App.cmdManual()" class="btn btn-ghost" data-testid="toolbar-manual-button" id="toolbar-manual-button">使用手册</button>
@@ -122,6 +123,45 @@
   </div>
 </div>
 
+<div id="compare-modal-overlay" class="hidden" data-testid="compare-modal">
+  <div class="modal merge-modal compare-modal" onclick="event.stopPropagation()">
+    <div class="modal-title-row">
+      <h3>比对文档</h3>
+      <button onclick="App.closeCompareModal()" class="btn btn-ghost btn-sm" type="button" data-testid="compare-close-button">关闭</button>
+    </div>
+    <div class="merge-select-grid compare-select-grid">
+      <label class="merge-select-field">
+        <span>左侧文档</span>
+        <select id="compare-left-select" data-testid="compare-left-select" onchange="App.selectCompareWorkspace('left', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>左侧版本</span>
+        <select id="compare-left-version-select" data-testid="compare-left-version-select" onchange="App.selectCompareVersion('left', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>右侧文档</span>
+        <select id="compare-right-select" data-testid="compare-right-select" onchange="App.selectCompareWorkspace('right', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>右侧版本</span>
+        <select id="compare-right-version-select" data-testid="compare-right-version-select" onchange="App.selectCompareVersion('right', this.value)"></select>
+      </label>
+    </div>
+    <div class="merge-inline-note">默认比对当前版本；选择好左右文档和版本后，点击“开始比对”生成只读报告，不会修改当前文档。</div>
+    <div class="compare-action-row">
+      <button id="compare-start-button" onclick="App.startCompare()" class="btn btn-primary" type="button" data-testid="compare-start-button">开始比对</button>
+      <div id="compare-progress" class="compare-progress hidden" data-testid="compare-progress" aria-live="polite">
+        <div class="compare-progress-track"><span></span></div>
+        <strong id="compare-progress-message" data-testid="compare-progress-message">正在比对...</strong>
+      </div>
+    </div>
+    <div id="compare-result" class="merge-analysis compare-result" data-testid="compare-result"></div>
+    <div class="modal-footer">
+      <button onclick="App.closeCompareModal()" class="btn btn-ghost" type="button" data-testid="compare-footer-close-button">关闭</button>
+    </div>
+  </div>
+</div>
+
 <div id="merge-modal-overlay" class="hidden" onclick="App.closeMergeModal()" data-testid="merge-modal">
   <div class="modal merge-modal" onclick="event.stopPropagation()">
     <h3>合并文档</h3>
@@ -135,11 +175,11 @@
         <select id="merge-right-select" onchange="App.selectMergeWorkspace('right', this.value)"></select>
       </label>
     </div>
-    <div class="merge-inline-note">只支持工作区文档合并；左右顺序没有区别，确认后会自动分析并在无冲突时生成合并文档。</div>
-    <div id="merge-analysis" class="merge-analysis"></div>
+    <div class="merge-inline-note">只支持工作区文档合并；先执行合并前检查，确认冲突项和校验问题处理完成后，再生成合并文档。</div>
+    <div id="merge-analysis" class="merge-analysis" data-testid="merge-analysis"></div>
     <div class="modal-footer">
       <button onclick="App.closeMergeModal()" class="btn btn-ghost">取消</button>
-      <button onclick="App.confirmMerge()" class="btn btn-primary" data-testid="merge-confirm-button">确认合并</button>
+      <button onclick="App.handleMergePrimaryAction()" class="btn btn-primary" data-testid="merge-confirm-button">合并前检查</button>
     </div>
   </div>
 </div>

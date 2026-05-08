@@ -1041,6 +1041,7 @@ function getTaskForms(task) {
       if (!section.id) section.id = createUiUid('formsec');
       section.name = String(section.name || `分组${sectionIndex + 1}`);
       section.note = String(section.note || '');
+      section.entity_id = String(section.entity_id || section.entityId || form.entity_id || '').trim();
       if (!Array.isArray(section.fields)) section.fields = [];
       section.fields.forEach((field) => {
         if (!field.id) field.id = createUiUid('formfield');
@@ -1063,10 +1064,35 @@ function findTaskFormSection(form, sectionId) {
   return (form?.sections || []).find((section) => section.id === sectionId) || null;
 }
 
-function getEntityFieldsForForm(form) {
-  const entityId = String(form?.entity_id || '').trim();
+function getEntityFieldsForFormSection(section, form = null) {
+  const entityId = String(section?.entity_id || form?.entity_id || '').trim();
   const entity = (S.doc?.entities || []).find((item) => item.id === entityId);
   return Array.isArray(entity?.fields) ? entity.fields : [];
+}
+
+function getEntityFieldsForForm(form) {
+  const firstSection = Array.isArray(form?.sections) ? form.sections[0] : null;
+  return getEntityFieldsForFormSection(firstSection, form);
+}
+
+function getTaskFormEntityIds(form) {
+  const ids = [];
+  (form?.sections || []).forEach((section) => {
+    const entityId = String(section?.entity_id || '').trim();
+    if (entityId && !ids.includes(entityId)) ids.push(entityId);
+  });
+  const legacyEntityId = String(form?.entity_id || '').trim();
+  if (!ids.length && legacyEntityId) ids.push(legacyEntityId);
+  return ids;
+}
+
+function getTaskFormEntitySummary(form) {
+  const ids = getTaskFormEntityIds(form);
+  if (!ids.length) return '未关联实体';
+  return ids.map((entityId) => {
+    const entity = (S.doc?.entities || []).find((item) => item.id === entityId);
+    return entity ? `${entity.id} ${entity.name || ''}`.trim() : entityId;
+  }).join('、');
 }
 
 function nextTaskFormId(task) {
@@ -1090,7 +1116,7 @@ function addTaskForm(procId, taskId) {
     name: '',
     entity_id: '',
     purpose: '',
-    sections: [{ id: 'SEC1', name: '基本信息', note: '', fields: [] }],
+    sections: [{ id: 'SEC1', name: '基本信息', note: '', entity_id: '', fields: [] }],
   };
   forms.push(form);
   markModified();
@@ -1099,9 +1125,15 @@ function addTaskForm(procId, taskId) {
   });
 }
 
-function removeTaskForm(procId, taskId, formId) {
+async function removeTaskForm(procId, taskId, formId) {
   const { task } = getTaskByIds(procId, taskId);
   if (!task) return;
+  const form = findTaskForm(task, formId);
+  if (!form) return;
+  if (!await showAppConfirm(`确认删除表单“${form.name || form.id}”？`, {
+    title: '删除表单',
+    confirmLabel: '删除',
+  })) return;
   task.forms = getTaskForms(task).filter((form) => form.id !== formId);
   markModified();
   rerenderProcessEditor({ anchorSelector: '[data-testid="task-forms-section"]' });
@@ -1127,7 +1159,7 @@ function addTaskFormSection(procId, taskId, formId, afterSectionId = '') {
   const { task } = getTaskByIds(procId, taskId);
   const form = findTaskForm(task, formId);
   if (!form) return;
-  const section = { id: nextTaskFormSectionId(form), name: '', note: '', fields: [] };
+  const section = { id: nextTaskFormSectionId(form), name: '', note: '', entity_id: '', fields: [] };
   const sections = form.sections || (form.sections = []);
   const sourceIndex = afterSectionId ? sections.findIndex((item) => item.id === afterSectionId) : -1;
   const insertIndex = sourceIndex >= 0 ? sourceIndex + 1 : sections.length;
@@ -1157,7 +1189,7 @@ function removeTaskFormSection(procId, taskId, formId, sectionId) {
   const form = findTaskForm(task, formId);
   if (!form) return;
   form.sections = (form.sections || []).filter((section) => section.id !== sectionId);
-  if (!form.sections.length) form.sections.push({ id: 'SEC1', name: '基本信息', note: '', fields: [] });
+  if (!form.sections.length) form.sections.push({ id: 'SEC1', name: '基本信息', note: '', entity_id: '', fields: [] });
   markModified();
   rerenderProcessEditor({ anchorSelector: `[data-form-id="${formId}"]` });
 }
@@ -1166,8 +1198,14 @@ function setTaskFormSection(procId, taskId, formId, sectionId, key, value) {
   const { task } = getTaskByIds(procId, taskId);
   const form = findTaskForm(task, formId);
   const section = findTaskFormSection(form, sectionId);
-  if (!section || !['name', 'note'].includes(key)) return;
+  if (!section || !['name', 'note', 'entity_id'].includes(key)) return;
   section[key] = value;
+  if (key === 'entity_id') {
+    const availableFields = new Set(getEntityFieldsForFormSection(section, form).map((field) => String(field.name || '').trim()).filter(Boolean));
+    (section.fields || []).forEach((field) => {
+      if (field.entity_field && !availableFields.has(field.entity_field)) field.entity_field = '';
+    });
+  }
   markModified();
 }
 
@@ -4032,9 +4070,9 @@ function renderTaskFormEntityOptions(selectedEntityId) {
   )).join('')}`;
 }
 
-function renderTaskFormFieldOptions(form, selectedFieldName) {
-  const fields = getEntityFieldsForForm(form);
-  if (!form.entity_id) return '<option value="">先绑定实体</option>';
+function renderTaskFormFieldOptions(form, section, selectedFieldName) {
+  const fields = getEntityFieldsForFormSection(section, form);
+  if (!String(section?.entity_id || form?.entity_id || '').trim()) return '<option value="">先绑定实体</option>';
   if (!fields.length) return '<option value="">实体暂无字段</option>';
   return `<option value="">不映射</option>${fields.map((field) => {
     const fieldName = String(field.name || '').trim();
@@ -4043,8 +4081,9 @@ function renderTaskFormFieldOptions(form, selectedFieldName) {
 }
 
 function renderTaskFormFieldRow(proc, task, form, section, field, fieldIndex) {
-  const fieldOptions = renderTaskFormFieldOptions(form, field.entity_field || '');
-  const entityFieldDisabled = !form.entity_id || !getEntityFieldsForForm(form).length ? 'disabled' : '';
+  const fieldOptions = renderTaskFormFieldOptions(form, section, field.entity_field || '');
+  const sectionEntityId = String(section?.entity_id || form?.entity_id || '').trim();
+  const entityFieldDisabled = !sectionEntityId || !getEntityFieldsForFormSection(section, form).length ? 'disabled' : '';
   const fieldCount = (section.fields || []).length;
   return `<tr class="task-form-field-row" data-testid="task-form-field-row" data-field-id="${esc(field.id)}">
     <td>
@@ -4099,6 +4138,10 @@ function renderTaskFormSectionCard(proc, task, form, section, sectionIndex) {
       <input type="text" data-testid="task-form-section-note" data-section-id="${esc(section.id)}"
         value="${esc(section.note || '')}" placeholder="分组说明"
         oninput="setTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','note',this.value)">
+      <select data-testid="task-form-section-entity" data-section-id="${esc(section.id)}"
+        onchange="setTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','entity_id',this.value);rerenderProcessEditor({focusSelector:'[data-testid=&quot;task-form-section-entity&quot;][data-section-id=&quot;${esc(section.id)}&quot;]'})">
+        ${renderTaskFormEntityOptions(section.entity_id || form.entity_id || '')}
+      </select>
       <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-field-add"
         onclick="addTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}')">＋字段</button>
       <div class="step-actions task-form-inline-actions">
@@ -4128,11 +4171,8 @@ function renderTaskFormCard(proc, task, form, index) {
       <input type="text" data-testid="task-form-name" data-form-id="${esc(form.id)}"
         value="${esc(form.name || '')}" placeholder="表单名称，如：仓库管理列表"
         oninput="setTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','name',this.value)">
-      <select data-testid="task-form-entity" data-form-id="${esc(form.id)}"
-        onchange="setTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','entity_id',this.value);rerenderProcessEditor({focusSelector:'[data-testid=&quot;task-form-entity&quot;][data-form-id=&quot;${esc(form.id)}&quot;]'})">
-        ${renderTaskFormEntityOptions(form.entity_id || '')}
-      </select>
-      <button class="step-del" type="button" title="删除表单"
+      <span class="task-form-entity-summary" data-testid="task-form-entity-summary">${esc(getTaskFormEntitySummary(form))}</span>
+      <button class="step-del" type="button" data-testid="task-form-delete" title="删除表单"
         onclick="removeTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">✕</button>
     </div>
     <input class="task-form-purpose" type="text" data-testid="task-form-purpose" data-form-id="${esc(form.id)}"
@@ -4205,6 +4245,7 @@ function renderTaskBusinessRulesSection(proc, task) {
    RENDER — Process Tab  (上：实时图 | 下：编辑)
 ═══════════════════════════════════════════════════════════ */
 function buildRoleUsecaseMap(selectedRole, options = {}) {
+  const readonly = Boolean(options.readonly);
   const usageByProcess = selectedRole ? getRoleUsageByProcess(selectedRole.id) : new Map();
   const participatingOnly = Boolean(options.participatingOnly && selectedRole);
   const roleGroups = participatingOnly
@@ -4304,22 +4345,24 @@ function buildRoleUsecaseMap(selectedRole, options = {}) {
       ${roleNodes.map((node) => {
         const active = selectedRole?.id === node.role.id ? ' active' : '';
         const usage = getRoleUsageSummary(node.role.id);
-        return `<button class="role-usecase-role${active}" data-role-id="${esc(node.role.id)}"
-          style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"
-          onclick="S.ui.roleId='${esc(node.role.id)}';renderProcessTab()">
+        const tagName = readonly ? 'div' : 'button';
+        const actionAttr = readonly ? '' : ` type="button" onclick="S.ui.roleId='${esc(node.role.id)}';renderProcessTab()"`;
+        return `<${tagName} class="role-usecase-role${active}${readonly ? ' readonly' : ''}" data-role-id="${esc(node.role.id)}"
+          style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"${actionAttr}>
           <span class="role-usecase-role-name">${esc(node.role.name)}</span>
           <span class="role-usecase-role-meta">${usage.processCount}P · ${usage.taskCount}N</span>
-        </button>`;
+        </${tagName}>`;
       }).join('')}
       ${processNodes.map((node) => {
         const linked = usageByProcess.has(node.proc.id) ? ' linked' : '';
         const taskCount = usageByProcess.has(node.proc.id) ? usageByProcess.get(node.proc.id).tasks.length : 0;
-        return `<button class="role-usecase-process${linked}" data-process-id="${esc(node.proc.id)}"
-          style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"
-          onclick="navigate('process',{procId:'${esc(node.proc.id)}',taskId:null})">
+        const tagName = readonly ? 'div' : 'button';
+        const actionAttr = readonly ? '' : ` type="button" onclick="navigate('process',{procId:'${esc(node.proc.id)}',taskId:null})"`;
+        return `<${tagName} class="role-usecase-process${linked}${readonly ? ' readonly' : ''}" data-process-id="${esc(node.proc.id)}"
+          style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"${actionAttr}>
           <span class="role-usecase-process-name">${esc(node.proc.id)} ${esc(node.proc.name || '未命名流程')}</span>
           ${taskCount ? `<span class="role-usecase-process-count">${taskCount}N</span>` : ''}
-        </button>`;
+        </${tagName}>`;
       }).join('')}
     </div>
   </div>`;

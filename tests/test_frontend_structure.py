@@ -56,6 +56,15 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn('id="trash-list"', html)
         self.assertIn('id="save-as-modal-title">复制文档</h3>', html)
         self.assertIn('id="save-as-confirm-label">确认复制</button>', html)
+        self.assertIn('data-testid="toolbar-compare-button"', html)
+        self.assertLess(
+            html.find('data-testid="toolbar-save-as-button"'),
+            html.find('data-testid="toolbar-compare-button"'),
+        )
+        self.assertLess(
+            html.find('data-testid="toolbar-compare-button"'),
+            html.find('data-testid="toolbar-merge-button"'),
+        )
         self.assertIn('data-testid="toolbar-manual-button"', html)
         self.assertLess(
             html.find('data-testid="toolbar-export-button"'),
@@ -70,6 +79,9 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("App.selectMergeWorkspace('left', this.value)", html)
         self.assertIn("App.selectMergeWorkspace('right', this.value)", html)
         self.assertIn('data-testid="merge-confirm-button"', html)
+        self.assertIn('data-testid="compare-modal"', html)
+        self.assertIn('id="compare-left-version-select"', html)
+        self.assertIn('id="compare-right-version-select"', html)
         self.assertNotIn('data-testid="merge-analyze-button"', html)
         self.assertNotIn('上传 JSON', html)
         self.assertNotIn('生成新的合并文档', html)
@@ -96,6 +108,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn("path = ''", app_js)
         self.assertIn("async runtime()", api_js)
         self.assertIn("fetch('/api/runtime')", api_js)
+        self.assertIn("async loadHistory(name, snapshotId)", api_js)
         self.assertNotIn("paths:", state_js)
         self.assertIn("supportsDocs", state_js)
         self.assertIn("flowGroup", state_js)
@@ -120,6 +133,9 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("flowGroup", process_js)
         self.assertIn("renderOrchestrationSection", process_js)
         self.assertIn("renderTaskFormsSection", process_js)
+        self.assertIn("task-form-section-entity", process_js)
+        self.assertIn("getTaskFormEntitySummary", process_js)
+        self.assertNotIn('data-testid="task-form-entity"', process_js)
         self.assertIn("renderTaskBusinessRulesSection", process_js)
         self.assertIn("businessRules", state_js)
         self.assertIn("buildOrchestrationFlowHtml", process_js)
@@ -129,6 +145,16 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("节点任务", preview_js)
         self.assertIn("表单模型", preview_js)
         self.assertIn(".manual-shell #tab-bar", style_css)
+
+    def test_reverse_action_buttons_are_readable_on_light_surfaces(self):
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn(".btn-ghost   { background: #fff; color: var(--text); border-color: var(--border); }", style_css)
+        self.assertIn("#toolbar .btn-ghost { background: transparent; color: var(--header-text); border-color: #475569; }", style_css)
+        self.assertLess(
+            style_css.find(".btn-ghost   { background: #fff; color: var(--text);"),
+            style_css.find("#toolbar .btn-ghost { background: transparent; color: var(--header-text);"),
+        )
 
 
 if __name__ == "__main__":

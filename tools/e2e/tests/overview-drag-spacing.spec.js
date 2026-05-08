@@ -1,15 +1,38 @@
 const { test, expect } = require('@playwright/test');
+const { createDocument, openDocument } = require('./support/app-helpers');
 
-test('process view uses one focused flow diagram instead of the dense card wall', async ({ page }) => {
+test('process view uses one focused flow diagram instead of the dense card wall', async ({ page, request }) => {
   const documentName = `process-flow-view-${Date.now()}`;
 
-  await page.goto('/');
-  await page.getByTestId('toolbar-new-button').click();
-  await page.getByTestId('new-doc-name-input').fill(documentName);
-  await page.getByTestId('new-doc-confirm-button').click();
+  await createDocument(request, documentName, {
+    meta: { title: documentName, domain: documentName, author: '', date: '' },
+    roles: [],
+    language: [],
+    processes: [
+      {
+        id: 'P1',
+        name: '示例流程',
+        trigger: '',
+        outcome: '',
+        nodes: [
+          {
+            id: 'N1',
+            name: '提交预约',
+            role: '',
+            userSteps: [],
+            orchestrationTasks: [],
+            forms: [],
+          },
+        ],
+      },
+    ],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
 
-  await expect(page.getByTestId('new-doc-modal')).toHaveClass(/hidden/);
-  await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
+  await page.goto('/');
+  await openDocument(page, documentName);
   await page.getByTestId('tab-process').click();
   await page.getByTestId('process-switch-card').click();
 

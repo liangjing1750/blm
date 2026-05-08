@@ -374,7 +374,8 @@ test('左侧目录同时展示流程目录和组件目录', async ({ page, reque
   await firstCapabilityHead.click();
   await page.locator('.sb-construct-head').filter({ hasText: '预约办理构件' }).click();
   await expect(firstProcessItem).toBeVisible();
-  await expect(firstProcessItem).toContainText('组件：示例服务');
+  await expect(firstProcessItem).toContainText('阶段：预约阶段');
+  await expect(firstProcessItem).not.toContainText('组件：');
   await expect(firstProcessItem).not.toContainText('分组：核心流程');
 
   await firstCapabilityHead.click();

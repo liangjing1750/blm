@@ -522,11 +522,11 @@ class MarkdownExporter:
                             f"**主状态字段**: {status_field.get('name', '')}（状态列表：{get_entity_state_values(entity) or '—'}）"
                         )
                         line()
-                    line("| 来源状态 | 目标状态 | 触发动作 |")
+                    line("| 来源状态 | 目标状态 | 备注说明 |")
                     line("|----------|----------|----------|")
                     for transition in state_transitions:
                         line(
-                            f"| {transition.get('from', '')} | {transition.get('to', '')} | {transition.get('action', '')} |"
+                            f"| {transition.get('from', '')} | {transition.get('to', '')} | {transition.get('note') or transition.get('action', '')} |"
                         )
                     line()
             separator()
@@ -751,16 +751,32 @@ class MarkdownExporter:
         for form in forms:
             if not isinstance(form, dict):
                 continue
-            entity_id = str(form.get("entity_id") or form.get("entityId") or "").strip()
-            entity = entities_by_id.get(entity_id, {})
-            entity_name = entity.get("name") or entity_id or "不绑定实体"
+            entity_ids = []
+            for section in form.get("sections", []) or []:
+                if not isinstance(section, dict):
+                    continue
+                entity_id = str(section.get("entity_id") or section.get("entityId") or "").strip()
+                if entity_id and entity_id not in entity_ids:
+                    entity_ids.append(entity_id)
+            legacy_entity_id = str(form.get("entity_id") or form.get("entityId") or "").strip()
+            if not entity_ids and legacy_entity_id:
+                entity_ids.append(legacy_entity_id)
+            entity_name = "、".join(
+                entities_by_id.get(entity_id, {}).get("name") or entity_id
+                for entity_id in entity_ids
+            ) or "不绑定实体"
             purpose = str(form.get("purpose", "")).strip()
-            line(f"- {form.get('name') or '未命名表单'}；绑定实体：{entity_name}" + (f"；用途：{purpose}" if purpose else ""))
+            line(f"- {form.get('name') or '未命名表单'}；关联实体：{entity_name}" + (f"；用途：{purpose}" if purpose else ""))
             for section in form.get("sections", []) or []:
                 if not isinstance(section, dict):
                     continue
                 section_note = str(section.get("note", "")).strip()
-                line(f"  - 分组：{section.get('name') or '未命名分组'}" + (f"；{section_note}" if section_note else ""))
+                section_entity_id = str(section.get("entity_id") or section.get("entityId") or legacy_entity_id).strip()
+                section_entity_name = entities_by_id.get(section_entity_id, {}).get("name") or section_entity_id or "不绑定实体"
+                line(
+                    f"  - 分组：{section.get('name') or '未命名分组'}；绑定实体：{section_entity_name}"
+                    + (f"；{section_note}" if section_note else "")
+                )
                 for field in section.get("fields", []) or []:
                     if not isinstance(field, dict):
                         continue

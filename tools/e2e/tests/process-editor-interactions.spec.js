@@ -1,6 +1,11 @@
 const { test, expect } = require('@playwright/test');
 
-const { createDocument, openDocument } = require('./support/app-helpers');
+const {
+  acceptAppDialog,
+  cancelAppDialog,
+  createDocument,
+  openDocument,
+} = require('./support/app-helpers');
 
 function buildProcessEditorDoc(name) {
   return {
@@ -220,6 +225,15 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
       ],
     },
   ];
+  doc.entities.push({
+    id: 'E2',
+    name: '仓单',
+    group: '示例服务机构',
+    fields: [
+      { name: '仓单编号', type: 'string', is_key: true, note: '' },
+      { name: '仓单状态', type: 'string', is_key: false, note: '' },
+    ],
+  });
   await createDocument(request, documentName, doc);
 
   await openTaskEditor(page, documentName);
@@ -229,7 +243,7 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
   await page.getByTestId('task-form-add').click();
   await expect(page.getByTestId('task-form-card')).toHaveCount(1);
   await page.getByTestId('task-form-name').fill('仓库管理列表');
-  await page.getByTestId('task-form-entity').selectOption('E1');
+  await page.getByTestId('task-form-section-entity').selectOption('E1');
   await page.getByTestId('task-form-purpose').fill('筛选、列表、新增、详情');
   await page.getByTestId('task-form-field-add').click();
   await expect(page.getByTestId('task-form-field-row')).toHaveCount(1);
@@ -239,6 +253,14 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
   await page.getByTestId('task-form-entity-field').selectOption('仓库名称');
   await page.getByTestId('task-form-field-note').fill('最多50个字符');
 
+  await page.getByTestId('task-form-section-add').click();
+  const formSections = page.getByTestId('task-form-section-card');
+  await expect(formSections).toHaveCount(2);
+  await formSections.nth(1).getByTestId('task-form-section-name').fill('仓单信息');
+  await formSections.nth(1).getByTestId('task-form-section-entity').selectOption('E2');
+  await expect(page.getByTestId('task-form-entity-summary').first()).toContainText('E1');
+  await expect(page.getByTestId('task-form-entity-summary').first()).toContainText('E2');
+
   await page.getByTestId('task-form-add').click();
   await expect(page.getByTestId('task-form-card')).toHaveCount(2);
   await expect.poll(() => page.evaluate(() => {
@@ -247,6 +269,7 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
       forms: node.forms.length,
       firstName: node.forms[0].name,
       entityId: node.forms[0].entity_id,
+      sectionEntityIds: node.forms[0].sections.map((section) => section.entity_id),
       fieldName: node.forms[0].sections[0].fields[0].name,
       fieldType: node.forms[0].sections[0].fields[0].type,
       required: node.forms[0].sections[0].fields[0].required,
@@ -255,12 +278,31 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
   })).toEqual({
     forms: 2,
     firstName: '仓库管理列表',
-    entityId: 'E1',
+    entityId: '',
+    sectionEntityIds: ['E1', 'E2'],
     fieldName: '仓库名称',
     fieldType: 'Select',
     required: true,
     mapped: '仓库名称',
   });
+});
+
+test('删除表单前需要二次确认', async ({ page, request }) => {
+  const documentName = `process-form-delete-confirm-${Date.now()}`;
+  await createDocument(request, documentName, buildProcessEditorDoc(documentName));
+
+  await openTaskEditor(page, documentName);
+  await page.getByTestId('task-form-add').click();
+  await page.getByTestId('task-form-name').fill('待删除表单');
+
+  await page.getByTestId('task-form-delete').click();
+  await expect(page.getByTestId('app-dialog-message')).toContainText('确认删除表单“待删除表单”');
+  await cancelAppDialog(page);
+  await expect(page.getByTestId('task-form-card')).toHaveCount(1);
+
+  await page.getByTestId('task-form-delete').click();
+  await acceptAppDialog(page);
+  await expect(page.getByTestId('task-form-card')).toHaveCount(0);
 });
 
 test('表单分组和字段支持行内插入、删除、上移和下移', async ({ page, request }) => {
@@ -282,7 +324,7 @@ test('表单分组和字段支持行内插入、删除、上移和下移', async
   await openTaskEditor(page, documentName);
   await page.getByTestId('task-form-add').click();
   await page.getByTestId('task-form-name').fill('仓库维护表单');
-  await page.getByTestId('task-form-entity').selectOption('E1');
+  await page.getByTestId('task-form-section-entity').selectOption('E1');
 
   let sections = page.getByTestId('task-form-section-card');
   await expect(sections).toHaveCount(1);

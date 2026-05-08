@@ -469,10 +469,9 @@ class MarkdownExporterTests(unittest.TestCase):
         self.assertIn("Draft/Active/Archived", markdown)
         self.assertIn("节点属性：Draft=初始状态；Active=中间状态；Archived=结束状态", markdown)
         self.assertIn("状态流转", markdown)
-        self.assertIn("| 来源状态 | 目标状态 | 触发动作 |", markdown)
+        self.assertIn("| 来源状态 | 目标状态 | 备注说明 |", markdown)
         self.assertNotIn("| 来源状态 | 目标状态 | 触发动作 | 说明 |", markdown)
-        self.assertIn("Activate", markdown)
-        self.assertNotIn("Reader must be approved", markdown)
+        self.assertIn("Reader must be approved", markdown)
 
     def test_export_includes_structured_business_rules(self):
         document = migrate_document(

@@ -12,6 +12,7 @@ from blm_core.document import SCHEMA_VERSION, migrate_document, renumber_documen
 MISSING = object()
 VERSION_SUFFIX_RE = re.compile(r"(?:[-_\s]?v\d+|[-_\s]?版本\d+)$", re.IGNORECASE)
 TRAILING_SEPARATOR_RE = re.compile(r"[-_\s]+$")
+SEMANTIC_UNIQUE_IN_COMBINE = {"rule", "business_rule"}
 
 DESCRIPTORS: dict[str, dict[str, Any]] = {
     "document": {
@@ -27,6 +28,9 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
             "entities": "entity",
             "relations": "relation",
             "rules": "rule",
+            "capabilityUnits": "capability_unit",
+            "businessConstructs": "business_construct",
+            "taskDefinitions": "task_definition",
         },
     },
     "meta": {"scalars": ["title", "domain", "author", "date"], "lists": {}},
@@ -41,8 +45,13 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "stage_flow_link": {"scalars": ["id", "stageId", "fromRefId", "toRefId"], "lists": {}},
     "process": {
         "scalars": ["id", "name", "subDomain", "flowGroup", "stageId", "stagePos", "trigger", "outcome", "pos"],
-        "lists": {"nodes": "node"},
+        "lists": {"prototypeFiles": "prototype_file", "nodes": "node"},
     },
+    "prototype_file": {
+        "scalars": ["name", "versionUid", "content", "contentType", "uploadedAt"],
+        "lists": {"versions": "prototype_version"},
+    },
+    "prototype_version": {"scalars": ["number", "name", "content", "contentType", "uploadedAt"], "lists": {}},
     "process_link": {"scalars": ["fromProcessId", "toProcessId"], "lists": {}},
     "node": {
         "scalars": ["id", "name", "role_id", "role", "repeatable", "rules_note"],
@@ -52,24 +61,70 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
             "entity_ops": "entity_op",
             "orchestrationTasks": "orchestration_task",
             "businessRules": "business_rule",
+            "forms": "form",
         },
     },
     "user_step": {"scalars": ["name", "type", "note"], "lists": {}},
     "business_rule": {"scalars": ["id", "name", "content"], "lists": {}},
     "orchestration_task": {
-        "scalars": ["name", "type", "querySourceKind", "target", "note"],
+        "scalars": [
+            "name",
+            "type",
+            "querySourceKind",
+            "target",
+            "note",
+            "taskDefinitionId",
+            "constructId",
+            "businessConstructId",
+            "constructName",
+            "capabilityUnitId",
+            "capabilityUnit",
+        ],
         "lists": {},
     },
     "entity_op": {"scalars": ["entity_id"], "set_lists": ["ops"], "lists": {}},
-    "entity": {"scalars": ["id", "name", "group", "note", "pos"], "lists": {"fields": "field", "state_transitions": "transition"}},
+    "form": {"scalars": ["id", "name", "purpose", "entity_id"], "lists": {"sections": "form_section"}},
+    "form_section": {"scalars": ["id", "name", "note", "entity_id"], "lists": {"fields": "form_field"}},
+    "form_field": {"scalars": ["id", "name", "type", "required", "entity_field", "note"], "lists": {}},
+    "entity": {
+        "scalars": ["id", "name", "group", "note", "pos", "businessConstructId"],
+        "set_lists": ["businessConstructIds"],
+        "lists": {"fields": "field", "state_transitions": "transition"},
+    },
     "field": {
         "scalars": ["name", "type", "is_key", "is_status", "status_role", "state_values", "note"],
         "lists": {"state_nodes": "state_node"},
     },
-    "state_node": {"scalars": ["name", "kind"], "lists": {}},
-    "transition": {"scalars": ["from", "to", "action", "note", "field_name"], "lists": {}},
+    "state_node": {"scalars": ["name", "kind", "pos", "markerPos"], "lists": {}},
+    "transition": {"scalars": ["from", "to", "action", "note", "field_name", "labelPos"], "lists": {}},
     "relation": {"scalars": ["from", "to", "type", "label"], "lists": {}},
     "rule": {"scalars": ["id", "name", "type", "applies_to", "description", "formula"], "lists": {}},
+    "capability_unit": {
+        "scalars": ["id", "name", "kind", "note"],
+        "set_lists": ["constructIds", "taskDefinitionIds", "entityIds"],
+        "lists": {},
+    },
+    "business_construct": {
+        "scalars": ["id", "name", "note", "capabilityUnitId", "capabilityUnit"],
+        "set_lists": ["taskDefinitionIds", "entityIds"],
+        "lists": {},
+    },
+    "task_definition": {
+        "scalars": [
+            "id",
+            "name",
+            "type",
+            "querySourceKind",
+            "target",
+            "note",
+            "capabilityUnitId",
+            "capabilityUnit",
+            "constructId",
+            "constructName",
+        ],
+        "set_lists": ["entityIds"],
+        "lists": {},
+    },
 }
 
 
@@ -115,6 +170,14 @@ def _collection_label(item_type: str) -> str:
         "relation": "关系",
         "rule": "规则",
         "entity_op": "实体操作",
+        "form": "表单",
+        "form_section": "表单分组",
+        "form_field": "表单字段",
+        "prototype_file": "流程原型",
+        "prototype_version": "原型版本",
+        "capability_unit": "能力单元",
+        "business_construct": "业务构件",
+        "task_definition": "任务定义",
     }.get(item_type, item_type)
 
 
@@ -148,7 +211,23 @@ def _name_key(item_type: str, item: dict) -> str:
     elif item_type == "business_rule":
         primary = item.get("name") or item.get("id")
     elif item_type == "orchestration_task":
-        primary = item.get("name") or item.get("target")
+        primary = item.get("taskDefinitionId") or item.get("name") or item.get("target")
+    elif item_type == "form":
+        primary = item.get("name") or item.get("id")
+    elif item_type == "form_section":
+        primary = item.get("name") or item.get("id")
+    elif item_type == "form_field":
+        primary = item.get("name") or item.get("id")
+    elif item_type == "prototype_file":
+        primary = item.get("name") or item.get("uid")
+    elif item_type == "prototype_version":
+        primary = item.get("uid") or item.get("number") or item.get("name")
+    elif item_type == "capability_unit":
+        primary = item.get("id") or item.get("name")
+    elif item_type == "business_construct":
+        primary = item.get("id") or item.get("name")
+    elif item_type == "task_definition":
+        primary = item.get("id") or item.get("name") or item.get("target")
     elif item_type == "entity":
         primary = item.get("name") or item.get("id")
     elif item_type == "field":
@@ -161,7 +240,6 @@ def _name_key(item_type: str, item: dict) -> str:
                 str(item.get("field_name", "")).strip(),
                 str(item.get("from", "")).strip(),
                 str(item.get("to", "")).strip(),
-                str(item.get("action", "")).strip(),
             ]
         )
     elif item_type == "relation":
@@ -667,9 +745,12 @@ class MergeEngine:
 
     def _item_key(self, item_type: str, item: dict, trust_identity: bool) -> tuple[str, str]:
         uid = str(item.get("uid", "")).strip()
+        semantic_key = _name_key(item_type, item)
+        if self.mode == "combine" and item_type in SEMANTIC_UNIQUE_IN_COMBINE and semantic_key:
+            return ("name", semantic_key)
         if trust_identity and uid:
             return ("uid", uid)
-        return ("name", _name_key(item_type, item))
+        return ("name", semantic_key)
 
     def _item_path_token(self, item_type: str, item: dict, index: int) -> str:
         label = item.get("name") or item.get("term") or item.get("id") or item.get("uid") or str(index)
@@ -903,6 +984,26 @@ def validate_document(document: dict) -> list[dict]:
                             "message": f"任务 {node['id']} 引用了不存在的实体 {entity_id}",
                         }
                     )
+            for form in node.get("forms", []):
+                form_entity_id = str(form.get("entity_id", "")).strip()
+                if form_entity_id and form_entity_id not in entity_ids:
+                    issues.append(
+                        {
+                            "level": "error",
+                            "path": f"processes.{process['id']}.nodes.{node['id']}.forms.{form.get('id', '')}.entity_id",
+                            "message": f"表单 {form.get('id', '')} 引用了不存在的实体 {form_entity_id}",
+                        }
+                    )
+                for section in form.get("sections", []):
+                    section_entity_id = str(section.get("entity_id", "")).strip()
+                    if section_entity_id and section_entity_id not in entity_ids:
+                        issues.append(
+                            {
+                                "level": "error",
+                                "path": f"processes.{process['id']}.nodes.{node['id']}.forms.{form.get('id', '')}.sections.{section.get('id', '')}.entity_id",
+                                "message": f"表单分组 {section.get('id', '')} 引用了不存在的实体 {section_entity_id}",
+                            }
+                        )
 
     for relation in doc.get("relations", []):
         relation_from = str(relation.get("from", "")).strip()

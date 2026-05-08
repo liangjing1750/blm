@@ -30,6 +30,34 @@ const S = {
     },
     analysis: null,
     resolutions: {},
+    isChecking: false,
+  },
+  compare: {
+    workspaceFiles: [],
+    workspaceNames: {
+      left: '',
+      right: '',
+    },
+    versionIds: {
+      left: '',
+      right: '',
+    },
+    versions: {
+      left: [],
+      right: [],
+    },
+    labels: {
+      left: '',
+      right: '',
+    },
+    documents: {
+      left: null,
+      right: null,
+    },
+    result: null,
+    needsRun: false,
+    isRunning: false,
+    runMessage: '',
   },
   recovery: {
     openTab: 'workspace',
@@ -253,6 +281,19 @@ function resetMergeState() {
   S.merge.documents = { left: null, right: null };
   S.merge.analysis = null;
   S.merge.resolutions = {};
+  S.merge.isChecking = false;
+}
+function resetCompareState() {
+  S.compare.workspaceFiles = [];
+  S.compare.workspaceNames = { left: '', right: '' };
+  S.compare.versionIds = { left: '', right: '' };
+  S.compare.versions = { left: [], right: [] };
+  S.compare.labels = { left: '', right: '' };
+  S.compare.documents = { left: null, right: null };
+  S.compare.result = null;
+  S.compare.needsRun = false;
+  S.compare.isRunning = false;
+  S.compare.runMessage = '';
 }
 function resetRecoveryState() {
   S.recovery.openTab = 'workspace';
@@ -859,6 +900,13 @@ function getStateNodeKindLabel(kind) {
   if (normalized === 'terminal') return '结束状态';
   return '中间状态';
 }
+function normalizeOptionalGraphOffset(value) {
+  if (!value || typeof value !== 'object') return null;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x: Math.round(x), y: Math.round(y) };
+}
 function inferDefaultStateNodeKind(index, total) {
   if (total <= 1) return 'intermediate';
   if (index === 0) return 'initial';
@@ -869,29 +917,55 @@ function syncFieldStateNodes(field) {
   if (!field || typeof field !== 'object') return [];
   const states = getFieldStateValues(field);
   const rawNodes = Array.isArray(field.state_nodes) ? field.state_nodes : [];
-  const existingKinds = new Map(
-    rawNodes
-      .filter((item) => item && typeof item === 'object')
-      .map((item) => [String(item.name || '').trim(), normalizeStateNodeKind(item.kind)]),
-  );
-  field.state_nodes = states.map((state, index) => ({
-    name: state,
-    kind: existingKinds.get(state) || inferDefaultStateNodeKind(index, states.length),
-  }));
+  const existingNodes = new Map();
+  rawNodes
+    .filter((item) => item && typeof item === 'object')
+    .forEach((item) => {
+      const name = String(item.name || '').trim();
+      if (!name) return;
+      existingNodes.set(name, item);
+    });
+  field.state_nodes = states.map((state, index) => {
+    const existing = existingNodes.get(state) || {};
+    const node = {
+      name: state,
+      kind: Object.prototype.hasOwnProperty.call(existing, 'kind')
+        ? normalizeStateNodeKind(existing.kind)
+        : inferDefaultStateNodeKind(index, states.length),
+    };
+    const pos = normalizeOptionalGraphOffset(existing.pos);
+    const markerPos = normalizeOptionalGraphOffset(existing.markerPos);
+    if (pos) node.pos = pos;
+    if (markerPos) node.markerPos = markerPos;
+    return node;
+  });
   return field.state_nodes;
 }
 function getFieldStateNodes(field) {
   const states = getFieldStateValues(field);
   const rawNodes = Array.isArray(field?.state_nodes) ? field.state_nodes : [];
-  const existingKinds = new Map(
-    rawNodes
-      .filter((item) => item && typeof item === 'object')
-      .map((item) => [String(item.name || '').trim(), normalizeStateNodeKind(item.kind)]),
-  );
-  return states.map((state, index) => ({
-    name: state,
-    kind: existingKinds.get(state) || inferDefaultStateNodeKind(index, states.length),
-  }));
+  const existingNodes = new Map();
+  rawNodes
+    .filter((item) => item && typeof item === 'object')
+    .forEach((item) => {
+      const name = String(item.name || '').trim();
+      if (!name) return;
+      existingNodes.set(name, item);
+    });
+  return states.map((state, index) => {
+    const existing = existingNodes.get(state) || {};
+    const node = {
+      name: state,
+      kind: Object.prototype.hasOwnProperty.call(existing, 'kind')
+        ? normalizeStateNodeKind(existing.kind)
+        : inferDefaultStateNodeKind(index, states.length),
+    };
+    const pos = normalizeOptionalGraphOffset(existing.pos);
+    const markerPos = normalizeOptionalGraphOffset(existing.markerPos);
+    if (pos) node.pos = pos;
+    if (markerPos) node.markerPos = markerPos;
+    return node;
+  });
 }
 function getEntityStateNodes(entity, preferredFieldName = '') {
   return getFieldStateNodes(getEntityStatusField(entity, preferredFieldName));
@@ -951,6 +1025,7 @@ function ensureEntityStateShape(entity) {
     action: String(transition?.action || ''),
     note: String(transition?.note || ''),
     field_name: String(transition?.field_name || ''),
+    ...(normalizeOptionalGraphOffset(transition?.labelPos) ? { labelPos: normalizeOptionalGraphOffset(transition.labelPos) } : {}),
   }));
   return entity;
 }

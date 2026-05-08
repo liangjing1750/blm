@@ -187,6 +187,21 @@ function buildPreviewMetaLine(meta) {
   return parts.length ? `<p class="pv-meta">${parts.join(' | ')}</p>` : '';
 }
 
+function renderPreviewRoleUsecaseHtml(roles) {
+  if (!roles.length || typeof buildRoleUsecaseMap !== 'function') return '';
+  return `<div class="pv-role-usecase-section" data-testid="preview-role-usecase-section">
+    <h3>角色用例图</h3>
+    <div class="pv-role-usecase-item">
+      <h4>全部角色</h4>
+      ${buildRoleUsecaseMap(null, { readonly: true })}
+    </div>
+    ${roles.map((role) => `<div class="pv-role-usecase-item" data-testid="preview-role-usecase-item">
+      <h4>${esc(getRoleName(role))} 用例图</h4>
+      ${buildRoleUsecaseMap(role, { participatingOnly: true, readonly: true })}
+    </div>`).join('')}
+  </div>`;
+}
+
 function renderPreviewRolesHtml(roles) {
   if (!roles.length) return '';
   return `<h2 id="preview-roles">角色</h2>
@@ -197,7 +212,8 @@ function renderPreviewRolesHtml(roles) {
         <td>${esc(getRoleDesc(role))}</td>
         <td>${esc(getRoleSubDomains(role))}</td>
       </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table>
+    ${renderPreviewRoleUsecaseHtml(roles)}`;
 }
 
 function renderPreviewLanguageHtml(languageItems) {
@@ -395,11 +411,16 @@ function renderPreviewTaskFormsHtml(forms, entityMap) {
   return `<div class="pv-form-model">
     <h5>表单模型</h5>
     ${forms.map((form) => {
-      const entityName = form.entity_id ? (entityMap[form.entity_id]?.name || form.entity_id) : '不绑定实体';
+      const entityName = typeof getTaskFormEntitySummary === 'function'
+        ? getTaskFormEntitySummary(form)
+        : (form.entity_id ? (entityMap[form.entity_id]?.name || form.entity_id) : '不绑定实体');
       return `<div class="pv-form-card">
-        <p class="pv-note"><strong>${esc(form.name || '未命名表单')}</strong> | <strong>绑定实体</strong>: ${esc(entityName)}${form.purpose ? ` | <strong>用途</strong>: ${esc(form.purpose)}` : ''}</p>
-        ${(form.sections || []).map((section) => `<div class="pv-form-section">
-          <p class="pv-note"><strong>分组</strong>: ${esc(section.name || '未命名分组')}${section.note ? ` | ${esc(section.note)}` : ''}</p>
+        <p class="pv-note"><strong>${esc(form.name || '未命名表单')}</strong> | <strong>关联实体</strong>: ${esc(entityName)}${form.purpose ? ` | <strong>用途</strong>: ${esc(form.purpose)}` : ''}</p>
+        ${(form.sections || []).map((section) => {
+          const sectionEntityId = String(section.entity_id || form.entity_id || '').trim();
+          const sectionEntityName = sectionEntityId ? (entityMap[sectionEntityId]?.name || sectionEntityId) : '不绑定实体';
+          return `<div class="pv-form-section">
+          <p class="pv-note"><strong>分组</strong>: ${esc(section.name || '未命名分组')} | <strong>绑定实体</strong>: ${esc(sectionEntityName)}${section.note ? ` | ${esc(section.note)}` : ''}</p>
           ${(section.fields || []).length ? `<table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>实体字段</th><th>说明</th></tr></thead><tbody>
             ${(section.fields || []).map((field) => `<tr>
               <td>${esc(field.name || '')}</td>
@@ -409,7 +430,8 @@ function renderPreviewTaskFormsHtml(forms, entityMap) {
               <td>${esc(field.note || '')}</td>
             </tr>`).join('')}
           </tbody></table>` : ''}
-        </div>`).join('')}
+        </div>`;
+        }).join('')}
       </div>`;
     }).join('')}
   </div>`;
@@ -504,6 +526,7 @@ function renderPreviewEntitiesHtml(entities, fieldLabels) {
           <td>${esc(getFieldRuleText(field) || '')}</td>
         </tr>`).join('')}
       </tbody></table>` : ''}
+      ${renderPreviewEntityStateGraphs(entity)}
       ${entity.state_transitions?.length ? `<h4>状态流转</h4>
         ${(() => {
           const statusField = getEntityStatusField(entity);
@@ -511,11 +534,29 @@ function renderPreviewEntitiesHtml(entities, fieldLabels) {
             ? `<p class="pv-note"><strong>主状态字段</strong>: ${esc(statusField.name || '')}（状态列表：${esc(getFieldStateValueText(statusField) || '—')}）</p>`
             : '';
           return `${statusLine}
-            <table><thead><tr><th>来源状态</th><th>目标状态</th><th>触发动作</th></tr></thead><tbody>
-              ${entity.state_transitions.map((transition) => `<tr><td>${esc(transition.from || '')}</td><td>${esc(transition.to || '')}</td><td>${esc(transition.action || '')}</td></tr>`).join('')}
+            <table><thead><tr><th>来源状态</th><th>目标状态</th><th>备注说明</th></tr></thead><tbody>
+              ${entity.state_transitions.map((transition) => `<tr><td>${esc(transition.from || '')}</td><td>${esc(transition.to || '')}</td><td>${esc(transition.note || transition.action || '')}</td></tr>`).join('')}
             </tbody></table>`;
         })()}` : ''}
     </div>`).join('')}`;
+}
+
+function renderPreviewEntityStateGraphs(entity) {
+  if (typeof getEntityStatusFields !== 'function' || typeof renderEntityStateGraphMarkup !== 'function') return '';
+  const statusFields = getEntityStatusFields(entity);
+  if (!statusFields.length) return '';
+  const graphs = statusFields
+    .map((field) => {
+      const stateNodes = getFieldStateNodes(field);
+      if (!stateNodes.length) return '';
+      return `<div class="pv-entity-state-graph" data-testid="preview-entity-state-graph">
+        <h4>状态图：${esc(getStateFieldOptionLabel(field))}</h4>
+        ${renderEntityStateGraphMarkup(entity, field.name, { readonly: true, zoom: 1 })}
+      </div>`;
+    })
+    .filter(Boolean)
+    .join('');
+  return graphs ? `<div class="pv-entity-state-graphs">${graphs}</div>` : '';
 }
 
 function buildHtmlPreview() {
@@ -620,10 +661,14 @@ function appendPreviewTaskFormsMd(add, forms, entityMap) {
   add('**表单模型**');
   add('');
   forms.forEach((form) => {
-    const entityName = form.entity_id ? (entityMap[form.entity_id]?.name || form.entity_id) : '不绑定实体';
-    add(`- ${form.name || '未命名表单'}；绑定实体：${entityName}${form.purpose ? `；用途：${form.purpose}` : ''}`);
+    const entityName = typeof getTaskFormEntitySummary === 'function'
+      ? getTaskFormEntitySummary(form)
+      : (form.entity_id ? (entityMap[form.entity_id]?.name || form.entity_id) : '不绑定实体');
+    add(`- ${form.name || '未命名表单'}；关联实体：${entityName}${form.purpose ? `；用途：${form.purpose}` : ''}`);
     (form.sections || []).forEach((section) => {
-      add(`  - 分组：${section.name || '未命名分组'}${section.note ? `；${section.note}` : ''}`);
+      const sectionEntityId = String(section.entity_id || form.entity_id || '').trim();
+      const sectionEntityName = sectionEntityId ? (entityMap[sectionEntityId]?.name || sectionEntityId) : '不绑定实体';
+      add(`  - 分组：${section.name || '未命名分组'}；绑定实体：${sectionEntityName}${section.note ? `；${section.note}` : ''}`);
       (section.fields || []).forEach((field) => {
         add(`    - ${field.name || '未命名字段'} / ${FORM_FIELD_TYPE_LABELS[field.type] || field.type || ''}${field.required ? ' / 必填' : ''}${field.entity_field ? ` / 映射：${field.entity_field}` : ''}${field.note ? ` / ${field.note}` : ''}`);
       });
@@ -736,9 +781,9 @@ function appendPreviewEntitiesMd(add, doc, entities, fieldLabels) {
         add(`**主状态字段**: ${statusField.name||''}（状态列表：${getFieldStateValueText(statusField)||'—'}）`);
         add('');
       }
-      add('| 来源状态 | 目标状态 | 触发动作 |');
+      add('| 来源状态 | 目标状态 | 备注说明 |');
       add('|----------|----------|----------|');
-      entity.state_transitions.forEach((transition) => add(`| ${transition.from||''} | ${transition.to||''} | ${transition.action||''} |`));
+      entity.state_transitions.forEach((transition) => add(`| ${transition.from||''} | ${transition.to||''} | ${transition.note || transition.action || ''} |`));
       add('');
     }
   }

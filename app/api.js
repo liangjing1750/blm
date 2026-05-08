@@ -41,6 +41,9 @@ const api = {
   async restoreHistory(name, snapshotId) {
     return postJson('/api/history/restore', { name, snapshot_id: snapshotId });
   },
+  async loadHistory(name, snapshotId) {
+    return postJson('/api/history/load', { name, snapshot_id: snapshotId });
+  },
   async trash() {
     return fetch('/api/trash').then((response) => response.json());
   },
@@ -67,5 +70,8 @@ const api = {
   },
   async applyMerge(payload) {
     return postJson('/api/merge/apply', payload);
+  },
+  async validateDocument(document) {
+    return postJson('/api/document/validate', { document });
   },
 };

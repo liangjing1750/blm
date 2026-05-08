@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 from blm_core.document import migrate_document
-from blm_core.merge import analyze_merge, apply_merge
+from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.storage import (
     InvalidDocumentNameError,
     InvalidWorkspaceEntryError,
@@ -108,12 +108,16 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._handle_new(body)
             if path.startswith("/api/delete/"):
                 return self._handle_delete(path)
+            if path == "/api/history/load":
+                return self._handle_history_load(body)
             if path == "/api/history/restore":
                 return self._handle_history_restore(body)
             if path == "/api/trash/restore":
                 return self._handle_trash_restore(body)
             if path == "/api/document/normalize":
                 return self._handle_document_normalize(body)
+            if path == "/api/document/validate":
+                return self._handle_document_validate(body)
             if path == "/api/merge/analyze":
                 return self._handle_merge_analyze(body)
             if path == "/api/merge/apply":
@@ -259,6 +263,20 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 }
             )
 
+        def _handle_history_load(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            name = str(payload.get("name", "")).strip()
+            snapshot_id = str(payload.get("snapshot_id", "")).strip()
+            try:
+                document = storage.load_history(name, snapshot_id)
+            except (InvalidDocumentNameError, InvalidWorkspaceEntryError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+            return self._json({"ok": True, "name": name, "snapshot_id": snapshot_id, "document": document})
+
         def _handle_trash_restore(self, body: bytes):
             payload = self._decode_json(body)
             if isinstance(payload, tuple):
@@ -285,6 +303,19 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._json(payload[0], payload[1])
             document = payload.get("document", {})
             return self._json({"ok": True, "document": migrate_document(document)})
+
+        def _handle_document_validate(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            document = migrate_document(payload.get("document", {}))
+            return self._json(
+                {
+                    "ok": True,
+                    "document": document,
+                    "validation_issues": validate_document(document),
+                }
+            )
 
         def _handle_merge_analyze(self, body: bytes):
             payload = self._decode_json(body)

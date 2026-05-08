@@ -102,6 +102,74 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(second_node["businessRules"][0]["name"], "业务规则")
         self.assertEqual(second_node["businessRules"][0]["content"], "账号或密码错误时提示统一错误")
 
+    def test_migrate_document_preserves_state_layout_and_section_entity_binding(self):
+        document = migrate_document(
+            {
+                "meta": {"title": "Layout"},
+                "roles": [],
+                "language": [],
+                "processes": [
+                    {
+                        "id": "P1",
+                        "name": "流程",
+                        "nodes": [
+                            {
+                                "id": "T1",
+                                "name": "办理",
+                                "forms": [
+                                    {
+                                        "id": "F1",
+                                        "name": "综合表单",
+                                        "entity_id": "E1",
+                                        "sections": [
+                                            {
+                                                "id": "SEC1",
+                                                "name": "主体",
+                                                "entity_id": "E2",
+                                                "fields": [{"id": "FLD1", "name": "名称", "entity_field": "名称"}],
+                                            }
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "entities": [
+                    {
+                        "id": "E1",
+                        "name": "单据",
+                        "fields": [
+                            {
+                                "name": "状态",
+                                "type": "string",
+                                "is_status": True,
+                                "status_role": "primary",
+                                "state_values": "草稿/完成",
+                                "state_nodes": [
+                                    {"name": "草稿", "kind": "initial", "pos": {"x": 42, "y": 56}, "markerPos": {"x": 60, "y": 24}},
+                                    {"name": "完成", "kind": "terminal", "pos": {"x": 80, "y": 140}, "markerPos": {"x": 110, "y": 196}},
+                                ],
+                            }
+                        ],
+                        "state_transitions": [{"from": "草稿", "to": "完成", "note": "submit / approve", "labelPos": {"x": 140, "y": 112}}],
+                    },
+                    {"id": "E2", "name": "主体", "fields": [{"name": "名称", "type": "string"}]},
+                ],
+                "relations": [],
+                "rules": [],
+            }
+        )
+
+        state_nodes = document["entities"][0]["fields"][0]["state_nodes"]
+        self.assertEqual(state_nodes[0]["pos"], {"x": 42, "y": 56})
+        self.assertEqual(state_nodes[0]["markerPos"], {"x": 60, "y": 24})
+        self.assertEqual(state_nodes[1]["markerPos"], {"x": 110, "y": 196})
+        self.assertEqual(document["entities"][0]["state_transitions"][0]["labelPos"], {"x": 140, "y": 112})
+        section = document["processes"][0]["nodes"][0]["forms"][0]["sections"][0]
+        self.assertEqual(section["entity_id"], "E2")
+        self.assertEqual(section["fields"][0]["entity_field"], "名称")
+
 
 class DocumentFileStoreTests(unittest.TestCase):
     def test_load_and_save_path_round_trip(self):
@@ -152,6 +220,97 @@ class MergeEngineTests(unittest.TestCase):
         self.assertEqual(len(analysis["merged_document"]["roles"]), 1)
         self.assertEqual(len(analysis["merged_document"]["entities"]), 1)
         self.assertEqual(analysis["validation_issues"], [])
+
+    def test_three_way_merge_keeps_latest_metadata_forms_and_prototypes(self):
+        base = create_empty_document("Metadata")
+        base["entities"].append(
+            {
+                "uid": "entity-1",
+                "id": "E1",
+                "name": "申请单",
+                "group": "",
+                "note": "",
+                "fields": [{"uid": "field-1", "name": "状态", "type": "string", "is_key": False, "is_status": False, "state_values": "", "note": ""}],
+                "state_transitions": [],
+            }
+        )
+        base["processes"][0]["nodes"].append(
+            {
+                "uid": "node-1",
+                "id": "T1",
+                "name": "提交申请",
+                "role_id": "",
+                "role": "",
+                "role_ids": [],
+                "roles": [],
+                "repeatable": False,
+                "userSteps": [],
+                "entity_ops": [],
+                "orchestrationTasks": [],
+                "businessRules": [],
+                "forms": [],
+            }
+        )
+        left = deepcopy(base)
+        right = deepcopy(base)
+        left["processes"][0]["prototypeFiles"] = [
+            {
+                "uid": "proto-1",
+                "name": "submit.html",
+                "versionUid": "proto-1-v1",
+                "content": "<main>submit</main>",
+                "contentType": "text/html",
+                "uploadedAt": "2026-05-08",
+                "versions": [
+                    {
+                        "uid": "proto-1-v1",
+                        "number": 1,
+                        "name": "submit.html",
+                        "content": "<main>submit</main>",
+                        "contentType": "text/html",
+                        "uploadedAt": "2026-05-08",
+                    }
+                ],
+            }
+        ]
+        left["processes"][0]["nodes"][0]["forms"] = [
+            {
+                "uid": "form-1",
+                "id": "F1",
+                "name": "申请表",
+                "purpose": "新增",
+                "entity_id": "",
+                "sections": [
+                    {
+                        "uid": "section-1",
+                        "id": "SEC1",
+                        "name": "申请信息",
+                        "note": "",
+                        "entity_id": "E1",
+                        "fields": [
+                            {"uid": "form-field-1", "id": "FLD1", "name": "状态", "type": "Text", "required": True, "entity_field": "状态", "note": "mixed EN note"}
+                        ],
+                    }
+                ],
+            }
+        ]
+        right["capabilityUnits"] = [{"uid": "cap-1", "id": "CU1", "name": "申请办理", "kind": "业务能力", "note": "", "entityIds": ["E1"]}]
+        right["businessConstructs"] = [{"uid": "bc-1", "id": "BC1", "name": "申请构件", "capabilityUnitId": "CU1", "entityIds": ["E1"]}]
+        right["taskDefinitions"] = [{"uid": "td-1", "id": "TD1", "name": "提交任务", "type": "Service", "target": "ApplyService.submit", "constructId": "BC1", "entityIds": ["E1"]}]
+        right["processes"][0]["nodes"][0]["orchestrationTasks"] = [
+            {"uid": "orch-1", "name": "提交任务", "type": "Service", "target": "ApplyService.submit", "note": "", "taskDefinitionId": "TD1", "constructId": "BC1"}
+        ]
+
+        analysis = analyze_merge("3way", left, right, base)
+
+        self.assertEqual(analysis["conflicts"], [])
+        merged = analysis["merged_document"]
+        self.assertEqual(merged["processes"][0]["prototypeFiles"][0]["name"], "submit.html")
+        self.assertEqual(merged["processes"][0]["nodes"][0]["forms"][0]["sections"][0]["entity_id"], "E1")
+        self.assertEqual(merged["capabilityUnits"][0]["id"], "CU1")
+        self.assertEqual(merged["businessConstructs"][0]["id"], "BC1")
+        self.assertEqual(merged["taskDefinitions"][0]["id"], "TD1")
+        self.assertEqual(merged["processes"][0]["nodes"][0]["orchestrationTasks"][0]["taskDefinitionId"], "TD1")
 
     def test_two_way_combine_reports_same_name_conflict_for_legacy_documents(self):
         left = {
@@ -220,6 +379,54 @@ class MergeEngineTests(unittest.TestCase):
 
         self.assertEqual(result["conflicts"], [])
         self.assertEqual(result["merged_document"]["roles"][0]["desc"], "负责对账")
+
+    def test_combine_reports_same_name_rule_conflict_even_with_distinct_uids(self):
+        left = create_empty_document("规则左侧")
+        right = create_empty_document("规则右侧")
+        left["processes"][0]["id"] = "P1"
+        right["processes"][0]["id"] = "P1"
+        left["rules"] = [
+            {
+                "uid": "left-rule-uid",
+                "id": "RULE1",
+                "name": "校验规则",
+                "type": "Check",
+                "applies_to": "P1",
+                "description": "左侧口径",
+                "formula": "amount > 0",
+            }
+        ]
+        right["rules"] = [
+            {
+                "uid": "right-rule-uid",
+                "id": "RULE1",
+                "name": "校验规则",
+                "type": "Check",
+                "applies_to": "P1",
+                "description": "右侧口径",
+                "formula": "amount >= 1",
+            }
+        ]
+
+        analysis = analyze_merge("combine", left, right)
+
+        rule_conflicts = [
+            conflict
+            for conflict in analysis["conflicts"]
+            if conflict["item_type"] == "rule" and conflict["kind"] == "duplicate_object"
+        ]
+        self.assertEqual(len(rule_conflicts), 1)
+        self.assertEqual(rule_conflicts[0]["resolution_options"], ["left", "right", "keep_both"])
+
+        result = apply_merge(
+            "combine",
+            left,
+            right,
+            resolutions={rule_conflicts[0]["id"]: {"choice": "keep_both"}},
+        )
+
+        self.assertEqual(result["conflicts"], [])
+        self.assertEqual(len(result["merged_document"]["rules"]), 2)
 
     def test_validate_document_rejects_stage_flow_link_that_points_to_ref_from_other_stage(self):
         document = create_empty_document("Stage refs")

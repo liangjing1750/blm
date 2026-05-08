@@ -119,6 +119,9 @@ test('预览页提供大纲视图并支持跳转', async ({ page, request }) => 
   await expect(page.locator('#preview-outline')).toContainText('流程视图');
   await expect(page.locator('#preview-outline')).toContainText('E2 现货仓单');
   await expect(page.getByTestId('preview-stage-panorama')).toBeVisible();
+  await expect(page.getByTestId('preview-role-usecase-section')).toBeVisible();
+  await expect(page.getByTestId('role-usecase-map')).toHaveCount(2);
+  await expect(page.getByTestId('preview-entity-state-graph')).toHaveCount(2);
   await expect(previewRendered).toContainText('阶段视图');
   await expect(previewRendered).toContainText('流程节点 T1');
   await expect(previewRendered).toContainText('节点任务');

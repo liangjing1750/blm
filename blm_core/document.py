@@ -99,6 +99,17 @@ def _normalize_graph_offset(value) -> dict:
     return {"x": x, "y": y}
 
 
+def _normalize_optional_graph_offset(value) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        x = int(round(float(value.get("x", 0))))
+        y = int(round(float(value.get("y", 0))))
+    except (TypeError, ValueError):
+        return None
+    return {"x": x, "y": y}
+
+
 def _normalize_stage_process_links(process_links: list[dict]) -> list[dict]:
     normalized_links: list[dict] = []
     for link in process_links or []:
@@ -403,21 +414,31 @@ def _infer_default_state_node_kind(index: int, total: int) -> str:
 
 
 def _normalize_state_nodes(raw_nodes: list[dict], state_values: list[str]) -> list[dict]:
-    existing_kinds: dict[str, str] = {}
+    existing_nodes: dict[str, dict] = {}
     for item in raw_nodes or []:
         if not isinstance(item, dict):
             continue
         name = str(item.get("name", "")).strip()
         if not name:
             continue
-        existing_kinds[name] = normalize_state_node_kind(item.get("kind", ""))
-    return [
-        {
+        existing_nodes[name] = item
+    normalized_nodes: list[dict] = []
+    for index, state_name in enumerate(state_values):
+        existing = existing_nodes.get(state_name, {})
+        node = {
             "name": state_name,
-            "kind": existing_kinds.get(state_name, _infer_default_state_node_kind(index, len(state_values))),
+            "kind": normalize_state_node_kind(existing.get("kind", ""))
+            if "kind" in existing
+            else _infer_default_state_node_kind(index, len(state_values)),
         }
-        for index, state_name in enumerate(state_values)
-    ]
+        pos = _normalize_optional_graph_offset(existing.get("pos"))
+        marker_pos = _normalize_optional_graph_offset(existing.get("markerPos"))
+        if pos is not None:
+            node["pos"] = pos
+        if marker_pos is not None:
+            node["markerPos"] = marker_pos
+        normalized_nodes.append(node)
+    return normalized_nodes
 
 
 def normalize_role_name(role_name: str) -> str:
@@ -725,17 +746,74 @@ def _normalize_entities(entities: list[dict]) -> None:
         )
         for transition in entity["state_transitions"]:
             transition_uid = str(transition.get("uid", "")).strip() or _new_uid()
-            normalized_transitions.append(
-                {
-                    "uid": transition_uid,
-                    "from": str(transition.get("from", "")).strip(),
-                    "to": str(transition.get("to", "")).strip(),
-                    "action": str(transition.get("action", "")).strip(),
-                    "note": str(transition.get("note", "")).strip(),
-                    "field_name": str(transition.get("field_name", default_field_name)).strip(),
-                }
-            )
+            normalized_transition = {
+                "uid": transition_uid,
+                "from": str(transition.get("from", "")).strip(),
+                "to": str(transition.get("to", "")).strip(),
+                "action": str(transition.get("action", "")).strip(),
+                "note": str(transition.get("note", "")).strip(),
+                "field_name": str(transition.get("field_name", default_field_name)).strip(),
+            }
+            label_pos = _normalize_optional_graph_offset(transition.get("labelPos"))
+            if label_pos is not None:
+                normalized_transition["labelPos"] = label_pos
+            normalized_transitions.append(normalized_transition)
         entity["state_transitions"] = normalized_transitions
+
+
+def _normalize_node_forms(node: dict) -> None:
+    forms = node.get("forms", [])
+    if not isinstance(forms, list):
+        forms = []
+    normalized_forms: list[dict] = []
+    for form_index, raw_form in enumerate(forms, start=1):
+        if not isinstance(raw_form, dict):
+            continue
+        form = raw_form
+        _ensure_uid(form)
+        form["id"] = str(form.get("id") or f"F{form_index}").strip()
+        form["name"] = str(form.get("name", "")).strip()
+        form["purpose"] = str(form.get("purpose", "")).strip()
+        legacy_entity_id = str(form.get("entity_id") or form.get("entityId") or "").strip()
+        form["entity_id"] = legacy_entity_id
+        sections = form.get("sections", [])
+        if not isinstance(sections, list):
+            sections = []
+        if not sections:
+            sections = [{"id": "SEC1", "name": "基本信息", "note": "", "entity_id": legacy_entity_id, "fields": []}]
+        normalized_sections: list[dict] = []
+        for section_index, raw_section in enumerate(sections, start=1):
+            if not isinstance(raw_section, dict):
+                continue
+            section = raw_section
+            _ensure_uid(section)
+            section["id"] = str(section.get("id") or f"SEC{section_index}").strip()
+            section["name"] = str(section.get("name", "")).strip()
+            section["note"] = str(section.get("note", "")).strip()
+            section["entity_id"] = str(
+                section.get("entity_id") or section.get("entityId") or legacy_entity_id
+            ).strip()
+            fields = section.get("fields", [])
+            if not isinstance(fields, list):
+                fields = []
+            normalized_fields: list[dict] = []
+            for field_index, raw_field in enumerate(fields, start=1):
+                if not isinstance(raw_field, dict):
+                    continue
+                field = raw_field
+                _ensure_uid(field)
+                field["id"] = str(field.get("id") or f"FLD{field_index}").strip()
+                field["name"] = str(field.get("name", "")).strip()
+                field["type"] = str(field.get("type", "Text") or "Text").strip()
+                field["required"] = bool(field.get("required"))
+                field["entity_field"] = str(field.get("entity_field") or field.get("entityField") or "").strip()
+                field["note"] = str(field.get("note", "")).strip()
+                normalized_fields.append(field)
+            section["fields"] = normalized_fields
+            normalized_sections.append(section)
+        form["sections"] = normalized_sections
+        normalized_forms.append(form)
+    node["forms"] = normalized_forms
 
 
 def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
@@ -845,6 +923,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
             node.setdefault("rules_note", "")
             _normalize_node_business_rules(node)
             node.setdefault("orchestrationTasks", [])
+            _normalize_node_forms(node)
 
             for step in node["userSteps"]:
                 _ensure_uid(step)
@@ -905,6 +984,9 @@ def migrate_document(document: dict | None) -> dict:
     doc.setdefault("entities", [])
     doc.setdefault("relations", [])
     doc.setdefault("rules", [])
+    doc.setdefault("capabilityUnits", [])
+    doc.setdefault("businessConstructs", [])
+    doc.setdefault("taskDefinitions", [])
 
     normalized_roles: list[dict] = []
     roles_by_id: dict[str, dict] = {}
@@ -1025,6 +1107,24 @@ def renumber_document_ids(document: dict | None) -> dict:
             for entity_op in node.get("entity_ops", []):
                 if entity_op.get("entity_id") in entity_map:
                     entity_op["entity_id"] = entity_map[entity_op["entity_id"]]
+            for form in node.get("forms", []):
+                if form.get("entity_id") in entity_map:
+                    form["entity_id"] = entity_map[form["entity_id"]]
+                for section in form.get("sections", []):
+                    if section.get("entity_id") in entity_map:
+                        section["entity_id"] = entity_map[section["entity_id"]]
+
+    for capability in doc.get("capabilityUnits", []):
+        if isinstance(capability.get("entityIds"), list):
+            capability["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in capability["entityIds"]]
+
+    for construct in doc.get("businessConstructs", []):
+        if isinstance(construct.get("entityIds"), list):
+            construct["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in construct["entityIds"]]
+
+    for task_definition in doc.get("taskDefinitions", []):
+        if isinstance(task_definition.get("entityIds"), list):
+            task_definition["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in task_definition["entityIds"]]
 
     for relation in doc["relations"]:
         if relation.get("from") in entity_map:

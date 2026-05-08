@@ -271,6 +271,10 @@ let efPanState    = null;          // 背景平移状态
 let efRubberState = null;          // 框选状态
 let efRubberEl    = null;          // 框选 DOM 元素
 let efShortcutInstalled = false;
+let stateNodeDragState = null;
+let stateNodeDragMoved = false;
+let stateTransitionLabelDragState = null;
+let stateTransitionLabelDragMoved = false;
 
 function isEntityRelationShortcutEditableTarget(target) {
   if (!target) return false;
@@ -1102,6 +1106,173 @@ function setStateNodeKind(entityId, fieldName, stateName, kind, nodeIndex) {
   rerenderStateWorkbenchView(Number.isInteger(nodeIndex) ? `[data-testid="entity-state-kind-${nodeIndex}"]` : '');
 }
 
+function getStateLayoutField(entityId, fieldName) {
+  const entity = S.doc?.entities?.find((item) => item.id === entityId);
+  if (!entity) return null;
+  ensureEntityStateShape(entity);
+  return getEntityStatusField(entity, fieldName);
+}
+
+function setStateLayoutPosition(entityId, fieldName, stateName, dragKind, point) {
+  const field = getStateLayoutField(entityId, fieldName);
+  if (!field) return false;
+  const nodes = syncFieldStateNodes(field);
+  const targetNode = nodes.find((item) => String(item?.name || '') === String(stateName || ''));
+  if (!targetNode) return false;
+  const nextPoint = normalizeOptionalGraphOffset(point);
+  if (!nextPoint) return false;
+  if (dragKind === 'marker') {
+    targetNode.markerPos = nextPoint;
+  } else {
+    targetNode.pos = nextPoint;
+  }
+  return true;
+}
+
+function startStateNodeDrag(entityId, fieldName, stateName, dragKind, event) {
+  if (event.button !== 0) return;
+  const target = event.currentTarget;
+  if (!target) return;
+  event.preventDefault();
+  event.stopPropagation();
+  stateNodeDragMoved = false;
+  stateNodeDragState = {
+    entityId,
+    fieldName,
+    stateName,
+    dragKind: dragKind === 'marker' ? 'marker' : 'node',
+    target,
+    startX: event.clientX,
+    startY: event.clientY,
+    startLeft: Number.parseFloat(target.style.left) || target.offsetLeft || 0,
+    startTop: Number.parseFloat(target.style.top) || target.offsetTop || 0,
+    width: target.offsetWidth || 0,
+    height: target.offsetHeight || 0,
+  };
+  target.classList.add('dragging');
+  document.addEventListener('mousemove', onStateNodeDrag);
+  document.addEventListener('mouseup', endStateNodeDrag);
+}
+
+function onStateNodeDrag(event) {
+  if (!stateNodeDragState) return;
+  const zoom = getStateDiagramZoom() || 1;
+  const dx = (event.clientX - stateNodeDragState.startX) / zoom;
+  const dy = (event.clientY - stateNodeDragState.startY) / zoom;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) stateNodeDragMoved = true;
+  if (!stateNodeDragMoved) return;
+  const nextLeft = Math.max(4, Math.round(stateNodeDragState.startLeft + dx));
+  const nextTop = Math.max(4, Math.round(stateNodeDragState.startTop + dy));
+  stateNodeDragState.target.style.left = `${nextLeft}px`;
+  stateNodeDragState.target.style.top = `${nextTop}px`;
+}
+
+function endStateNodeDrag(event) {
+  if (!stateNodeDragState) return;
+  const dragState = stateNodeDragState;
+  const zoom = getStateDiagramZoom() || 1;
+  const dx = (event.clientX - dragState.startX) / zoom;
+  const dy = (event.clientY - dragState.startY) / zoom;
+  document.removeEventListener('mousemove', onStateNodeDrag);
+  document.removeEventListener('mouseup', endStateNodeDrag);
+  stateNodeDragState = null;
+  dragState.target.classList.remove('dragging');
+  if (!stateNodeDragMoved && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+  const left = Math.max(4, Math.round(dragState.startLeft + dx));
+  const top = Math.max(4, Math.round(dragState.startTop + dy));
+  const point = dragState.dragKind === 'marker'
+    ? {
+      x: left + Math.round((dragState.width || 0) / 2),
+      y: top + Math.round((dragState.height || 0) / 2),
+    }
+    : { x: left, y: top };
+  if (!setStateLayoutPosition(dragState.entityId, dragState.fieldName, dragState.stateName, dragState.dragKind, point)) return;
+  markModified();
+  rerenderStateWorkbenchView();
+}
+
+function setStateTransitionLabelPosition(entityId, transitionIndex, point) {
+  const entity = S.doc?.entities?.find((item) => item.id === entityId);
+  if (!entity) return false;
+  ensureEntityStateShape(entity);
+  const target = entity.state_transitions[transitionIndex];
+  if (!target) return false;
+  const nextPoint = normalizeOptionalGraphOffset(point);
+  if (!nextPoint) return false;
+  target.labelPos = nextPoint;
+  return true;
+}
+
+function startStateTransitionLabelDrag(entityId, fieldName, transitionIndex, event) {
+  if (event.button !== 0) return;
+  const hitTarget = event.currentTarget;
+  if (!hitTarget) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const labelX = Number.parseFloat(hitTarget.dataset.labelX || '');
+  const labelY = Number.parseFloat(hitTarget.dataset.labelY || '');
+  if (!Number.isFinite(labelX) || !Number.isFinite(labelY)) return;
+  const visualTarget = hitTarget.classList.contains('entity-state-link-label-hitbox')
+    ? hitTarget.closest('.entity-state-canvas')?.querySelector(`.entity-state-link-label-group[data-transition-index="${transitionIndex}"]`)
+    : hitTarget;
+  stateTransitionLabelDragMoved = false;
+  stateTransitionLabelDragState = {
+    entityId,
+    fieldName,
+    transitionIndex: Number(transitionIndex),
+    target: visualTarget || hitTarget,
+    hitTarget,
+    startX: event.clientX,
+    startY: event.clientY,
+    labelX,
+    labelY,
+    angle: Number.parseFloat(hitTarget.dataset.labelAngle || '0') || 0,
+  };
+  hitTarget.classList.add('dragging');
+  if (visualTarget && visualTarget !== hitTarget) visualTarget.classList.add('dragging');
+  document.addEventListener('mousemove', onStateTransitionLabelDrag);
+  document.addEventListener('mouseup', endStateTransitionLabelDrag);
+}
+
+function onStateTransitionLabelDrag(event) {
+  if (!stateTransitionLabelDragState) return;
+  const zoom = getStateDiagramZoom() || 1;
+  const dx = (event.clientX - stateTransitionLabelDragState.startX) / zoom;
+  const dy = (event.clientY - stateTransitionLabelDragState.startY) / zoom;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) stateTransitionLabelDragMoved = true;
+  if (!stateTransitionLabelDragMoved) return;
+  const { target, hitTarget, labelX, labelY, angle } = stateTransitionLabelDragState;
+  const translate = `translate(${Math.round(dx * 10) / 10} ${Math.round(dy * 10) / 10})`;
+  target.setAttribute('transform', `${translate} rotate(${angle} ${labelX} ${labelY})`);
+  if (hitTarget && hitTarget !== target) {
+    hitTarget.style.transform = translate;
+  }
+}
+
+function endStateTransitionLabelDrag(event) {
+  if (!stateTransitionLabelDragState) return;
+  const dragState = stateTransitionLabelDragState;
+  const zoom = getStateDiagramZoom() || 1;
+  const dx = (event.clientX - dragState.startX) / zoom;
+  const dy = (event.clientY - dragState.startY) / zoom;
+  document.removeEventListener('mousemove', onStateTransitionLabelDrag);
+  document.removeEventListener('mouseup', endStateTransitionLabelDrag);
+  stateTransitionLabelDragState = null;
+  dragState.target.classList.remove('dragging');
+  if (dragState.hitTarget && dragState.hitTarget !== dragState.target) {
+    dragState.hitTarget.classList.remove('dragging');
+    dragState.hitTarget.style.transform = '';
+  }
+  if (!stateTransitionLabelDragMoved && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+  const point = {
+    x: Math.max(4, Math.round(dragState.labelX + dx)),
+    y: Math.max(4, Math.round(dragState.labelY + dy)),
+  };
+  if (!setStateTransitionLabelPosition(dragState.entityId, dragState.transitionIndex, point)) return;
+  markModified();
+  rerenderStateWorkbenchView();
+}
+
 function getStateNodeDisplayWidth(label) {
   const text = String(label || '').trim() || '状态';
   let units = 0;
@@ -1202,11 +1373,14 @@ function getStateLinkLabelPlacement(points, preferredX = null, preferredY = null
   };
 }
 
-function renderEntityStateGraphMarkup(entity, fieldName = '') {
+function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
+  const readonly = Boolean(options.readonly);
   const stateNodes = getEntityStateNodes(entity, fieldName);
   if (!stateNodes.length) return '<div class="diag-empty">暂无状态值</div>';
   const states = stateNodes.map((item) => item.name);
-  const transitions = getEntityStateTransitions(entity, fieldName).map(({ transition }) => transition);
+  const transitionItems = getEntityStateTransitions(entity, fieldName);
+  const transitions = transitionItems.map(({ transition }) => transition);
+  const transitionOriginalIndices = transitionItems.map(({ index }) => index);
   const nodeH = 36;
   const gapX = 68;
   const gapY = 68;
@@ -1288,8 +1462,8 @@ function renderEntityStateGraphMarkup(entity, fieldName = '') {
   const topMarkerSpace = startNodes.length ? markerGap + startDotR * 2 : 0;
   const bottomMarkerSpace = terminalNodes.length ? markerGap + endOuterR * 2 : 0;
   const layoutBoardW = Math.max(360, padX * 2 + Math.max(...rowWidths, 0));
-  const boardW = leftRouteReserve + layoutBoardW + rightRouteReserve;
-  const boardH = Math.max(220, padY * 2 + topMarkerSpace + bottomMarkerSpace + rowGroups.length * nodeH + Math.max(0, rowGroups.length - 1) * gapY);
+  let boardW = leftRouteReserve + layoutBoardW + rightRouteReserve;
+  let boardH = Math.max(220, padY * 2 + topMarkerSpace + bottomMarkerSpace + rowGroups.length * nodeH + Math.max(0, rowGroups.length - 1) * gapY);
   const posMap = {};
 
   rowGroups.forEach((group, rowIndex) => {
@@ -1312,6 +1486,40 @@ function renderEntityStateGraphMarkup(entity, fieldName = '') {
       cursorX += width + gapX;
     });
   });
+
+  stateNodes.forEach((item) => {
+    const pos = posMap[item.name];
+    const manualPos = normalizeOptionalGraphOffset(item.pos);
+    if (!pos || !manualPos) return;
+    pos.x = Math.max(4, manualPos.x);
+    pos.y = Math.max(4, manualPos.y);
+    pos.cx = pos.x + pos.w / 2;
+    pos.cy = pos.y + pos.h / 2;
+  });
+
+  const markerPosMap = {};
+  stateNodes.forEach((item) => {
+    const pos = posMap[item.name];
+    if (!pos || (item.kind !== 'initial' && item.kind !== 'terminal')) return;
+    const radius = item.kind === 'initial' ? startDotR : endOuterR;
+    const fallbackY = item.kind === 'initial' ? pos.y - markerGap : pos.y + pos.h + markerGap;
+    const manualMarkerPos = normalizeOptionalGraphOffset(item.markerPos);
+    markerPosMap[item.name] = manualMarkerPos
+      ? { x: Math.max(radius, manualMarkerPos.x), y: Math.max(radius, manualMarkerPos.y) }
+      : { x: pos.cx, y: fallbackY };
+  });
+
+  const layoutBounds = Object.values(posMap).map((pos) => ({
+    right: pos.x + pos.w,
+    bottom: pos.y + pos.h,
+  }));
+  Object.entries(markerPosMap).forEach(([name, point]) => {
+    const item = stateNodes.find((node) => node.name === name);
+    const radius = item?.kind === 'initial' ? startDotR : endOuterR;
+    layoutBounds.push({ right: point.x + radius, bottom: point.y + radius });
+  });
+  boardW = Math.max(boardW, Math.max(...layoutBounds.map((bound) => bound.right), 0) + padX);
+  boardH = Math.max(boardH, Math.max(...layoutBounds.map((bound) => bound.bottom), 0) + padY);
 
   const minNodeLeft = Math.min(...Object.values(posMap).map((pos) => pos.x), leftRouteReserve + padX);
   const maxNodeRight = Math.max(...Object.values(posMap).map((pos) => pos.x + pos.w), leftRouteReserve + padX + 160);
@@ -1399,7 +1607,9 @@ function renderEntityStateGraphMarkup(entity, fieldName = '') {
   const markerMarkup = `<marker id="entity-state-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
       <path d="M0,0 L0,8 L8,4 z" fill="#64748b"></path>
     </marker>`;
+  const labelHitBoxes = [];
   const linesMarkup = transitions.map((transition, index) => {
+    const originalIndex = transitionOriginalIndices[index] ?? index;
     const fromPos = posMap[transition.from];
     const toPos = posMap[transition.to];
     if (!fromPos || !toPos) return '';
@@ -1482,60 +1692,99 @@ function renderEntityStateGraphMarkup(entity, fieldName = '') {
       pathD = `M ${sourceX} ${fromPos.cy} L ${routeX} ${fromPos.cy} L ${routeX} ${toPos.cy} L ${targetX} ${toPos.cy}`;
       linkKind = 'backward';
     }
-    const labelMetrics = getStateLinkLabelMetrics(transition.action || '流转');
-    const labelPlacement = getStateLinkLabelPlacement(
+    const transitionLabel = String(transition.note || transition.action || '流转').trim() || '流转';
+    const labelMetrics = getStateLinkLabelMetrics(transitionLabel);
+    const manualLabelPos = normalizeOptionalGraphOffset(transition.labelPos);
+    let labelPlacement = getStateLinkLabelPlacement(
       pathPoints,
       (fromPos.cx + toPos.cx) / 2,
       (fromPos.cy + toPos.cy) / 2,
       labelMetrics,
     );
+    if (manualLabelPos) {
+      const manualX = Math.max(labelMetrics.width / 2 + 4, manualLabelPos.x);
+      const manualY = Math.max(labelMetrics.height / 2 + 4, manualLabelPos.y);
+      labelPlacement = {
+        x: manualX,
+        y: manualY,
+        axis: 'manual',
+        lineX: manualX,
+        lineY: manualY,
+        angle: 0,
+      };
+    }
     const labelBoxX = Math.round((labelPlacement.x - labelMetrics.width / 2) * 10) / 10;
     const labelBoxY = Math.round((labelPlacement.y - labelMetrics.height / 2) * 10) / 10;
     const labelTextX = Math.round(labelPlacement.x * 10) / 10;
     const labelTextY = Math.round(labelPlacement.y * 10) / 10;
+    const labelDragAttr = readonly
+      ? ''
+      : ` onmousedown="startStateTransitionLabelDrag('${esc(entity.id)}','${esc(fieldName)}',${originalIndex},event)"`;
+    labelHitBoxes.push(`<div class="entity-state-link-label-hitbox" data-testid="entity-state-link-label-hitbox"
+      data-transition-index="${originalIndex}" data-label-x="${labelTextX}" data-label-y="${labelTextY}" data-label-angle="${labelPlacement.angle || 0}"${labelDragAttr}
+      style="left:${labelBoxX}px;top:${labelBoxY}px;width:${labelMetrics.width}px;height:${labelMetrics.height}px"></div>`);
+    boardW = Math.max(boardW, labelBoxX + labelMetrics.width + padX);
+    boardH = Math.max(boardH, labelBoxY + labelMetrics.height + padY);
 
     return `
-      <path class="entity-state-link entity-state-link-${linkKind}" data-testid="entity-state-graph-link" data-link-kind="${linkKind}" data-link-side="${esc(detourRoute?.side || '')}" data-link-action="${esc(transition.action || '')}"
+      <path class="entity-state-link entity-state-link-${linkKind}" data-testid="entity-state-graph-link" data-transition-index="${originalIndex}" data-link-kind="${linkKind}" data-link-side="${esc(detourRoute?.side || '')}" data-link-action="${esc(transition.action || '')}" data-link-note="${esc(transition.note || '')}"
         d="${pathD}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
         marker-end="url(#entity-state-arrow)"></path>
-      <g class="entity-state-link-label-group" data-testid="entity-state-link-label-group" data-link-action="${esc(transition.action || '')}" data-label-axis="${labelPlacement.axis}" data-label-line-x="${labelPlacement.lineX}" data-label-line-y="${labelPlacement.lineY}" data-label-angle="${labelPlacement.angle || 0}" transform="rotate(${labelPlacement.angle || 0} ${labelTextX} ${labelTextY})">
+      <g class="entity-state-link-label-group" data-testid="entity-state-link-label-group" data-transition-index="${originalIndex}" data-link-action="${esc(transition.action || '')}" data-link-note="${esc(transition.note || '')}" data-label-axis="${labelPlacement.axis}" data-label-x="${labelTextX}" data-label-y="${labelTextY}" data-label-line-x="${labelPlacement.lineX}" data-label-line-y="${labelPlacement.lineY}" data-label-angle="${labelPlacement.angle || 0}" transform="rotate(${labelPlacement.angle || 0} ${labelTextX} ${labelTextY})"${labelDragAttr}>
         <rect class="entity-state-link-label-box" x="${labelBoxX}" y="${labelBoxY}" width="${labelMetrics.width}" height="${labelMetrics.height}" rx="10" ry="10"></rect>
         <text x="${labelTextX}" y="${labelTextY}" text-anchor="middle" dominant-baseline="middle" class="entity-state-link-label">${esc(labelMetrics.text)}</text>
       </g>
-      <text x="-9999" y="-9999" text-anchor="middle" class="entity-state-link-label-legacy">${esc(transition.action || '流转')}</text>
+      <text x="-9999" y="-9999" text-anchor="middle" class="entity-state-link-label-legacy" data-transition-index="${originalIndex}">${esc(transitionLabel)}</text>
     `;
   }).join('');
   const startEndMarkup = stateNodes.map((item) => {
     const pos = posMap[item.name];
     if (!pos) return '';
     if (item.kind === 'initial') {
-      const dotY = pos.y - markerGap;
+      const markerPos = markerPosMap[item.name] || { x: pos.cx, y: pos.y - markerGap };
       return `
-        <circle class="entity-state-start-dot" data-testid="entity-state-start-dot" cx="${pos.cx}" cy="${dotY}" r="${startDotR}"></circle>
         <path class="entity-state-link entity-state-link-anchor"
-          d="M ${pos.cx} ${dotY + startDotR} L ${pos.cx} ${pos.y}"
+          d="M ${markerPos.x} ${markerPos.y} L ${pos.cx} ${pos.y}"
           fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round"
           marker-end="url(#entity-state-arrow)"></path>
       `;
     }
     if (item.kind === 'terminal') {
-      const dotY = pos.y + pos.h + markerGap;
+      const markerPos = markerPosMap[item.name] || { x: pos.cx, y: pos.y + pos.h + markerGap };
       return `
         <path class="entity-state-link entity-state-link-anchor"
-          d="M ${pos.cx} ${pos.y + pos.h} L ${pos.cx} ${dotY - endOuterR}"
+          d="M ${pos.cx} ${pos.y + pos.h} L ${markerPos.x} ${markerPos.y}"
           fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round"></path>
-        <circle class="entity-state-end-dot-outer" data-testid="entity-state-end-dot" cx="${pos.cx}" cy="${dotY}" r="${endOuterR}"></circle>
-        <circle class="entity-state-end-dot-inner" cx="${pos.cx}" cy="${dotY}" r="${endInnerR}"></circle>
       `;
     }
     return '';
   }).join('');
+  const markerBoardMarkup = stateNodes.map((item) => {
+    const markerPos = markerPosMap[item.name];
+    if (!markerPos) return '';
+    if (item.kind === 'initial') {
+      const dragAttr = readonly ? '' : ` onmousedown="startStateNodeDrag('${esc(entity.id)}','${esc(fieldName)}','${esc(item.name)}','marker',event)"`;
+      return `<div class="entity-state-marker entity-state-start-dot"
+        data-testid="entity-state-start-dot" data-state-name="${esc(item.name)}" data-state-kind="${esc(item.kind)}"
+        ${dragAttr}
+        style="left:${markerPos.x - startDotR}px;top:${markerPos.y - startDotR}px;width:${startDotR * 2}px;height:${startDotR * 2}px"></div>`;
+    }
+    if (item.kind === 'terminal') {
+      const dragAttr = readonly ? '' : ` onmousedown="startStateNodeDrag('${esc(entity.id)}','${esc(fieldName)}','${esc(item.name)}','marker',event)"`;
+      return `<div class="entity-state-marker entity-state-end-dot-outer"
+        data-testid="entity-state-end-dot" data-state-name="${esc(item.name)}" data-state-kind="${esc(item.kind)}"
+        ${dragAttr}
+        style="left:${markerPos.x - endOuterR}px;top:${markerPos.y - endOuterR}px;width:${endOuterR * 2}px;height:${endOuterR * 2}px"></div>`;
+    }
+    return '';
+  }).join('');
 
-  const zoom = getStateDiagramZoom();
+  const requestedZoom = Number(options.zoom);
+  const zoom = Number.isFinite(requestedZoom) ? clampStateDiagramZoom(requestedZoom) : getStateDiagramZoom();
   const zoomedW = Math.max(180, Math.round(boardW * zoom * 10) / 10);
   const zoomedH = Math.max(160, Math.round(boardH * zoom * 10) / 10);
 
-  return `<div class="entity-state-graph" data-testid="entity-state-graph-canvas">
+  return `<div class="entity-state-graph${readonly ? ' readonly' : ''}" data-testid="entity-state-graph-canvas">
     <div class="entity-state-zoom-shell" data-testid="entity-state-zoom-shell" data-state-zoom="${zoom}" style="width:${zoomedW}px;height:${zoomedH}px">
       <div class="entity-state-zoom-target" data-testid="entity-state-zoom-target" style="width:${boardW}px;height:${boardH}px;transform:scale(${zoom});transform-origin:0 0;">
         <div class="entity-state-canvas" style="width:${boardW}px;height:${boardH}px">
@@ -1545,10 +1794,14 @@ function renderEntityStateGraphMarkup(entity, fieldName = '') {
             ${linesMarkup}
           </svg>
           <div class="entity-state-board" style="width:${boardW}px;height:${boardH}px">
+            ${labelHitBoxes.join('')}
+            ${markerBoardMarkup}
             ${stateNodes.map((item, index) => {
               const pos = posMap[item.name];
+              const dragAttr = readonly ? '' : ` onmousedown="startStateNodeDrag('${esc(entity.id)}','${esc(fieldName)}','${esc(item.name)}','node',event)"`;
               return `<div class="entity-state-node kind-${item.kind}"
                 data-testid="entity-state-node-${index}" data-state-name="${esc(item.name)}" data-state-kind="${esc(item.kind)}"
+                ${dragAttr}
                 style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
                 <span class="entity-state-node-label">${esc(item.name)}</span>
               </div>`;
@@ -1589,6 +1842,17 @@ async function removeEntity(id) {
   for(const proc of S.doc.processes)
     for(const task of getProcNodes(proc))
       task.entity_ops=(task.entity_ops||[]).filter(eo=>eo.entity_id!==id);
+  for(const proc of S.doc.processes)
+    for(const task of getProcNodes(proc))
+      for(const form of getNodeForms(task)) {
+        if(form.entity_id===id) form.entity_id='';
+        (form.sections||[]).forEach((section) => {
+          if(section.entity_id===id) {
+            section.entity_id = '';
+            (section.fields||[]).forEach((field) => { field.entity_field = ''; });
+          }
+        });
+      }
   if(S.ui.entityId===id) S.ui.entityId=null;
   markModified(); render();
 }
@@ -1659,9 +1923,16 @@ function renameEntityId(oldId, newId) {
     if(r.to  ===oldId) r.to  =newId;
   }
   for(const proc of S.doc.processes)
-    for(const task of (proc.tasks||[]))
+    for(const task of getProcNodes(proc))
       for(const eo of (task.entity_ops||[]))
         if(eo.entity_id===oldId) eo.entity_id=newId;
+  for(const proc of S.doc.processes)
+    for(const task of getProcNodes(proc))
+      for(const form of getNodeForms(task)) {
+        if(form.entity_id===oldId) form.entity_id=newId;
+        for(const section of (form.sections||[]))
+          if(section.entity_id===oldId) section.entity_id=newId;
+      }
   if(S.ui.entityId === oldId) S.ui.entityId = newId;
   markModified(); render();
 }
@@ -1811,6 +2082,32 @@ function moveStateTransition(entityId, idx, dir, fieldName) {
   rerenderStateWorkbenchView(`[data-testid="entity-transition-from-${targetIdx}"]`);
 }
 
+function updateStateTransitionLabelInDom(idx, transition) {
+  const labelMetrics = getStateLinkLabelMetrics(String(transition?.note || transition?.action || '流转').trim() || '流转');
+  document.querySelectorAll(`[data-testid="entity-state-link-label-group"][data-transition-index="${idx}"]`).forEach((group) => {
+    group.dataset.linkAction = transition?.action || '';
+    group.dataset.linkNote = transition?.note || '';
+    const labelX = Number.parseFloat(group.dataset.labelX || '');
+    const labelY = Number.parseFloat(group.dataset.labelY || '');
+    const rect = group.querySelector('.entity-state-link-label-box');
+    const text = group.querySelector('.entity-state-link-label');
+    if (text) text.textContent = labelMetrics.text;
+    if (rect && Number.isFinite(labelX) && Number.isFinite(labelY)) {
+      rect.setAttribute('x', String(Math.round((labelX - labelMetrics.width / 2) * 10) / 10));
+      rect.setAttribute('y', String(Math.round((labelY - labelMetrics.height / 2) * 10) / 10));
+      rect.setAttribute('width', String(labelMetrics.width));
+      rect.setAttribute('height', String(labelMetrics.height));
+    }
+  });
+  document.querySelectorAll(`[data-testid="entity-state-graph-link"][data-transition-index="${idx}"]`).forEach((path) => {
+    path.dataset.linkAction = transition?.action || '';
+    path.dataset.linkNote = transition?.note || '';
+  });
+  document.querySelectorAll(`.entity-state-link-label-legacy[data-transition-index="${idx}"]`).forEach((node) => {
+    node.textContent = labelMetrics.text;
+  });
+}
+
 function setStateTransition(entityId, idx, key, val) {
   const entity = S.doc.entities.find((item) => item.id === entityId);
   if (!entity) return;
@@ -1818,8 +2115,12 @@ function setStateTransition(entityId, idx, key, val) {
   if (!entity.state_transitions[idx]) return;
   entity.state_transitions[idx][key] = val;
   markModified();
+  if (key === 'action' || key === 'note') {
+    updateStateTransitionLabelInDom(idx, entity.state_transitions[idx]);
+    return;
+  }
   const activeElement = document.activeElement;
-  const selection = key === 'action' && activeElement && typeof activeElement.selectionStart === 'number'
+  const selection = (key === 'action' || key === 'note') && activeElement && typeof activeElement.selectionStart === 'number'
     ? {
       start: activeElement.selectionStart,
       end: activeElement.selectionEnd,
@@ -2041,8 +2342,8 @@ function renderStateTransitionList(entity, stateField, stateValues, stateTransit
       <select data-testid="entity-transition-to-${index}" onchange="setStateTransition('${esc(entity.id)}',${index},'to',this.value)">
         ${stateValues.map((value) => `<option value="${esc(value)}" ${transition.to===value?'selected':''}>${esc(value)}</option>`).join('')}
       </select>
-      <input type="text" data-testid="entity-transition-action-${index}" value="${esc(transition.action||'')}" placeholder="触发动作"
-        oninput="setStateTransition('${esc(entity.id)}',${index},'action',this.value)">
+      <input type="text" data-testid="entity-transition-note-${index}" value="${esc(transition.note || transition.action || '')}" placeholder="备注说明"
+        oninput="setStateTransition('${esc(entity.id)}',${index},'note',this.value)">
       <div class="entity-transition-actions">
         <button class="transition-action" type="button" data-testid="entity-transition-add-after-${index}" title="在下方插入流转" onclick="addStateTransition('${esc(entity.id)}',${index})">+</button>
         <button class="transition-action" type="button" data-testid="entity-transition-move-up-${index}" title="上移" ${localIndex === 0 ? 'disabled' : ''} onclick="moveStateTransition('${esc(entity.id)}',${index},-1,'${esc(stateField.name)}')">↑</button>

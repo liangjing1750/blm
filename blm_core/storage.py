@@ -125,6 +125,9 @@ class WorkspaceStorage(DocumentFileStore):
         document = self._load_history_snapshot(self._validate_name(name), snapshot_id)
         return self.save(name, document)
 
+    def load_history(self, name: str, snapshot_id: str) -> dict:
+        return self._load_history_snapshot(self._validate_name(name), snapshot_id)
+
     def list_trash(self) -> list[dict]:
         if not self.trash_dir.exists():
             return []
