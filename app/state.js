@@ -58,6 +58,7 @@ const S = {
     needsRun: false,
     isRunning: false,
     runMessage: '',
+    reportMode: 'diff',
   },
   recovery: {
     openTab: 'workspace',
@@ -294,6 +295,7 @@ function resetCompareState() {
   S.compare.needsRun = false;
   S.compare.isRunning = false;
   S.compare.runMessage = '';
+  S.compare.reportMode = 'diff';
 }
 function resetRecoveryState() {
   S.recovery.openTab = 'workspace';

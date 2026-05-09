@@ -863,6 +863,17 @@ function valueDigest(value) {
   return JSON.stringify(value);
 }
 
+function isEmptyCompareContainer(value) {
+  if (Array.isArray(value)) return value.length === 0;
+  return Boolean(value && typeof value === 'object' && !Object.keys(value).length);
+}
+
+function hasCompareDescendant(map, path) {
+  const childObjectPrefix = `${path}.`;
+  const childArrayPrefix = `${path}[`;
+  return Object.keys(map).some((key) => key.startsWith(childObjectPrefix) || key.startsWith(childArrayPrefix));
+}
+
 function compactCompareValue(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   if (text === undefined) return '';
@@ -871,6 +882,8 @@ function compactCompareValue(value) {
 
 const COMPARE_TOP_LEVEL_LABELS = {
   meta: '基本信息',
+  panorama: '业务全景',
+  businessDomains: '业务域',
   roles: '角色',
   language: '统一语言',
   stages: '业务阶段',
@@ -885,6 +898,97 @@ const COMPARE_TOP_LEVEL_LABELS = {
   businessConstructs: '业务构件',
   taskDefinitions: '任务定义',
 };
+
+const COMPARE_BUSINESS_LEVELS = {
+  valueStream: {
+    id: 'valueStream',
+    rank: 1,
+    label: 'L1 价值流',
+    note: '判断业务活动在全景价值链上的覆盖位置。',
+  },
+  businessDomain: {
+    id: 'businessDomain',
+    rank: 2,
+    label: 'L2 业务域',
+    note: '判断产品、业务线或责任边界的差异。',
+  },
+  stage: {
+    id: 'stage',
+    rank: 3,
+    label: 'L3 阶段',
+    note: '判断业务段落、阶段归属和阶段内流程组织。',
+  },
+  process: {
+    id: 'process',
+    rank: 4,
+    label: 'L4 流程',
+    note: '判断可发起事项的触发、办理和办结口径。',
+  },
+  node: {
+    id: 'node',
+    rank: 5,
+    label: 'L5 流程节点',
+    note: '判断节点职责、顺序、参与角色和流转内容。',
+  },
+  step: {
+    id: 'step',
+    rank: 6,
+    label: 'L6 步骤',
+    note: '判断一线用户操作步骤和办理口径。',
+  },
+  form: {
+    id: 'form',
+    rank: 6.1,
+    label: 'L6 表单',
+    note: '判断表单分组、字段、必填和实体字段映射。',
+  },
+  entity: {
+    id: 'entity',
+    rank: 6.2,
+    label: 'L6 实体',
+    note: '判断实体、字段、状态和关系是否支撑流程。',
+  },
+  task: {
+    id: 'task',
+    rank: 6.3,
+    label: 'L6 任务',
+    note: '判断系统编排任务、规则校验和服务动作。',
+  },
+  asset: {
+    id: 'asset',
+    rank: 7,
+    label: '组件/数据/规则',
+    note: '判断复用资产、实体字段、状态和规则口径。',
+  },
+  document: {
+    id: 'document',
+    rank: 8,
+    label: '文档信息',
+    note: '判断标题、作者、说明等辅助信息。',
+  },
+};
+
+const COMPARE_REPORT_SECTIONS = [
+  { id: 'valueStream', title: '（一）价值流差异分析结果', emptyText: '没有价值流层差异。' },
+  { id: 'businessDomain', title: '（二）业务域差异分析结果', emptyText: '没有业务域层差异。' },
+  { id: 'stage', title: '（三）阶段差异分析结果', emptyText: '没有阶段层差异。' },
+  { id: 'process', title: '（四）流程差异分析结果', emptyText: '没有流程层差异。' },
+  { id: 'node', title: '（五）流程节点差异分析结果', emptyText: '没有流程节点层差异。' },
+  { id: 'step', title: '（六-1）步骤差异分析结果', emptyText: '没有步骤层差异。' },
+  { id: 'form', title: '（六-2）表单差异分析结果', emptyText: '没有表单层差异。' },
+  { id: 'entity', title: '（六-3）实体差异分析结果', emptyText: '没有实体层差异。' },
+  { id: 'task', title: '（六-4）任务差异分析结果', emptyText: '没有任务层差异。' },
+  { id: 'asset', title: '其他组件与规则差异分析结果', emptyText: '没有其他组件或规则差异。' },
+  { id: 'document', title: '文档信息差异分析结果', emptyText: '没有文档信息差异。' },
+];
+
+const COMPARE_LAYOUT_CHECKS = [
+  { id: 'panorama', title: '全景视图', itemNoun: '全景元素' },
+  { id: 'stage', title: '阶段视图', itemNoun: '阶段/连线' },
+  { id: 'process', title: '流程视图', itemNoun: '流程节点' },
+  { id: 'entityRelation', title: '实体关系图', itemNoun: '实体/关系' },
+  { id: 'entityState', title: '实体状态图', itemNoun: '状态节点/流转' },
+];
 
 const COMPARE_FIELD_LABELS = {
   title: '标题',
@@ -989,7 +1093,10 @@ function getCompareItemTitle(collectionKey, item, index) {
     return `${prefix} ${[item.from, item.to].filter(Boolean).join(' → ') || index + 1}`;
   }
   if (collectionKey === 'relations') {
-    return `${prefix} ${[item.from, item.to].filter(Boolean).join(' → ') || item.label || index + 1}`;
+    const endpoints = [item.from, item.to].filter(Boolean).join(' → ');
+    const label = String(item.label || item.name || '').trim();
+    if (endpoints && label) return `${prefix} ${endpoints}（${label}）`;
+    return `${prefix} ${endpoints || label || index + 1}`;
   }
   const id = String(item.id || '').trim();
   const name = String(item.name || item.title || item.term || item.target || '').trim();
@@ -1013,13 +1120,41 @@ function getCompareFieldLabel(tokens) {
   return COMPARE_FIELD_LABELS[fieldKey] || fieldKey || '内容';
 }
 
-function isCompareLayoutPath(tokens) {
+function isCompareBusinessRulePath(tokens) {
   const keys = tokens.map((token) => token.key);
-  const layoutKeys = new Set(['pos', 'stagePos', 'markerPos', 'labelPos']);
+  const lastKey = keys[keys.length - 1] || '';
+  const topKey = keys[0] || '';
+  const layoutKeys = new Set(['pos', 'stagePos', 'markerPos', 'labelPos', 'panoramaPos', 'panoramaSlot']);
+  if (keys.some((key) => layoutKeys.has(key))) return false;
+  const businessKeys = new Set([
+    'from',
+    'to',
+    'type',
+    'label',
+    'action',
+    'description',
+    'rules_note',
+    'businessRules',
+    'entity_ops',
+    'entity_id',
+    'entity_field',
+    'forms',
+    'sections',
+    'fields',
+    'state_transitions',
+  ]);
+  if (businessKeys.has(lastKey) || keys.some((key) => businessKeys.has(key))) return true;
+  return topKey === 'relations' && !['pos', 'labelPos'].includes(lastKey);
+}
+
+function isCompareLayoutPath(tokens) {
+  if (isCompareBusinessRulePath(tokens)) return false;
+  const keys = tokens.map((token) => token.key);
+  const layoutKeys = new Set(['pos', 'stagePos', 'markerPos', 'labelPos', 'panoramaPos', 'panoramaSlot']);
   if (keys.some((key) => layoutKeys.has(key))) return true;
   const lastKey = keys[keys.length - 1] || '';
   const parentKey = keys[keys.length - 2] || '';
-  return ['x', 'y', 'order'].includes(lastKey) && layoutKeys.has(parentKey);
+  return ['x', 'y', 'row', 'col', 'order'].includes(lastKey) && layoutKeys.has(parentKey);
 }
 
 function getCompareImpact(section, fieldLabel, isLayout) {
@@ -1034,6 +1169,70 @@ function getCompareImpact(section, fieldLabel, isLayout) {
   return 'medium';
 }
 
+function getCompareBusinessLevel(tokens, section) {
+  const keys = tokens.map((token) => token.key);
+  const topKey = tokens[0]?.key || '';
+  const hasKey = (...candidates) => candidates.some((key) => keys.includes(key));
+  if (topKey === 'entities' || topKey === 'relations' || hasKey('entity_ops')) return COMPARE_BUSINESS_LEVELS.entity;
+  if (hasKey('forms', 'sections')) return COMPARE_BUSINESS_LEVELS.form;
+  if (hasKey('userSteps', 'steps')) return COMPARE_BUSINESS_LEVELS.step;
+  if (hasKey('orchestrationTasks', 'businessRules') || topKey === 'taskDefinitions' || topKey === 'rules') return COMPARE_BUSINESS_LEVELS.task;
+  if (hasKey('nodes', 'tasks')) return COMPARE_BUSINESS_LEVELS.node;
+  if (hasKey('processes')) return COMPARE_BUSINESS_LEVELS.process;
+  if (hasKey('stages', 'stageLinks', 'stageFlowRefs', 'stageFlowLinks')) return COMPARE_BUSINESS_LEVELS.stage;
+  if (hasKey('businessDomains', 'lanes') || section === '业务域') return COMPARE_BUSINESS_LEVELS.businessDomain;
+  if (hasKey('panorama', 'valueStreams', 'columns')) return COMPARE_BUSINESS_LEVELS.valueStream;
+  if (['业务组件', '业务构件'].includes(section)) {
+    return COMPARE_BUSINESS_LEVELS.asset;
+  }
+  return COMPARE_BUSINESS_LEVELS.document;
+}
+
+function stringifyCompareToken(token) {
+  return token.index === null ? token.key : `${token.key}[${token.index}]`;
+}
+
+function stringifyCompareTokens(tokens) {
+  return tokens.map((token) => stringifyCompareToken(token)).join('.');
+}
+
+function valueExistsForCompare(value) {
+  return value !== undefined && value !== null;
+}
+
+function getCompareCrumbLabels(tokens, document) {
+  const labels = [];
+  tokens.forEach((token, index) => {
+    if (token.index === null) return;
+    const itemTokens = tokens.slice(0, index + 1);
+    const item = getCompareValueAtTokens(document, itemTokens);
+    labels.push(getCompareItemTitle(token.key, item, token.index));
+  });
+  return labels;
+}
+
+function getCompareChangeScope(tokens, leftDocument, rightDocument, presentSide, section) {
+  const presentDocument = presentSide === 'left' ? leftDocument : rightDocument;
+  const missingDocument = presentSide === 'left' ? rightDocument : leftDocument;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.index === null) continue;
+    const itemTokens = tokens.slice(0, index + 1);
+    const presentValue = getCompareValueAtTokens(presentDocument, itemTokens);
+    const missingValue = getCompareValueAtTokens(missingDocument, itemTokens);
+    if (!valueExistsForCompare(presentValue) || valueExistsForCompare(missingValue)) continue;
+    const labels = getCompareCrumbLabels(itemTokens, presentDocument);
+    return {
+      scopeKey: stringifyCompareTokens(itemTokens),
+      scopeLabel: labels[labels.length - 1] || getCompareItemTitle(token.key, presentValue, token.index),
+      scopeContext: labels.slice(0, -1).join(' / '),
+      scopeCollection: token.key,
+      businessLevel: getCompareBusinessLevel(itemTokens, section),
+    };
+  }
+  return {};
+}
+
 function describeComparePath(path, leftDocument, rightDocument) {
   const tokens = tokenizeComparePath(path);
   const topKey = tokens[0]?.key || '';
@@ -1042,8 +1241,8 @@ function describeComparePath(path, leftDocument, rightDocument) {
   tokens.forEach((token, index) => {
     if (token.index === null) return;
     const itemTokens = tokens.slice(0, index + 1);
-    const item = getCompareValueAtTokens(rightDocument, itemTokens)
-      || getCompareValueAtTokens(leftDocument, itemTokens);
+    const item = getCompareValueAtTokens(leftDocument, itemTokens)
+      || getCompareValueAtTokens(rightDocument, itemTokens);
     crumbs.push(getCompareItemTitle(token.key, item, token.index));
   });
   const fieldLabel = getCompareFieldLabel(tokens);
@@ -1052,6 +1251,7 @@ function describeComparePath(path, leftDocument, rightDocument) {
     section,
     itemLabel: crumbs.length ? crumbs.join(' / ') : section,
     fieldLabel,
+    businessLevel: getCompareBusinessLevel(tokens, section),
     impact: getCompareImpact(section, fieldLabel, isLayout),
     isLayout,
   };
@@ -1065,15 +1265,20 @@ function buildDocumentCompareResult(leftDocument, rightDocument) {
   const removed = [];
   const changed = [];
   paths.forEach((path) => {
+    const tokens = tokenizeComparePath(path);
     const inLeft = Object.prototype.hasOwnProperty.call(leftMap, path);
     const inRight = Object.prototype.hasOwnProperty.call(rightMap, path);
     const view = describeComparePath(path, leftDocument, rightDocument);
     if (!inLeft && inRight) {
-      added.push({ path, right: rightMap[path], ...view });
+      if (isEmptyCompareContainer(rightMap[path]) && hasCompareDescendant(leftMap, path)) return;
+      const scope = getCompareChangeScope(tokens, leftDocument, rightDocument, 'right', view.section);
+      added.push({ path, right: rightMap[path], ...view, ...scope });
       return;
     }
     if (inLeft && !inRight) {
-      removed.push({ path, left: leftMap[path], ...view });
+      if (isEmptyCompareContainer(leftMap[path]) && hasCompareDescendant(rightMap, path)) return;
+      const scope = getCompareChangeScope(tokens, leftDocument, rightDocument, 'left', view.section);
+      removed.push({ path, left: leftMap[path], ...view, ...scope });
       return;
     }
     if (valueDigest(leftMap[path]) !== valueDigest(rightMap[path])) {
@@ -1110,6 +1315,213 @@ function uniqueCompareLayoutItems(items) {
     seen.add(key);
     return true;
   });
+}
+
+function formatCompareBusinessValue(value) {
+  if (value === undefined || value === null || value === '') return '未填写';
+  if (value === true) return '是';
+  if (value === false) return '否';
+  return `“${compactCompareValue(value)}”`;
+}
+
+function summarizeCompareFields(items) {
+  const fields = Array.from(new Set(items.map((item) => item.fieldLabel || '内容'))).filter(Boolean);
+  if (!fields.length) return '内容';
+  if (fields.length <= 4) return fields.join('、');
+  return `${fields.slice(0, 4).join('、')}等 ${fields.length} 项`;
+}
+
+function getCompareBusinessNoun(item) {
+  const id = item.businessLevel?.id || '';
+  const nouns = {
+    valueStream: '价值流',
+    businessDomain: '业务域',
+    stage: '阶段',
+    process: '流程',
+    node: '流程节点',
+    step: '步骤',
+    form: '表单',
+    entity: '实体',
+    task: '任务',
+    asset: item.section || '组件',
+    document: item.section || '文档信息',
+  };
+  return nouns[id] || item.section || '模型内容';
+}
+
+function formatCompareSubject(item) {
+  const subject = item.scopeLabel || item.itemLabel || item.section || '模型内容';
+  const noun = getCompareBusinessNoun(item);
+  return subject.startsWith(noun) ? subject : `${noun}${subject}`;
+}
+
+function countCompareCollectionItems(items, collectionKey) {
+  const paths = new Set();
+  items.forEach((item) => {
+    const tokens = tokenizeComparePath(item.path);
+    tokens.forEach((token, index) => {
+      if (token.key !== collectionKey || token.index === null) return;
+      paths.add(stringifyCompareTokens(tokens.slice(0, index + 1)));
+    });
+  });
+  return paths.size;
+}
+
+function summarizeCompareScopeItems(items) {
+  const first = items[0] || {};
+  const countSpecs = [
+    ['tasks', '流程节点'],
+    ['userSteps', '步骤'],
+    ['forms', '表单'],
+    ['sections', '模块/片段'],
+    ['fields', '字段'],
+    ['orchestrationTasks', '任务'],
+    ['businessRules', '业务规则'],
+    ['entity_ops', '实体操作'],
+    ['state_transitions', '状态流转'],
+    ['relations', '实体关系'],
+  ];
+  const parts = countSpecs
+    .map(([collectionKey, label]) => {
+      const count = countCompareCollectionItems(items, collectionKey);
+      if (!count) return '';
+      if (collectionKey === first.scopeCollection && count === 1) return '';
+      return `${count} 个${label}`;
+    })
+    .filter(Boolean);
+  const fields = summarizeCompareFields(items);
+  if (parts.length) return `合并 ${parts.join('、')}，涉及${fields}`;
+  return `涉及${fields}`;
+}
+
+function getCompareRowSortScore(row) {
+  const typeScore = { 新增: 1, 删除: 2, 修改: 3 }[row.changeKind] || 9;
+  return `${String(row.rank).padStart(4, '0')}-${typeScore}-${row.subject}`;
+}
+
+function buildCompareBusinessRows(businessItems) {
+  const rows = [];
+  const changedItems = uniqueCompareItems(businessItems.filter((item) => item.changeKind === '修改'));
+  changedItems.forEach((item) => {
+    const subject = formatCompareSubject(item);
+    rows.push({
+      subject,
+      changeKind: '修改',
+      levelLabel: item.businessLevel?.label || '模型',
+      levelId: item.businessLevel?.id || 'document',
+      rank: item.businessLevel?.rank || 99,
+      detail: `修改${subject}的${item.fieldLabel || '内容'}：由${formatCompareBusinessValue(item.right)}调整为${formatCompareBusinessValue(item.left)}。`,
+    });
+  });
+
+  const grouped = new Map();
+  businessItems
+    .filter((item) => item.changeKind === '新增' || item.changeKind === '删除')
+    .forEach((item) => {
+      const key = item.scopeKey
+        ? `${item.changeKind}::${item.businessLevel?.id || ''}::${item.scopeKey}`
+        : `${item.changeKind}::${item.businessLevel?.id || ''}::${item.section}::${item.itemLabel}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(item);
+    });
+
+  Array.from(grouped.values()).forEach((items) => {
+    const first = items[0];
+    const subject = formatCompareSubject(first);
+    const scopeSummary = summarizeCompareScopeItems(items);
+    const context = first.scopeContext ? `（位于${first.scopeContext}）` : '';
+    const isAdded = first.changeKind === '新增';
+    rows.push({
+      subject,
+      changeKind: first.changeKind,
+      levelLabel: first.businessLevel?.label || '模型',
+      levelId: first.businessLevel?.id || 'document',
+      rank: first.businessLevel?.rank || 99,
+      detail: isAdded
+        ? `增加${subject}${context}，${scopeSummary}。`
+        : `删除${subject}${context}，${scopeSummary}。`,
+    });
+  });
+
+  rows.sort((left, right) => getCompareRowSortScore(left).localeCompare(getCompareRowSortScore(right), 'zh-Hans-CN'));
+  return rows;
+}
+
+function renderCompareLevelSummary(businessRows) {
+  const counts = businessRows.reduce((map, row) => {
+    const level = Object.values(COMPARE_BUSINESS_LEVELS).find((item) => item.id === row.levelId) || COMPARE_BUSINESS_LEVELS.document;
+    map.set(level.id, { level, count: (map.get(level.id)?.count || 0) + 1 });
+    return map;
+  }, new Map());
+  const levels = Array.from(counts.values()).sort((left, right) => left.level.rank - right.level.rank);
+  if (!levels.length) return '';
+  return `<div class="compare-report-section">
+    <h4>流程6级模型影响</h4>
+    <div class="compare-level-grid">
+      ${levels.map(({ level, count }) => `<div class="compare-level-card">
+        <strong>${esc(level.label)}</strong>
+        <span>${count} 项差异</span>
+        <em>${esc(level.note)}</em>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderCompareBusinessTable(rows, showAll = false) {
+  if (!rows.length && !showAll) {
+    return `<div class="compare-report-section">
+      <h4>业务差异分析</h4>
+      <p class="merge-inline-note">没有发现流程、数据、规则等业务内容变化；如有差异，主要体现在图形布局或位置调整。</p>
+    </div>`;
+  }
+  const rowsByLevel = rows.reduce((map, row) => {
+    if (!map.has(row.levelId)) map.set(row.levelId, []);
+    map.get(row.levelId).push(row);
+    return map;
+  }, new Map());
+  const sections = COMPARE_REPORT_SECTIONS
+    .map((section) => ({ ...section, rows: rowsByLevel.get(section.id) || [] }))
+    .filter((section) => showAll || section.rows.length);
+  return `<div class="compare-report-section">
+    <h4>业务差异分析</h4>
+    <p class="merge-inline-note">默认按“新版本（左侧）相对旧版本（右侧）”解释差异，重点看业务含义，不展开 JSON 路径和坐标。</p>
+    <div class="compare-business-sections">
+      ${sections.map((section) => renderCompareBusinessSection(section)).join('')}
+    </div>
+  </div>`;
+}
+
+function renderCompareHeaderHelp(text) {
+  return `<span class="compare-th-help" title="${esc(text)}">？</span>`;
+}
+
+function renderCompareBusinessSection(section) {
+  const visibleRows = section.rows.slice(0, 40);
+  const bodyRows = visibleRows.length
+    ? visibleRows.map((row, index) => `<tr>
+      <td>${index + 1}</td>
+      <td><span class="compare-type-badge compare-type-${esc(row.changeKind)}">${esc(row.changeKind)}</span></td>
+      <td>${esc(row.detail)}</td>
+    </tr>`).join('')
+    : `<tr class="compare-no-diff-row"><td colspan="3">${esc(section.emptyText || '没有差异。')}</td></tr>`;
+  return `<section class="compare-business-section">
+    <h5>${esc(section.title)}</h5>
+    <div class="compare-business-table-wrap">
+      <table class="compare-business-table">
+        <thead>
+          <tr>
+            <th>序号 ${renderCompareHeaderHelp('本小节内的差异序号，从 1 开始排序。')}</th>
+            <th>差异类型 ${renderCompareHeaderHelp('按新版本相对旧版本分类：新增、删除、修改。')}</th>
+            <th>差异说明 ${renderCompareHeaderHelp('用业务语言说明新版本相对旧版本发生了什么变化。')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+        </tbody>
+      </table>
+    </div>
+    ${section.rows.length > visibleRows.length ? `<p class="merge-inline-note">本小节仅显示前 ${visibleRows.length} 条，请优先确认高重要级别项目。</p>` : ''}
+  </section>`;
 }
 
 function renderCompareOverview(result, businessItems, layoutItems) {
@@ -1160,15 +1572,117 @@ function renderCompareHighlights(businessItems) {
   </div>`;
 }
 
-function renderCompareLayoutSummary(layoutItems) {
-  if (!layoutItems.length) return '';
-  const affected = uniqueCompareLayoutItems(layoutItems).slice(0, 16);
-  return `<div class="compare-report-section compare-layout-report">
-    <h4>图形与布局变化</h4>
-    <p class="merge-inline-note">以下内容只有图形位置、排序或布局发生变化，不展示具体坐标。请结合左右版本的图形视图直观看布局差异。</p>
-    <div class="compare-layout-list">
-      ${affected.map((item) => `<span>${esc(item.itemLabel || item.section)}</span>`).join('')}
+function getCompareLayoutCheck(item) {
+  const tokens = tokenizeComparePath(item.path);
+  const keys = tokens.map((token) => token.key);
+  const topKey = tokens[0]?.key || '';
+  if (topKey === 'panorama' || keys.includes('panoramaSlot')) return COMPARE_LAYOUT_CHECKS[0];
+  if (topKey === 'stages' || topKey === 'stageLinks' || topKey === 'stageFlowRefs' || topKey === 'stageFlowLinks' || keys.includes('stagePos') || keys.includes('markerPos')) {
+    return COMPARE_LAYOUT_CHECKS[1];
+  }
+  if (topKey === 'processes') return COMPARE_LAYOUT_CHECKS[2];
+  if ((topKey === 'entities' && (keys.includes('state_nodes') || keys.includes('state_transitions'))) || keys.includes('state_nodes') || keys.includes('state_transitions')) {
+    return COMPARE_LAYOUT_CHECKS[4];
+  }
+  if (topKey === 'entities' || topKey === 'relations') return COMPARE_LAYOUT_CHECKS[3];
+  return { id: 'other', title: '其他图形布局', itemNoun: '图形元素' };
+}
+
+function buildCompareLayoutRows(layoutItems) {
+  const grouped = new Map();
+  layoutItems.forEach((item) => {
+    const check = getCompareLayoutCheck(item);
+    const objectKey = `${check.id}::${item.section}::${item.itemLabel}`;
+    if (!grouped.has(check.id)) grouped.set(check.id, { ...check, items: [], seen: new Set() });
+    const group = grouped.get(check.id);
+    if (group.seen.has(objectKey)) return;
+    group.seen.add(objectKey);
+    group.items.push(item);
+  });
+  const rows = COMPARE_LAYOUT_CHECKS.map((check) => {
+    const group = grouped.get(check.id);
+    const items = group?.items || [];
+    const names = items.map((item) => item.itemLabel || item.section).filter(Boolean);
+    const visibleNames = names.slice(0, 6).join('、');
+    const moreText = names.length > 6 ? `等 ${names.length} 项` : '';
+    return {
+      ...check,
+      items,
+      detail: items.length
+        ? `${items.length} 个${check.itemNoun}位置或布局变化：${visibleNames}${moreText}。`
+        : '无变化',
+    };
+  });
+  const otherGroup = grouped.get('other');
+  if (otherGroup?.items?.length) {
+    const names = otherGroup.items.map((item) => item.itemLabel || item.section).filter(Boolean);
+    rows.push({
+      id: otherGroup.id,
+      title: otherGroup.title,
+      itemNoun: otherGroup.itemNoun,
+      items: otherGroup.items,
+      detail: `${otherGroup.items.length} 个${otherGroup.itemNoun}位置或布局变化：${names.slice(0, 6).join('、')}${names.length > 6 ? `等 ${names.length} 项` : ''}。`,
+    });
+  }
+  return rows;
+}
+
+function countCompareLayoutChanges(layoutRows) {
+  return layoutRows.reduce((sum, row) => sum + row.items.length, 0);
+}
+
+function getCompareReportMode() {
+  return S.compare.reportMode === 'all' ? 'all' : 'diff';
+}
+
+function shouldSuppressLayoutForBusinessObjectChange(layoutItem, allItems) {
+  if (!layoutItem?.isLayout || !['新增', '删除'].includes(layoutItem.changeKind)) return false;
+  const scopeKey = layoutItem.scopeKey || '';
+  if (!scopeKey) return false;
+  return allItems.some((item) => (
+    item !== layoutItem
+    && !item.isLayout
+    && item.changeKind === layoutItem.changeKind
+    && item.scopeKey === scopeKey
+  ));
+}
+
+function renderCompareReportHeader(mode) {
+  const nextLabel = mode === 'all' ? '只看差异' : '全部报告';
+  const currentLabel = mode === 'all' ? '当前：全部报告' : '当前：只看差异';
+  return `<div class="compare-report-head">
+    <div>
+      <h3>版本比对报告</h3>
+      <span>${esc(currentLabel)}</span>
     </div>
+    <button type="button" class="btn btn-outline btn-sm" data-testid="compare-report-mode-toggle" onclick="App.toggleCompareReportMode()">${esc(nextLabel)}</button>
+  </div>`;
+}
+
+function renderCompareLayoutSummary(layoutRows, showAll = false) {
+  const visibleRows = showAll ? layoutRows : layoutRows.filter((row) => row.items.length);
+  const body = visibleRows.length
+    ? `<div class="compare-business-table-wrap">
+      <table class="compare-layout-table">
+        <thead>
+          <tr>
+            <th>检查项</th>
+            <th>差异说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleRows.map((row) => `<tr>
+            <td>${esc(row.title)}</td>
+            <td>${esc(row.detail)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`
+    : '<p class="merge-inline-note">没有发现图形位置、排序或标签拖拽等布局变化。</p>';
+  return `<div class="compare-report-section compare-layout-report">
+    <h4>图形布局差异分析</h4>
+    <p class="merge-inline-note">检查图形视图中的位置、排序和连线布局，只描述变化对象，不展示坐标。</p>
+    ${body}
   </div>`;
 }
 
@@ -1186,8 +1700,8 @@ function renderCompareDiffList(title, items, type) {
             <span>${esc(item.fieldLabel || '内容')}</span>
           </div>
           ${type === 'changed'
-            ? `<div class="compare-diff-values"><span><em>左侧</em>${esc(compactCompareValue(item.left))}</span><span><em>右侧</em>${esc(compactCompareValue(item.right))}</span></div>`
-            : `<div class="compare-diff-values"><span><em>${type === 'added' ? '右侧' : '左侧'}</em>${esc(compactCompareValue(item.left ?? item.right))}</span></div>`}
+            ? `<div class="compare-diff-values"><span><em>新版本</em>${esc(compactCompareValue(item.left))}</span><span><em>旧版本</em>${esc(compactCompareValue(item.right))}</span></div>`
+            : `<div class="compare-diff-values"><span><em>${type === 'added' ? '新版本' : '旧版本'}</em>${esc(compactCompareValue(item.left ?? item.right))}</span></div>`}
         </div>`).join('')}
       </div>`).join('')}
     </div>
@@ -1208,35 +1722,32 @@ function renderCompareResult(result) {
       : '<div class="merge-empty">请选择左右文档和版本。</div>';
     return;
   }
-  const { added, removed, changed, sameCount, leftLabel, rightLabel } = result;
-  const totalDiff = added.length + removed.length + changed.length;
+  const { added, removed, changed, leftLabel, rightLabel } = result;
   const withKind = [
-    ...changed.map((item) => ({ ...item, changeKind: '调整' })),
-    ...added.map((item) => ({ ...item, changeKind: '新增' })),
-    ...removed.map((item) => ({ ...item, changeKind: '删除' })),
+    ...changed.map((item) => ({ ...item, changeKind: '修改' })),
+    ...removed.map((item) => ({ ...item, changeKind: '新增' })),
+    ...added.map((item) => ({ ...item, changeKind: '删除' })),
   ];
-  const layoutItems = withKind.filter((item) => item.isLayout);
+  const layoutItems = withKind.filter((item) => (
+    item.isLayout && !shouldSuppressLayoutForBusinessObjectChange(item, withKind)
+  ));
   const businessItems = withKind.filter((item) => !item.isLayout);
-  const businessChanged = changed.filter((item) => !item.isLayout);
-  const businessAdded = added.filter((item) => !item.isLayout);
-  const businessRemoved = removed.filter((item) => !item.isLayout);
+  const businessRows = buildCompareBusinessRows(businessItems);
+  const layoutRows = buildCompareLayoutRows(layoutItems);
+  const layoutChangeCount = countCompareLayoutChanges(layoutRows);
+  const reportMode = getCompareReportMode();
+  const showAllReport = reportMode === 'all';
   container.innerHTML = `<div class="compare-report" data-testid="compare-report">
-    <h3>版本比对报告</h3>
+    ${renderCompareReportHeader(reportMode)}
     <div class="compare-summary">
-      <div><strong>左侧</strong><span>${esc(leftLabel)}</span></div>
-      <div><strong>右侧</strong><span>${esc(rightLabel)}</span></div>
-      <div><strong>差异</strong><span>${totalDiff}</span></div>
-      <div><strong>未变</strong><span>${sameCount}</span></div>
+      <div><strong>新版本</strong><span>${esc(leftLabel)}</span></div>
+      <div><strong>旧版本</strong><span>${esc(rightLabel)}</span></div>
+      <div><strong>业务差异</strong><span>${businessRows.length}</span></div>
+      <div><strong>布局变化</strong><span>${layoutChangeCount}</span></div>
     </div>
-    ${renderCompareOverview(result, businessItems, layoutItems)}
-    ${renderCompareHighlights(businessItems)}
-    ${renderCompareLayoutSummary(layoutItems)}
-    ${totalDiff ? `<details class="compare-detail-panel" ${businessItems.length ? '' : 'open'}>
-      <summary>模型明细</summary>
-      ${renderCompareDiffList('内容调整', businessChanged, 'changed')}
-      ${renderCompareDiffList('右侧新增', businessAdded, 'added')}
-      ${renderCompareDiffList('右侧缺少', businessRemoved, 'removed')}
-    </details>` : '<div class="merge-ok">两侧版本没有结构化差异。</div>'}
+    ${renderCompareLevelSummary(businessRows)}
+    ${renderCompareBusinessTable(businessRows, showAllReport)}
+    ${renderCompareLayoutSummary(layoutRows, showAllReport)}
   </div>`;
 }
 
@@ -2003,6 +2514,11 @@ const App = {
   async startCompare() {
     if (S.compare.isRunning) return;
     await updateCompareResult();
+  },
+
+  toggleCompareReportMode() {
+    S.compare.reportMode = getCompareReportMode() === 'all' ? 'diff' : 'all';
+    renderCompareResult(S.compare.result);
   },
 
   async cmdMerge() {

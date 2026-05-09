@@ -126,28 +126,28 @@
 <div id="compare-modal-overlay" class="hidden" data-testid="compare-modal">
   <div class="modal merge-modal compare-modal" onclick="event.stopPropagation()">
     <div class="modal-title-row">
-      <h3>比对文档</h3>
+      <h3>比对信息</h3>
       <button onclick="App.closeCompareModal()" class="btn btn-ghost btn-sm" type="button" data-testid="compare-close-button">关闭</button>
     </div>
     <div class="merge-select-grid compare-select-grid">
       <label class="merge-select-field">
-        <span>左侧文档</span>
+        <span>新版本文档</span>
         <select id="compare-left-select" data-testid="compare-left-select" onchange="App.selectCompareWorkspace('left', this.value)"></select>
       </label>
       <label class="merge-select-field">
-        <span>左侧版本</span>
+        <span>新版本</span>
         <select id="compare-left-version-select" data-testid="compare-left-version-select" onchange="App.selectCompareVersion('left', this.value)"></select>
       </label>
       <label class="merge-select-field">
-        <span>右侧文档</span>
+        <span>旧版本文档</span>
         <select id="compare-right-select" data-testid="compare-right-select" onchange="App.selectCompareWorkspace('right', this.value)"></select>
       </label>
       <label class="merge-select-field">
-        <span>右侧版本</span>
+        <span>旧版本</span>
         <select id="compare-right-version-select" data-testid="compare-right-version-select" onchange="App.selectCompareVersion('right', this.value)"></select>
       </label>
     </div>
-    <div class="merge-inline-note">默认比对当前版本；选择好左右文档和版本后，点击“开始比对”生成只读报告，不会修改当前文档。</div>
+    <div class="merge-inline-note">默认左侧为新版本、右侧为旧版本；选择好文档和版本后，点击“开始比对”生成只读报告，不会修改当前文档。</div>
     <div class="compare-action-row">
       <button id="compare-start-button" onclick="App.startCompare()" class="btn btn-primary" type="button" data-testid="compare-start-button">开始比对</button>
       <div id="compare-progress" class="compare-progress hidden" data-testid="compare-progress" aria-live="polite">
@@ -156,9 +156,6 @@
       </div>
     </div>
     <div id="compare-result" class="merge-analysis compare-result" data-testid="compare-result"></div>
-    <div class="modal-footer">
-      <button onclick="App.closeCompareModal()" class="btn btn-ghost" type="button" data-testid="compare-footer-close-button">关闭</button>
-    </div>
   </div>
 </div>
 
