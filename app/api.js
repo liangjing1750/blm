@@ -8,6 +8,55 @@ async function postJson(url, payload) {
   }).then((response) => response.json());
 }
 
+function postJsonWithProgress(url, payload, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const body = JSON.stringify(payload || {});
+    if (body.length > 1024 * 1024) {
+      console.warn(`[BLM save] large JSON payload: ${(body.length / 1024 / 1024).toFixed(2)} MB`, url);
+    }
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.responseType = 'json';
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      const result = xhr.response || JSON.parse(xhr.responseText || '{}');
+      resolve(result);
+    };
+    xhr.onerror = () => reject(new Error('request failed'));
+    xhr.send(body);
+  });
+}
+
+function uploadBinary(url, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.setRequestHeader('X-Attachment-Name', encodeURIComponent(file.name || 'attachment'));
+    xhr.responseType = 'json';
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      const result = xhr.response || JSON.parse(xhr.responseText || '{}');
+      resolve({
+        ...(result && typeof result === 'object' ? result : {}),
+        status: xhr.status,
+        ok: xhr.status >= 200 && xhr.status < 300 && !result?.error,
+      });
+    };
+    xhr.onerror = () => reject(new Error('upload failed'));
+    xhr.send(file);
+  });
+}
+
 const api = {
   async runtime() {
     return fetch('/api/runtime').then((response) => response.json());
@@ -18,16 +67,23 @@ const api = {
   async load(name) {
     return fetch(`/api/load/${encodeURIComponent(name)}`).then((response) => response.json());
   },
-  async save(name, doc) {
-    return postJson(`/api/save/${encodeURIComponent(name)}`, doc);
+  async save(name, doc, onProgress) {
+    return postJsonWithProgress(`/api/save/${encodeURIComponent(name)}`, doc, onProgress);
   },
-  async rename(oldName, newName, document, overwrite = false) {
-    return postJson('/api/rename', {
+  async uploadAttachment(file, onProgress) {
+    return uploadBinary('/api/attachment-upload', file, onProgress);
+  },
+  attachmentUrl(name, attachmentUid, versionUid, options = {}) {
+    const url = `/api/attachment/${encodeURIComponent(name)}/${encodeURIComponent(attachmentUid)}/${encodeURIComponent(versionUid)}`;
+    return options.download ? `${url}?download=1` : url;
+  },
+  async rename(oldName, newName, document, overwrite = false, onProgress) {
+    return postJsonWithProgress('/api/rename', {
       old_name: oldName,
       new_name: newName,
       document,
       overwrite,
-    });
+    }, onProgress);
   },
   async create(name) {
     return postJson('/api/new', { name });

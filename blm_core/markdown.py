@@ -653,7 +653,7 @@ class MarkdownExporter:
         if prototype_files:
             prototype_names = _format_prototype_summary(prototype_files)
             if prototype_names:
-                process_meta.append(f"**\u6d41\u7a0b\u539f\u578b**: {prototype_names}")
+                process_meta.append(f"**\u6d41\u7a0b\u539f\u578b/\u9644\u4ef6**: {prototype_names}")
         if process_meta:
             for item in process_meta:
                 line(item)

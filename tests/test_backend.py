@@ -1,6 +1,7 @@
 import http.server
 import io
 import json
+import base64
 import shutil
 import tempfile
 import threading
@@ -8,6 +9,8 @@ import unittest
 import urllib.parse
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from pathlib import Path
 
 from blm_core.document import create_empty_document, migrate_document
@@ -28,16 +31,30 @@ def markdown_path(workspace: Path, name: str) -> Path:
     return package_dir(workspace, name) / f"{name}.md"
 
 
-def attachment_index_path(workspace: Path, document_uid: str) -> Path:
-    return workspace / ".attachments" / document_uid / "attachments.json"
+def attachment_root_path(workspace: Path, document_uid: str, document_name: str = "Loans") -> Path:
+    preferred = workspace / document_name
+    if preferred.exists():
+        return preferred / "attachments"
+    for package in workspace.iterdir():
+        manifest = package / "manifest.json"
+        if not manifest.is_file():
+            continue
+        payload = json.loads(manifest.read_text("utf-8"))
+        if payload.get("meta", {}).get("document_uid") == document_uid:
+            return package / "attachments"
+    return preferred / "attachments"
 
 
-def attachment_path(workspace: Path, document_uid: str, relative_path: str) -> Path:
-    return workspace / ".attachments" / document_uid / relative_path
+def attachment_index_path(workspace: Path, document_uid: str, document_name: str = "Loans") -> Path:
+    return attachment_root_path(workspace, document_uid, document_name) / "attachments.json"
 
 
-def attachment_files(workspace: Path, document_uid: str) -> list[Path]:
-    root = workspace / ".attachments" / document_uid
+def attachment_path(workspace: Path, document_uid: str, relative_path: str, document_name: str = "Loans") -> Path:
+    return attachment_root_path(workspace, document_uid, document_name) / relative_path
+
+
+def attachment_files(workspace: Path, document_uid: str, document_name: str = "Loans") -> list[Path]:
+    root = attachment_root_path(workspace, document_uid, document_name)
     if not root.exists():
         return []
     return sorted(
@@ -605,7 +622,9 @@ class WorkspaceStorageTests(unittest.TestCase):
                 },
             ]
 
-            storage.save("Loans", document)
+            saved_document = storage.save("Loans", document)
+            self.assertEqual(saved_document["processes"][0]["prototypeFiles"][0].get("content", ""), "")
+            self.assertEqual(saved_document["processes"][0]["prototypeFiles"][0]["versions"][0].get("content", ""), "")
 
             manifest = json.loads(manifest_path(workspace, "Loans").read_text("utf-8"))
             prototype_entries = manifest["processes"][0]["prototypeFiles"]
@@ -620,6 +639,8 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(len(attachment_index["attachments"]), 2)
             first_attachment = attachment_index["attachments"][0]
             self.assertEqual(first_attachment["name"], "borrow-form.html")
+            self.assertEqual(first_attachment["ownerType"], "process")
+            self.assertEqual(first_attachment["ownerId"], document["processes"][0]["id"])
             self.assertTrue(
                 attachment_path(
                     workspace,
@@ -627,17 +648,76 @@ class WorkspaceStorageTests(unittest.TestCase):
                     first_attachment["versions"][0]["path"],
                 ).exists()
             )
+            self.assertRegex(
+                first_attachment["versions"][0]["path"],
+                r"^processes/[^/]+/[^/]+/v1__borrow-form\.html$",
+            )
 
             loaded = storage.load("Loans")
-            self.assertEqual(
-                [item["content"] for item in loaded["processes"][0]["prototypeFiles"]],
-                [
-                    "<html><body>borrow</body></html>",
-                    "<html><body>quota</body></html>",
-                ],
+            self.assertEqual(loaded["processes"][0]["prototypeFiles"][0].get("content", ""), "")
+            self.assertEqual(loaded["processes"][0]["prototypeFiles"][0]["versions"][0].get("content", ""), "")
+            filename, content_type, payload = storage.load_attachment_payload(
+                "Loans",
+                first_attachment["uid"],
+                first_attachment["versions"][0]["uid"],
             )
+            self.assertEqual(filename, "borrow-form.html")
+            self.assertEqual(content_type, "text/html")
+            self.assertEqual(payload.decode("utf-8"), "<html><body>borrow</body></html>")
             self.assertEqual(loaded["processes"][0]["prototypeFiles"][0]["versions"][0]["number"], 1)
             self.assertTrue(loaded["processes"][0]["prototypeFiles"][0]["versions"][0]["uploadedAt"])
+
+    def test_save_stores_binary_process_attachments(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            png_payload = b"\x89PNG\r\n\x1a\n\x00\x00binary-image"
+            document["processes"][0]["prototypeFiles"] = [
+                {
+                    "uid": "attach-a",
+                    "name": "wireframe.png",
+                    "content": base64.b64encode(png_payload).decode("ascii"),
+                    "contentEncoding": "base64",
+                    "contentType": "image/png",
+                    "size": len(png_payload),
+                }
+            ]
+
+            storage.save("Loans", document)
+
+            manifest = json.loads(manifest_path(workspace, "Loans").read_text("utf-8"))
+            attachment_index = json.loads(
+                attachment_index_path(workspace, manifest["meta"]["document_uid"]).read_text("utf-8")
+            )
+            attachment_version = attachment_index["attachments"][0]["versions"][0]
+            self.assertRegex(
+                attachment_version["path"],
+                r"^processes/[^/]+/[^/]+/v1__wireframe\.png$",
+            )
+            stored_payload = attachment_path(
+                workspace,
+                manifest["meta"]["document_uid"],
+                attachment_version["path"],
+            ).read_bytes()
+            self.assertEqual(stored_payload, png_payload)
+            self.assertEqual(attachment_version["contentType"], "image/png")
+            self.assertEqual(attachment_version["contentEncoding"], "base64")
+            self.assertEqual(attachment_version["size"], len(png_payload))
+
+            loaded_attachment = storage.load("Loans")["processes"][0]["prototypeFiles"][0]
+            self.assertEqual(loaded_attachment["contentEncoding"], "base64")
+            self.assertEqual(loaded_attachment.get("content", ""), "")
+            self.assertEqual(loaded_attachment["versions"][0].get("content", ""), "")
+            self.assertEqual(loaded_attachment["size"], len(png_payload))
+            filename, content_type, payload = storage.load_attachment_payload(
+                "Loans",
+                attachment_index["attachments"][0]["uid"],
+                attachment_version["uid"],
+            )
+            self.assertEqual(filename, "wireframe.png")
+            self.assertEqual(content_type, "image/png")
+            self.assertEqual(payload, png_payload)
 
     def test_build_export_bundle_outputs_zip_package_with_prototypes(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -669,14 +749,45 @@ class WorkspaceStorageTests(unittest.TestCase):
                 attachment_index = json.loads(archive.read("Loans/attachments/attachments.json").decode("utf-8"))
                 attachment_entry = attachment_index["attachments"][0]
                 self.assertEqual(attachment_entry["name"], "borrow-form.html")
+                self.assertEqual(attachment_entry["ownerType"], "process")
+                self.assertEqual(attachment_entry["ownerId"], document["processes"][0]["id"])
                 self.assertRegex(
                     attachment_entry["versions"][0]["path"],
-                    r"^attachments/[^/]+/v1__borrow-form\.html$",
+                    r"^attachments/processes/[^/]+/[^/]+/v1__borrow-form\.html$",
                 )
                 self.assertIn(f"Loans/{attachment_entry['versions'][0]['path']}", names)
                 self.assertEqual(
                     archive.read(f"Loans/{attachment_entry['versions'][0]['path']}").decode("utf-8"),
                     "<html><body>borrow</body></html>",
+                )
+
+    def test_build_export_bundle_preserves_binary_process_attachments(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir))
+            document = create_empty_document("Loans")
+            pdf_payload = b"%PDF-1.4\nbinary-pdf\n%%EOF"
+            document["processes"][0]["prototypeFiles"] = [
+                {
+                    "uid": "attach-a",
+                    "name": "rules.pdf",
+                    "content": base64.b64encode(pdf_payload).decode("ascii"),
+                    "contentEncoding": "base64",
+                    "contentType": "application/pdf",
+                    "size": len(pdf_payload),
+                }
+            ]
+            storage.save("Loans", document)
+
+            _, payload = storage.build_export_bundle("Loans")
+
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                attachment_index = json.loads(archive.read("Loans/attachments/attachments.json").decode("utf-8"))
+                attachment_version = attachment_index["attachments"][0]["versions"][0]
+                self.assertEqual(attachment_version["contentEncoding"], "base64")
+                self.assertEqual(attachment_version["size"], len(pdf_payload))
+                self.assertEqual(
+                    archive.read(f"Loans/{attachment_version['path']}"),
+                    pdf_payload,
                 )
 
     def test_save_stores_attachment_versions_and_current_version_ref(self):
@@ -819,6 +930,54 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(len(saved_files), 1)
             self.assertEqual(saved_files[0].name, "v1__borrow-form.html")
 
+    def test_concurrent_saves_do_not_corrupt_document_package(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            payload = base64.b64encode(b"concurrent attachment").decode("ascii")
+            document["processes"][0]["prototypeFiles"] = [
+                {
+                    "uid": "attach-a",
+                    "name": "flow.txt",
+                    "content": payload,
+                    "contentEncoding": "base64",
+                    "contentType": "text/plain",
+                    "size": 21,
+                    "versions": [
+                        {
+                            "uid": "attach-a-v1",
+                            "number": 1,
+                            "name": "flow.txt",
+                            "content": payload,
+                            "contentEncoding": "base64",
+                            "contentType": "text/plain",
+                            "size": 21,
+                        }
+                    ],
+                    "versionUid": "attach-a-v1",
+                }
+            ]
+
+            storage.save("Loans", document)
+            first = deepcopy(document)
+            second = deepcopy(document)
+            first["meta"]["title"] = "Loans first"
+            second["meta"]["title"] = "Loans second"
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                results = list(executor.map(lambda doc: storage.save("Loans", doc), [first, second]))
+
+            self.assertEqual(len(results), 2)
+            loaded = storage.load("Loans")
+            self.assertIn(loaded["meta"]["title"], {"Loans first", "Loans second"})
+            manifest = json.loads(manifest_path(workspace, "Loans").read_text("utf-8"))
+            attachment_index = json.loads(
+                attachment_index_path(workspace, manifest["meta"]["document_uid"]).read_text("utf-8")
+            )
+            version_path = attachment_index["attachments"][0]["versions"][0]["path"]
+            self.assertTrue(attachment_path(workspace, manifest["meta"]["document_uid"], version_path).exists())
+
     def test_migrate_workspace_layout_converts_legacy_documents_history_and_trash(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -894,6 +1053,78 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(snapshot_document["meta"]["title"], "Loans")
             self.assertEqual(storage.load("Loans")["meta"]["title"], "Loans v2")
 
+    def test_history_snapshot_keeps_attachment_metadata_without_binary_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            staged = storage.stage_attachment_upload("large.bin", "application/octet-stream", b"x" * 1024)
+            document = create_empty_document("Loans")
+            document["processes"][0]["prototypeFiles"] = [
+                {
+                    "uid": "attach-a",
+                    "name": "large.bin",
+                    "contentType": "application/octet-stream",
+                    "versions": [
+                        {
+                            "uid": "attach-a-v1",
+                            "number": 1,
+                            "name": "large.bin",
+                            "contentType": "application/octet-stream",
+                            "uploadToken": staged["token"],
+                        }
+                    ],
+                }
+            ]
+            storage.save("Loans", document)
+            document["meta"]["title"] = "Loans v2"
+
+            storage.save("Loans", document)
+
+            snapshot = history_snapshot_dirs(workspace, "Loans")[0]
+            self.assertTrue((snapshot / "attachments" / "attachments.json").is_file())
+            snapshot_files = [
+                path
+                for path in snapshot.rglob("*")
+                if path.is_file() and path.name != "manifest.json" and path.name != "Loans.md" and path.name != "attachments.json"
+            ]
+            self.assertEqual(snapshot_files, [])
+
+    def test_existing_attachment_file_is_not_rewritten_on_metadata_save(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            staged = storage.stage_attachment_upload("large.bin", "application/octet-stream", b"x" * 1024)
+            document = create_empty_document("Loans")
+            document["processes"][0]["prototypeFiles"] = [
+                {
+                    "uid": "attach-a",
+                    "name": "large.bin",
+                    "contentType": "application/octet-stream",
+                    "versions": [
+                        {
+                            "uid": "attach-a-v1",
+                            "number": 1,
+                            "name": "large.bin",
+                            "contentType": "application/octet-stream",
+                            "uploadToken": staged["token"],
+                        }
+                    ],
+                }
+            ]
+            saved = storage.save("Loans", document)
+            attachment_version = saved["processes"][0]["prototypeFiles"][0]["versions"][0]
+            document_uid = saved["meta"]["document_uid"]
+            stored_path = attachment_path(workspace, document_uid, storage._load_attachment_index(document_uid, package_dir(workspace, "Loans"))["attach-a"]["versions"][0]["path"])
+            before_stat = stored_path.stat()
+            document["meta"]["author"] = "metadata only"
+            document["processes"][0]["prototypeFiles"] = [attachment_version | {"uid": "attach-a", "versionUid": "attach-a-v1"}]
+
+            storage.save("Loans", document)
+
+            after_stat = stored_path.stat()
+            self.assertEqual(after_stat.st_mtime_ns, before_stat.st_mtime_ns)
+            self.assertEqual(after_stat.st_size, before_stat.st_size)
+
     def test_delete_moves_document_to_trash(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -908,6 +1139,47 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(len(trash_dirs), 1)
             self.assertTrue((trash_dirs[0] / "manifest.json").exists())
             self.assertTrue((trash_dirs[0] / "Loans.md").exists())
+
+    def test_save_consumes_staged_attachment_upload(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            staged = storage.stage_attachment_upload("large.doc", "application/msword", b"large-doc-payload")
+            document = create_empty_document("Loans")
+            document["processes"][0]["prototypeFiles"] = [
+                {
+                    "uid": "attach-a",
+                    "name": "large.doc",
+                    "contentType": "application/msword",
+                    "versions": [
+                        {
+                            "uid": "attach-a-v1",
+                            "number": 1,
+                            "name": "large.doc",
+                            "contentType": "application/msword",
+                            "uploadToken": staged["token"],
+                        }
+                    ],
+                }
+            ]
+
+            saved_document = storage.save("Loans", document)
+
+            attachment = saved_document["processes"][0]["prototypeFiles"][0]
+            self.assertEqual(attachment["size"], len(b"large-doc-payload"))
+            self.assertEqual(storage.load_attachment_payload("Loans", "attach-a", "attach-a-v1")[2], b"large-doc-payload")
+            self.assertFalse((workspace / ".uploads" / f"{staged['token']}.bin").exists())
+            self.assertFalse((workspace / ".uploads" / f"{staged['token']}.json").exists())
+
+    def test_save_uses_hidden_tmp_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+
+            storage.save("Loans", create_empty_document("Loans"))
+
+            self.assertTrue((workspace / ".tmp").is_dir())
+            self.assertFalse(any(path.name.startswith(".Loans.tmp-") for path in workspace.iterdir()))
 
     def test_history_keeps_recent_snapshots_only(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1367,7 +1639,7 @@ class ExportApiTests(unittest.TestCase):
             self.assertTrue(prototype["versionUid"])
             attachment_index = json.loads(archive.read("Loans/attachments/attachments.json").decode("utf-8"))
             version_path = attachment_index["attachments"][0]["versions"][0]["path"]
-            self.assertRegex(version_path, r"^attachments/[^/]+/v1__borrow-form\.html$")
+            self.assertRegex(version_path, r"^attachments/processes/[^/]+/[^/]+/v1__borrow-form\.html$")
             self.assertIn(f"Loans/{version_path}", names)
             self.assertEqual(
                 archive.read(f"Loans/{version_path}").decode("utf-8"),

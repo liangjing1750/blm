@@ -9,6 +9,7 @@ const S = {
   saveDialogMode: 'save',
   doc: null,
   modified: false,
+  isSaving: false,
   runtime: {
     checked: false,
     apiVersion: 0,
@@ -97,6 +98,7 @@ const S = {
     procView: 'stage',  // 'stage' | 'list'(internal editor) | 'flow' | 'role'
     nodePerspective: 'user',
     procPrototypeExpanded: {},
+    procAttachmentUpload: { active: false, percent: 0, message: '' },
     procRolePickerCollapsed: {},
     procEditorFocusSelector: '',
     stepNoteEditKey: '',
@@ -377,6 +379,10 @@ function normalizePrototypeVersionEntry(version, fallbackName, versionIndex = 1)
     name: versionName,
     content: String(normalizedVersion.content || ''),
     contentType: String(normalizedVersion.contentType || 'text/html').trim() || 'text/html',
+    contentEncoding: String(normalizedVersion.contentEncoding || '').trim(),
+    uploadToken: String(normalizedVersion.uploadToken || '').trim(),
+    localUrl: String(normalizedVersion.localUrl || '').trim(),
+    size: Number(normalizedVersion.size || 0) || 0,
     uploadedAt: String(normalizedVersion.uploadedAt || '').trim(),
   };
 }
@@ -390,6 +396,10 @@ function normalizePrototypeFileEntry(file, index = 1) {
       versionUid: version.uid,
       content: version.content,
       contentType: version.contentType,
+      contentEncoding: version.contentEncoding,
+      uploadToken: version.uploadToken,
+      localUrl: version.localUrl,
+      size: version.size,
       uploadedAt: version.uploadedAt,
       versions: [version],
     };
@@ -403,6 +413,10 @@ function normalizePrototypeFileEntry(file, index = 1) {
       name: normalizedName,
       content: String(file.content || ''),
       contentType: String(file.contentType || 'text/html').trim() || 'text/html',
+      contentEncoding: String(file.contentEncoding || '').trim(),
+      uploadToken: String(file.uploadToken || '').trim(),
+      localUrl: String(file.localUrl || '').trim(),
+      size: Number(file.size || 0) || 0,
       uploadedAt: String(file.uploadedAt || '').trim(),
     }];
   const normalizedVersions = versionSources
@@ -417,6 +431,10 @@ function normalizePrototypeFileEntry(file, index = 1) {
     versionUid: currentVersion.uid,
     content: currentVersion.content,
     contentType: currentVersion.contentType,
+    contentEncoding: currentVersion.contentEncoding,
+    uploadToken: currentVersion.uploadToken,
+    localUrl: currentVersion.localUrl,
+    size: currentVersion.size,
     uploadedAt: currentVersion.uploadedAt,
     versions: normalizedVersions,
   };

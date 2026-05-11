@@ -265,6 +265,7 @@ function renderToolbar() {
   document.getElementById('modified-badge')?.classList.toggle('hidden', !S.modified);
   document.getElementById('save-alert')?.classList.toggle('hidden', !S.modified);
   document.getElementById('toolbar-manual-button')?.classList.toggle('active', S.ui.tab === 'manual');
+  if (typeof syncSavingControls === 'function') syncSavingControls();
   if (typeof refreshSaveDialogText === 'function') {
     refreshSaveDialogText();
   }

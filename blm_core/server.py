@@ -88,6 +88,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._handle_docs(path)
             if path.startswith("/api/load/"):
                 return self._handle_load(path)
+            if path.startswith("/api/attachment/"):
+                return self._handle_attachment(path)
             if path.startswith("/api/export-bundle/"):
                 return self._handle_export_bundle(path)
             if path.startswith("/api/export/"):
@@ -102,6 +104,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
 
             if path.startswith("/api/save/"):
                 return self._handle_save(path, body)
+            if path == "/api/attachment-upload":
+                return self._handle_attachment_upload(body)
             if path == "/api/rename":
                 return self._handle_rename(body)
             if path == "/api/new":
@@ -189,6 +193,29 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._json({"error": "not found"}, 404)
             content_type = mimetypes.guess_type(asset_path.name)[0] or "application/octet-stream"
             return self._binary(asset_path.read_bytes(), content_type)
+
+        def _handle_attachment(self, path: str):
+            parts = path[len("/api/attachment/"):].strip("/").split("/")
+            if len(parts) != 3:
+                return self._json({"error": "not found"}, 404)
+            name, attachment_uid, version_uid = [unquote(part) for part in parts]
+            try:
+                filename, content_type, payload = storage.load_attachment_payload(name, attachment_uid, version_uid)
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+            should_download = "download=1" in urlparse(self.path).query.split("&")
+            return self._binary(payload, content_type, filename=filename if should_download else None)
+
+        def _handle_attachment_upload(self, body: bytes):
+            filename = unquote(self.headers.get("X-Attachment-Name", "")).strip()
+            content_type = self.headers.get("Content-Type", "application/octet-stream")
+            try:
+                staged = storage.stage_attachment_upload(filename, content_type, body)
+                return self._json({"ok": True, **staged})
+            except OSError as exc:
+                return self._json({"error": str(exc)}, 500)
 
         def _handle_save(self, path: str, body: bytes):
             name = unquote(path[len("/api/save/"):])

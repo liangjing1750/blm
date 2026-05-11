@@ -585,6 +585,10 @@ def _normalize_prototype_versions(prototype: dict, prototype_index: int) -> tupl
                 "name": normalized_name,
                 "content": str(prototype.get("content", "")),
                 "contentType": str(prototype.get("contentType", "text/html")).strip() or "text/html",
+                "contentEncoding": str(prototype.get("contentEncoding", "")).strip(),
+                "uploadToken": str(prototype.get("uploadToken", "")).strip(),
+                "localUrl": str(prototype.get("localUrl", "")).strip(),
+                "size": int(prototype.get("size") or 0),
                 "uploadedAt": _normalize_uploaded_at(prototype.get("uploadedAt", "")),
             }
         ]
@@ -606,6 +610,10 @@ def _normalize_prototype_versions(prototype: dict, prototype_index: int) -> tupl
                 "name": version_name,
                 "content": str(raw_version.get("content", "")),
                 "contentType": str(raw_version.get("contentType", "text/html")).strip() or "text/html",
+                "contentEncoding": str(raw_version.get("contentEncoding", "")).strip(),
+                "uploadToken": str(raw_version.get("uploadToken", "")).strip(),
+                "localUrl": str(raw_version.get("localUrl", "")).strip(),
+                "size": int(raw_version.get("size") or 0),
                 "uploadedAt": _normalize_uploaded_at(raw_version.get("uploadedAt", "")),
             }
         )
@@ -845,6 +853,8 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                     "versionUid": current_version["uid"],
                     "content": current_version["content"],
                     "contentType": current_version["contentType"],
+                    "contentEncoding": current_version["contentEncoding"],
+                    "size": current_version["size"],
                     "uploadedAt": current_version["uploadedAt"],
                     "versions": normalized_versions,
                 }

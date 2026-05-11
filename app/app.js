@@ -572,6 +572,7 @@ function setActiveDocumentSession(doc, options = {}) {
   S.ui = options.preserveUiState
     ? getPreservedDocUiState(doc, previousUi)
     : createDocUiState(doc);
+  S.ui.procAttachmentUpload = { active: false, percent: 0, message: '' };
   render();
   if (options.preserveUiState) {
     restoreUiViewportState(previousViewport);
@@ -1899,7 +1900,84 @@ function openWorkspaceSaveAsModal(initialName = '', mode = 'save') {
   setTimeout(() => input?.focus(), 50);
 }
 
+function setSaveProgress(visible, percent = 0, message = '正在保存...', detailText = '') {
+  const box = document.getElementById('save-progress');
+  const bar = document.getElementById('save-progress-bar');
+  const label = document.getElementById('save-progress-message');
+  const detail = document.getElementById('save-progress-detail');
+  box?.classList.toggle('hidden', !visible);
+  document.body?.classList.toggle('is-saving', Boolean(visible));
+  if (bar) bar.style.width = `${Math.max(0, Math.min(100, Number(percent) || 0))}%`;
+  if (label) label.textContent = message;
+  if (detail) detail.textContent = detailText || (visible ? '请稍候，正在处理文档。' : '');
+}
+
+function syncSavingControls() {
+  const disabled = Boolean(S.isSaving);
+  ['btn-save', 'toolbar-save-as-label'].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = disabled;
+  });
+  document.querySelector('[data-testid="toolbar-export-button"]')?.toggleAttribute('disabled', disabled);
+  document.querySelector('[data-testid="preview-export-bundle"]')?.toggleAttribute('disabled', disabled);
+}
+
+function decodeBase64ToBytes(base64Content) {
+  const binary = atob(String(base64Content || ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function getInlineAttachmentVersions(document) {
+  const inlineVersions = [];
+  for (const process of Array.isArray(document?.processes) ? document.processes : []) {
+    for (const file of Array.isArray(process?.prototypeFiles) ? process.prototypeFiles : []) {
+      for (const version of Array.isArray(file?.versions) ? file.versions : []) {
+        if (version?.uploadToken || !String(version?.content || '')) continue;
+        inlineVersions.push({ file, version });
+      }
+    }
+  }
+  return inlineVersions;
+}
+
+async function uploadInlineAttachmentsBeforeSave(document) {
+  const inlineVersions = getInlineAttachmentVersions(document);
+  if (!inlineVersions.length) return true;
+  for (let index = 0; index < inlineVersions.length; index += 1) {
+    const { file, version } = inlineVersions[index];
+    const name = String(version.name || file.name || 'attachment').trim() || 'attachment';
+    const contentType = String(version.contentType || file.contentType || 'application/octet-stream').trim() || 'application/octet-stream';
+    const payload = String(version.contentEncoding || '') === 'base64'
+      ? decodeBase64ToBytes(version.content)
+      : String(version.content || '');
+    const uploadFile = new File([payload], name, { type: contentType });
+    const percent = 6 + Math.round((index / inlineVersions.length) * 28);
+    setSaveProgress(true, percent, `正在预处理附件 ${index + 1}/${inlineVersions.length}`, `正在把“${name}”转为后台暂存文件。`);
+    const staged = await api.uploadAttachment(uploadFile);
+    if (staged?.error || !staged?.ok) {
+      alert(staged?.status === 404 || staged?.error === 'not found'
+        ? '附件上传接口不可用，请重启本地服务后再保存。'
+        : (staged?.error || '附件预处理失败，请重试。'));
+      return false;
+    }
+    version.uploadToken = String(staged.token || '').trim();
+    version.content = '';
+    version.contentEncoding = '';
+    version.size = Number(staged.size || version.size || 0) || 0;
+    file.uploadToken = version.uploadToken;
+    file.content = '';
+    file.contentEncoding = '';
+    file.size = version.size;
+  }
+  return true;
+}
+
 async function saveWorkspaceDocument(targetName, document, { currentName = '', allowOverwrite = true } = {}) {
+  if (S.isSaving) return null;
   const normalizedName = String(targetName || '').trim();
   if (!normalizedName) {
     alert('请输入业务域名称');
@@ -1923,10 +2001,33 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
     }
   }
 
-  const result = currentName && currentName !== normalizedName
-    ? await api.rename(currentName, normalizedName, document, willOverwrite)
-    : await api.save(normalizedName, document);
-  if (result.error) {
+  let result;
+  S.isSaving = true;
+  syncSavingControls();
+  try {
+    setSaveProgress(true, 5, '正在准备保存...', '正在检查附件和文档状态。');
+    if (!await uploadInlineAttachmentsBeforeSave(document)) return null;
+    const handleSaveUploadProgress = (percent) => {
+      const progress = Math.max(0, Math.min(100, Number(percent) || 0));
+      if (progress >= 100) {
+        setSaveProgress(true, 78, '数据已发送，正在等待服务器保存...', '本地服务正在写入文档元数据并整理附件索引。');
+        return;
+      }
+      const mapped = 36 + Math.round(progress * 0.4);
+      setSaveProgress(true, mapped, `正在发送保存请求 ${progress}%`, '请保持当前页面打开。');
+    };
+    setSaveProgress(true, 35, '正在发送保存请求...', '文档数据正在发送到本地服务。');
+    result = currentName && currentName !== normalizedName
+      ? await api.rename(currentName, normalizedName, document, willOverwrite, handleSaveUploadProgress)
+      : await api.save(normalizedName, document, handleSaveUploadProgress);
+    setSaveProgress(true, 100, '保存完成', '文档已写入工作区。');
+  } finally {
+    S.isSaving = false;
+    syncSavingControls();
+    setTimeout(() => setSaveProgress(false), 350);
+  }
+  if (!result || result.error) {
+    if (!result) return null;
     alert(result.error);
     return null;
   }
@@ -2350,6 +2451,7 @@ const App = {
   },
 
   async cmdSaveAs() {
+    if (S.isSaving) return;
     if (!S.doc) return;
     const workspaceFiles = await loadWorkspaceDocumentNames();
     if (!workspaceFiles) return;
@@ -2388,6 +2490,7 @@ const App = {
   },
 
   async cmdSave() {
+    if (S.isSaving) return;
     if (!S.doc) return;
     if (!S.currentFile) {
       openWorkspaceSaveAsModal((S.doc.meta?.domain || S.doc.meta?.title || '').trim(), 'save');
@@ -2407,6 +2510,7 @@ const App = {
   },
 
   async confirmSaveAs() {
+    if (S.isSaving) return;
     if (!S.doc) return;
     const name = document.getElementById('save-as-name').value.trim();
     if (!name) return alert('请输入业务域名称');
@@ -2429,6 +2533,7 @@ const App = {
   },
 
   async cmdExport() {
+    if (S.isSaving) return;
     if (!S.doc) return;
     await App.cmdSave();
     if (!S.currentFile || S.modified) return;
@@ -2726,6 +2831,11 @@ function createDocUiState(doc) {
 }
 
 document.addEventListener('keydown', (event) => {
+  if (S.isSaving) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   const key = String(event.key || '').toLowerCase();
   if ((event.ctrlKey || event.metaKey) && !event.altKey && key === 's') {
     event.preventDefault();

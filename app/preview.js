@@ -497,7 +497,7 @@ function renderPreviewProcessesHtml(processes, entityMap, stepLabels, orchestrat
           ${proc.flowGroup ? `${processStageSummary ? ' | ' : ''}<strong>流程分组</strong>: ${esc(proc.flowGroup)}` : ''}
         </p>` : ''}
         ${proc.trigger || proc.outcome ? `<p class="pv-note"><strong>触发</strong>: ${esc(proc.trigger||'—')} → <strong>预期结果</strong>: ${esc(proc.outcome||'—')}</p>` : ''}
-        ${prototypeFiles.length ? `<p class="pv-note"><strong>流程原型</strong>: ${esc(formatPrototypeSummary(prototypeFiles))}</p>` : ''}
+        ${prototypeFiles.length ? `<p class="pv-note"><strong>流程原型/附件</strong>: ${esc(formatPrototypeSummary(prototypeFiles))}</p>` : ''}
         <div id="pv-proc-${proc.id}" class="pv-diag"></div>
         ${nodes.length ? `<div class="pv-tasks">
           ${nodes.map((node) => {
@@ -718,7 +718,7 @@ function appendPreviewProcessesMd(add, doc, processes, entityMap, stepLabels, or
     const processStageSummary = formatProcessStageSummary(proc, doc);
     if(processStageSummary) add(`**业务阶段**: ${processStageSummary}`);
     if(proc.flowGroup) add(`**流程分组**: ${proc.flowGroup}`);
-    if(prototypeFiles.length) add(`**流程原型**: ${formatPrototypeSummary(prototypeFiles)}`);
+    if(prototypeFiles.length) add(`**流程原型/附件**: ${formatPrototypeSummary(prototypeFiles)}`);
     add('');
     if(proc.trigger||proc.outcome){
       add(`**触发**: ${proc.trigger||'—'}  →  **预期结果**: ${proc.outcome||'—'}`);

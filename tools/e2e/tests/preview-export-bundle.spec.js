@@ -106,7 +106,7 @@ test('预览页导出会下载文档包 ZIP，并保留流程原型', async ({ p
   expect(inspection.prototype_uid).toBe('proto-a');
   expect(inspection.prototype_version_uid).toBeTruthy();
   expect(inspection.attachment_name).toBe('login-a.html');
-  expect(inspection.prototype_path).toMatch(/^attachments\/[^/]+\/v1__login-a\.html$/);
+  expect(inspection.prototype_path).toMatch(/^attachments\/processes\/[^/]+\/[^/]+\/v1__login-a\.html$/);
   expect(inspection.names).toContain(`${documentName}/${inspection.prototype_path}`);
   expect(inspection.prototype_html).toContain('prototype-a');
   expect(inspection.markdown).toContain(`# ${documentName}`);

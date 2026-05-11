@@ -31,6 +31,15 @@
   <span>按 Ctrl+S 或点击“保存”即可落盘。</span>
 </div>
 
+<div id="save-progress" class="operation-progress hidden" data-testid="save-progress" aria-live="polite" aria-modal="true">
+  <div class="operation-progress-card" role="status">
+    <div class="operation-spinner" aria-hidden="true"></div>
+    <strong id="save-progress-message">正在保存...</strong>
+    <div class="operation-progress-track"><span id="save-progress-bar"></span></div>
+    <span id="save-progress-detail" class="operation-progress-detail">请稍候，正在处理文档。</span>
+  </div>
+</div>
+
 <div id="layout">
   <aside id="sidebar">
     <div id="sidebar-content"></div>

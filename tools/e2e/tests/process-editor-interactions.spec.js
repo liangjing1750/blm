@@ -744,6 +744,7 @@ test('流程支持上传多个 HTML 原型并在保存后保留', async ({ page,
   expect(download.suggestedFilename()).toBe('login-a.html');
 
   await page.getByTestId('proc-prototype-remove').nth(1).click();
+  await acceptAppDialog(page);
   await expect(page.getByTestId('proc-prototype-item')).toHaveCount(1);
   await expect(page.locator('.prototype-file-name').first()).toHaveText('login-a.html');
 
@@ -753,6 +754,100 @@ test('流程支持上传多个 HTML 原型并在保存后保留', async ({ page,
   await openProcessEditor(page, documentName);
   await expect(page.getByTestId('proc-prototype-item')).toHaveCount(1);
   await expect(page.locator('.prototype-file-name').first()).toHaveText('login-a.html');
+});
+
+test('process attachments allow previewable files and download-only documents', async ({ page, request }) => {
+  const documentName = `process-attachments-${Date.now()}`;
+  await createDocument(request, documentName, buildProcessEditorDoc(documentName));
+
+  await openProcessEditor(page, documentName);
+  await expect(page.locator('.proc-drawer')).toContainText('流程原型/附件');
+  await page.getByTestId('proc-prototype-input').setInputFiles([
+    {
+      name: 'flow.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]),
+    },
+    {
+      name: 'handoff.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer: Buffer.from('docx-bytes'),
+    },
+  ]);
+  await page.getByTestId('proc-prototype-upload-button').click();
+
+  await expect(page.getByTestId('proc-prototype-item')).toHaveCount(2);
+  await expect(page.locator('.prototype-file-kind').nth(0)).toHaveText('图片');
+  await expect(page.locator('.prototype-file-kind').nth(1)).toHaveText('文档');
+  await expect(page.getByTestId('proc-prototype-open')).toHaveCount(1);
+  await expect(page.getByTestId('proc-prototype-download')).toHaveCount(2);
+  await expect.poll(() => page.evaluate(() => {
+    const first = S.doc.processes[0].prototypeFiles[0];
+    return {
+      encoding: first.contentEncoding,
+      type: first.contentType,
+      hasContent: Boolean(first.content),
+      hasUploadToken: Boolean(first.versions[0].uploadToken),
+      hasLocalUrl: Boolean(first.versions[0].localUrl),
+      title: S.doc.meta.title,
+      processName: S.doc.processes[0].name,
+    };
+  })).toEqual({
+    encoding: '',
+    type: 'image/png',
+    hasContent: false,
+    hasUploadToken: true,
+    hasLocalUrl: true,
+    title: documentName,
+    processName: '统一登录',
+  });
+
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByTestId('proc-prototype-open').first().click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState('domcontentloaded');
+  expect(popup.url()).toContain('blob:');
+  await popup.close();
+
+  await page.keyboard.press('Control+S');
+  await expect(page.getByTestId('modified-badge')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => Boolean(S.doc.processes[0].prototypeFiles[0].content))).toBe(false);
+  await expect.poll(() => page.evaluate(() => Boolean(S.doc.processes[0].prototypeFiles[0].versions[0].uploadToken))).toBe(false);
+
+  await openProcessEditor(page, documentName);
+  await expect(page.getByTestId('proc-prototype-item')).toHaveCount(2);
+  await expect(page.getByTestId('proc-prototype-open')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => S.doc.processes[0].prototypeFiles[0].contentEncoding)).toBe('');
+  await expect.poll(() => page.evaluate(() => Boolean(S.doc.processes[0].prototypeFiles[0].content))).toBe(false);
+
+  const persistedPopupPromise = page.waitForEvent('popup');
+  await page.getByTestId('proc-prototype-open').first().click();
+  const persistedPopup = await persistedPopupPromise;
+  await persistedPopup.waitForLoadState('domcontentloaded');
+  expect(persistedPopup.url()).toContain('/api/attachment/');
+  await persistedPopup.close();
+});
+
+test('process attachments reject executable file types', async ({ page, request }) => {
+  const documentName = `process-attachment-reject-${Date.now()}`;
+  await createDocument(request, documentName, buildProcessEditorDoc(documentName));
+
+  await openProcessEditor(page, documentName);
+  await page.getByTestId('proc-prototype-input').setInputFiles([
+    {
+      name: 'danger.exe',
+      mimeType: 'application/x-msdownload',
+      buffer: Buffer.from('not really executable'),
+    },
+  ]);
+
+  await page.getByTestId('proc-prototype-upload-button').click();
+  await expect(page.getByTestId('app-dialog-message')).toContainText('不支持上传');
+  await expect(page.getByTestId('app-dialog-message')).toContainText('danger.exe');
+  await acceptAppDialog(page);
+
+  await expect(page.getByTestId('proc-prototype-item')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => S.doc.processes[0].prototypeFiles.length)).toBe(0);
 });
 
 test('流程编辑区不再维护流程级组件和分类标签，节点任务可选择所属构件', async ({ page, request }) => {

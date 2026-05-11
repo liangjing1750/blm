@@ -530,12 +530,113 @@ function findProcessPrototypeVersion(prototypeFile, versionUid = '') {
   return versions.find((version) => version.uid === targetVersionUid) || versions[versions.length - 1] || null;
 }
 
+const PROCESS_ATTACHMENT_ALLOWED_EXTENSIONS = new Set([
+  'html', 'htm',
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+  'pdf',
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'md', 'txt', 'json', 'csv',
+]);
+
+const PROCESS_ATTACHMENT_PREVIEW_EXTENSIONS = new Set([
+  'html', 'htm',
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+  'pdf',
+  'md', 'txt', 'json', 'csv',
+]);
+
+const PROCESS_ATTACHMENT_BLOCKED_EXTENSIONS = new Set([
+  'exe', 'bat', 'cmd', 'ps1', 'sh', 'msi', 'dll', 'com', 'scr', 'jar', 'js', 'vbs', 'reg',
+  'zip', 'rar', '7z',
+]);
+
+function getProcessAttachmentExtension(name = '') {
+  const match = String(name || '').trim().toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match ? match[1] : '';
+}
+
+function isProcessAttachmentAllowedFile(file) {
+  const ext = getProcessAttachmentExtension(file?.name);
+  if (!ext || PROCESS_ATTACHMENT_BLOCKED_EXTENSIONS.has(ext)) return false;
+  return PROCESS_ATTACHMENT_ALLOWED_EXTENSIONS.has(ext);
+}
+
+function getProcessAttachmentKind(versionOrFile = {}) {
+  const name = String(versionOrFile.name || '').trim();
+  const contentType = String(versionOrFile.contentType || '').toLowerCase();
+  const ext = getProcessAttachmentExtension(name);
+  if (ext === 'html' || ext === 'htm' || contentType === 'text/html') return 'HTML 原型';
+  if (contentType.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return '图片';
+  if (contentType === 'application/pdf' || ext === 'pdf') return 'PDF';
+  if (['doc', 'docx', 'ppt', 'pptx'].includes(ext)) return '文档';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return '表格';
+  if (['md', 'txt', 'json'].includes(ext) || contentType.startsWith('text/')) return '文本';
+  return '附件';
+}
+
+function canPreviewProcessAttachment(version = {}) {
+  return PROCESS_ATTACHMENT_PREVIEW_EXTENSIONS.has(getProcessAttachmentExtension(version.name || ''));
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('file read failed'));
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const commaIndex = result.indexOf(',');
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function decodeProcessAttachmentContent(version = {}) {
+  if (String(version.contentEncoding || '') === 'base64') {
+    const binary = atob(String(version.content || ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+  return version.content || '';
+}
+
 function createProcessPrototypeObjectUrl(prototypeVersion) {
+  if (prototypeVersion?.localUrl) return prototypeVersion.localUrl;
   const contentType = String(prototypeVersion?.contentType || 'text/html').trim() || 'text/html';
-  const blob = new Blob([prototypeVersion?.content || ''], {
+  const blob = new Blob([decodeProcessAttachmentContent(prototypeVersion || {})], {
     type: /charset=/i.test(contentType) ? contentType : `${contentType};charset=utf-8`,
   });
   return URL.createObjectURL(blob);
+}
+
+function hasInlineProcessAttachmentContent(prototypeVersion = {}) {
+  return Boolean(prototypeVersion.localUrl) || (Object.prototype.hasOwnProperty.call(prototypeVersion, 'content') && String(prototypeVersion.content || '') !== '');
+}
+
+function setProcessAttachmentUploadProgress(active, percent = 0, message = '') {
+  if (!S.ui.procAttachmentUpload) S.ui.procAttachmentUpload = { active: false, percent: 0, message: '' };
+  S.ui.procAttachmentUpload = {
+    active: Boolean(active),
+    percent: Math.max(0, Math.min(100, Number(percent) || 0)),
+    message: String(message || '').trim(),
+  };
+  const progress = document.querySelector('[data-testid="proc-prototype-upload-progress"]');
+  const bar = document.querySelector('[data-testid="proc-prototype-upload-progress-bar"]');
+  const label = document.querySelector('[data-testid="proc-prototype-upload-progress-message"]');
+  if (progress) progress.classList.toggle('hidden', !active);
+  if (bar) bar.style.width = `${S.ui.procAttachmentUpload.percent}%`;
+  if (label) label.textContent = S.ui.procAttachmentUpload.message || '正在上传...';
+}
+
+function getPersistedProcessAttachmentUrl(prototypeFile, prototypeVersion, options = {}) {
+  const documentName = String(S.currentFile || S.doc?.meta?.domain || '').trim();
+  const attachmentUid = String(prototypeFile?.uid || '').trim();
+  const versionUid = String(prototypeVersion?.uid || prototypeFile?.versionUid || '').trim();
+  if (!documentName || !attachmentUid || !versionUid || !api?.attachmentUrl) return '';
+  return api.attachmentUrl(documentName, attachmentUid, versionUid, options);
 }
 
 function syncProcessPrototypeCurrentVersion(prototypeFile, versionUid = '') {
@@ -553,23 +654,48 @@ async function addProcessPrototypeFiles(procId, inputId) {
   if (!proc || !input?.files?.length) return;
 
   const selectedFiles = Array.from(input.files);
-  const invalidFiles = selectedFiles.filter((file) => {
-    const fileName = String(file?.name || '');
-    return !/\.html?$/i.test(fileName) && String(file?.type || '').toLowerCase() !== 'text/html';
-  });
+  const invalidFiles = selectedFiles.filter((file) => !isProcessAttachmentAllowedFile(file));
   if (invalidFiles.length) {
-    alert(`仅支持上传 HTML 原型文件：${invalidFiles.map((file) => file.name).join('、')}`);
+    alert(`不支持上传这些文件类型：${invalidFiles.map((file) => file.name).join('、')}`);
     input.value = '';
     return;
   }
 
-  const uploadedVersions = await Promise.all(selectedFiles.map(async (file) => ({
-    uid: createUiUid('protover'),
-    name: String(file.name || '').trim() || '未命名原型.html',
-    content: await file.text(),
-    contentType: String(file.type || 'text/html').trim() || 'text/html',
-    uploadedAt: formatPrototypeUploadedAt(),
-  })));
+  const uploadedVersions = [];
+  try {
+    setProcessAttachmentUploadProgress(true, 0, '正在上传附件...');
+    for (let index = 0; index < selectedFiles.length; index += 1) {
+      const file = selectedFiles[index];
+      const staged = await api.uploadAttachment(file, (filePercent) => {
+        const totalPercent = Math.round(((index + (filePercent / 100)) / selectedFiles.length) * 100);
+        setProcessAttachmentUploadProgress(true, totalPercent, `正在上传 ${file.name || '附件'} ${totalPercent}%`);
+      });
+      const localContentType = String(staged.contentType || file.type || 'application/octet-stream').trim() || 'application/octet-stream';
+      const localPreviewBlob = /^text\//i.test(localContentType) || /html/i.test(localContentType)
+        ? new Blob([file], { type: /charset=/i.test(localContentType) ? localContentType : `${localContentType};charset=utf-8` })
+        : file;
+      if (staged?.error || !staged?.ok) {
+        throw new Error(staged?.status === 404 || staged?.error === 'not found'
+          ? '附件上传接口不可用，请重启本地服务后再上传。'
+          : (staged?.error || '附件上传失败'));
+      }
+      uploadedVersions.push({
+        uid: createUiUid('protover'),
+        name: String(file.name || '').trim() || '未命名附件',
+        uploadToken: String(staged.token || '').trim(),
+        localUrl: URL.createObjectURL(localPreviewBlob),
+        contentEncoding: '',
+        contentType: localContentType,
+        size: Number(staged.size || file.size || 0) || 0,
+        uploadedAt: formatPrototypeUploadedAt(),
+      });
+    }
+  } catch (error) {
+    alert(error?.message || '附件上传失败，请重试。');
+    setProcessAttachmentUploadProgress(false);
+    input.value = '';
+    return;
+  }
   const prototypeFiles = getProcPrototypeFiles(proc);
   const expandedMap = getProcessPrototypeExpandedMap(procId);
   for (const uploadedVersion of uploadedVersions) {
@@ -603,12 +729,19 @@ async function addProcessPrototypeFiles(procId, inputId) {
   S.ui.procEditorFocusSelector = '[data-testid="proc-prototype-upload-button"]';
   markModified();
   rerenderProcessEditor({ focusSelector: '[data-testid="proc-prototype-upload-button"]' });
+  setProcessAttachmentUploadProgress(true, 100, '附件已上传，保存后生效');
 }
 
-function removeProcessPrototypeFile(procId, prototypeUid) {
+async function removeProcessPrototypeFile(procId, prototypeUid) {
   const proc = S.doc.processes.find((item) => item.id === procId);
   if (!proc) return;
   const prototypeFiles = getProcPrototypeFiles(proc);
+  const target = prototypeFiles.find((file) => file.uid === prototypeUid);
+  if (!target) return;
+  if (!await showAppConfirm(`确认删除附件“${target.name || '未命名附件'}”？`, {
+    title: '删除附件',
+    confirmLabel: '删除',
+  })) return;
   const nextFiles = prototypeFiles.filter((file) => file.uid !== prototypeUid);
   if (nextFiles.length === prototypeFiles.length) return;
   proc.prototypeFiles = nextFiles;
@@ -624,12 +757,29 @@ function openProcessPrototypeFile(procId, prototypeUid, versionUid = '') {
   if (!prototypeFile) return;
   const prototypeVersion = findProcessPrototypeVersion(prototypeFile, versionUid);
   if (!prototypeVersion) return;
+  if (!canPreviewProcessAttachment(prototypeVersion)) {
+    downloadProcessPrototypeFile(procId, prototypeUid, versionUid);
+    return;
+  }
+  if (!hasInlineProcessAttachmentContent(prototypeVersion)) {
+    const persistedUrl = getPersistedProcessAttachmentUrl(prototypeFile, prototypeVersion);
+    if (persistedUrl) {
+      const popup = window.open(persistedUrl, '_blank');
+      if (!popup) alert('浏览器拦截了附件预览窗口，请允许弹窗后重试。');
+      return;
+    }
+  }
   const objectUrl = createProcessPrototypeObjectUrl(prototypeVersion);
   const popup = window.open(objectUrl, '_blank');
   if (!popup) {
     URL.revokeObjectURL(objectUrl);
     alert('浏览器拦截了原型预览窗口，请允许弹窗后重试。');
     return;
+  }
+  try {
+    popup.opener = null;
+  } catch (error) {
+    // Some browsers block access to the new window; the blob URL is still opened.
   }
   setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
@@ -640,6 +790,20 @@ function downloadProcessPrototypeFile(procId, prototypeUid, versionUid = '') {
   if (!prototypeFile) return;
   const prototypeVersion = findProcessPrototypeVersion(prototypeFile, versionUid);
   if (!prototypeVersion) return;
+  if (!hasInlineProcessAttachmentContent(prototypeVersion)) {
+    const persistedUrl = getPersistedProcessAttachmentUrl(prototypeFile, prototypeVersion, { download: true });
+    if (persistedUrl) {
+      const link = document.createElement('a');
+      link.href = persistedUrl;
+      link.download = String(prototypeVersion.name || prototypeFile.name || '').trim() || 'attachment';
+      link.rel = 'noopener';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+  }
   const objectUrl = createProcessPrototypeObjectUrl(prototypeVersion);
   const link = document.createElement('a');
   link.href = objectUrl;
@@ -4779,24 +4943,26 @@ function renderProcessTab() {
       </div>
       <div class="form-section">
         <div class="section-toolbar">
-          <h4>流程原型${prototypeFiles.length ? `<span class="section-count">${prototypeFiles.length}项</span>` : ''}</h4>
+          <h4>流程原型/附件${prototypeFiles.length ? `<span class="section-count">${prototypeFiles.length}项</span>` : ''}</h4>
         </div>
         ${prototypeFiles.length ? `<div class="prototype-file-list" data-testid="proc-prototype-list">
           ${prototypeFiles.map((file) => {
             const currentVersion = findProcessPrototypeVersion(file);
             const versionCount = Array.isArray(file.versions) ? file.versions.length : 0;
             const expanded = isProcessPrototypeExpanded(proc.id, file.uid);
+            const fileKind = getProcessAttachmentKind(currentVersion || file);
+            const canPreviewCurrent = canPreviewProcessAttachment(currentVersion || file);
             return `<div class="prototype-file-item" data-testid="proc-prototype-item">
             <div class="prototype-file-meta">
               <strong class="prototype-file-name">${esc(file.name || '')}</strong>
               <span class="prototype-file-version">当前 v${currentVersion?.number || 1} · 共${versionCount || 1}版${currentVersion?.uploadedAt ? ` · ${esc(currentVersion.uploadedAt)}` : ''}</span>
-              <span class="prototype-file-kind">HTML 原型</span>
+              <span class="prototype-file-kind">${esc(fileKind)}</span>
             </div>
             <div class="prototype-file-actions">
               <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-toggle" data-prototype-toggle="${esc(file.uid)}"
                 onclick="toggleProcessPrototypeVersions('${esc(proc.id)}','${esc(file.uid)}')">${expanded ? '收起' : '展开'}版本</button>
-              <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-open"
-                onclick="openProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}')">打开</button>
+              ${canPreviewCurrent ? `<button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-open"
+                onclick="openProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}')">查看</button>` : ''}
               <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-download"
                 onclick="downloadProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}')">下载</button>
               <button class="btn btn-ghost-sm prototype-file-remove" type="button" data-testid="proc-prototype-remove"
@@ -4809,8 +4975,8 @@ function renderProcessTab() {
                   <span class="prototype-version-time">${esc(version.uploadedAt || '未记录上传时间')}</span>
                 </div>
                 <div class="prototype-version-actions">
-                  <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-open"
-                    onclick="openProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}','${esc(version.uid)}')">打开</button>
+                  ${canPreviewProcessAttachment(version) ? `<button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-open"
+                    onclick="openProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}','${esc(version.uid)}')">查看</button>` : ''}
                   <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-download"
                     onclick="downloadProcessPrototypeFile('${esc(proc.id)}','${esc(file.uid)}','${esc(version.uid)}')">下载</button>
                 </div>
@@ -4818,13 +4984,18 @@ function renderProcessTab() {
             </div>` : ''}
           </div>`;
           }).join('')}
-        </div>` : `<p class="no-refs" style="margin-bottom:8px">尚未上传流程原型文件</p>`}
+        </div>` : `<p class="no-refs" style="margin-bottom:8px">尚未上传流程原型/附件</p>`}
         <div class="prototype-upload-row" data-testid="proc-prototype-upload">
-          <input type="file" id="${prototypeInputId}" data-testid="proc-prototype-input" accept=".html,.htm,text/html" multiple>
+          <input type="file" id="${prototypeInputId}" data-testid="proc-prototype-input"
+            accept=".html,.htm,.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.md,.txt,.json,.csv" multiple>
           <button class="btn btn-outline btn-sm" type="button" data-testid="proc-prototype-upload-button"
-            onclick="addProcessPrototypeFiles('${esc(proc.id)}','${prototypeInputId}')">上传 HTML 原型</button>
+            onclick="addProcessPrototypeFiles('${esc(proc.id)}','${prototypeInputId}')">上传附件</button>
         </div>
-        <p class="prototype-upload-hint">支持同一流程上传多个 HTML 原型文件；同名上传会自动新增版本，并把最新上传设为当前引用。</p>
+        <div class="prototype-upload-progress ${(S.ui.procAttachmentUpload || {}).active ? '' : 'hidden'}" data-testid="proc-prototype-upload-progress">
+          <div class="prototype-upload-progress-track"><span data-testid="proc-prototype-upload-progress-bar" style="width:${Number((S.ui.procAttachmentUpload || {}).percent || 0)}%"></span></div>
+          <strong data-testid="proc-prototype-upload-progress-message">${esc((S.ui.procAttachmentUpload || {}).message || '正在上传...')}</strong>
+        </div>
+        <p class="prototype-upload-hint">支持上传 HTML 原型、图片、PDF、Office 文档和文本类附件；同名上传会自动新增版本，并把最新上传设为当前引用。</p>
       </div>
       <p style="margin-top:14px;font-size:12px;color:var(--text-m)">
         点击上方流程图中的流程节点可直接进入节点编辑
