@@ -1,6 +1,60 @@
 const { test, expect } = require('@playwright/test');
 
-const { createDocument, openDocument } = require('./support/app-helpers');
+const { createDocument, expandValueStreams, openDocument } = require('./support/app-helpers');
+
+function buildPreviewStageDoc(name) {
+  return {
+    meta: { title: name, domain: name, author: 'tester', date: '2026-05-11' },
+    roles: [],
+    language: [],
+    stages: [
+      { id: 'S1', name: 'Account opening', subDomain: 'Account', processLinks: [] },
+    ],
+    stageLinks: [],
+    stageFlowRefs: [
+      { id: 'SFR1', stageId: 'S1', processId: 'P1', order: 1, pos: { x: 0, y: 0 } },
+      { id: 'SFR2', stageId: 'S1', processId: 'P2', order: 2, pos: { x: 0, y: 0 } },
+    ],
+    stageFlowLinks: [
+      { id: 'SFL1', stageId: 'S1', fromRefId: 'SFR1', toRefId: 'SFR2' },
+    ],
+    processes: [
+      { id: 'P1', name: 'Capture application', subDomain: 'Account', flowGroup: 'Onboarding', trigger: '', outcome: '', nodes: [] },
+      { id: 'P2', name: 'Review application', subDomain: 'Account', flowGroup: 'Onboarding', trigger: '', outcome: '', nodes: [] },
+    ],
+    entities: [],
+    relations: [],
+    rules: [],
+  };
+}
+
+test('preview stage detail uses the same readonly rendering as modeling stage view', async ({ page, request }) => {
+  const documentName = `preview-stage-render-${Date.now()}`;
+  await createDocument(request, documentName, buildPreviewStageDoc(documentName));
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('sidebar-browse-stage').click();
+  await expandValueStreams(page);
+  await page.locator('.sb-stage-head[data-stage-id="S1"]').click();
+
+  await expect(page.getByTestId('stage-detail-graph')).toBeVisible();
+  await expect(page.getByTestId('stage-flow-group')).toContainText('Onboarding');
+  await expect(page.locator('[data-testid="stage-detail-graph"] [data-testid="stage-graph-node"] .stage-graph-node-meta')).toHaveCount(0);
+  const modelingWritingMode = await page.locator('[data-testid="stage-detail-graph"] [data-process-id="P1"] .stage-flow-node-title').evaluate((node) => getComputedStyle(node).writingMode);
+  expect(modelingWritingMode).toBe('vertical-lr');
+
+  await page.getByTestId('tab-preview').click();
+  const previewGraph = page.getByTestId('preview-stage-detail-S1');
+  await expect(previewGraph).toBeVisible();
+  await expect(previewGraph).toHaveClass(/stage-flow-guide/);
+  await expect(previewGraph.getByTestId('stage-flow-group')).toContainText('Onboarding');
+  await expect(previewGraph.getByTestId('stage-graph-node')).toHaveCount(2);
+  await expect(previewGraph.locator('.stage-graph-node-meta')).toHaveCount(0);
+  const previewWritingMode = await previewGraph.locator('[data-process-id="P1"] .stage-flow-node-title').evaluate((node) => getComputedStyle(node).writingMode);
+  expect(previewWritingMode).toBe(modelingWritingMode);
+});
 
 test('预览页提供大纲视图并支持跳转', async ({ page, request }) => {
   const documentName = `preview-outline-${Date.now()}`;

@@ -314,21 +314,35 @@ function buildPreviewStageDetailData(doc, stageItem) {
   const processes = processRefs.map((ref) => getStageRefProcess(ref, doc)).filter(Boolean);
   return {
     processes,
+    processRefs,
     nodes: processRefs.map((ref) => {
       const proc = getStageRefProcess(ref, doc);
       return {
         id: ref.id,
         label: proc?.name || proc?.id || ref.processId,
-        meta: proc?.flowGroup ? `流程分组 · ${proc.flowGroup}` : '',
+        meta: '',
+        group: proc?.flowGroup || '',
+        processId: proc?.id || ref.processId,
       };
     }),
     links: getStageFlowLinks(doc)
       .filter((link) => link.stageId === stageItem.id)
-      .map((link) => ({ from: link.fromRefId, to: link.toRefId })),
+      .map((link) => ({ id: link.id, from: link.fromRefId, to: link.toRefId })),
   };
 }
 
-function renderPreviewStageGraphMarkup(nodes, links, kind = 'stage', testId = 'preview-stage-graph') {
+function renderPreviewStageGraphMarkup(nodes, links, kind = 'stage', testId = 'preview-stage-graph', options = {}) {
+  if (kind === 'stage-ref' && typeof renderStageGraphMarkup === 'function') {
+    return renderStageGraphMarkup({
+      nodes,
+      links,
+      kind,
+      testId,
+      stageItem: options.stageItem || null,
+      editing: false,
+      processRefs: options.processRefs || [],
+    });
+  }
   if (!nodes.length) {
     return `<div class="diag-empty" data-testid="${testId}-empty">暂无内容</div>`;
   }
@@ -379,7 +393,10 @@ function renderPreviewStagesHtml(doc) {
           | <strong>流程数</strong>: ${detail.processes.length}
           ${stageItem.virtual ? ' | <strong>说明</strong>: 未设置业务阶段' : ''}
         </p>
-        ${renderPreviewStageGraphMarkup(detail.nodes, detail.links, 'stage-ref', graphTestId)}
+        ${renderPreviewStageGraphMarkup(detail.nodes, detail.links, 'stage-ref', graphTestId, {
+          stageItem,
+          processRefs: detail.processRefs,
+        })}
       </div>`;
     }).join('')}`;
 }
