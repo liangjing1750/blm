@@ -977,6 +977,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                 continue
             flow_node_ids.add(node_id)
             normalized_flow_node = dict(flow_node)
+            _ensure_uid(normalized_flow_node)
             normalized_flow_node["id"] = node_id
             normalized_flow_node["kind"] = "gateway"
             normalized_flow_node["title"] = str(
@@ -1021,6 +1022,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                     continue
                 seen_flow_edges.add(edge_key)
             normalized_edge = dict(edge)
+            _ensure_uid(normalized_edge)
             normalized_edge["id"] = str(edge.get("id") or f"E{edge_index}").strip()
             normalized_edge["from"] = source
             normalized_edge["to"] = target

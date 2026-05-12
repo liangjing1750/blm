@@ -573,6 +573,8 @@ function setActiveDocumentSession(doc, options = {}) {
   }
   S.doc = doc;
   S.currentFile = options.fileName || null;
+  S.documentRevision = Math.max(0, Number(doc?.meta?.revision) || 0);
+  S.baseDocument = cloneDocument(doc);
   S.modified = false;
   S.ui = options.preserveUiState
     ? getPreservedDocUiState(doc, previousUi)
@@ -2022,9 +2024,16 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
       setSaveProgress(true, mapped, `正在发送保存请求 ${progress}%`, '请保持当前页面打开。');
     };
     setSaveProgress(true, 35, '正在发送保存请求...', '文档数据正在发送到本地服务。');
+    const revisionOptions = currentName && currentName === S.currentFile
+      ? {
+        baseRevision: S.documentRevision,
+        baseDocument: S.baseDocument,
+        rebase: true,
+      }
+      : {};
     result = currentName && currentName !== normalizedName
       ? await api.rename(currentName, normalizedName, document, willOverwrite, handleSaveUploadProgress)
-      : await api.save(normalizedName, document, handleSaveUploadProgress);
+      : await api.save(normalizedName, document, handleSaveUploadProgress, revisionOptions);
     setSaveProgress(true, 100, '保存完成', '文档已写入工作区。');
   } finally {
     S.isSaving = false;
@@ -2033,7 +2042,11 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
   }
   if (!result || result.error) {
     if (!result) return null;
-    alert(result.error);
+    if (result.error === 'revision_conflict') {
+      alert(result.message || '文档已被其他人保存，请重新加载或合并后再保存。');
+    } else {
+      alert(result.error);
+    }
     return null;
   }
 
@@ -2488,6 +2501,8 @@ const App = {
     if (S.currentFile === name) {
       S.currentFile = null;
       S.doc = null;
+      S.documentRevision = 0;
+      S.baseDocument = null;
       S.modified = false;
       render();
     }

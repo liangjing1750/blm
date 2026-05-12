@@ -434,7 +434,7 @@ function addProcessTaskAfter(procId, afterTaskId = '') {
   const proc = S.doc?.processes?.find((item) => item.id === procId);
   if (!proc) return;
   const allTasks = (S.doc?.processes || []).flatMap((item) => getProcNodes(item));
-  const id = nextId('T', allTasks);
+  const id = nextStableId('T', allTasks);
   const node = {
     id,
     name: '新节点',
@@ -467,7 +467,7 @@ function addProcessGateway(procId, afterGatewayId = '') {
   if (!proc) return;
   const flow = normalizeProcessFlow(proc);
   const gateway = {
-    id: nextId('G', flow.nodes || []),
+    id: nextStableId('B', flow.nodes || []),
     kind: 'gateway',
     gatewayType: 'exclusive',
     title: '',
@@ -534,7 +534,7 @@ function addProcessFlowEdge(procId, afterEdgeId = '') {
   if (!proc) return;
   const flow = normalizeProcessFlow(proc);
   const edge = {
-    id: nextId('E', flow.edges || []),
+    id: nextStableId('L', flow.edges || []),
     from: '',
     to: '',
     label: '',
@@ -663,7 +663,9 @@ function renderProcessFlowRoutingEditor(proc) {
       <div class="flow-routing-column">
         <h5>节点</h5>
         ${nodes.length ? nodes.map((node, index) => `<div class="flow-routing-row flow-node-row" data-testid="process-flow-node-row">
-          <button class="flow-node-open" type="button" title="编辑节点" onclick="openProcessEditor('${esc(proc.id)}','${esc(node.id)}')">${esc(node.id)}</button>
+          <input class="flow-id-input" type="text" data-testid="process-flow-node-id-input" value="${esc(node.id)}" title="节点业务ID"
+            onchange="renameTaskId('${esc(proc.id)}','${esc(node.id)}',this.value)">
+          <button class="flow-node-open" type="button" title="编辑节点" onclick="openProcessEditor('${esc(proc.id)}','${esc(node.id)}')">编辑</button>
           <input type="text" value="${esc(node.name || '')}" placeholder="节点名称"
             oninput="setTask('${esc(proc.id)}','${esc(node.id)}','name',this.value);renderProcDiagramNow()">
           <select class="flow-node-role-select" multiple size="1" title="按住 Ctrl 可多选角色"
@@ -681,7 +683,9 @@ function renderProcessFlowRoutingEditor(proc) {
       <div class="flow-routing-column">
         <h5>分支</h5>
         ${gateways.length ? gateways.map((gateway) => `<div class="flow-routing-row" data-testid="process-flow-gateway-row">
-          <input type="text" value="${esc(gateway.title || '')}" placeholder="如：是否通过校验"
+          <input class="flow-id-input" type="text" data-testid="process-flow-gateway-id-input" value="${esc(gateway.id)}" title="分支业务ID"
+            onchange="renameGatewayId('${esc(proc.id)}','${esc(gateway.id)}',this.value)">
+          <input type="text" data-testid="process-flow-gateway-title-input" value="${esc(gateway.title || '')}" placeholder="如：是否通过校验"
             oninput="setProcessGateway('${esc(proc.id)}','${esc(gateway.id)}','title',this.value)">
           <select onchange="setProcessGateway('${esc(proc.id)}','${esc(gateway.id)}','role_id',this.value)">
             <option value="">跟随上游 / 系统判断</option>
@@ -698,6 +702,8 @@ function renderProcessFlowRoutingEditor(proc) {
       <div class="flow-routing-column">
         <h5>连线</h5>
         ${flow.edges.length ? flow.edges.map((edge) => `<div class="flow-edge-row" data-testid="process-flow-edge-row">
+          <input class="flow-id-input" type="text" data-testid="process-flow-edge-id-input" value="${esc(edge.id)}" title="连线业务ID"
+            onchange="renameFlowEdgeId('${esc(proc.id)}','${esc(edge.id)}',this.value)">
           <select onchange="setProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}','from',this.value)">
             ${renderProcessFlowNodeOptions(proc, edge.from, 'from')}
           </select>
@@ -1617,7 +1623,7 @@ function moveSdGroup(sd, dir, e) {
 }
 
 function addProcess(subDomain, stageId = '') {
-  const id  = nextId('P', S.doc.processes);
+  const id  = nextStableId('P', S.doc.processes);
   const pos = _nextFreePos(S.doc.processes, null); /* 自动填补空缺格子 */
   const stage = findStage(stageId, S.doc);
   const nextSubDomain = String(subDomain || stage?.subDomain || '').trim();
@@ -1631,7 +1637,7 @@ function addProcess(subDomain, stageId = '') {
 function addStageFlowNode(stageId) {
   const stage = findStage(stageId, S.doc);
   if (!stage) return;
-  const id = nextId('P', S.doc.processes || []);
+  const id = nextStableId('P', S.doc.processes || []);
   const pos = _nextFreePos(S.doc.processes || [], null);
   S.doc.processes.push({
     id,
@@ -2031,7 +2037,7 @@ function ensureTaskDefinitionForNodeTask(item) {
   const knownTypes = new Set((typeof ORCHESTRATION_TYPES !== 'undefined' ? ORCHESTRATION_TYPES : []).map((option) => option.value));
   const rawType = knownTypes.has(item.type) ? item.type : 'Service';
   const definition = {
-    id: nextId('TD', defs),
+    id: nextStableId('TD', defs),
     name: getUniqueTaskDefinitionName(item.name || '新任务定义'),
     type: rawType,
     querySourceKind: rawType === 'Query' ? (item.querySourceKind || 'Dictionary') : '',
@@ -2081,7 +2087,7 @@ function renderTaskConstructOptions(selectedConstructId = '') {
 function addTask(procId) {
   const proc=S.doc.processes.find(p=>p.id===procId); if(!proc) return;
   const allTasks=S.doc.processes.flatMap(p=>getProcNodes(p));
-  const id=nextId('T',allTasks);
+  const id=nextStableId('T',allTasks);
   const node = {id, name:'\u65b0\u8282\u70b9', role_ids:[], roles:[], role_id:'', role:'', userSteps:[], orchestrationTasks:[], forms:[], entity_ops:[], repeatable:false, rules_note:'', businessRules:[]};
   getProcNodes(proc).push(node);
   hydrateDocumentForUi(S.doc);
@@ -3058,7 +3064,7 @@ function moveStageProcessRef(stageId, procId, dir) {
 
 function addStage(subDomain = '', afterStageId = '', options = {}) {
   const stages = getStages(S.doc);
-  const id = nextId('S', stages);
+  const id = nextStableId('S', stages);
   const row = normalizeStageEntry({
     id,
     name: `业务阶段${stages.length + 1}`,
@@ -3360,7 +3366,7 @@ async function addStageFromMatrixCell(laneId, columnId) {
   const stageName = String(name || '').trim();
   if (!stageName) return;
   const stages = getStages(S.doc);
-  const id = nextId('S', stages);
+  const id = nextStableId('S', stages);
   stages.push(normalizeStageEntry({
     id,
     name: stageName,
@@ -6125,6 +6131,11 @@ function renderProcessTab() {
       /* ── 节点编辑 ── */
       h+=`<div class="form-grid" style="margin-bottom:16px">
         <div class="field-group">
+          <label>节点ID</label>
+          <input type="text" data-testid="process-task-id-input" value="${esc(task.id || '')}" placeholder="节点业务ID"
+            onchange="renameTaskId('${esc(proc.id)}','${esc(task.id)}',this.value)">
+        </div>
+        <div class="field-group">
           <label>节点名称</label>
           <input type="text" data-testid="process-task-name-input" value="${esc(task.name||'')}" placeholder="如：新增仓库"
             oninput="setTask('${esc(proc.id)}','${esc(task.id)}','name',this.value)">
@@ -6194,6 +6205,11 @@ function renderProcessTab() {
         })
         .join('');
       h+=`<div class="form-grid">
+        <div class="field-group">
+          <label>流程ID</label>
+          <input type="text" data-testid="process-id-input" value="${esc(proc.id || '')}" placeholder="流程业务ID"
+            onchange="renameProcessId('${esc(proc.id)}',this.value)">
+        </div>
         <div class="field-group">
           <label>流程名称</label>
           <input type="text" id="proc-name-input" value="${esc(proc.name||'')}"

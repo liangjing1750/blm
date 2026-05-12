@@ -6,7 +6,7 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from blm_core.document import SCHEMA_VERSION, migrate_document, renumber_document_ids
+from blm_core.document import SCHEMA_VERSION, migrate_document
 
 
 MISSING = object()
@@ -44,7 +44,7 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "stage_flow_ref": {"scalars": ["id", "stageId", "processId", "order", "pos"], "lists": {}},
     "stage_flow_link": {"scalars": ["id", "stageId", "fromRefId", "toRefId"], "lists": {}},
     "process": {
-        "scalars": ["id", "name", "subDomain", "flowGroup", "stageId", "stagePos", "trigger", "outcome", "pos"],
+        "scalars": ["id", "name", "subDomain", "flowGroup", "stageId", "stagePos", "trigger", "outcome", "pos", "flow"],
         "lists": {"prototypeFiles": "prototype_file", "nodes": "node"},
     },
     "prototype_file": {
@@ -359,7 +359,6 @@ class MergeEngine:
         base = MergeInput(*_prepare_input(base_raw)) if base_raw is not None else None
 
         merged = self._merge_document(base, left, right)
-        merged = renumber_document_ids(merged)
         merged = migrate_document(merged)
         self.validation_issues = validate_document(merged)
 
@@ -786,6 +785,26 @@ def validate_document(document: dict) -> list[dict]:
     doc = migrate_document(document)
     issues: list[dict] = []
 
+    def add_duplicate_id_issues(items: list[dict], item_type: str, path_prefix: str, scope_label: str = "") -> None:
+        seen: dict[str, dict] = {}
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id", "")).strip()
+            if not item_id:
+                continue
+            if item_id in seen:
+                suffix = f"（{scope_label}）" if scope_label else ""
+                issues.append(
+                    {
+                        "level": "error",
+                        "path": f"{path_prefix}.{item_id}.id",
+                        "message": f"{_collection_label(item_type)}业务ID重复{suffix}: {item_id}",
+                    }
+                )
+            else:
+                seen[item_id] = item
+
     role_ids = {role["id"] for role in doc.get("roles", [])}
     stage_ids = {stage["id"] for stage in doc.get("stages", [])}
     entity_ids = {entity["id"] for entity in doc.get("entities", [])}
@@ -798,6 +817,21 @@ def validate_document(document: dict) -> list[dict]:
         if str(ref.get("id", "")).strip()
     }
     node_ids = {node["id"] for process in doc.get("processes", []) for node in process.get("nodes", [])}
+
+    add_duplicate_id_issues(doc.get("roles", []), "role", "roles")
+    add_duplicate_id_issues(doc.get("stages", []), "stage", "stages")
+    add_duplicate_id_issues(doc.get("processes", []), "process", "processes")
+    add_duplicate_id_issues(doc.get("entities", []), "entity", "entities")
+    add_duplicate_id_issues(doc.get("rules", []), "rule", "rules")
+    add_duplicate_id_issues(doc.get("capabilityUnits", []), "capability_unit", "capabilityUnits")
+    add_duplicate_id_issues(doc.get("businessConstructs", []), "business_construct", "businessConstructs")
+    add_duplicate_id_issues(doc.get("taskDefinitions", []), "task_definition", "taskDefinitions")
+    for process in doc.get("processes", []):
+        process_id = str(process.get("id", "")).strip()
+        add_duplicate_id_issues(process.get("nodes", []), "node", f"processes.{process_id}.nodes", process_id)
+        flow = process.get("flow") if isinstance(process.get("flow"), dict) else {}
+        add_duplicate_id_issues(flow.get("nodes", []), "stage_flow_ref", f"processes.{process_id}.flow.nodes", process_id)
+        add_duplicate_id_issues(flow.get("edges", []), "stage_flow_link", f"processes.{process_id}.flow.edges", process_id)
 
     process_stage_map = {
         process["id"]: str(process.get("stageId", "")).strip()

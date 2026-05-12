@@ -1815,7 +1815,7 @@ function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
 }
 
 function addEntity(constructId = '') {
-  const id = nextId('E', S.doc.entities);
+  const id = nextStableId('E', S.doc.entities);
   const entity = { id, name: '新实体', businessConstructId: constructId || '', businessConstructIds: constructId ? [constructId] : [], fields: [], state_transitions: [] };
   S.doc.entities.push(entity);
   if (constructId && typeof addEntityToConstruct === 'function') {
@@ -1899,17 +1899,79 @@ function renameProcessId(oldId, newId) {
   if(S.doc.processes.some(p=>p.id===newId)) { alert(`流程ID "${newId}" 已存在`); render(); return; }
   const proc = S.doc.processes.find(p=>p.id===oldId); if(!proc) return;
   proc.id = newId;
+  for(const stage of getStages(S.doc)) {
+    for(const link of getStageProcessLinks(stage)) {
+      if(link.fromProcessId === oldId) link.fromProcessId = newId;
+      if(link.toProcessId === oldId) link.toProcessId = newId;
+    }
+  }
+  for(const ref of getStageFlowRefs(S.doc)) {
+    if(ref.processId === oldId) ref.processId = newId;
+  }
+  for(const rule of (S.doc.rules || [])) {
+    if(rule.applies_to === oldId) rule.applies_to = newId;
+  }
   if(S.ui.procId === oldId) S.ui.procId = newId;
   markModified(); render();
 }
 function renameTaskId(procId, oldId, newId) {
   newId = newId.trim();
   if(!newId || newId === oldId) { render(); return; }
-  const allTasks = S.doc.processes.flatMap(p=>p.tasks||[]);
+  const allTasks = S.doc.processes.flatMap(p=>getProcNodes(p));
   if(allTasks.some(t=>t.id===newId)) { alert(`任务ID "${newId}" 已存在`); render(); return; }
-  const task = S.doc.processes.find(p=>p.id===procId)?.tasks?.find(t=>t.id===oldId); if(!task) return;
+  const proc = S.doc.processes.find(p=>p.id===procId);
+  const task = getProcNodes(proc).find(t=>t.id===oldId); if(!task) return;
   task.id = newId;
+  const flow = normalizeProcessFlow(proc);
+  for(const edge of flow.edges || []) {
+    if(edge.from === oldId) edge.from = newId;
+    if(edge.to === oldId) edge.to = newId;
+  }
+  const swimlane = flow.layout?.swimlane;
+  if(swimlane?.items && swimlane.items[oldId]) {
+    swimlane.items[newId] = swimlane.items[oldId];
+    delete swimlane.items[oldId];
+  }
   if(S.ui.taskId === oldId) S.ui.taskId = newId;
+  markModified(); render();
+}
+function renameGatewayId(procId, oldId, newId) {
+  newId = newId.trim();
+  if(!newId || newId === oldId) { render(); return; }
+  const proc = S.doc.processes.find(p=>p.id===procId); if(!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  const taskIds = new Set(getProcNodes(proc).map((task) => task.id));
+  if(taskIds.has(newId) || flow.nodes.some((node)=>node.id===newId)) { alert(`分支ID "${newId}" 已存在`); render(); return; }
+  const gateway = flow.nodes.find((node)=>node.id===oldId);
+  if(!gateway) return;
+  gateway.id = newId;
+  for(const edge of flow.edges || []) {
+    if(edge.from === oldId) edge.from = newId;
+    if(edge.to === oldId) edge.to = newId;
+  }
+  const swimlane = flow.layout?.swimlane;
+  if(swimlane?.items && swimlane.items[oldId]) {
+    swimlane.items[newId] = swimlane.items[oldId];
+    delete swimlane.items[oldId];
+  }
+  markModified(); render();
+}
+function renameFlowEdgeId(procId, oldId, newId) {
+  newId = newId.trim();
+  if(!newId || newId === oldId) { render(); return; }
+  const proc = S.doc.processes.find(p=>p.id===procId); if(!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  if(flow.edges.some((edge)=>edge.id===newId)) { alert(`连线ID "${newId}" 已存在`); render(); return; }
+  const edge = flow.edges.find((item)=>item.id===oldId);
+  if(!edge) return;
+  edge.id = newId;
+  const swimlane = flow.layout?.swimlane;
+  const oldLabelKey = `edge:${oldId}`;
+  const newLabelKey = `edge:${newId}`;
+  if(swimlane?.labels && swimlane.labels[oldLabelKey]) {
+    swimlane.labels[newLabelKey] = swimlane.labels[oldLabelKey];
+    delete swimlane.labels[oldLabelKey];
+  }
   markModified(); render();
 }
 function renameEntityId(oldId, newId) {
@@ -1949,6 +2011,8 @@ function startEditId(spanEl, type, ...args) {
     const v = input.value.trim();
     if(type==='proc')   renameProcessId(curId, v);
     else if(type==='task')   renameTaskId(args[0], curId, v);
+    else if(type==='gateway') renameGatewayId(args[0], curId, v);
+    else if(type==='flowEdge') renameFlowEdgeId(args[0], curId, v);
     else if(type==='entity') renameEntityId(curId, v);
     else render();
   }

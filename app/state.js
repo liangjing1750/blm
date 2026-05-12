@@ -6,6 +6,8 @@
 const S = {
   files: [],
   currentFile: null,
+  documentRevision: 0,
+  baseDocument: null,
   saveDialogMode: 'save',
   doc: null,
   modified: false,
@@ -222,6 +224,30 @@ function nextId(prefix, items) {
   const used = new Set((items||[]).map(x=>x.id));
   let i=1; while(used.has(`${prefix}${i}`))i++;
   return `${prefix}${i}`;
+}
+function shortBusinessId() {
+  if (window.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(3);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+  return Math.random().toString(16).slice(2, 8).toUpperCase().padEnd(6, '0');
+}
+function nextStableId(prefix, items, preferredName = '') {
+  const used = new Set((items || []).map((item) => String(item?.id || '').trim()).filter(Boolean));
+  const normalizedPrefix = String(prefix || 'ID').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase() || 'ID';
+  const normalizedName = String(preferredName || '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}_-]+/gu, '')
+    .slice(0, 24);
+  const base = normalizedName ? `${normalizedPrefix}-${normalizedName}` : `${normalizedPrefix}-${shortBusinessId()}`;
+  if (!used.has(base)) return base;
+  let candidate = '';
+  do {
+    candidate = `${base}-${shortBusinessId().slice(0, 4)}`;
+  } while (used.has(candidate));
+  return candidate;
 }
 function createUiUid(prefix = 'uid') {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
@@ -1264,10 +1290,7 @@ function syncTaskRole(task) {
   task.role = roleNames.join('、');
 }
 function nextRoleId() {
-  const used = new Set(getRoles().map((role) => role.id));
-  let index = 1;
-  while (used.has(`R${index}`)) index += 1;
-  return `R${index}`;
+  return nextStableId('R', getRoles());
 }
 function createRoleDraft(name) {
   return {

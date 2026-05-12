@@ -152,7 +152,7 @@ function ensureCapabilityUnitRef(capabilityId) {
   const inferred = (typeof getCapabilityItems === 'function' ? getCapabilityItems(S.doc) : [])
     .find((item) => String(item.id || item.name || '').trim() === targetId || String(item.name || '').trim() === targetId);
   capability = {
-    id: targetId || nextId('CU', ensureDocumentArray('capabilityUnits')),
+    id: targetId || nextStableId('CU', ensureDocumentArray('capabilityUnits')),
     name: getUniqueCapabilityUnitName(inferred?.name || targetId || '新业务组件'),
     kind: inferred?.kind === 'core' ? 'core' : 'generic',
     note: inferred?.note || '',
@@ -258,7 +258,7 @@ function hasBusinessConstructNameConflict(name, capabilityId = '', ignoreConstru
 function addCapabilityUnit(afterId = '') {
   const items = ensureDocumentArray('capabilityUnits');
   const capability = {
-    id: nextId('CU', items),
+    id: nextStableId('CU', items),
     name: getUniqueCapabilityUnitName('新业务组件'),
     kind: 'core',
     note: '',
@@ -338,7 +338,7 @@ function addBusinessConstruct(afterId = '', capabilityId = '') {
   const capability = capabilityId ? ensureCapabilityUnitRef(capabilityId) : (getCapabilityItems(S.doc)[0] || null);
   const capabilityScopeId = capability?.id || '';
   const construct = {
-    id: nextId('BC', constructs),
+    id: nextStableId('BC', constructs),
     name: getUniqueBusinessConstructName('新业务构件', capabilityScopeId),
     note: '',
     capabilityUnitId: capabilityScopeId,
@@ -506,7 +506,7 @@ function addTaskDefinition(afterId = '', capabilityId = '', constructId = '') {
     ? ensureCapabilityUnitRef(capabilityId)
     : (construct?.capabilityUnitId ? ensureCapabilityUnitRef(construct.capabilityUnitId) : null);
   const task = {
-    id: nextId('TD', tasks),
+    id: nextStableId('TD', tasks),
     name: getUniqueTaskDefinitionName('新任务定义'),
     type: 'Service',
     target: '',

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from blm_core.document import create_empty_document, migrate_document
 from blm_core.merge import analyze_merge, apply_merge, validate_document
-from blm_core.storage import DocumentFileStore
+from blm_core.storage import DocumentFileStore, WorkspaceStorage
 
 
 class DocumentIdentityTests(unittest.TestCase):
@@ -184,6 +184,92 @@ class DocumentFileStoreTests(unittest.TestCase):
             self.assertEqual(loaded["meta"]["title"], "Portable")
             self.assertTrue(path.exists())
             self.assertTrue(path.with_suffix(".md").exists())
+
+
+class WorkspaceRevisionTests(unittest.TestCase):
+    def test_save_with_revision_rebases_non_overlapping_stale_changes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir))
+            saved = storage.save_with_revision("Doc", create_empty_document("Doc"))
+            base = deepcopy(saved["document"])
+
+            remote = deepcopy(base)
+            remote["entities"].append(
+                {
+                    "uid": "entity-remote",
+                    "id": "E1",
+                    "name": "订单",
+                    "group": "",
+                    "note": "",
+                    "fields": [],
+                    "state_transitions": [],
+                }
+            )
+            remote_result = storage.save_with_revision(
+                "Doc",
+                remote,
+                base_revision=base["meta"]["revision"],
+                base_document=base,
+                rebase=True,
+            )
+            self.assertTrue(remote_result["ok"])
+
+            local = deepcopy(base)
+            local["roles"].append(
+                {
+                    "uid": "role-local",
+                    "id": "R1",
+                    "name": "业务员",
+                    "desc": "",
+                    "group": "",
+                    "subDomains": [],
+                }
+            )
+            stale_result = storage.save_with_revision(
+                "Doc",
+                local,
+                base_revision=base["meta"]["revision"],
+                base_document=base,
+                rebase=True,
+            )
+
+            self.assertTrue(stale_result["ok"])
+            self.assertTrue(stale_result["rebased"])
+            self.assertEqual(stale_result["document"]["meta"]["revision"], 3)
+            self.assertEqual(len(stale_result["document"]["roles"]), 1)
+            self.assertEqual(len(stale_result["document"]["entities"]), 1)
+
+    def test_save_with_revision_returns_conflict_for_same_field_changes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir))
+            saved = storage.save_with_revision("Doc", create_empty_document("Doc"))
+            base = deepcopy(saved["document"])
+
+            remote = deepcopy(base)
+            remote["meta"]["title"] = "远端标题"
+            remote["meta"]["domain"] = "远端标题"
+            storage.save_with_revision(
+                "Doc",
+                remote,
+                base_revision=base["meta"]["revision"],
+                base_document=base,
+                rebase=True,
+            )
+
+            local = deepcopy(base)
+            local["meta"]["title"] = "本地标题"
+            local["meta"]["domain"] = "本地标题"
+            conflict = storage.save_with_revision(
+                "Doc",
+                local,
+                base_revision=base["meta"]["revision"],
+                base_document=base,
+                rebase=True,
+            )
+
+            self.assertFalse(conflict["ok"])
+            self.assertEqual(conflict["error"], "revision_conflict")
+            self.assertGreaterEqual(len(conflict["conflicts"]), 1)
 
 
 class MergeEngineTests(unittest.TestCase):
@@ -427,6 +513,50 @@ class MergeEngineTests(unittest.TestCase):
 
         self.assertEqual(result["conflicts"], [])
         self.assertEqual(len(result["merged_document"]["rules"]), 2)
+
+    def test_merge_preserves_user_defined_ids_and_process_flow(self):
+        left = create_empty_document("流程左侧")
+        right = deepcopy(left)
+        left["processes"][0]["id"] = "P-RKYY"
+        right["processes"][0]["id"] = "P-RKYY"
+        left["processes"][0]["nodes"] = [
+            {"uid": "node-a", "id": "T-SUBMIT", "name": "提交", "role_ids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
+            {"uid": "node-b", "id": "T-CHECK", "name": "校验", "role_ids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
+        ]
+        right["processes"][0]["nodes"] = deepcopy(left["processes"][0]["nodes"])
+        right["processes"][0]["flow"] = {
+            "version": 2,
+            "nodes": [{"uid": "branch-a", "id": "B-QUALIFY", "kind": "gateway", "title": ""}],
+            "edges": [
+                {"uid": "edge-a", "id": "L-START", "from": "START", "to": "T-SUBMIT", "label": ""},
+                {"uid": "edge-b", "id": "L-CHECK", "from": "T-SUBMIT", "to": "B-QUALIFY", "label": ""},
+                {"uid": "edge-c", "id": "L-YES", "from": "B-QUALIFY", "to": "T-CHECK", "label": "通过"},
+                {"uid": "edge-d", "id": "L-END", "from": "T-CHECK", "to": "END", "label": ""},
+            ],
+        }
+
+        analysis = analyze_merge("3way", left, right, left)
+
+        merged_process = analysis["merged_document"]["processes"][0]
+        self.assertEqual(merged_process["id"], "P-RKYY")
+        self.assertEqual([node["id"] for node in merged_process["nodes"]], ["T-SUBMIT", "T-CHECK"])
+        self.assertEqual(merged_process["flow"]["nodes"][0]["id"], "B-QUALIFY")
+        self.assertEqual(merged_process["flow"]["edges"][1]["id"], "L-CHECK")
+        self.assertEqual(analysis["validation_issues"], [])
+
+    def test_validate_document_reports_duplicate_business_ids(self):
+        document = create_empty_document("重复ID")
+        document["processes"].append(deepcopy(document["processes"][0]))
+        document["processes"][1]["uid"] = "another-process"
+        document["processes"][0]["nodes"] = [
+            {"uid": "node-left", "id": "T-SAME", "name": "节点A", "role_ids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
+            {"uid": "node-right", "id": "T-SAME", "name": "节点B", "role_ids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
+        ]
+
+        issues = validate_document(document)
+
+        self.assertTrue(any("业务ID重复" in issue["message"] and "P1" in issue["message"] for issue in issues))
+        self.assertTrue(any("业务ID重复" in issue["message"] and "T-SAME" in issue["message"] for issue in issues))
 
     def test_validate_document_rejects_stage_flow_link_that_points_to_ref_from_other_stage(self):
         document = create_empty_document("Stage refs")

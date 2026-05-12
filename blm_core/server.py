@@ -220,8 +220,19 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
         def _handle_save(self, path: str, body: bytes):
             name = unquote(path[len("/api/save/"):])
             try:
-                document = json.loads(body or b"{}")
-                saved_document = storage.save(name, document)
+                payload = json.loads(body or b"{}")
+                if isinstance(payload, dict) and isinstance(payload.get("document"), dict):
+                    result = storage.save_with_revision(
+                        name,
+                        payload.get("document", {}),
+                        base_revision=payload.get("base_revision"),
+                        base_document=payload.get("base_document"),
+                        rebase=bool(payload.get("rebase")),
+                    )
+                    if not result.get("ok"):
+                        return self._json(result, 409)
+                    return self._json({"name": name, **result})
+                saved_document = storage.save(name, payload)
                 return self._json({"ok": True, "document": saved_document, "name": name})
             except json.JSONDecodeError:
                 return self._json({"error": "invalid json"}, 400)

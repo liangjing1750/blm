@@ -67,8 +67,13 @@ const api = {
   async load(name) {
     return fetch(`/api/load/${encodeURIComponent(name)}`).then((response) => response.json());
   },
-  async save(name, doc, onProgress) {
-    return postJsonWithProgress(`/api/save/${encodeURIComponent(name)}`, doc, onProgress);
+  async save(name, doc, onProgress, options = {}) {
+    return postJsonWithProgress(`/api/save/${encodeURIComponent(name)}`, {
+      document: doc,
+      base_revision: options.baseRevision,
+      base_document: options.baseDocument,
+      rebase: options.rebase !== false,
+    }, onProgress);
   },
   async uploadAttachment(file, onProgress) {
     return uploadBinary('/api/attachment-upload', file, onProgress);

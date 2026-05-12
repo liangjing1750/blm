@@ -172,8 +172,9 @@ test('process editor exposes only nodes branches and edges as new structure entr
 
   await page.getByTestId('process-flow-add-gateway').click();
   await expect(page.getByTestId('process-flow-gateway-row')).toHaveCount(1);
-  await page.getByTestId('process-flow-gateway-row').locator('input').fill('是否需要复核');
+  await page.getByTestId('process-flow-gateway-title-input').fill('是否需要复核');
   await expect(page.locator('.ps-gateway')).not.toContainText('是否需要复核');
+  const gatewayId = await page.getByTestId('process-flow-gateway-id-input').inputValue();
 
   await page.getByTestId('process-flow-add-edge').click();
   const lastEdge = page.getByTestId('process-flow-edge-row').last();
@@ -184,10 +185,10 @@ test('process editor exposes only nodes branches and edges as new structure entr
   expect(fromOptions).not.toContain('END');
   expect(toOptions).not.toContain('START');
   await lastEdge.locator('select').nth(0).selectOption('START');
-  await lastEdge.locator('select').nth(1).selectOption('G1');
-  await lastEdge.locator('input').fill('进入分支');
+  await lastEdge.locator('select').nth(1).selectOption(gatewayId);
+  await lastEdge.locator('input').nth(1).fill('进入分支');
   const explicitEdge = await page.evaluate(() => S.doc.processes[0].flow.edges.at(-1));
-  expect(explicitEdge).toMatchObject({ from: 'START', to: 'G1', label: '进入分支' });
+  expect(explicitEdge).toMatchObject({ from: 'START', to: gatewayId, label: '进入分支' });
   await expect(page.getByTestId('process-flow-validation')).toBeVisible();
 });
 

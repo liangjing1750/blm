@@ -223,7 +223,9 @@ class MigrateDocumentTests(unittest.TestCase):
         flow = migrated["processes"][0]["flow"]
 
         self.assertEqual(flow["orientation"], "vertical")
-        self.assertEqual(flow["nodes"], [
+        self.assertTrue(flow["nodes"][0]["uid"])
+        self.assertEqual(
+            {key: flow["nodes"][0][key] for key in ["id", "kind", "title", "role_id", "gatewayType"]},
             {
                 "id": "G1",
                 "kind": "gateway",
@@ -231,7 +233,8 @@ class MigrateDocumentTests(unittest.TestCase):
                 "role_id": "R2",
                 "gatewayType": "exclusive",
             },
-        ])
+        )
+        self.assertTrue(all(edge["uid"] for edge in flow["edges"]))
         self.assertEqual(
             [(edge["from"], edge["to"], edge["label"], edge["condition"]) for edge in flow["edges"]],
             [

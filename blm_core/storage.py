@@ -17,6 +17,7 @@ from pathlib import Path
 
 from blm_core.document import create_empty_document, migrate_document
 from blm_core.markdown import MarkdownExporter
+from blm_core.merge import apply_merge
 
 
 TRASH_ENTRY_RE = re.compile(r"^(?P<name>.+)-(?P<timestamp>\d{8}-\d{6}-\d{6})$")
@@ -297,9 +298,71 @@ class WorkspaceStorage(DocumentFileStore):
             safe_name = self._validate_name(name)
             if self._workspace_document_exists(safe_name):
                 self._snapshot_document(safe_name)
-            saved_document = self._save_workspace_document(safe_name, document)
+            current_revision = self._current_document_revision(safe_name)
+            document_to_save = self._with_document_revision(document, current_revision + 1)
+            saved_document = self._save_workspace_document(safe_name, document_to_save)
             self._remove_legacy_workspace_files(safe_name)
             return saved_document
+
+    def save_with_revision(
+        self,
+        name: str,
+        document: dict,
+        *,
+        base_revision: int | str | None = None,
+        base_document: dict | None = None,
+        rebase: bool = False,
+    ) -> dict:
+        with self._write_lock:
+            safe_name = self._validate_name(name)
+            exists = self._workspace_document_exists(safe_name)
+            current_document = self.load(safe_name) if exists else None
+            current_revision = self._document_revision(current_document) if current_document else 0
+            expected_revision = self._coerce_revision(base_revision)
+            document_to_save = document
+            rebased = False
+            merge_result: dict | None = None
+
+            if expected_revision is not None and exists and expected_revision != current_revision:
+                if not rebase or not isinstance(base_document, dict):
+                    return {
+                        "ok": False,
+                        "error": "revision_conflict",
+                        "message": "文档已被其他人保存，请重新加载或合并后再保存。",
+                        "current_revision": current_revision,
+                        "base_revision": expected_revision,
+                        "current_document": current_document,
+                    }
+                merge_result = apply_merge(
+                    "3way",
+                    left_document=document,
+                    right_document=current_document or {},
+                    base_document=base_document,
+                )
+                if merge_result.get("conflicts"):
+                    return {
+                        "ok": False,
+                        "error": "revision_conflict",
+                        "message": "文档已被其他人保存，自动合并存在冲突，请先处理冲突。",
+                        "current_revision": current_revision,
+                        "base_revision": expected_revision,
+                        **merge_result,
+                    }
+                document_to_save = merge_result.get("merged_document") or document
+                rebased = True
+
+            if exists:
+                self._snapshot_document(safe_name)
+            document_to_save = self._with_document_revision(document_to_save, current_revision + 1)
+            saved_document = self._save_workspace_document(safe_name, document_to_save)
+            self._remove_legacy_workspace_files(safe_name)
+            return {
+                "ok": True,
+                "document": saved_document,
+                "revision": self._document_revision(saved_document),
+                "rebased": rebased,
+                "merge_summary": (merge_result or {}).get("summary", {}),
+            }
 
     def rename(
         self,
@@ -910,6 +973,32 @@ class WorkspaceStorage(DocumentFileStore):
     def _workspace_document_exists(self, name: str) -> bool:
         safe_name = self._validate_name(name)
         return self._is_package_dir(self._package_dir(safe_name)) or self._legacy_json_path(safe_name).exists()
+
+    def _coerce_revision(self, value: int | str | None) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _document_revision(self, document: dict | None) -> int:
+        if not isinstance(document, dict):
+            return 0
+        meta = document.get("meta") if isinstance(document.get("meta"), dict) else {}
+        return self._coerce_revision(meta.get("revision")) or 0
+
+    def _current_document_revision(self, name: str) -> int:
+        safe_name = self._validate_name(name)
+        if not self._workspace_document_exists(safe_name):
+            return 0
+        return self._document_revision(self.load(safe_name))
+
+    def _with_document_revision(self, document: dict, revision: int) -> dict:
+        next_document = deepcopy(document if isinstance(document, dict) else {})
+        next_document["meta"] = next_document.get("meta") if isinstance(next_document.get("meta"), dict) else {}
+        next_document["meta"]["revision"] = max(0, int(revision or 0))
+        return next_document
 
     def _snapshot_document(self, name: str) -> None:
         safe_name = self._validate_name(name)
