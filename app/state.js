@@ -96,8 +96,12 @@ const S = {
     sidebarW: 240,
     businessDomainFilter: 'all',
     procView: 'stage',  // 'stage' | 'list'(internal editor) | 'flow' | 'role'
+    procDiagramMode: 'swimlane',
+    procDiagramShowEntities: true,
+    procDiagramShowTasks: false,
     nodePerspective: 'user',
     procPrototypeExpanded: {},
+    procTasklevelCollapsed: true,
     procAttachmentUpload: { active: false, percent: 0, message: '' },
     procRolePickerCollapsed: {},
     procEditorFocusSelector: '',
@@ -308,6 +312,95 @@ function resetRecoveryState() {
 function getEntityName(id) { return S.doc?.entities?.find(e=>e.id===id)?.name||id; }
 function getProcNodes(proc) {
   return Array.isArray(proc?.nodes) ? proc.nodes : (Array.isArray(proc?.tasks) ? proc.tasks : []);
+}
+function normalizeProcessFlow(proc) {
+  if (!proc || typeof proc !== 'object') return { version: 2, orientation: 'horizontal', nodes: [], edges: [] };
+  const rawFlow = proc.flow && typeof proc.flow === 'object' && !Array.isArray(proc.flow) ? proc.flow : {};
+  const tasks = getProcNodes(proc);
+  const taskIds = new Set(tasks.map((task) => String(task.id || '').trim()).filter(Boolean));
+  const normalized = {
+    version: Number(rawFlow.version || 2) || 2,
+    orientation: String(rawFlow.orientation || 'horizontal') === 'vertical' ? 'vertical' : 'horizontal',
+    nodes: [],
+    edges: [],
+    layout: { swimlane: { laneOrder: [], items: {}, labels: {} } },
+  };
+  const flowNodeIds = new Set();
+  const rawNodes = Array.isArray(rawFlow.nodes) ? rawFlow.nodes : [];
+  rawNodes.forEach((node, index) => {
+    if (!node || typeof node !== 'object') return;
+    const kind = String(node.kind || '').trim() === 'gateway' ? 'gateway' : 'task';
+    if (kind !== 'gateway') return;
+    const id = String(node.id || '').trim() || `G${index + 1}`;
+    if (!id || flowNodeIds.has(id) || taskIds.has(id)) return;
+    flowNodeIds.add(id);
+    normalized.nodes.push({
+      ...node,
+      id,
+      kind: 'gateway',
+      gatewayType: String(node.gatewayType || 'exclusive').trim() || 'exclusive',
+      title: String(node.title || node.name || '').trim(),
+      role_id: String(node.role_id || node.roleId || '').trim(),
+    });
+  });
+
+  const gatewayIds = new Set(normalized.nodes.map((node) => node.id));
+  const validRegularIds = new Set([...taskIds, ...gatewayIds]);
+  const normalizeEndpoint = (value, side) => {
+    const id = String(value || '').trim();
+    if (side === 'from' && id === 'START') return 'START';
+    if (side === 'to' && id === 'END') return 'END';
+    return id;
+  };
+  const rawEdges = Array.isArray(rawFlow.edges) ? rawFlow.edges : [];
+  const seenEdgeKeys = new Set();
+  normalized.edges = rawEdges.map((edge, index) => {
+    if (!edge || typeof edge !== 'object') return null;
+    const from = normalizeEndpoint(edge.from || edge.source, 'from');
+    const to = normalizeEndpoint(edge.to || edge.target, 'to');
+    const isDraft = !from || !to;
+    if (to === 'START' || from === 'END') return null;
+    if (from && from !== 'START' && !validRegularIds.has(from)) return null;
+    if (to && to !== 'END' && !validRegularIds.has(to)) return null;
+    const key = `${from}->${to}`;
+    if (!isDraft) {
+      if (seenEdgeKeys.has(key)) return null;
+      seenEdgeKeys.add(key);
+    }
+    return {
+      ...edge,
+      id: String(edge.id || '').trim() || `E${index + 1}`,
+      from,
+      to,
+      label: String(edge.label || edge.name || '').trim(),
+      condition: String(edge.condition || '').trim(),
+    };
+  }).filter(Boolean);
+  const rawLayout = rawFlow.layout && typeof rawFlow.layout === 'object' && !Array.isArray(rawFlow.layout) ? rawFlow.layout : {};
+  const rawSwimlane = rawLayout.swimlane && typeof rawLayout.swimlane === 'object' && !Array.isArray(rawLayout.swimlane) ? rawLayout.swimlane : {};
+  const normalizeOffsetMap = (value) => {
+    const result = {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
+    Object.entries(value).forEach(([key, offset]) => {
+      if (!key || !offset || typeof offset !== 'object' || Array.isArray(offset)) return;
+      const dx = Math.round(Number(offset.dx || 0));
+      const dy = Math.round(Number(offset.dy || 0));
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+      result[String(key)] = { dx, dy };
+    });
+    return result;
+  };
+  normalized.layout = {
+    swimlane: {
+      laneOrder: Array.isArray(rawSwimlane.laneOrder)
+        ? rawSwimlane.laneOrder.map((item) => String(item || '').trim()).filter(Boolean)
+        : [],
+      items: normalizeOffsetMap(rawSwimlane.items),
+      labels: normalizeOffsetMap(rawSwimlane.labels),
+    },
+  };
+  proc.flow = normalized;
+  return proc.flow;
 }
 function getNodeUserSteps(node) {
   return Array.isArray(node?.userSteps) ? node.userSteps : (Array.isArray(node?.steps) ? node.steps : []);
@@ -829,6 +922,7 @@ function hydrateDocumentForUi(doc) {
     proc.stageId = String(proc.stageId || '').trim();
     proc.stagePos = normalizeGraphOffset(proc.stagePos);
     getProcPrototypeFiles(proc);
+    normalizeProcessFlow(proc);
     proc.nodes.forEach((node) => {
       if (!Array.isArray(node.userSteps) && Array.isArray(node.steps)) node.userSteps = node.steps;
       if (!Array.isArray(node.userSteps)) node.userSteps = [];

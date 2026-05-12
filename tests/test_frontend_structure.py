@@ -1,5 +1,6 @@
 import subprocess
 import unittest
+import re
 from pathlib import Path
 
 
@@ -70,9 +71,9 @@ class FrontendStructureTests(unittest.TestCase):
             html.find('data-testid="toolbar-export-button"'),
             html.find('data-testid="toolbar-manual-button"'),
         )
-        self.assertIn('<script src="vendor/mermaid.min.js"></script>', html)
-        self.assertIn('<script src="vendor/marked.umd.js"></script>', html)
-        self.assertIn('<script src="manual.js"></script>', html)
+        self.assertRegex(html, r'<script src="vendor/mermaid\.min\.js(?:\?[^"]*)?"></script>')
+        self.assertRegex(html, r'<script src="vendor/marked\.umd\.js(?:\?[^"]*)?"></script>')
+        self.assertRegex(html, r'<script src="manual\.js(?:\?[^"]*)?"></script>')
         self.assertNotIn("https://cdn.jsdelivr.net", html)
         self.assertIn('id="merge-left-select"', html)
         self.assertIn('id="merge-right-select"', html)
@@ -87,8 +88,8 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn('生成新的合并文档', html)
         previous_position = -1
         for script_name in EXPECTED_SCRIPTS:
-            marker = f'<script src="{script_name}"></script>'
-            position = html.find(marker)
+            match = re.search(rf'<script src="{re.escape(script_name)}(?:\?[^"]*)?"></script>', html)
+            position = match.start() if match else -1
             self.assertNotEqual(position, -1, f"index.html 未加载 {script_name}")
             self.assertGreater(position, previous_position, f"{script_name} 加载顺序不正确")
             previous_position = position

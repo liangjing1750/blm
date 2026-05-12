@@ -186,6 +186,65 @@ class MigrateDocumentTests(unittest.TestCase):
         self.assertEqual(migrated["processes"][0]["nodes"][1]["role"], "监管员")
         self.assertEqual(migrated["processes"][0]["nodes"][1]["role_id"], "R9")
 
+    def test_migrate_document_normalizes_process_flow_edges_and_gateways(self):
+        document = {
+            "meta": {"title": "Flow"},
+            "roles": [{"id": "R1", "name": "申请人"}, {"id": "R2", "name": "系统"}],
+            "processes": [
+                {
+                    "id": "P1",
+                    "name": "预约",
+                    "nodes": [
+                        {"id": "T1", "name": "提交", "role_id": "R1"},
+                        {"id": "T2", "name": "审核", "role_id": "R1"},
+                    ],
+                    "flow": {
+                        "orientation": "vertical",
+                        "nodes": [
+                            {"id": "G1", "kind": "gateway", "title": "是否完整", "role_id": "R2"},
+                            {"id": "bad", "kind": "task"},
+                        ],
+                        "edges": [
+                            {"from": "START", "to": "T1"},
+                            {"from": "T1", "to": "G1", "label": "提交后"},
+                            {"from": "G1", "to": "T2", "condition": "完整"},
+                            {"from": "G1", "to": "END", "label": "驳回"},
+                            {"from": "T2", "to": "END"},
+                            {"from": "T2", "to": "T2", "label": "补正"},
+                            {"from": "", "to": "", "label": "待配置"},
+                            {"from": "missing", "to": "T2", "label": "无效"},
+                        ],
+                    },
+                }
+            ],
+        }
+
+        migrated = migrate_document(document)
+        flow = migrated["processes"][0]["flow"]
+
+        self.assertEqual(flow["orientation"], "vertical")
+        self.assertEqual(flow["nodes"], [
+            {
+                "id": "G1",
+                "kind": "gateway",
+                "title": "是否完整",
+                "role_id": "R2",
+                "gatewayType": "exclusive",
+            },
+        ])
+        self.assertEqual(
+            [(edge["from"], edge["to"], edge["label"], edge["condition"]) for edge in flow["edges"]],
+            [
+                ("START", "T1", "", ""),
+                ("T1", "G1", "提交后", ""),
+                ("G1", "T2", "", "完整"),
+                ("G1", "END", "驳回", ""),
+                ("T2", "END", "", ""),
+                ("T2", "T2", "补正", ""),
+                ("", "", "待配置", ""),
+            ],
+        )
+
     def test_migrate_document_normalizes_multi_role_nodes(self):
         document = {
             "meta": {"title": "Multi roles"},

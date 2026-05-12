@@ -39,8 +39,8 @@ function applyZoom(id) {
     requestAnimationFrame(() => drawEfLines(id, relations));
     return;
   }
-  /* 自定义 HTML 流程图（pf-wrap / ptf-wrap），优先整体缩放容器，避免命中内部回退线 SVG */
-  const wrap = el.querySelector('.pf-wrap, .ptf-wrap');
+  /* 自定义 HTML 流程图（pf-wrap / ptf-wrap / ps-wrap），优先整体缩放容器，避免命中内部回退线 SVG */
+  const wrap = el.querySelector('.pf-wrap, .ptf-wrap, .ps-wrap');
   if(wrap) {
     wrap.style.zoom = String(s);
     return;
@@ -64,7 +64,7 @@ function resetZoom(id) { ZOOM[id] = 1; applyZoom(id); }
 function initZoom(id) {
   const el  = document.getElementById(id);
   if(!el) return;
-  const wrap = el.querySelector('.pf-wrap, .ptf-wrap');
+  const wrap = el.querySelector('.pf-wrap, .ptf-wrap, .ps-wrap');
   /* 每次渲染后刷新 SVG 自然尺寸（SVG DOM 已替换；跳过 ef-canvas overlay SVG） */
   const svg = el.querySelector('svg');
   if(svg && !wrap && !el.querySelector('.ef-canvas')) _captureSvgSize(svg);
@@ -120,7 +120,7 @@ function navigate(tab, opts, navOptions = {}) {
       if ('entityId' in opts) next.entityId = opts.entityId;
     }
     if (tab === 'process' && opts && ('procId' in opts || 'taskId' in opts)) {
-      next.procView = 'list';
+      next.procView = opts.taskId ? 'list' : 'flow';
     }
     return next;
   }, navOptions);
@@ -131,7 +131,7 @@ function navigate(tab, opts, navOptions = {}) {
     if('entityId' in opts) S.ui.entityId = opts.entityId;
   }
   if(tab === 'process' && opts && ('procId' in opts || 'taskId' in opts)) {
-    S.ui.procView = 'list';
+    S.ui.procView = opts.taskId ? 'list' : 'flow';
   }
   render();
 }
@@ -1270,6 +1270,13 @@ function startDrawerResize(e) {
     } else if (drawer.classList.contains('stage-drawer')) {
       const mainShell = document.querySelector('.stage-main-shell');
       if (mainShell) mainShell.style.marginRight = newW + 'px';
+    } else if (drawer.classList.contains('proc-drawer')) {
+      const flowView = document.querySelector('.process-flow-view');
+      if (flowView) flowView.style.marginRight = newW + 'px';
+      if (typeof renderProcDiagramNow === 'function') {
+        window.clearTimeout(startDrawerResize._processResizeTimer);
+        startDrawerResize._processResizeTimer = window.setTimeout(() => renderProcDiagramNow(), 60);
+      }
     }
   }
   function onUp() {
@@ -1277,6 +1284,10 @@ function startDrawerResize(e) {
     document.body.style.userSelect = '';
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    if (drawer.classList.contains('proc-drawer') && typeof renderProcDiagramNow === 'function') {
+      window.clearTimeout(startDrawerResize._processResizeTimer);
+      renderProcDiagramNow();
+    }
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);

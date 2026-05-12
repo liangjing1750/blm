@@ -507,6 +507,11 @@ function getPreservedDocUiState(doc, sourceUi = {}) {
   const validNodePerspectives = new Set(['user', 'engineering', 'task']);
   if (!validNodePerspectives.has(String(next.nodePerspective || ''))) next.nodePerspective = base.nodePerspective;
 
+  const validDiagramModes = new Set(['linear', 'swimlane']);
+  if (!validDiagramModes.has(String(next.procDiagramMode || ''))) next.procDiagramMode = base.procDiagramMode;
+  next.procDiagramShowEntities = next.procDiagramShowEntities !== false;
+  next.procDiagramShowTasks = next.procDiagramShowTasks === true;
+
   const validDataViews = new Set(['relation', 'state']);
   if (!validDataViews.has(String(next.dataView || ''))) next.dataView = base.dataView;
 
@@ -2811,6 +2816,10 @@ function createDocUiState(doc) {
     sidebarW: getUiPrefNumber('sidebarW', 240),
     businessDomainFilter: 'all',
     procView: 'stage',
+    procDiagramMode: 'swimlane',
+    procDiagramShowEntities: true,
+    procDiagramShowTasks: false,
+    procTasklevelCollapsed: true,
     nodePerspective: 'user',
     procPrototypeExpanded: {},
     procRolePickerCollapsed: {},

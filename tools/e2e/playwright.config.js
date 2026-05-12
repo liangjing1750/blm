@@ -19,7 +19,7 @@ module.exports = {
     headless: true,
   },
   webServer: {
-    command: 'python blm.py',
+    command: process.platform === 'win32' ? 'py blm.py' : 'python blm.py',
     url: 'http://127.0.0.1:8899',
     reuseExistingServer: false,
     timeout: 30_000,

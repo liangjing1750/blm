@@ -80,6 +80,8 @@ function buildProcMermaid(proc) {
 const PROC_RETURN_LINE_OFFSET = 20;
 const PROC_RETURN_START_RATIO = 0.25;
 const PROC_RETURN_END_RATIO = 0.75;
+let processFlowDragState = null;
+let processFlowDragMoved = false;
 
 function renderProcReturnLines(wrap, tasks, overlayKey) {
   if(!wrap) return;
@@ -203,74 +205,1256 @@ function syncTaskReturnableToggle(root = document) {
    PROCESS FLOW — 自定义 HTML 渲染器（不依赖 Mermaid）
    布局：任务横向直线 + 实体在任务正下方垂直虚线连接
 ═══════════════════════════════════════════════════════════ */
+function getProcessFlowMode() {
+  return S.ui.procDiagramMode === 'swimlane' ? 'swimlane' : 'linear';
+}
+
+function setProcessFlowMode(mode) {
+  S.ui.procDiagramMode = mode === 'swimlane' ? 'swimlane' : 'linear';
+  renderProcessTab();
+}
+
+function getProcessFlowShowEntities() {
+  return S.ui.procDiagramShowEntities !== false;
+}
+
+function toggleProcessFlowEntities(checked) {
+  S.ui.procDiagramShowEntities = Boolean(checked);
+  renderProcessTab();
+}
+
+function getProcessFlowShowTasks() {
+  return S.ui.procDiagramShowTasks === true;
+}
+
+function toggleProcessFlowTasks(checked) {
+  S.ui.procDiagramShowTasks = Boolean(checked);
+  if (checked && !S.ui.taskId) {
+    S.ui.taskId = getDefaultTaskIdForProc(currentProc());
+  }
+  renderProcessTab();
+}
+
+function openProcessEditor(procId, taskId = null) {
+  S.ui.tab = 'process';
+  S.ui.procView = 'list';
+  S.ui.procId = procId || S.ui.procId;
+  S.ui.taskId = taskId || null;
+  render();
+}
+
+function getProcessFlowGraph(proc) {
+  const tasks = getProcNodes(proc);
+  const flow = normalizeProcessFlow(proc);
+  const taskNodes = tasks.map((task, index) => ({
+    id: String(task.id || ('T' + (index + 1))),
+    kind: 'task',
+    title: String(task.name || task.id || ('节点' + (index + 1))),
+    task,
+  }));
+  const taskIds = new Set(taskNodes.map((node) => node.id));
+  const gatewayNodes = flow.nodes
+    .filter((node) => node.kind === 'gateway' && !taskIds.has(node.id))
+    .map((node) => ({
+      id: node.id,
+      kind: 'gateway',
+      title: String(node.title || node.name || '').trim(),
+      gatewayType: node.gatewayType || 'exclusive',
+      role_id: node.role_id || node.roleId || '',
+      source: node,
+    }));
+  const gatewayIds = new Set(gatewayNodes.map((node) => node.id));
+  const hasStart = flow.edges.some((edge) => edge.from === 'START');
+  const hasEnd = flow.edges.some((edge) => edge.to === 'END');
+  const nodes = [
+    ...(hasStart ? [{ id: 'START', kind: 'start', title: '开始' }] : []),
+    ...taskNodes,
+    ...gatewayNodes,
+    ...(hasEnd ? [{ id: 'END', kind: 'end', title: '结束' }] : []),
+  ];
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = flow.edges
+    .filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to))
+    .map((edge, index) => ({
+      id: edge.id || ('E' + (index + 1)),
+      from: edge.from,
+      to: edge.to,
+      label: String(edge.label || edge.condition || '').trim(),
+      condition: String(edge.condition || '').trim(),
+    }));
+  return { nodes, edges, taskIds, gatewayIds };
+}
+
+function orderProcessFlowNodes(nodes, edges) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const inDegree = new Map(nodes.map((node) => [node.id, 0]));
+  const outgoing = new Map(nodes.map((node) => [node.id, []]));
+  edges.forEach((edge) => {
+    if (!nodeById.has(edge.from) || !nodeById.has(edge.to)) return;
+    outgoing.get(edge.from).push(edge.to);
+    inDegree.set(edge.to, (inDegree.get(edge.to) || 0) + 1);
+  });
+  const queue = nodes.filter((node) => (inDegree.get(node.id) || 0) === 0).map((node) => node.id);
+  const ordered = [];
+  const seen = new Set();
+  while (queue.length) {
+    const id = queue.shift();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ordered.push(nodeById.get(id));
+    for (const to of outgoing.get(id) || []) {
+      inDegree.set(to, Math.max(0, (inDegree.get(to) || 0) - 1));
+      if ((inDegree.get(to) || 0) === 0) queue.push(to);
+    }
+  }
+  nodes.forEach((node) => {
+    if (!seen.has(node.id)) ordered.push(node);
+  });
+  return ordered.filter(Boolean);
+}
+
+function getFlowNodeRoleId(node, incomingEdges, graphNodesById) {
+  if (node.kind === 'task') return getTaskRoleIds(node.task)[0] || '';
+  const explicitRoleId = String(node.role_id || node.roleId || '').trim();
+  if (explicitRoleId) return explicitRoleId;
+  const edge = node.kind === 'start'
+    ? incomingEdges.find((item) => item.from === node.id)
+    : incomingEdges.find((item) => item.to === node.id);
+  const connected = edge ? graphNodesById.get(node.kind === 'start' ? edge.to : edge.from) : null;
+  return connected ? getFlowNodeRoleId(connected, incomingEdges, graphNodesById) : '';
+}
+
+function getFlowNodeRoleName(node, incomingEdges, graphNodesById) {
+  if (node.kind === 'task') return getTaskRoleNames(node.task)[0] || '未分配';
+  const roleId = getFlowNodeRoleId(node, incomingEdges, graphNodesById);
+  return roleId ? getRoleName(roleId) : '系统/判断';
+}
+
+function renderProcessFlowNodeMarkup(node, roleMap, onClickMap, classPrefix) {
+  if (node.kind === 'gateway') {
+    return '<div class="' + classPrefix + '-gateway" data-id="' + esc(node.id) + '"></div>';
+  }
+  if (node.kind === 'start' || node.kind === 'end') {
+    const title = node.title || (node.kind === 'start' ? '开始' : '结束');
+    return '<div class="' + classPrefix + '-boundary ' + classPrefix + '-' + node.kind + '" data-id="' + esc(node.id) + '">' + esc(title) + '</div>';
+  }
+  const roleNames = getTaskRoleNames(node.task);
+  const c = getTaskPrimaryRoleStyle(node.task, roleMap);
+  const clickable = onClickMap?.[node.id] ? ' ' + classPrefix + '-clickable' : '';
+  const multiRoleClass = roleNames.length > 1 ? ' ' + classPrefix + '-task-multi-role' : '';
+  return '<div class="' + classPrefix + '-task' + clickable + multiRoleClass + '" data-id="' + esc(node.id) + '"' +
+    ' style="background:' + c.fill + ';border-color:' + c.stroke + ';color:' + c.color + '">' +
+    '<div class="' + classPrefix + '-tn">' + esc(node.title || '') + '</div>' +
+    (roleNames.length ? '<div class="' + classPrefix + '-role-list">' + renderTaskRoleChips(roleNames, roleMap, classPrefix + '-role-chip') + '</div>' : '') +
+  '</div>';
+}
+
+function bindProcessFlowNodeClicks(el, onClickMap, selector) {
+  if (!onClickMap) return;
+  for (const [taskId, handler] of Object.entries(onClickMap)) {
+    const safeId = window.CSS?.escape ? CSS.escape(taskId) : String(taskId).replace(/"/g, '\\"');
+    const nodes = el.querySelectorAll(`${selector}[data-id="${safeId}"]`);
+    nodes.forEach((node) => {
+      node.style.cursor = 'pointer';
+      node.addEventListener('click', (event) => {
+        if (processFlowDragMoved) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        handler(event);
+      });
+    });
+  }
+}
+
+function getProcessFlowEditorNodes(proc, side = 'any') {
+  const graph = getProcessFlowGraph(proc);
+  const regularNodes = graph.nodes.filter((node) => node.kind !== 'start' && node.kind !== 'end');
+  if (side === 'from') return [{ id: 'START', kind: 'start', title: '开始' }, ...regularNodes];
+  if (side === 'to') return [...regularNodes, { id: 'END', kind: 'end', title: '结束' }];
+  return [{ id: 'START', kind: 'start', title: '开始' }, ...regularNodes, { id: 'END', kind: 'end', title: '结束' }];
+}
+
+function renderProcessFlowNodeOptions(proc, selectedId = '', side = 'any') {
+  const emptyLabel = side === 'from' ? '选择上游' : side === 'to' ? '选择下游' : '选择节点';
+  const emptyOption = `<option value="" ${selectedId ? '' : 'selected'}>${emptyLabel}</option>`;
+  return emptyOption + getProcessFlowEditorNodes(proc, side).map((node) => {
+    const label = node.kind === 'gateway'
+      ? (node.title || '分支')
+      : node.kind === 'start' || node.kind === 'end'
+        ? node.title
+        : (node.title || node.id);
+    return `<option value="${esc(node.id)}" ${node.id === selectedId ? 'selected' : ''}>${esc(label)}</option>`;
+  }).join('');
+}
+
+function renderFlowNodeRoleOptions(node) {
+  const selected = new Set(getTaskRoleIds(node));
+  return getRoles().map((role) => `<option value="${esc(role.id)}" ${selected.has(role.id) ? 'selected' : ''}>${esc(role.name || role.id)}</option>`).join('');
+}
+
+function setProcessFlowNodeRoles(procId, taskId, selectEl) {
+  const roleIds = Array.from(selectEl?.selectedOptions || []).map((option) => option.value).filter(Boolean);
+  setTaskRoles(procId, taskId, roleIds);
+  refreshProcessStructureEditor('[data-testid="process-flow-node-row"]');
+}
+
+function setProcessFlowNodeFlag() {
+  // 起点和终点已经改为连线端点，不再作为节点属性维护。
+}
+
+function refreshProcessStructureEditor(anchorSelector = '[data-testid="process-flow-routing-editor"]') {
+  if ((S.ui.procView || '') === 'list') {
+    rerenderProcessEditor({ anchorSelector });
+  } else {
+    renderProcessTab();
+  }
+}
+
+function moveProcessTask(procId, taskId, dir) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  const nodes = getProcNodes(proc);
+  const index = nodes.findIndex((node) => node.id === taskId);
+  const nextIndex = index + dir;
+  if (index < 0 || nextIndex < 0 || nextIndex >= nodes.length) return;
+  [nodes[index], nodes[nextIndex]] = [nodes[nextIndex], nodes[index]];
+  markModified();
+  renderSidebar();
+  refreshProcessStructureEditor('[data-testid="process-flow-node-row"]');
+}
+
+function addProcessTaskDefinition(procId) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  addProcessTaskAfter(procId, '');
+}
+
+function addProcessTaskAfter(procId, afterTaskId = '') {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const allTasks = (S.doc?.processes || []).flatMap((item) => getProcNodes(item));
+  const id = nextId('T', allTasks);
+  const node = {
+    id,
+    name: '新节点',
+    role_ids: [],
+    roles: [],
+    role_id: '',
+    role: '',
+    userSteps: [],
+    orchestrationTasks: [],
+    forms: [],
+    entity_ops: [],
+    repeatable: false,
+    rules_note: '',
+    businessRules: [],
+  };
+  const nodes = getProcNodes(proc);
+  const index = nodes.findIndex((item) => item.id === afterTaskId);
+  if (index >= 0) nodes.splice(index + 1, 0, node);
+  else nodes.push(node);
+  normalizeProcessFlow(proc);
+  hydrateDocumentForUi(S.doc);
+  markModified();
+  renderSidebar();
+  renderProcessTab();
+}
+
+
+function addProcessGateway(procId, afterGatewayId = '') {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  const gateway = {
+    id: nextId('G', flow.nodes || []),
+    kind: 'gateway',
+    gatewayType: 'exclusive',
+    title: '',
+    role_id: '',
+  };
+  const index = flow.nodes.findIndex((node) => node.id === afterGatewayId);
+  if (index >= 0) flow.nodes.splice(index + 1, 0, gateway);
+  else flow.nodes.push(gateway);
+  markModified();
+  refreshProcessStructureEditor('[data-testid="process-flow-gateway-row"]');
+}
+
+function moveProcessGateway(procId, gatewayId, dir) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  const index = flow.nodes.findIndex((node) => node.id === gatewayId && node.kind === 'gateway');
+  const gateways = flow.nodes.filter((node) => node.kind === 'gateway');
+  const gatewayIndex = gateways.findIndex((node) => node.id === gatewayId);
+  const swapGateway = gateways[gatewayIndex + dir];
+  const swapIndex = swapGateway ? flow.nodes.findIndex((node) => node.id === swapGateway.id) : -1;
+  if (index < 0 || swapIndex < 0) return;
+  [flow.nodes[index], flow.nodes[swapIndex]] = [flow.nodes[swapIndex], flow.nodes[index]];
+  markModified();
+  refreshProcessStructureEditor('[data-testid="process-flow-gateway-row"]');
+}
+
+function removeProcessGateway(procId, gatewayId) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  flow.nodes = flow.nodes.filter((node) => node.id !== gatewayId);
+  flow.edges = flow.edges.filter((edge) => edge.from !== gatewayId && edge.to !== gatewayId);
+  markModified();
+  refreshProcessStructureEditor('[data-testid="process-flow-gateway-row"]');
+}
+
+function setProcessGateway(procId, gatewayId, key, value) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  const gateway = flow.nodes.find((node) => node.id === gatewayId && node.kind === 'gateway');
+  if (!gateway) return;
+  if (key === 'role_id') gateway.role_id = String(value || '').trim();
+  else if (key === 'title') gateway.title = String(value || '').trim();
+  markModified();
+  renderProcDiagramNow();
+}
+
+function addProcessBoundary() {
+  // 起点和终点已经改为连线端点，不再提供新增入口。
+}
+
+function setProcessBoundary() {
+  // 起点和终点已经改为连线端点，不再提供独立编辑入口。
+}
+
+function removeProcessBoundary() {
+  // 起点和终点已经改为连线端点，不再提供删除入口。
+}
+
+function addProcessFlowEdge(procId, afterEdgeId = '') {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  const edge = {
+    id: nextId('E', flow.edges || []),
+    from: '',
+    to: '',
+    label: '',
+    condition: '',
+  };
+  const index = flow.edges.findIndex((item) => item.id === afterEdgeId);
+  if (index >= 0) flow.edges.splice(index + 1, 0, edge);
+  else flow.edges.push(edge);
+  markModified();
+  refreshProcessStructureEditor('[data-testid="process-flow-edge-row"]');
+}
+
+function moveProcessFlowEdge(procId, edgeId, dir) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  const index = flow.edges.findIndex((edge) => edge.id === edgeId);
+  const nextIndex = index + dir;
+  if (index < 0 || nextIndex < 0 || nextIndex >= flow.edges.length) return;
+  [flow.edges[index], flow.edges[nextIndex]] = [flow.edges[nextIndex], flow.edges[index]];
+  markModified();
+  refreshProcessStructureEditor('[data-testid="process-flow-edge-row"]');
+}
+
+function removeProcessFlowEdge(procId, edgeId) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  flow.edges = flow.edges.filter((edge) => edge.id !== edgeId);
+  markModified();
+  refreshProcessStructureEditor('[data-testid="process-flow-edge-row"]');
+}
+
+function setProcessFlowEdge(procId, edgeId, key, value) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc) return;
+  const flow = normalizeProcessFlow(proc);
+  const edge = flow.edges.find((item) => item.id === edgeId);
+  if (!edge) return;
+  if (key === 'from') {
+    const nextValue = String(value || '').trim();
+    if (nextValue === 'END') return;
+    edge.from = nextValue;
+    if (edge.to === 'START') edge.to = '';
+  } else if (key === 'to') {
+    const nextValue = String(value || '').trim();
+    if (nextValue === 'START') return;
+    edge.to = nextValue;
+    if (edge.from === 'END') edge.from = '';
+  } else if (key === 'label' || key === 'condition') {
+    edge[key] = String(value || '').trim();
+  }
+  normalizeProcessFlow(proc);
+  markModified();
+  renderProcDiagramNow();
+}
+
+function getProcessFlowValidationMessages(proc) {
+  const graph = getProcessFlowGraph(proc);
+  const kindById = new Map(graph.nodes.map((node) => [node.id, node.kind]));
+  const messages = [];
+  const outgoing = new Map();
+  const incoming = new Map();
+  graph.edges.forEach((edge) => {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    if (!incoming.has(edge.to)) incoming.set(edge.to, []);
+    outgoing.get(edge.from).push(edge);
+    incoming.get(edge.to).push(edge);
+  });
+  if (graph.nodes.some((node) => node.kind !== 'start' && node.kind !== 'end')) {
+    if (!graph.edges.some((edge) => edge.from === 'START')) messages.push('建议至少添加一条“开始 -> 节点/分支”的连线。');
+    if (!graph.edges.some((edge) => edge.to === 'END')) messages.push('建议至少添加一条“节点/分支 -> 结束”的连线。');
+  }
+  graph.edges.forEach((edge) => {
+    if (edge.to === 'START') messages.push('“开始”不能作为下游，请调整连线。');
+    if (edge.from === 'END') messages.push('“结束”不能作为上游，请调整连线。');
+  });
+  graph.nodes.filter((node) => node.kind === 'task').forEach((node) => {
+    const nextEdges = (outgoing.get(node.id) || []).filter((edge) => edge.to !== 'END' && edge.to !== node.id);
+    const nextKinds = new Set(nextEdges.map((edge) => kindById.get(edge.to)).filter(Boolean));
+    const taskCount = nextEdges.filter((edge) => kindById.get(edge.to) === 'task').length;
+    const branchCount = nextEdges.filter((edge) => kindById.get(edge.to) === 'gateway').length;
+    if (taskCount > 1 || branchCount > 1 || (taskCount && branchCount)) {
+      messages.push('节点“' + (node.title || node.id) + '”的下游只能选择 1 个节点或 1 个分支，不能同时连接节点和分支。');
+    }
+    if ([...nextKinds].some((kind) => kind !== 'task' && kind !== 'gateway')) {
+      messages.push('节点“' + (node.title || node.id) + '”存在不支持的下游类型。');
+    }
+    const gatewayBranchCount = nextEdges
+      .filter((edge) => kindById.get(edge.to) === 'gateway')
+      .some((edge) => ((outgoing.get(edge.to) || []).filter((item) => item.to !== 'END').length > 1));
+    if (getTaskRoleIds(node.task).length > 1 && (nextEdges.length > 1 || gatewayBranchCount)) {
+      messages.push('共享节点“' + (node.title || node.id) + '”存在多个下游。如果不同角色对应不同路径、任务、输入输出，建议拆成多个单角色节点；如果只是“谁都可以处理”，可保留共享节点。');
+    }
+  });
+  graph.nodes.filter((node) => node.kind === 'gateway').forEach((node) => {
+    const nextEdges = (outgoing.get(node.id) || []).filter((edge) => edge.to !== 'END');
+    const invalidTargets = nextEdges.filter((edge) => kindById.get(edge.to) !== 'task');
+    if (invalidTargets.length) messages.push('分支“' + (node.title || node.id) + '”的下游只能连接节点或结束。');
+    if (nextEdges.length > 3) messages.push('分支“' + (node.title || node.id) + '”最多连接 3 个下游节点。');
+    const prevEdges = (incoming.get(node.id) || []).filter((edge) => edge.from !== 'START');
+    if (prevEdges.length > 1) messages.push('分支“' + (node.title || node.id) + '”建议只保留 1 个上游节点，避免分支来源混乱。');
+  });
+  return [...new Set(messages)];
+}
+function renderProcessFlowRoutingEditor(proc) {
+  const flow = normalizeProcessFlow(proc);
+  const nodes = getProcNodes(proc);
+  const gateways = flow.nodes.filter((node) => node.kind === 'gateway');
+  const validationMessages = getProcessFlowValidationMessages(proc);
+  const renderGatewayRoleOptions = (selectedRoleId = '') => getRoles()
+    .map((role) => `<option value="${esc(role.id)}" ${role.id === selectedRoleId ? 'selected' : ''}>${esc(role.name || role.id)}</option>`)
+    .join('');
+  return `<div class="form-section process-flow-routing-editor" data-testid="process-flow-routing-editor">
+    <div class="section-toolbar">
+      <h4>流程结构</h4>
+      <div class="section-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="process-flow-add-task" onclick="addProcessTaskDefinition('${esc(proc.id)}')">+ 节点</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="process-flow-add-gateway" onclick="addProcessGateway('${esc(proc.id)}')">+ 分支</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="process-flow-add-edge" onclick="addProcessFlowEdge('${esc(proc.id)}')">+ 连线</button>
+      </div>
+    </div>
+    <p class="flow-routing-hint">在这里定义节点、分支和连线。开始和结束只在连线中选择，不作为独立元素新增；新增节点默认保持孤立，由用户手动添加连线。</p>
+    ${validationMessages.length ? `<div class="flow-validation" data-testid="process-flow-validation">${validationMessages.map((message) => `<div>${esc(message)}</div>`).join('')}</div>` : ''}
+    <div class="flow-routing-grid">
+      <div class="flow-routing-column">
+        <h5>节点</h5>
+        ${nodes.length ? nodes.map((node, index) => `<div class="flow-routing-row flow-node-row" data-testid="process-flow-node-row">
+          <button class="flow-node-open" type="button" title="编辑节点" onclick="openProcessEditor('${esc(proc.id)}','${esc(node.id)}')">${esc(node.id)}</button>
+          <input type="text" value="${esc(node.name || '')}" placeholder="节点名称"
+            oninput="setTask('${esc(proc.id)}','${esc(node.id)}','name',this.value);renderProcDiagramNow()">
+          <select class="flow-node-role-select" multiple size="1" title="按住 Ctrl 可多选角色"
+            onchange="setProcessFlowNodeRoles('${esc(proc.id)}','${esc(node.id)}',this)">
+            ${renderFlowNodeRoleOptions(node)}
+          </select>
+          <div class="flow-row-actions">
+            <button type="button" title="在下方添加节点" onclick="addProcessTaskAfter('${esc(proc.id)}','${esc(node.id)}')">+</button>
+            <button type="button" title="上移" onclick="moveProcessTask('${esc(proc.id)}','${esc(node.id)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" title="下移" onclick="moveProcessTask('${esc(proc.id)}','${esc(node.id)}',1)" ${index === nodes.length - 1 ? 'disabled' : ''}>↓</button>
+            <button type="button" title="删除节点" onclick="removeTask('${esc(proc.id)}','${esc(node.id)}')">×</button>
+          </div>
+        </div>`).join('') : '<p class="no-refs">暂无节点，可先添加节点。</p>'}
+      </div>
+      <div class="flow-routing-column">
+        <h5>分支</h5>
+        ${gateways.length ? gateways.map((gateway) => `<div class="flow-routing-row" data-testid="process-flow-gateway-row">
+          <input type="text" value="${esc(gateway.title || '')}" placeholder="如：是否通过校验"
+            oninput="setProcessGateway('${esc(proc.id)}','${esc(gateway.id)}','title',this.value)">
+          <select onchange="setProcessGateway('${esc(proc.id)}','${esc(gateway.id)}','role_id',this.value)">
+            <option value="">跟随上游 / 系统判断</option>
+            ${renderGatewayRoleOptions(gateway.role_id || '')}
+          </select>
+          <div class="flow-row-actions">
+            <button type="button" title="在下方添加分支" onclick="addProcessGateway('${esc(proc.id)}','${esc(gateway.id)}')">+</button>
+            <button type="button" title="上移" onclick="moveProcessGateway('${esc(proc.id)}','${esc(gateway.id)}',-1)">↑</button>
+            <button type="button" title="下移" onclick="moveProcessGateway('${esc(proc.id)}','${esc(gateway.id)}',1)">↓</button>
+            <button type="button" title="删除分支" onclick="removeProcessGateway('${esc(proc.id)}','${esc(gateway.id)}')">×</button>
+          </div>
+        </div>`).join('') : '<p class="no-refs">暂无分支；当一个节点需要多个下游时，可先添加分支。</p>'}
+      </div>
+      <div class="flow-routing-column">
+        <h5>连线</h5>
+        ${flow.edges.length ? flow.edges.map((edge) => `<div class="flow-edge-row" data-testid="process-flow-edge-row">
+          <select onchange="setProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}','from',this.value)">
+            ${renderProcessFlowNodeOptions(proc, edge.from, 'from')}
+          </select>
+          <span class="flow-edge-arrow">→</span>
+          <select onchange="setProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}','to',this.value)">
+            ${renderProcessFlowNodeOptions(proc, edge.to, 'to')}
+          </select>
+          <input type="text" value="${esc(edge.label || '')}" placeholder="连线说明，如：通过"
+            oninput="setProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}','label',this.value)">
+          <div class="flow-row-actions">
+            <button type="button" title="在下方添加连线" onclick="addProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}')">+</button>
+            <button type="button" title="上移" onclick="moveProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}',-1)">↑</button>
+            <button type="button" title="下移" onclick="moveProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}',1)">↓</button>
+            <button type="button" title="删除连线" onclick="removeProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}')">×</button>
+          </div>
+        </div>`).join('') : '<p class="no-refs">暂无连线；添加连线后可选择“开始”或“结束”作为首尾端点。</p>'}
+      </div>
+    </div>
+  </div>`;
+}
+
+function getProcessSwimlaneLayout(proc) {
+  const flow = normalizeProcessFlow(proc);
+  if (!flow.layout || typeof flow.layout !== 'object') flow.layout = {};
+  if (!flow.layout.swimlane || typeof flow.layout.swimlane !== 'object') {
+    flow.layout.swimlane = { laneOrder: [], items: {}, labels: {} };
+  }
+  if (!Array.isArray(flow.layout.swimlane.laneOrder)) flow.layout.swimlane.laneOrder = [];
+  if (!flow.layout.swimlane.items || typeof flow.layout.swimlane.items !== 'object') flow.layout.swimlane.items = {};
+  if (!flow.layout.swimlane.labels || typeof flow.layout.swimlane.labels !== 'object') flow.layout.swimlane.labels = {};
+  return flow.layout.swimlane;
+}
+
+function getProcessFlowOffset(offsetMap, key) {
+  const offset = offsetMap?.[key];
+  return offset && typeof offset === 'object'
+    ? { dx: Number(offset.dx || 0) || 0, dy: Number(offset.dy || 0) || 0 }
+    : { dx: 0, dy: 0 };
+}
+
+function setProcessFlowOffset(offsetMap, key, dx, dy) {
+  if (!key) return;
+  const nextDx = Math.round(Number(dx || 0));
+  const nextDy = Math.round(Number(dy || 0));
+  if (!nextDx && !nextDy) delete offsetMap[key];
+  else offsetMap[key] = { dx: nextDx, dy: nextDy };
+}
+
+function getProcessFlowEdgeLabel(edge) {
+  return String(edge?.label || edge?.condition || '').trim();
+}
+
+function buildProcessSummaryGraph(proc) {
+  const graph = getProcessFlowGraph(proc);
+  const selfLoops = graph.edges.filter((edge) => edge.from && edge.from === edge.to);
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const gatewayOut = new Map();
+  graph.edges.filter((edge) => edge.from !== edge.to).forEach((edge) => {
+    if (nodeById.get(edge.from)?.kind === 'gateway') {
+      if (!gatewayOut.has(edge.from)) gatewayOut.set(edge.from, []);
+      gatewayOut.get(edge.from).push(edge);
+    }
+  });
+  const edges = [];
+  graph.edges.filter((edge) => edge.from !== edge.to).forEach((edge) => {
+    const fromKind = nodeById.get(edge.from)?.kind;
+    const toKind = nodeById.get(edge.to)?.kind;
+    if (fromKind === 'gateway') return;
+    if (toKind === 'gateway') {
+      (gatewayOut.get(edge.to) || []).forEach((outEdge) => {
+        edges.push({
+          id: outEdge.id || edge.id,
+          from: edge.from,
+          to: outEdge.to,
+          label: getProcessFlowEdgeLabel(outEdge) || getProcessFlowEdgeLabel(edge),
+          condition: outEdge.condition || edge.condition || '',
+        });
+      });
+      return;
+    }
+    edges.push({ ...edge, label: getProcessFlowEdgeLabel(edge) });
+  });
+  const nodeIds = new Set();
+  edges.forEach((edge) => {
+    nodeIds.add(edge.from);
+    nodeIds.add(edge.to);
+  });
+  getProcNodes(proc).forEach((task) => nodeIds.add(String(task.id || '')));
+  const nodes = graph.nodes.filter((node) => node.kind !== 'gateway' && nodeIds.has(node.id));
+  return { nodes, edges, selfLoops };
+}
+
+function buildProcessSummaryLayout(proc) {
+  const { nodes, edges, selfLoops } = buildProcessSummaryGraph(proc);
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const outgoing = new Map();
+  const incoming = new Map();
+  edges.forEach((edge) => {
+    if (!nodeById.has(edge.from) || !nodeById.has(edge.to)) return;
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    if (!incoming.has(edge.to)) incoming.set(edge.to, []);
+    outgoing.get(edge.from).push(edge);
+    incoming.get(edge.to).push(edge);
+  });
+  const starts = nodeById.has('START')
+    ? ['START']
+    : nodes.filter((node) => !(incoming.get(node.id) || []).length).map((node) => node.id);
+  const rank = new Map();
+  const queue = [];
+  starts.forEach((id, index) => {
+    rank.set(id, 0);
+    queue.push(id);
+    if (index > 0) rank.set(id, 0);
+  });
+  let guard = 0;
+  while (queue.length && guard < nodes.length * Math.max(2, edges.length + 1)) {
+    guard += 1;
+    const id = queue.shift();
+    const currentRank = rank.get(id) || 0;
+    (outgoing.get(id) || []).forEach((edge) => {
+      const nextRank = currentRank + 1;
+      if (!rank.has(edge.to) || nextRank > rank.get(edge.to)) {
+        rank.set(edge.to, nextRank);
+        queue.push(edge.to);
+      }
+    });
+  }
+  nodes.forEach((node) => {
+    if (!rank.has(node.id)) rank.set(node.id, Math.max(0, rank.size));
+  });
+
+  const row = new Map();
+  starts.forEach((id, index) => row.set(id, index));
+  let nextFreeRow = Math.max(1, starts.length);
+  const orderedByRank = [...nodes].sort((a, b) => (rank.get(a.id) || 0) - (rank.get(b.id) || 0));
+  orderedByRank.forEach((node) => {
+    if (!row.has(node.id)) {
+      const parentRows = (incoming.get(node.id) || []).map((edge) => row.get(edge.from)).filter((value) => value !== undefined);
+      row.set(node.id, parentRows.length ? Math.min(...parentRows) : nextFreeRow++);
+    }
+    const outs = outgoing.get(node.id) || [];
+    if (outs.length > 1) {
+      outs.forEach((edge, index) => {
+        if (!row.has(edge.to)) row.set(edge.to, (row.get(node.id) || 0) + index);
+      });
+      nextFreeRow = Math.max(nextFreeRow, (row.get(node.id) || 0) + outs.length);
+    } else if (outs.length === 1 && !row.has(outs[0].to)) {
+      row.set(outs[0].to, row.get(node.id) || 0);
+    }
+  });
+  const incomingByTarget = new Map();
+  edges.forEach((edge) => {
+    if (!incomingByTarget.has(edge.to)) incomingByTarget.set(edge.to, []);
+    incomingByTarget.get(edge.to).push(edge);
+  });
+  incomingByTarget.forEach((list, targetId) => {
+    if (list.length > 1) {
+      const rows = list.map((edge) => row.get(edge.from)).filter((value) => value !== undefined);
+      if (rows.length) row.set(targetId, Math.min(...rows));
+    }
+  });
+  const returnEdges = [];
+  const mainEdges = [];
+  edges.forEach((edge) => {
+    const fromRank = rank.get(edge.from) || 0;
+    const toRank = rank.get(edge.to) || 0;
+    if (edge.to !== 'END' && toRank <= fromRank) returnEdges.push(edge);
+    else mainEdges.push(edge);
+  });
+  return { nodes, edges: mainEdges, returnEdges, selfLoops, rank, row };
+}
+
+function renderProcGraphFlow(containerId, proc, onClickMap) {
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const tasks = getProcNodes(proc);
+  if(!tasks.length) { el.innerHTML = '<div class="diag-empty">暂无节点</div>'; initZoom(containerId); return; }
+  const showEntities = getProcessFlowShowEntities();
+  const roleMap = buildTaskRoleColorMap(tasks);
+  const summary = buildProcessSummaryLayout(proc);
+  const nodeW = 150;
+  const nodeH = 62;
+  const boundaryW = 64;
+  const boundaryH = 34;
+  const colW = 196;
+  const rowH = showEntities ? 118 : 86;
+  const padX = 24;
+  const hasAuxiliaryEdges = (summary.selfLoops || []).length || (summary.returnEdges || []).length;
+  const padY = hasAuxiliaryEdges ? 58 : 18;
+  const layout = new Map();
+  let maxRank = 0;
+  let maxRow = 0;
+  summary.nodes.forEach((node) => {
+    const r = summary.rank.get(node.id) || 0;
+    const yRow = summary.row.get(node.id) || 0;
+    maxRank = Math.max(maxRank, r);
+    maxRow = Math.max(maxRow, yRow);
+    const isBoundary = node.kind === 'start' || node.kind === 'end';
+    const w = isBoundary ? boundaryW : nodeW;
+    const h = isBoundary ? boundaryH : nodeH;
+    layout.set(node.id, {
+      x: padX + r * colW,
+      y: padY + yRow * rowH,
+      w,
+      h,
+    });
+  });
+  const boardW = Math.max(720, padX * 2 + (maxRank + 1) * colW + 40);
+  const boardH = Math.max(120, padY * 2 + (maxRow + 1) * rowH);
+  const markerId = `pf-arrow-${String(containerId || 'default').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const edgeLabels = [];
+  const edgeLines = summary.edges.map((edge, index) => {
+    const from = layout.get(edge.from);
+    const to = layout.get(edge.to);
+    if (!from || !to) return '';
+    const sx = from.x + from.w;
+    const sy = from.y + from.h / 2;
+    const tx = to.x;
+    const ty = to.y + to.h / 2;
+    const sameRow = Math.abs(sy - ty) < 2;
+    const midX = sx <= tx ? Math.round((sx + tx) / 2) : sx + 36 + (index % 3) * 12;
+    const points = sameRow
+      ? `${Math.round(sx)},${Math.round(sy)} ${Math.round(tx)},${Math.round(ty)}`
+      : `${Math.round(sx)},${Math.round(sy)} ${midX},${Math.round(sy)} ${midX},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`;
+    const label = getProcessFlowEdgeLabel(edge);
+    if (label) {
+      edgeLabels.push({
+        id: edge.id || `E${index + 1}`,
+        label,
+        x: midX + 4,
+        y: Math.round((sy + ty) / 2) - 12,
+      });
+    }
+    return `<polyline class="pf-link" points="${points}" marker-end="url(#${markerId})"></polyline>`;
+  }).join('');
+  const returnLines = (summary.returnEdges || []).map((edge, index) => {
+    const from = layout.get(edge.from);
+    const to = layout.get(edge.to);
+    if (!from || !to) return '';
+    const startX = from.x + from.w * 0.68;
+    const endX = to.x + to.w * 0.32;
+    const startY = from.y;
+    const endY = to.y;
+    const laneY = Math.max(12, Math.min(startY, endY) - 26 - index * 12);
+    const label = getProcessFlowEdgeLabel(edge);
+    if (label) {
+      edgeLabels.push({
+        id: edge.id || `R${index + 1}`,
+        label,
+        x: Math.min(startX, endX) + Math.abs(startX - endX) / 2 - 18,
+        y: laneY - 24,
+      });
+    }
+    return `<polyline class="pf-link pf-return-link" points="${Math.round(startX)},${Math.round(startY)} ${Math.round(startX)},${Math.round(laneY)} ${Math.round(endX)},${Math.round(laneY)} ${Math.round(endX)},${Math.round(endY)}" marker-end="url(#${markerId})"></polyline>`;
+  }).join('');
+  const selfLoopLines = (summary.selfLoops || []).map((edge, index) => {
+    const node = layout.get(edge.from);
+    if (!node) return '';
+    const x1 = node.x + node.w * 0.42;
+    const x2 = node.x + node.w * 0.58;
+    const topY = Math.max(10, node.y - 24 - (index % 3) * 10);
+    const label = getProcessFlowEdgeLabel(edge);
+    if (label) {
+      edgeLabels.push({
+        id: edge.id || `SL${index + 1}`,
+        label,
+        x: node.x + node.w / 2 - 20,
+        y: topY - 22,
+      });
+    }
+    return `<path class="pf-link pf-loop-link" d="M ${Math.round(x1)} ${Math.round(node.y)} C ${Math.round(x1 - 18)} ${Math.round(topY)} ${Math.round(x2 + 18)} ${Math.round(topY)} ${Math.round(x2)} ${Math.round(node.y)}" marker-end="url(#${markerId})"></path>`;
+  }).join('');
+
+  let h = `<div class="pf-wrap pf-graph-wrap" data-testid="process-summary-view" style="width:${boardW}px;height:${boardH}px">`;
+  h += `<svg class="pf-link-layer" width="${boardW}" height="${boardH}" viewBox="0 0 ${boardW} ${boardH}" aria-hidden="true">
+    <defs>
+      <marker id="${markerId}" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#64748b"></path>
+      </marker>
+    </defs>
+    ${edgeLines}${returnLines}${selfLoopLines}
+  </svg>`;
+  summary.nodes.forEach((node) => {
+    const pos = layout.get(node.id);
+    if (!pos) return;
+    const eops = showEntities && node.kind === 'task' ? (node.task.entity_ops || []).filter((eo) => eo.ops?.length) : [];
+    h += `<div class="pf-col" data-id="${esc(node.id)}" style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px">`;
+    h += renderProcessFlowNodeMarkup(node, roleMap, onClickMap, 'pf');
+    if(eops.length) {
+      h += '<div class="pf-vline"></div><div class="pf-tags">';
+      for(const eo of eops) {
+        const en = getEntityName(eo.entity_id);
+        const ops = (eo.ops || []).join('');
+        h += `<span class="pf-tag">${esc(en)}·${esc(ops)}</span>`;
+      }
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+  h += edgeLabels.map((item) => `<span class="pf-edge-label" data-edge-id="${esc(item.id)}" style="left:${item.x}px;top:${item.y}px">${esc(item.label)}</span>`).join('');
+  h += '</div>';
+  el.innerHTML = h;
+  el.style.overflow = 'auto';
+  bindProcessFlowNodeClicks(el, onClickMap, '.pf-task');
+  el.addEventListener('mousedown', ev => {
+    if(ev.target.closest('.pf-task,.pf-tag,.pf-boundary,.pf-edge-label')) return;
+    ev.preventDefault();
+    startEfPan(el, ev);
+  });
+  initZoom(containerId);
+  if(ZOOM[containerId] && ZOOM[containerId] !== 1) applyZoom(containerId);
+}
+
+function renderProcSwimlaneFlow(containerId, proc, onClickMap) {
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const tasks = getProcNodes(proc);
+  if(!tasks.length) { el.innerHTML = '<div class="diag-empty">暂无节点</div>'; initZoom(containerId); return; }
+  const showEntities = getProcessFlowShowEntities();
+  const roleMap = buildTaskRoleColorMap(tasks);
+  const graph = getProcessFlowGraph(proc);
+  const swimlaneLayout = getProcessSwimlaneLayout(proc);
+  const isEditableDiagram = containerId === 'proc-diagram' && S.ui.tab === 'process';
+  const selfLoopEdges = graph.edges.filter((edge) => edge.from && edge.from === edge.to);
+  const rawMainEdges = graph.edges.filter((edge) => edge.from !== edge.to);
+  const rankProbeNodes = orderProcessFlowNodes(graph.nodes, rawMainEdges);
+  const rankProbe = new Map(rankProbeNodes.map((node, index) => [node.id, index]));
+  const returnEdges = rawMainEdges.filter((edge) => edge.to !== 'END' && (rankProbe.get(edge.to) || 0) <= (rankProbe.get(edge.from) || 0));
+  const mainEdges = rawMainEdges.filter((edge) => !returnEdges.includes(edge));
+  const orderedNodes = orderProcessFlowNodes(graph.nodes, mainEdges);
+  const orderedLayoutNodes = orderedNodes.filter((node) => node.kind !== 'start' && node.kind !== 'end');
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const incomingEdges = mainEdges;
+  const orderIndexByNodeId = new Map(orderedLayoutNodes.map((node, index) => [node.id, index]));
+  const lanes = [];
+  const laneByName = new Map();
+  const ensureLane = (name, key = '') => {
+    const laneName = String(name || '未分配').trim() || '未分配';
+    const laneKey = String(key || laneName).trim() || laneName;
+    if (!laneByName.has(laneKey)) {
+      const lane = { key: laneKey, name: laneName, nodes: [], index: lanes.length };
+      laneByName.set(laneKey, lane);
+      lanes.push(lane);
+    }
+    return laneByName.get(laneKey);
+  };
+  const visualNodes = [];
+  const visualNodesByModelId = new Map();
+  for (const node of orderedLayoutNodes) {
+    const roleIds = node.kind === 'task' ? getTaskRoleIds(node.task) : [];
+    const roleNames = node.kind === 'task' ? getTaskRoleNames(node.task) : [];
+    const roleEntries = node.kind === 'task' && roleIds.length > 1
+      ? roleIds.map((roleId, index) => ({ roleId, roleName: roleNames[index] || getRoleName(roleId) || '未分配' }))
+      : [{ roleId: getFlowNodeRoleId(node, incomingEdges, nodeById), roleName: getFlowNodeRoleName(node, incomingEdges, nodeById) }];
+    roleEntries.forEach((entry, roleIndex) => {
+      const laneKey = entry.roleId || entry.roleName || '未分配';
+      const lane = ensureLane(entry.roleName, laneKey);
+      const visualNode = {
+        ...node,
+        modelId: node.id,
+        visualId: roleEntries.length > 1 ? `${node.id}__role_${entry.roleId || roleIndex}` : node.id,
+        roleId: entry.roleId || '',
+        roleName: entry.roleName,
+        laneKey,
+        roleIndex,
+        isRoleReplica: roleEntries.length > 1,
+        orderIndex: orderIndexByNodeId.get(node.id) || 0,
+      };
+      lane.nodes.push(visualNode);
+      visualNodes.push(visualNode);
+      if (!visualNodesByModelId.has(node.id)) visualNodesByModelId.set(node.id, []);
+      visualNodesByModelId.get(node.id).push(visualNode);
+    });
+  }
+  if (swimlaneLayout.laneOrder.length) {
+    const order = new Map(swimlaneLayout.laneOrder.map((key, index) => [key, index]));
+    lanes.sort((a, b) => {
+      const ai = order.has(a.key) ? order.get(a.key) : Number.MAX_SAFE_INTEGER;
+      const bi = order.has(b.key) ? order.get(b.key) : Number.MAX_SAFE_INTEGER;
+      return ai === bi ? a.index - b.index : ai - bi;
+    });
+    lanes.forEach((lane, index) => { lane.index = index; });
+  }
+
+  const colW = 180;
+  const taskW = 132;
+  const taskH = 54;
+  const hasVisibleEntities = showEntities && tasks.some((task) => (task.entity_ops || []).some((eo) => eo.ops?.length));
+  const laneHeaderW = 86;
+  const gatewaySize = 22;
+  const startX = laneHeaderW + 44;
+  const firstNodeX = laneHeaderW + 94;
+  const contentW = firstNodeX + Math.max(orderedLayoutNodes.length - 1, 0) * colW + 210;
+  let boardW = Math.max(720, el.clientWidth ? el.clientWidth - 2 : 0, contentW);
+  const getNodeEntityRows = (node) => {
+    if (!showEntities || node.kind !== 'task') return 0;
+    return (node.task.entity_ops || []).filter((eo) => eo.ops?.length).length;
+  };
+  const laneMetrics = lanes.map((lane) => {
+    const maxEntityRows = Math.max(0, ...lane.nodes.map(getNodeEntityRows));
+    const contentH = taskH + (maxEntityRows ? 8 + maxEntityRows * 20 + (maxEntityRows - 1) * 3 : 0);
+    const height = Math.max(hasVisibleEntities ? 116 : 96, contentH + 28);
+    return { ...lane, maxEntityRows, contentH, height, top: 0 };
+  });
+  let laneTop = 0;
+  laneMetrics.forEach((lane) => {
+    lane.top = laneTop;
+    laneTop += lane.height;
+  });
+  const laneMetricByName = new Map(laneMetrics.map((lane) => [lane.key, lane]));
+  let boardH = Math.max(96, laneTop);
+  const nodeLayout = new Map();
+  visualNodes.forEach((node) => {
+    const lane = laneByName.get(node.laneKey || node.roleName) || lanes[0] || { index: 0, key: '', name: node.roleName };
+    const laneMetric = laneMetricByName.get(lane.key) || laneMetrics[0] || { top: 0, height: 96 };
+    const isGateway = node.kind === 'gateway';
+    const w = isGateway ? gatewaySize : taskW;
+    const h = isGateway ? gatewaySize : taskH;
+    const entityRows = getNodeEntityRows(node);
+    const entityBlockH = entityRows ? 8 + entityRows * 20 + (entityRows - 1) * 3 : 0;
+    const contentH = h + entityBlockH;
+    const offset = getProcessFlowOffset(swimlaneLayout.items, node.visualId || node.id);
+    nodeLayout.set(node.id, {
+      x: firstNodeX + node.orderIndex * colW + offset.dx,
+      y: laneMetric.top + Math.round((laneMetric.height - contentH) / 2) + offset.dy,
+      w,
+      h,
+      laneIndex: lane.index,
+      laneTop: laneMetric.top,
+      laneHeight: laneMetric.height,
+    });
+    nodeLayout.set(node.visualId, nodeLayout.get(node.id));
+  });
+  const boundaryNodes = graph.nodes.filter((node) => node.kind === 'start' || node.kind === 'end');
+  boundaryNodes.forEach((boundary) => {
+    const relatedEdges = mainEdges.filter((edge) => boundary.kind === 'start' ? edge.from === boundary.id : edge.to === boundary.id);
+    const connectedLayouts = [];
+    relatedEdges.forEach((edge) => {
+      const connectedId = boundary.kind === 'start' ? edge.to : edge.from;
+      const connectedVisuals = visualNodesByModelId.get(connectedId) || [];
+      connectedVisuals.forEach((connectedVisual) => {
+        const connectedLayout = nodeLayout.get(connectedVisual.visualId);
+        if (connectedLayout) connectedLayouts.push({ visual: connectedVisual, layout: connectedLayout });
+      });
+    });
+    if (!connectedLayouts.length) return;
+    const firstConnected = connectedLayouts[0];
+    const averageY = Math.round(connectedLayouts.reduce((sum, item) => sum + item.layout.y + item.layout.h / 2, 0) / connectedLayouts.length - 9);
+    const maxRight = Math.max(...connectedLayouts.map((item) => item.layout.x + item.layout.w));
+    const x = boundary.kind === 'start' ? startX : Math.max(firstNodeX + 180, maxRight + 72);
+    const laneTopForEnd = Math.min(...connectedLayouts.map((item) => item.layout.laneTop));
+    const laneBottomForEnd = Math.max(...connectedLayouts.map((item) => item.layout.laneTop + item.layout.laneHeight));
+    const offset = getProcessFlowOffset(swimlaneLayout.items, boundary.id);
+    const layout = {
+      x: x + offset.dx,
+      y: averageY + offset.dy,
+      w: 18,
+      h: 18,
+      laneIndex: firstConnected.layout.laneIndex,
+      laneTop: boundary.kind === 'end' ? laneTopForEnd : firstConnected.layout.laneTop,
+      laneHeight: boundary.kind === 'end' ? laneBottomForEnd - laneTopForEnd : firstConnected.layout.laneHeight,
+    };
+    const boundaryVisual = {
+      ...boundary,
+      modelId: boundary.id,
+      visualId: boundary.id,
+      roleName: firstConnected.visual.roleName,
+    };
+    boardW = Math.max(boardW, x + 60);
+    visualNodes.push(boundaryVisual);
+    visualNodesByModelId.set(boundary.id, [boundaryVisual]);
+    nodeLayout.set(boundary.id, layout);
+  });
+  nodeLayout.forEach((layout) => {
+    boardW = Math.max(boardW, layout.x + layout.w + 90);
+    boardH = Math.max(boardH, layout.y + layout.h + 70);
+  });
+  const topAuxGap = (selfLoopEdges.length || returnEdges.length) ? 54 : 0;
+  if (topAuxGap) {
+    nodeLayout.forEach((layout) => { layout.y += topAuxGap; });
+    boardH += topAuxGap;
+  }
+
+  const edgeLabels = [];
+  const visualEdges = mainEdges.flatMap((edge) => {
+    const sources = visualNodesByModelId.get(edge.from) || [];
+    const targets = visualNodesByModelId.get(edge.to) || [];
+    return sources.flatMap((source, sourceIndex) => targets.map((target, targetIndex) => ({
+      ...edge,
+      visualId: `${edge.id || `${edge.from}-${edge.to}`}__${source.visualId}__${target.visualId}`,
+      sourceVisualId: source.visualId,
+      targetVisualId: target.visualId,
+      showLabel: sourceIndex === 0 && targetIndex === 0,
+    })));
+  });
+  const edgeLines = visualEdges.map((edge, index) => {
+    const source = nodeLayout.get(edge.sourceVisualId);
+    const target = nodeLayout.get(edge.targetVisualId);
+    if (!source || !target) return '';
+    const sx = source.x + source.w;
+    const sy = source.y + source.h / 2;
+    const tx = target.x;
+    const ty = target.y + target.h / 2;
+    const midX = sx <= tx ? Math.round((sx + tx) / 2) : sx + 34;
+    const points = `${Math.round(sx)},${Math.round(sy)} ${midX},${Math.round(sy)} ${midX},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`;
+    const label = edge.label || edge.condition || '';
+    if (label && edge.showLabel) {
+      const labelKey = edge.id || edge.visualId || `E${index + 1}`;
+      const labelOffset = getProcessFlowOffset(swimlaneLayout.labels, labelKey);
+      edgeLabels.push({
+        id: labelKey,
+        label,
+        x: midX + 4 + labelOffset.dx,
+        y: Math.round((sy + ty) / 2) - 12 + labelOffset.dy,
+      });
+    }
+    return `<polyline class="ps-link" points="${points}" marker-end="url(#ps-arrow-${esc(containerId)})"></polyline>`;
+  }).join('');
+  const visualReturnEdges = returnEdges.flatMap((edge) => {
+    const sources = visualNodesByModelId.get(edge.from) || [];
+    const targets = visualNodesByModelId.get(edge.to) || [];
+    return sources.flatMap((source, sourceIndex) => targets.map((target, targetIndex) => ({
+      ...edge,
+      visualId: `${edge.id || `${edge.from}-${edge.to}`}__return__${source.visualId}__${target.visualId}`,
+      sourceVisualId: source.visualId,
+      targetVisualId: target.visualId,
+      showLabel: sourceIndex === 0 && targetIndex === 0,
+    })));
+  });
+  const returnLines = visualReturnEdges.map((edge, index) => {
+    const source = nodeLayout.get(edge.sourceVisualId);
+    const target = nodeLayout.get(edge.targetVisualId);
+    if (!source || !target) return '';
+    const startX = source.x + source.w * 0.68;
+    const endX = target.x + target.w * 0.32;
+    const startY = source.y;
+    const endY = target.y;
+    const laneY = Math.max(10, Math.min(startY, endY) - 30 - (index % 4) * 13);
+    const label = edge.label || edge.condition || '';
+    if (label && edge.showLabel) {
+      const labelKey = edge.id || `R${index + 1}`;
+      const labelOffset = getProcessFlowOffset(swimlaneLayout.labels, labelKey);
+      edgeLabels.push({
+        id: labelKey,
+        label,
+        x: Math.min(startX, endX) + Math.abs(startX - endX) / 2 - 20 + labelOffset.dx,
+        y: laneY - 24 + labelOffset.dy,
+      });
+    }
+    return `<polyline class="ps-link ps-return-link" points="${Math.round(startX)},${Math.round(startY)} ${Math.round(startX)},${Math.round(laneY)} ${Math.round(endX)},${Math.round(laneY)} ${Math.round(endX)},${Math.round(endY)}" marker-end="url(#ps-arrow-${esc(containerId)})"></polyline>`;
+  }).join('');
+  const selfLoopLines = selfLoopEdges.map((edge, index) => {
+    const visuals = visualNodesByModelId.get(edge.from) || [];
+    return visuals.map((visual, visualIndex) => {
+      const source = nodeLayout.get(visual.visualId);
+      if (!source) return '';
+      const x1 = source.x + source.w * 0.42;
+      const x2 = source.x + source.w * 0.58;
+      const topY = Math.max(8, source.y - 24 - ((index + visualIndex) % 3) * 10);
+      const label = edge.label || edge.condition || '';
+      if (label && visualIndex === 0) {
+        const labelKey = edge.id || `SL${index + 1}`;
+        const labelOffset = getProcessFlowOffset(swimlaneLayout.labels, labelKey);
+        edgeLabels.push({
+          id: labelKey,
+          label,
+          x: source.x + source.w / 2 - 22 + labelOffset.dx,
+          y: topY - 22 + labelOffset.dy,
+        });
+      }
+      return `<path class="ps-link ps-loop-link" d="M ${Math.round(x1)} ${Math.round(source.y)} C ${Math.round(x1 - 18)} ${Math.round(topY)} ${Math.round(x2 + 18)} ${Math.round(topY)} ${Math.round(x2)} ${Math.round(source.y)}" marker-end="url(#ps-arrow-${esc(containerId)})"></path>`;
+    }).join('');
+  }).join('');
+
+  const renderNode = (node) => {
+    const layout = nodeLayout.get(node.visualId || node.id);
+    if (!layout) return '';
+    const commonStyle = `left:${layout.x}px;top:${layout.y}px;width:${layout.w}px;height:${layout.h}px`;
+    const dragAttrs = isEditableDiagram
+      ? ` data-layout-key="${esc(node.visualId || node.modelId || node.id)}" onmousedown="startProcessFlowItemDrag('${esc(proc.id)}','${esc(containerId)}','item','${esc(node.visualId || node.modelId || node.id)}',event)"`
+      : '';
+    if (node.kind === 'start' || node.kind === 'end') {
+      return `<div class="ps-${node.kind}${isEditableDiagram ? ' ps-draggable' : ''}" data-id="${esc(node.modelId || node.id)}" data-visual-id="${esc(node.visualId || node.id)}"${dragAttrs} style="left:${layout.x + layout.w / 2}px;top:${layout.y + layout.h / 2}px"><span>${esc(node.title || (node.kind === 'start' ? '开始' : '结束'))}</span></div>`;
+    }
+    if (node.kind === 'gateway') {
+      return `<div class="ps-gateway${isEditableDiagram ? ' ps-draggable' : ''}" data-id="${esc(node.modelId || node.id)}"${dragAttrs} style="${commonStyle}">
+        <i class="ps-gateway-x" aria-hidden="true"></i>
+      </div>`;
+    }
+    const roleNames = getTaskRoleNames(node.task);
+    const color = getTaskPrimaryRoleStyle(node.task, roleMap);
+    const clickable = onClickMap?.[node.id] ? ' ps-clickable' : '';
+    const shared = roleNames.length > 1;
+    const eops = showEntities ? (node.task.entity_ops || []).filter((eo) => eo.ops?.length) : [];
+    const entityTop = layout.y + layout.h + 8;
+    return `<div class="ps-task${clickable}${shared ? ' ps-task-shared' : ''}${isEditableDiagram ? ' ps-draggable' : ''}" data-id="${esc(node.modelId || node.id)}" data-visual-id="${esc(node.visualId || node.id)}"${dragAttrs} style="${commonStyle};background:${color.fill};border-color:${color.stroke};color:${color.color}">
+      <div class="ps-tn">${esc(node.title || '')}</div>
+      ${roleNames.length ? `<div class="ps-role-list">${renderTaskRoleChips(roleNames, roleMap, 'ps-role-chip')}</div>` : ''}
+    </div>${eops.length ? `<div class="ps-entity-tags" data-layout-key="${esc(node.visualId || node.modelId || node.id)}" style="left:${layout.x}px;top:${entityTop}px;width:${layout.w}px">
+      ${eops.map((eo) => `<span class="ps-entity-tag">${esc(getEntityName(eo.entity_id))}·${esc((eo.ops || []).join(''))}</span>`).join('')}
+    </div>` : ''}`;
+  };
+
+  let h = `<div class="ps-wrap horizontal" data-testid="process-swimlane-view" style="width:${boardW}px;height:${boardH}px">`;
+  h += `<svg class="ps-link-layer" width="${boardW}" height="${boardH}" viewBox="0 0 ${boardW} ${boardH}" aria-hidden="true">
+    <defs>
+      <marker id="ps-arrow-${esc(containerId)}" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#111827"></path>
+      </marker>
+    </defs>
+    <rect class="ps-board-bg" x="0.5" y="0.5" width="${boardW - 1}" height="${boardH - 1}"></rect>
+    ${laneMetrics.map((lane) => `<rect class="ps-lane-title-bg" x="0.5" y="${lane.top + 0.5}" width="${laneHeaderW - 0.5}" height="${lane.height}"></rect>`).join('')}
+    <line class="ps-lane-title-sep" x1="${laneHeaderW}" y1="0.5" x2="${laneHeaderW}" y2="${boardH - 0.5}"></line>
+    ${laneMetrics.slice(1).map((lane) => `<line class="ps-lane-sep" x1="0.5" y1="${lane.top + 0.5}" x2="${boardW - 0.5}" y2="${lane.top + 0.5}"></line>`).join('')}
+    ${edgeLines}${returnLines}${selfLoopLines}
+    <rect class="ps-board-border" x="0.5" y="0.5" width="${boardW - 1}" height="${boardH - 1}"></rect>
+  </svg>`;
+  h += laneMetrics.map((lane) => `<div class="ps-lane-title${isEditableDiagram ? ' ps-lane-draggable' : ''}" data-lane-key="${esc(lane.key)}" ${isEditableDiagram ? `onmousedown="startProcessFlowLaneDrag('${esc(proc.id)}','${esc(containerId)}','${esc(lane.key)}',event)"` : ''} style="left:0;top:${lane.top}px;width:${laneHeaderW}px;height:${lane.height}px">${esc(lane.name)}</div>`).join('');
+  h += visualNodes.map(renderNode).join('');
+  h += edgeLabels.map((item) => `<span class="ps-edge-label${isEditableDiagram ? ' ps-draggable' : ''}" data-edge-id="${esc(item.id)}" ${isEditableDiagram ? `onmousedown="startProcessFlowItemDrag('${esc(proc.id)}','${esc(containerId)}','label','${esc(item.id)}',event)"` : ''} style="left:${item.x}px;top:${item.y}px">${esc(item.label)}</span>`).join('');
+  h += '</div>';
+  el.innerHTML = h;
+  el.style.overflow = 'auto';
+  el.style.minHeight = '0';
+  bindProcessFlowNodeClicks(el, onClickMap, '.ps-task');
+  el.addEventListener('mousedown', ev => {
+    if(ev.target.closest('.ps-task,.ps-gateway,.ps-edge-label,.ps-start,.ps-end')) return;
+    ev.preventDefault();
+    startEfPan(el, ev);
+  });
+  initZoom(containerId);
+  if(ZOOM[containerId] && ZOOM[containerId] !== 1) applyZoom(containerId);
+}
+
+function startProcessFlowItemDrag(procId, containerId, kind, key, event) {
+  if (containerId !== 'proc-diagram') return;
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc || !key) return;
+  event.stopPropagation();
+  const swimlaneLayout = getProcessSwimlaneLayout(proc);
+  const map = kind === 'label' ? swimlaneLayout.labels : swimlaneLayout.items;
+  const startOffset = getProcessFlowOffset(map, key);
+  processFlowDragMoved = false;
+  processFlowDragState = {
+    pending: true,
+    type: kind === 'label' ? 'label' : 'item',
+    procId,
+    containerId,
+    key,
+    startX: event.clientX,
+    startY: event.clientY,
+    startOffset,
+    scale: ZOOM[containerId] || 1,
+    raf: 0,
+  };
+  processFlowDragState.timer = window.setTimeout(() => {
+    if (!processFlowDragState || processFlowDragState.key !== key) return;
+    processFlowDragState.pending = false;
+    const target = document.querySelector(`#${CSS.escape(containerId)} [data-layout-key="${CSS.escape(key)}"], #${CSS.escape(containerId)} [data-edge-id="${CSS.escape(key)}"]`);
+    target?.classList?.add('is-dragging-ready');
+  }, 220);
+  document.addEventListener('mousemove', onProcessFlowItemDrag);
+  document.addEventListener('mouseup', endProcessFlowDrag);
+}
+
+function onProcessFlowItemDrag(event) {
+  const drag = processFlowDragState;
+  if (!drag || (drag.type !== 'item' && drag.type !== 'label')) return;
+  if (drag.pending) return;
+  const dx = (event.clientX - drag.startX) / (drag.scale || 1);
+  const dy = (event.clientY - drag.startY) / (drag.scale || 1);
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) processFlowDragMoved = true;
+  if (!processFlowDragMoved) return;
+  const proc = S.doc?.processes?.find((item) => item.id === drag.procId);
+  if (!proc) return;
+  const swimlaneLayout = getProcessSwimlaneLayout(proc);
+  const map = drag.type === 'label' ? swimlaneLayout.labels : swimlaneLayout.items;
+  setProcessFlowOffset(map, drag.key, drag.startOffset.dx + dx, drag.startOffset.dy + dy);
+  if (!drag.raf) {
+    drag.raf = requestAnimationFrame(() => {
+      drag.raf = 0;
+      renderProcDiagramNow();
+    });
+  }
+}
+
+function startProcessFlowLaneDrag(procId, containerId, laneKey, event) {
+  if (containerId !== 'proc-diagram') return;
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  if (!proc || !laneKey) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const laneEls = Array.from(document.querySelectorAll(`#${CSS.escape(containerId)} .ps-lane-title[data-lane-key]`));
+  const laneTops = laneEls.map((el) => ({
+    key: el.dataset.laneKey || '',
+    top: Number.parseFloat(el.style.top || '0') || 0,
+    height: Number.parseFloat(el.style.height || '') || el.offsetHeight || 0,
+  })).filter((item) => item.key);
+  processFlowDragMoved = false;
+  processFlowDragState = {
+    type: 'lane',
+    procId,
+    containerId,
+    key: laneKey,
+    startX: event.clientX,
+    startY: event.clientY,
+    laneTops,
+  };
+  document.addEventListener('mousemove', onProcessFlowLaneDrag);
+  document.addEventListener('mouseup', endProcessFlowDrag);
+}
+
+function onProcessFlowLaneDrag(event) {
+  const drag = processFlowDragState;
+  if (!drag || drag.type !== 'lane') return;
+  const dy = event.clientY - drag.startY;
+  if (Math.abs(dy) > 3) processFlowDragMoved = true;
+  const laneEl = document.querySelector(`#${CSS.escape(drag.containerId)} .ps-lane-title[data-lane-key="${CSS.escape(drag.key)}"]`);
+  if (laneEl) laneEl.style.transform = `translateY(${dy}px)`;
+}
+
+function endProcessFlowDrag(event) {
+  const drag = processFlowDragState;
+  if (!drag) return;
+  if (drag.timer) clearTimeout(drag.timer);
+  document.removeEventListener('mousemove', onProcessFlowItemDrag);
+  document.removeEventListener('mousemove', onProcessFlowLaneDrag);
+  document.removeEventListener('mouseup', endProcessFlowDrag);
+  if (drag.raf) cancelAnimationFrame(drag.raf);
+  const proc = S.doc?.processes?.find((item) => item.id === drag.procId);
+  if (proc && drag.type === 'lane' && processFlowDragMoved) {
+    const dy = event.clientY - drag.startY;
+    const active = drag.laneTops.find((lane) => lane.key === drag.key);
+    const center = (active?.top || 0) + (active?.height || 0) / 2 + dy;
+    const otherKeys = drag.laneTops.filter((lane) => lane.key !== drag.key);
+    let insertIndex = otherKeys.findIndex((lane) => center < lane.top + lane.height / 2);
+    if (insertIndex < 0) insertIndex = otherKeys.length;
+    const nextOrder = otherKeys.map((lane) => lane.key);
+    nextOrder.splice(insertIndex, 0, drag.key);
+    getProcessSwimlaneLayout(proc).laneOrder = nextOrder;
+  }
+  if (proc && processFlowDragMoved) markModified();
+  document.querySelectorAll(`#${CSS.escape(drag.containerId)} .is-dragging-ready`).forEach((item) => item.classList.remove('is-dragging-ready'));
+  processFlowDragState = null;
+  if (processFlowDragMoved || drag.type === 'lane') renderProcDiagramNow();
+  setTimeout(() => { processFlowDragMoved = false; }, 80);
+}
+
 function renderProcFlow(containerId, proc, onClickMap) {
   const el = document.getElementById(containerId);
   if(!el) return;
   const tasks = getProcNodes(proc);
-  if(!tasks.length) { el.innerHTML=`<div class="diag-empty">暂无节点，点击上方"添加节点"</div>`; initZoom(containerId); return; }
-
-  /* 角色→颜色 */
-  const roleMap = buildTaskRoleColorMap(tasks);
-
-  let h = '<div class="pf-wrap">';
-  h += `<div class="pf-se">开始</div>`;
-
-  for(const t of tasks) {
-    const roleNames = getTaskRoleNames(t);
-    const c = getTaskPrimaryRoleStyle(t, roleMap);
-    const eops = (t.entity_ops||[]).filter(eo=>eo.ops?.length);
-    const clickable = onClickMap?.[t.id] ? ' pf-clickable' : '';
-    const multiRoleClass = roleNames.length > 1 ? ' pf-task-multi-role' : '';
-
-    h += `<div class="pf-arrow">→</div>`;
-    h += `<div class="pf-col" data-id="${t.id}">`;
-    /* 流程节点 */
-    h += `<div class="pf-task${clickable}${multiRoleClass}" data-id="${t.id}"
-      style="background:${c.fill};border-color:${c.stroke};color:${c.color}">`;
-    h += `<div class="pf-tn">${esc(t.name||'')}</div>`;
-    if(roleNames.length) {
-      h += `<div class="pf-role-list">${renderTaskRoleChips(roleNames, roleMap)}</div>`;
-    }
-    h += `</div>`;
-    /* 实体标签（正下方） */
-    if(eops.length) {
-      h += `<div class="pf-vline"></div>`;
-      h += `<div class="pf-tags">`;
-      for(const eo of eops) {
-        const en  = getEntityName(eo.entity_id);
-        const ops = (eo.ops||[]).join('');
-        h += `<span class="pf-tag">${esc(en)}·${esc(ops)}</span>`;
-      }
-      h += `</div>`;
-    }
-    h += `</div>`; /* pf-col */
+  if(getProcessFlowMode() === 'swimlane') {
+    renderProcSwimlaneFlow(containerId, proc, onClickMap);
+    return;
   }
-
-  h += `<div class="pf-arrow">→</div>`;
-  h += `<div class="pf-se">结束</div>`;
-  h += '</div>';
-
-  el.innerHTML = h;
-  const wrap = el.querySelector('.pf-wrap');
-  renderProcReturnLines(wrap, tasks, containerId);
-
-  /* 绑定点击 */
-  if(onClickMap) {
-    for(const [taskId, handler] of Object.entries(onClickMap)) {
-      const node = el.querySelector(`.pf-task[data-id="${taskId}"]`);
-      if(node) { node.style.cursor='pointer'; node.addEventListener('click', handler); }
-    }
-  }
-
-  /* 流程图背景拖动平移（mousedown 在 .pf-wrap 空白处） */
-  el.addEventListener('mousedown', ev => {
-    if(ev.target.closest('.pf-task,.pf-tag,.pf-se')) return;
-    ev.preventDefault();
-    startEfPan(el, ev);
-  });
-
-  initZoom(containerId);
-  if(ZOOM[containerId] && ZOOM[containerId]!==1) applyZoom(containerId);
+  renderProcGraphFlow(containerId, proc, onClickMap);
 }
 
 function getTaskRolePickerCollapsedMap(procId) {
@@ -441,7 +1625,7 @@ function addProcess(subDomain, stageId = '') {
   hydrateDocumentForUi(S.doc);
   if (stage?.id) addStageProcessRef(stage.id, id, { silent: true });
   markModified();
-  navigate('process',{procId:id, taskId:null});
+    openProcessEditor(id, null);
 }
 
 function addStageFlowNode(stageId) {
@@ -4627,7 +5811,7 @@ function getDefaultTaskIdForProc(proc, preferredTaskId = S.ui.taskId) {
 
 function openProcessFlowView(navOptions = {}) {
   const proc = currentProc() || S.doc?.processes?.[0] || null;
-  const taskId = getDefaultTaskIdForProc(proc);
+  const taskId = getProcessFlowShowTasks() ? getDefaultTaskIdForProc(proc) : null;
   queueUiNavigationHistoryFor((next) => {
     next.tab = 'process';
     next.procView = 'flow';
@@ -4645,7 +5829,7 @@ function openProcessFlowView(navOptions = {}) {
 function selectProcessFlow(procId) {
   const proc = (S.doc?.processes || []).find((item) => item.id === procId) || S.doc?.processes?.[0] || null;
   S.ui.procId = proc?.id || null;
-  S.ui.taskId = getDefaultTaskIdForProc(proc, S.ui.taskId);
+  S.ui.taskId = getProcessFlowShowTasks() ? getDefaultTaskIdForProc(proc, null) : null;
   S.ui.procView = 'flow';
   renderProcessTab();
 }
@@ -4656,7 +5840,12 @@ function closeProcessEditor() {
   }
   S.ui.procView = 'flow';
   const proc = currentProc() || S.doc?.processes?.[0] || null;
-  S.ui.taskId = getDefaultTaskIdForProc(proc, S.ui.taskId);
+  S.ui.taskId = getProcessFlowShowTasks() ? getDefaultTaskIdForProc(proc, null) : null;
+  renderProcessTab();
+}
+
+function toggleTaskLevel() {
+  S.ui.procTasklevelCollapsed = !S.ui.procTasklevelCollapsed;
   renderProcessTab();
 }
 
@@ -4672,18 +5861,109 @@ function renderProcessZoomControls(containerId, primary = false) {
   </div>`;
 }
 
+function renderProcessSummaryHelpPanel() {
+  const card = (title, desc, svg) => `<div class="summary-help-card" data-testid="process-summary-help-card">
+    <strong>${esc(title)}</strong>
+    <span>${esc(desc)}</span>
+    <svg viewBox="0 0 360 116" aria-hidden="true">
+      <defs>
+        <marker id="summary-help-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#64748b"></path>
+        </marker>
+      </defs>
+      ${svg}
+    </svg>
+  </div>`;
+  const node = (x, y, text, cls = '') => `<rect class="msh-node ${cls}" x="${x}" y="${y}" width="74" height="34" rx="7"></rect><text class="msh-node-text" x="${x + 37}" y="${y + 21}">${esc(text)}</text>`;
+  const end = (x, y, text) => `<rect class="msh-boundary" x="${x}" y="${y}" width="58" height="30" rx="15"></rect><text class="msh-node-text" x="${x + 29}" y="${y + 19}">${esc(text)}</text>`;
+  const line = (points, cls = '') => `<polyline class="msh-link ${cls}" points="${points}"></polyline>`;
+  const label = (x, y, text) => `<rect class="msh-label-bg" x="${x}" y="${y}" width="${Math.max(34, text.length * 13 + 14)}" height="20" rx="10"></rect><text class="msh-label" x="${x + Math.max(17, (text.length * 13 + 14) / 2)}" y="${y + 14}">${esc(text)}</text>`;
+  return `<span class="process-summary-help-wrap" data-testid="process-summary-help" onclick="toggleProcessSummaryHelp(event)" onmouseleave="clearProcessSummaryHelpSuppressed(this)">
+    <span class="process-summary-help-icon">?</span>
+    <div class="process-summary-help-panel" data-testid="process-summary-help-panel">
+      <div class="summary-help-head">
+        <strong>摘要图怎么读</strong>
+        <span>按业务路径排布，不按角色排布；复杂流程会自动展开为多排。</span>
+      </div>
+      <div class="summary-help-grid">
+        ${card('纯顺序', '同一行用直线表达连续办理。', `
+          ${end(10, 42, '开始')}${line('68,57 98,57')}${node(98, 40, 'A', 'msh-blue')}${line('172,57 202,57')}${node(202, 40, 'B', 'msh-green')}${line('276,57 302,57')}${end(302, 42, '结束')}
+        `)}
+        ${card('一个分支', '一个节点后出现多条下游路径。', `
+          ${end(10, 42, '开始')}${line('68,57 98,57')}${node(98, 40, 'A', 'msh-blue')}${line('172,57 206,57 206,30 230,30')}${label(184, 10, '通过')}${node(230, 13, 'B', 'msh-green')}${line('172,57 206,57 206,84 230,84')}${label(184, 90, '驳回')}${node(230, 67, 'C', 'msh-yellow')}
+        `)}
+        ${card('分支后归并', '多排路径在公共节点处收束。', `
+          ${node(24, 40, 'A', 'msh-blue')}${line('98,57 132,57 132,30 156,30')}${node(156, 13, 'B', 'msh-green')}${line('98,57 132,57 132,84 156,84')}${node(156, 67, 'C', 'msh-yellow')}${line('230,30 260,30 260,57 282,57')}${line('230,84 260,84 260,57 282,57')}${node(282, 40, 'D', 'msh-green')}
+        `)}
+        ${card('分支直接结束', '某条路径没有办理节点，直接办结。', `
+          ${node(32, 40, 'A', 'msh-blue')}${line('106,57 144,57 144,30 174,30')}${label(120, 10, '通过')}${node(174, 13, 'B', 'msh-green')}${line('106,57 144,57 144,84 278,84')}${label(120, 90, '不通过')}${end(278, 69, '结束')}
+        `)}
+        ${card('多起点', '多条开始连线会展开为多条入口路径。', `
+          ${end(10, 42, '开始')}${line('68,57 96,57 96,30 126,30')}${node(126, 13, 'A', 'msh-blue')}${line('68,57 96,57 96,84 126,84')}${node(126, 67, 'B', 'msh-yellow')}${line('200,30 230,30 230,57 258,57')}${line('200,84 230,84 230,57 258,57')}${node(258, 40, 'C', 'msh-green')}
+        `)}
+        ${card('多个结束连线', '多个终止路径收束到同一个结束点。', `
+          ${node(60, 13, 'B', 'msh-green')}${node(60, 67, 'C', 'msh-yellow')}${line('134,30 184,30 184,57 246,57')}${line('134,84 184,84 184,57 246,57')}${end(246, 42, '结束')}
+        `)}
+        ${card('回退/撤回', '回退作为辅助线展示，不打乱主路径。', `
+          ${node(40, 40, 'A', 'msh-blue')}${line('114,57 156,57')}${node(156, 40, 'B', 'msh-green')}${line('230,57 274,57')}${end(274, 42, '结束')}${line('193,40 193,18 77,18 77,40', 'msh-return')}${label(108, 20, '撤回')}
+        `)}
+      </div>
+    </div>
+  </span>`;
+}
+
+function toggleProcessSummaryHelp(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const wrap = event.currentTarget;
+  const shouldOpen = !wrap.classList.contains('is-open');
+  document.querySelectorAll('.process-summary-help-wrap.is-open').forEach((item) => {
+    if (item !== wrap) item.classList.remove('is-open');
+  });
+  wrap.classList.toggle('is-suppressed', !shouldOpen);
+  wrap.classList.toggle('is-open', shouldOpen);
+}
+
+function clearProcessSummaryHelpSuppressed(wrap) {
+  wrap?.classList?.remove('is-suppressed');
+}
+
+function closeProcessSummaryHelp(event) {
+  if (event?.target?.closest?.('.process-summary-help-wrap')) return;
+  document.querySelectorAll('.process-summary-help-wrap.is-open').forEach((item) => item.classList.remove('is-open'));
+}
+
+document.addEventListener('click', closeProcessSummaryHelp);
+
 function renderProcessFlowStage(proc, { editing = false, task = null, drawerW = 0 } = {}) {
   const procs = S.doc?.processes || [];
   const offsetStyle = editing ? ` style="margin-right:${drawerW}px"` : '';
-  const taskLevelMode = !!task && (!editing || (S.ui.nodePerspective || 'user') === 'engineering');
+  const taskLevelMode = getProcessFlowShowTasks() && !!task;
   const diagMode = taskLevelMode ? ' taskflow-mode' : '';
-  return `<div class="process-flow-view${taskLevelMode ? ' has-tasklevel' : ''}" data-testid="process-flow-view"${offsetStyle}>
+  const diagramMode = getProcessFlowMode();
+  const diagramControls = `<div class="process-diagram-mode" data-testid="process-flow-mode">
+    ${renderProcessSummaryHelpPanel()}
+    <button class="vtb ${diagramMode === 'linear' ? 'active' : ''}" type="button" data-testid="process-flow-mode-linear" onclick="setProcessFlowMode('linear')">摘要图</button>
+    <button class="vtb ${diagramMode === 'swimlane' ? 'active' : ''}" type="button" data-testid="process-flow-mode-swimlane" onclick="setProcessFlowMode('swimlane')">泳道图</button>
+  </div>`;
+  const entityToggle = `<label class="process-diagram-entity-toggle" data-testid="process-flow-entity-toggle">
+    <input type="checkbox" ${getProcessFlowShowEntities() ? 'checked' : ''} onchange="toggleProcessFlowEntities(this.checked)">
+    <span>显示实体</span>
+  </label>`;
+  const taskToggle = `<label class="process-diagram-entity-toggle" data-testid="process-flow-task-toggle">
+    <input type="checkbox" ${getProcessFlowShowTasks() ? 'checked' : ''} onchange="toggleProcessFlowTasks(this.checked)">
+    <span>显示任务</span>
+  </label>`;
+  return `<div class="process-flow-view${taskLevelMode ? ' has-tasklevel' : ''}${diagramMode === 'swimlane' ? ' is-swimlane' : ''}" data-testid="process-flow-view"${offsetStyle}>
     <div class="process-flow-card${taskLevelMode ? ' has-tasklevel' : ''}">
       <div class="process-flow-head">
         <div class="process-flow-actions">
           ${procs.length ? `<select data-testid="process-flow-select" onchange="selectProcessFlow(this.value)">
             ${procs.map((item) => `<option value="${esc(item.id)}" ${proc?.id===item.id?'selected':''}>${esc(item.id)} ${esc(item.name || '未命名流程')}</option>`).join('')}
           </select>` : ''}
+          ${diagramControls}
+          ${entityToggle}
+          ${taskToggle}
         </div>
       </div>
       ${taskLevelMode ? `<div class="process-diagram-stack" data-testid="process-tasklevel-stack">
@@ -4727,7 +6007,7 @@ function renderProcessTab() {
   ensureProcPos(S.doc);
   const procs=S.doc.processes||[];
   const proc=currentProc();
-  const task=currentTask();
+  let task=currentTask();
   const view=S.ui.procView||'stage';
   const stageItem = view === 'stage' ? getCurrentStageItem() : null;
   const realStageDetail = view === 'stage' && S.ui.stageViewMode === 'detail' && stageItem && !stageItem.virtual;
@@ -4736,6 +6016,10 @@ function renderProcessTab() {
   const flowViewActive = view === 'flow' || view === 'list';
   const stageEditing = view === 'stage' && S.ui.stageEditorCollapsed === false;
   const displayProc = proc || procs[0] || null;
+  if ((view === 'flow' || view === 'list') && getProcessFlowShowTasks() && displayProc && !task) {
+    S.ui.taskId = getDefaultTaskIdForProc(displayProc, null);
+    task = currentTask();
+  }
   if (view === 'list' && !proc && displayProc) {
     S.ui.procId = displayProc.id;
     S.ui.procView = 'flow';
@@ -4766,7 +6050,7 @@ function renderProcessTab() {
     (panoramaActive || stageDetailActive) ? (stageEditing
       ? '<button class="btn btn-ghost-sm" type="button" data-testid="stage-editor-hide" onclick="toggleStageEditorDrawer(false)">关闭编辑</button>'
       : '<button class="btn btn-outline btn-sm" type="button" data-testid="stage-editor-open" onclick="toggleStageEditorDrawer(true)">打开编辑</button>') : '',
-    view === 'flow' && displayProc ? `<button class="btn btn-outline btn-sm" type="button" data-testid="process-editor-open" onclick="navigate('process',{procId:'${esc(displayProc.id)}',taskId:${task ? `'${esc(task.id)}'` : 'null'}})">打开编辑</button>` : '',
+    view === 'flow' && displayProc ? `<button class="btn btn-outline btn-sm" type="button" data-testid="process-editor-open" onclick="openProcessEditor('${esc(displayProc.id)}',${task ? `'${esc(task.id)}'` : 'null'})">打开编辑</button>` : '',
   ].filter(Boolean).join('');
 
   /* ── 视图切换工具栏 ── */
@@ -4822,13 +6106,12 @@ function renderProcessTab() {
     /* 抽屉头部 */
     h+=`<div class="drawer-head">
       <div class="drawer-crumb">
-        <span class="drawer-crumb-proc" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})"
+        <span class="drawer-crumb-proc" onclick="${task ? `openProcessEditor('${esc(proc.id)}', null)` : ''}"
           title="回到流程">${esc(proc.id)} ${esc(proc.name||'')}</span>
         ${task?`<span class="dc-sep">›</span>
           <span>节点 ${esc(task.id)} ${esc(task.name||'')}</span>`:''}
       </div>
       <div class="drawer-actions">
-        ${!task?`<button class="btn btn-outline btn-sm" onclick="addTask('${esc(proc.id)}')">\uff0b\u8282\u70b9</button>`:''}
         ${task?`<button class="btn btn-danger btn-sm" onclick="removeTask('${esc(proc.id)}','${esc(task.id)}')">\u5220\u9664\u8282\u70b9</button>`:''}
         <button class="drawer-close" type="button" data-testid="process-editor-close" onclick="closeProcessEditor()" title="关闭编辑">✕</button>
       </div>
@@ -4845,14 +6128,8 @@ function renderProcessTab() {
           <label>节点名称</label>
           <input type="text" data-testid="process-task-name-input" value="${esc(task.name||'')}" placeholder="如：新增仓库"
             oninput="setTask('${esc(proc.id)}','${esc(task.id)}','name',this.value)">
-          <label class="task-returnable-inline">
-            <span class="task-returnable-label">\u53ef\u9000\u56de</span>
-            <input type="checkbox" data-testid="task-returnable-toggle" ${task.repeatable?'checked':''}
-              onchange="setTask('${esc(proc.id)}','${esc(task.id)}','repeatable',this.checked);rerenderProcessEditor({ focusSelector: '[data-testid=&quot;task-returnable-toggle&quot;]' })">
-            <span class="task-returnable-note">\u5f53\u524d\u8282\u70b9\u5141\u8bb8\u9000\u56de\u4e0a\u4e00\u8282\u70b9\u91cd\u65b0\u5904\u7406</span>
-          </label>
         </div>
-        <div class="field-group field-group-wide">
+        <div class="field-group">
           <label>执行角色</label>`;
 
       h+=renderTaskRolePicker(proc, task);
@@ -4941,6 +6218,7 @@ function renderProcessTab() {
             oninput="setProc('${esc(proc.id)}','outcome',this.value)">
         </div>
       </div>
+      ${renderProcessFlowRoutingEditor(proc)}
       <div class="form-section">
         <div class="section-toolbar">
           <h4>流程原型/附件${prototypeFiles.length ? `<span class="section-count">${prototypeFiles.length}项</span>` : ''}</h4>

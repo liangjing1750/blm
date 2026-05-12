@@ -961,6 +961,113 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                     query_source_kind if orchestration_task["type"] == "Query" else ""
                 )
 
+        raw_flow = process.get("flow")
+        if not isinstance(raw_flow, dict):
+            raw_flow = {}
+        task_ids = {str(node.get("id", "")).strip() for node in process["nodes"] if str(node.get("id", "")).strip()}
+        flow_nodes = []
+        flow_node_ids = set()
+        for flow_node_index, flow_node in enumerate(raw_flow.get("nodes", []), start=1):
+            if not isinstance(flow_node, dict):
+                continue
+            if str(flow_node.get("kind", "")).strip() != "gateway":
+                continue
+            node_id = str(flow_node.get("id", "")).strip() or f"G{flow_node_index}"
+            if not node_id or node_id in flow_node_ids or node_id in task_ids:
+                continue
+            flow_node_ids.add(node_id)
+            normalized_flow_node = dict(flow_node)
+            normalized_flow_node["id"] = node_id
+            normalized_flow_node["kind"] = "gateway"
+            normalized_flow_node["title"] = str(
+                flow_node.get("title") or flow_node.get("name") or ""
+            ).strip()
+            normalized_flow_node["gatewayType"] = str(
+                flow_node.get("gatewayType") or "exclusive"
+            ).strip() or "exclusive"
+            normalized_flow_node["role_id"] = str(
+                flow_node.get("role_id") or flow_node.get("roleId") or ""
+            ).strip()
+            flow_nodes.append(normalized_flow_node)
+
+        valid_flow_node_ids = task_ids | flow_node_ids
+
+        def normalize_process_flow_endpoint(value: object, side: str) -> str:
+            endpoint = str(value or "").strip()
+            if side == "from" and endpoint == "START":
+                return "START"
+            if side == "to" and endpoint == "END":
+                return "END"
+            return endpoint
+
+        flow_edges = []
+        seen_flow_edges = set()
+        for edge_index, edge in enumerate(raw_flow.get("edges", []), start=1):
+            if not isinstance(edge, dict):
+                continue
+            source = normalize_process_flow_endpoint(edge.get("from") or edge.get("source"), "from")
+            target = normalize_process_flow_endpoint(edge.get("to") or edge.get("target"), "to")
+            is_draft_edge = not source or not target
+            if (
+                target == "START"
+                or source == "END"
+                or (source and source != "START" and source not in valid_flow_node_ids)
+                or (target and target != "END" and target not in valid_flow_node_ids)
+            ):
+                continue
+            edge_key = (source, target)
+            if not is_draft_edge:
+                if edge_key in seen_flow_edges:
+                    continue
+                seen_flow_edges.add(edge_key)
+            normalized_edge = dict(edge)
+            normalized_edge["id"] = str(edge.get("id") or f"E{edge_index}").strip()
+            normalized_edge["from"] = source
+            normalized_edge["to"] = target
+            normalized_edge["label"] = str(edge.get("label") or edge.get("name") or "").strip()
+            normalized_edge["condition"] = str(edge.get("condition") or "").strip()
+            flow_edges.append(normalized_edge)
+
+        process["flow"] = {
+            "version": int(raw_flow.get("version") or 2),
+            "orientation": "vertical" if raw_flow.get("orientation") == "vertical" else "horizontal",
+            "nodes": flow_nodes,
+            "edges": flow_edges,
+            "layout": {
+                "swimlane": {
+                    "laneOrder": [],
+                    "items": {},
+                    "labels": {},
+                }
+            },
+        }
+        raw_layout = raw_flow.get("layout")
+        raw_swimlane = raw_layout.get("swimlane") if isinstance(raw_layout, dict) else None
+        if isinstance(raw_swimlane, dict):
+            process["flow"]["layout"]["swimlane"]["laneOrder"] = [
+                str(item).strip()
+                for item in raw_swimlane.get("laneOrder", [])
+                if str(item).strip()
+            ] if isinstance(raw_swimlane.get("laneOrder"), list) else []
+
+            def normalize_offset_map(value: object) -> dict:
+                if not isinstance(value, dict):
+                    return {}
+                normalized_offsets = {}
+                for key, offset in value.items():
+                    if not isinstance(offset, dict) or not str(key).strip():
+                        continue
+                    try:
+                        dx = round(float(offset.get("dx", 0) or 0))
+                        dy = round(float(offset.get("dy", 0) or 0))
+                    except (TypeError, ValueError):
+                        continue
+                    normalized_offsets[str(key)] = {"dx": dx, "dy": dy}
+                return normalized_offsets
+
+            process["flow"]["layout"]["swimlane"]["items"] = normalize_offset_map(raw_swimlane.get("items"))
+            process["flow"]["layout"]["swimlane"]["labels"] = normalize_offset_map(raw_swimlane.get("labels"))
+
 
 
 def migrate_document(document: dict | None) -> dict:
