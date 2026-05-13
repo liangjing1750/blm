@@ -182,6 +182,17 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("height: auto;", style_css)
         self.assertIn("overflow: visible;", style_css)
 
+    def test_process_flow_node_role_control_is_plain_dropdown(self):
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn('data-testid="process-flow-node-role-picker"', process_js)
+        self.assertIn("setProcessFlowNodeRole", process_js)
+        self.assertIn('type="checkbox"', process_js)
+        self.assertIn(".flow-node-role-menu", style_css)
+        self.assertNotIn('class="flow-node-role-select" multiple', process_js)
+        self.assertNotIn('multiple size="1"', process_js)
+
 
 if __name__ == "__main__":
     unittest.main()

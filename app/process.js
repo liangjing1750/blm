@@ -389,13 +389,61 @@ function renderProcessFlowNodeOptions(proc, selectedId = '', side = 'any') {
   }).join('');
 }
 
-function renderFlowNodeRoleOptions(node) {
-  const selected = new Set(getTaskRoleIds(node));
-  return getRoles().map((role) => `<option value="${esc(role.id)}" ${selected.has(role.id) ? 'selected' : ''}>${esc(role.name || role.id)}</option>`).join('');
+function getFlowNodeRoleMenuKey(procId, taskId) {
+  return `${procId}::${taskId}`;
 }
 
-function setProcessFlowNodeRoles(procId, taskId, selectEl) {
-  const roleIds = Array.from(selectEl?.selectedOptions || []).map((option) => option.value).filter(Boolean);
+function renderFlowNodeRolePicker(proc, node) {
+  const roles = getRoles();
+  const selectedRoleIds = getTaskRoleIds(node);
+  const selected = new Set(selectedRoleIds);
+  const selectedNames = selectedRoleIds.map((roleId) => getRoleName(roleId)).filter(Boolean);
+  const summary = selectedNames.length === 0
+    ? '选择角色'
+    : selectedNames.length === 1
+      ? selectedNames[0]
+      : `${selectedNames[0]} +${selectedNames.length - 1}`;
+  const menuKey = getFlowNodeRoleMenuKey(proc.id, node.id);
+  const open = S.ui.processFlowRoleMenu === menuKey;
+  return `<div class="flow-node-role-picker${open ? ' is-open' : ''}${selectedNames.length ? ' has-value' : ''}" data-testid="process-flow-node-role-picker">
+    <button type="button" class="flow-node-role-trigger" title="${esc(selectedNames.join('、') || '选择节点执行角色')}"
+      onclick="toggleProcessFlowNodeRoleMenu('${esc(proc.id)}','${esc(node.id)}')">
+      <span>${esc(summary)}</span>
+      <b>⌄</b>
+    </button>
+    ${open ? `<div class="flow-node-role-menu" onclick="event.stopPropagation()">
+      <div class="flow-node-role-menu-head">执行角色</div>
+      ${roles.length ? roles.map((role) => `<label class="flow-node-role-option">
+        <input type="checkbox" value="${esc(role.id)}" ${selected.has(role.id) ? 'checked' : ''}
+          onchange="setProcessFlowNodeRole('${esc(proc.id)}','${esc(node.id)}','${esc(role.id)}',this.checked)">
+        <span>${esc(role.name || role.id)}</span>
+      </label>`).join('') : '<div class="flow-node-role-empty">暂无角色</div>'}
+      <div class="flow-node-role-menu-footer">
+        <button type="button" onclick="closeProcessFlowNodeRoleMenu()">完成</button>
+      </div>
+    </div>` : ''}
+  </div>`;
+}
+
+function toggleProcessFlowNodeRoleMenu(procId, taskId) {
+  const key = getFlowNodeRoleMenuKey(procId, taskId);
+  S.ui.processFlowRoleMenu = S.ui.processFlowRoleMenu === key ? '' : key;
+  refreshProcessStructureEditor('[data-testid="process-flow-node-row"]');
+}
+
+function closeProcessFlowNodeRoleMenu() {
+  S.ui.processFlowRoleMenu = '';
+  refreshProcessStructureEditor('[data-testid="process-flow-node-row"]');
+}
+
+function setProcessFlowNodeRole(procId, taskId, roleId, checked) {
+  const proc = S.doc?.processes?.find((item) => item.id === procId);
+  const node = getProcNodes(proc).find((item) => item.id === taskId);
+  if (!node) return;
+  const next = new Set(getTaskRoleIds(node));
+  if (checked) next.add(roleId);
+  else next.delete(roleId);
+  const roleIds = getRoles().map((role) => role.id).filter((id) => next.has(id));
   setTaskRoles(procId, taskId, roleIds);
   refreshProcessStructureEditor('[data-testid="process-flow-node-row"]');
 }
@@ -665,10 +713,7 @@ function renderProcessFlowRoutingEditor(proc) {
         ${nodes.length ? nodes.map((node, index) => `<div class="flow-routing-row flow-node-row" data-testid="process-flow-node-row">
           <input type="text" value="${esc(node.name || '')}" placeholder="节点名称"
             oninput="setTask('${esc(proc.id)}','${esc(node.id)}','name',this.value);renderProcDiagramNow()">
-          <select class="flow-node-role-select" multiple size="1" title="按住 Ctrl 可多选角色"
-            onchange="setProcessFlowNodeRoles('${esc(proc.id)}','${esc(node.id)}',this)">
-            ${renderFlowNodeRoleOptions(node)}
-          </select>
+          ${renderFlowNodeRolePicker(proc, node)}
           <div class="flow-row-actions">
             <button type="button" class="flow-enter-action" title="进入节点编辑" onclick="openProcessEditor('${esc(proc.id)}','${esc(node.id)}')">→</button>
             <button type="button" title="在下方添加节点" onclick="addProcessTaskAfter('${esc(proc.id)}','${esc(node.id)}')">+</button>

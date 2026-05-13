@@ -7922,7 +7922,7 @@ body.is-saving * {
   gap: 6px;
 }
 .process-flow-routing-editor {
-  overflow-x: auto;
+  overflow: visible;
 }
 .flow-routing-hint {
   margin: 0 0 10px;
@@ -7954,6 +7954,7 @@ body.is-saving * {
   gap: 8px;
   padding-bottom: 10px;
   border-bottom: 1px solid #e2e8f0;
+  overflow: visible;
 }
 .flow-routing-column:last-child {
   border-bottom: 0;
@@ -7974,12 +7975,13 @@ body.is-saving * {
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   background: #f8fafc;
+  overflow: visible;
 }
 .flow-edge-row {
   grid-template-columns: minmax(78px, .7fr) minmax(0, 1fr) auto minmax(0, 1fr) minmax(100px, 1fr) auto;
 }
 .flow-node-row {
-  grid-template-columns: minmax(0, 1fr) minmax(118px, auto) auto;
+  grid-template-columns: minmax(150px, 1fr) minmax(160px, 220px) auto;
 }
 .flow-routing-row .flow-id-input,
 .flow-edge-row .flow-id-input {
@@ -8003,10 +8005,111 @@ body.is-saving * {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.flow-node-role-select {
-  min-width: 118px;
+.flow-node-role-picker {
+  position: relative;
+  min-width: 160px;
+}
+.flow-node-role-trigger {
+  width: 100%;
   height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: linear-gradient(#fff, #f8fafc);
+  color: #475569;
   font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, .03);
+}
+.flow-node-role-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-node-role-trigger b {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1;
+}
+.flow-node-role-picker.has-value .flow-node-role-trigger {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 650;
+}
+.flow-node-role-picker.is-open .flow-node-role-trigger {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #bfdbfe;
+}
+.flow-node-role-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 70;
+  width: max(220px, 100%);
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .18);
+}
+.flow-node-role-menu-head {
+  padding: 2px 4px 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+.flow-node-role-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: #1f2937;
+  font-size: 12px;
+  cursor: pointer;
+}
+.flow-node-role-option:hover {
+  background: #eff6ff;
+}
+.flow-node-role-option input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.flow-node-role-option input:checked + span {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+.flow-node-role-empty {
+  padding: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+.flow-node-role-menu-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+.flow-node-role-menu-footer button {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  cursor: pointer;
 }
 .flow-row-actions {
   display: inline-flex;
