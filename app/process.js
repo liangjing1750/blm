@@ -927,12 +927,25 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
   const nodeH = 62;
   const boundaryW = 64;
   const boundaryH = 34;
-  const colW = 196;
+  const colGap = 46;
   const rowH = showEntities ? 118 : 86;
   const padX = 24;
   const hasAuxiliaryEdges = (summary.selfLoops || []).length || (summary.returnEdges || []).length;
   const padY = hasAuxiliaryEdges ? 58 : 18;
   const layout = new Map();
+  const rankWidths = new Map();
+  summary.nodes.forEach((node) => {
+    const r = summary.rank.get(node.id) || 0;
+    const isBoundary = node.kind === 'start' || node.kind === 'end';
+    rankWidths.set(r, Math.max(rankWidths.get(r) || 0, isBoundary ? boundaryW : nodeW));
+  });
+  const rankXs = new Map();
+  let nextX = padX;
+  const rankList = [...rankWidths.keys()].sort((a, b) => a - b);
+  rankList.forEach((rankValue) => {
+    rankXs.set(rankValue, nextX);
+    nextX += (rankWidths.get(rankValue) || nodeW) + colGap;
+  });
   let maxRank = 0;
   let maxRow = 0;
   summary.nodes.forEach((node) => {
@@ -943,14 +956,17 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
     const isBoundary = node.kind === 'start' || node.kind === 'end';
     const w = isBoundary ? boundaryW : nodeW;
     const h = isBoundary ? boundaryH : nodeH;
+    const rowTop = padY + yRow * rowH;
     layout.set(node.id, {
-      x: padX + r * colW,
-      y: padY + yRow * rowH,
+      x: rankXs.get(r) || padX,
+      y: isBoundary ? rowTop + (nodeH - boundaryH) / 2 : rowTop,
       w,
       h,
     });
   });
-  const boardW = Math.max(720, padX * 2 + (maxRank + 1) * colW + 40);
+  const lastRankX = rankXs.get(maxRank) || padX;
+  const lastRankW = rankWidths.get(maxRank) || nodeW;
+  const boardW = Math.max(720, padX + lastRankX + lastRankW + 40);
   const boardH = Math.max(120, padY * 2 + (maxRow + 1) * rowH);
   const markerId = `pf-arrow-${String(containerId || 'default').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const edgeLabels = [];
