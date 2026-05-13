@@ -933,8 +933,48 @@ function defineUiAlias(target, aliasKey, actualKey) {
     },
   });
 }
+
+function normalizeLegacyBusinessComponentKeys(value) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => normalizeLegacyBusinessComponentKeys(item));
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+
+  const collectionRenames = {
+    capabilityUnits: 'businessComponents',
+  };
+  const fieldRenames = {
+    capabilityUnitId: 'businessComponentId',
+    capabilityUnit: 'businessComponent',
+    capabilityUnitIds: 'businessComponentIds',
+  };
+
+  Object.entries(collectionRenames).forEach(([legacyKey, currentKey]) => {
+    if (!Object.prototype.hasOwnProperty.call(value, currentKey) && Object.prototype.hasOwnProperty.call(value, legacyKey)) {
+      value[currentKey] = value[legacyKey];
+    }
+    if (legacyKey !== currentKey) delete value[legacyKey];
+  });
+  Object.entries(fieldRenames).forEach(([legacyKey, currentKey]) => {
+    if (!Object.prototype.hasOwnProperty.call(value, currentKey) && Object.prototype.hasOwnProperty.call(value, legacyKey)) {
+      value[currentKey] = value[legacyKey];
+    }
+    if (legacyKey !== currentKey) delete value[legacyKey];
+  });
+  Object.values(value).forEach((item) => normalizeLegacyBusinessComponentKeys(item));
+}
+
 function hydrateDocumentForUi(doc) {
   if (!doc || typeof doc !== 'object') return doc;
+  if (doc.document && typeof doc.document === 'object' && !doc.processes && !doc.entities && !doc.businessComponents) {
+    Object.assign(doc, doc.document);
+    delete doc.document;
+  }
+  normalizeLegacyBusinessComponentKeys(doc);
+  if (!Array.isArray(doc.businessComponents)) doc.businessComponents = [];
+  if (!Array.isArray(doc.businessConstructs)) doc.businessConstructs = [];
+  if (!Array.isArray(doc.taskDefinitions)) doc.taskDefinitions = [];
   getStages(doc);
   getStageLinks(doc);
   getStageFlowRefs(doc);

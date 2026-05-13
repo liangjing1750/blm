@@ -663,9 +663,6 @@ function renderProcessFlowRoutingEditor(proc) {
       <div class="flow-routing-column">
         <h5>节点</h5>
         ${nodes.length ? nodes.map((node, index) => `<div class="flow-routing-row flow-node-row" data-testid="process-flow-node-row">
-          <input class="flow-id-input" type="text" data-testid="process-flow-node-id-input" value="${esc(node.id)}" title="节点业务ID"
-            onchange="renameTaskId('${esc(proc.id)}','${esc(node.id)}',this.value)">
-          <button class="flow-node-open" type="button" title="编辑节点" onclick="openProcessEditor('${esc(proc.id)}','${esc(node.id)}')">编辑</button>
           <input type="text" value="${esc(node.name || '')}" placeholder="节点名称"
             oninput="setTask('${esc(proc.id)}','${esc(node.id)}','name',this.value);renderProcDiagramNow()">
           <select class="flow-node-role-select" multiple size="1" title="按住 Ctrl 可多选角色"
@@ -673,6 +670,7 @@ function renderProcessFlowRoutingEditor(proc) {
             ${renderFlowNodeRoleOptions(node)}
           </select>
           <div class="flow-row-actions">
+            <button type="button" class="flow-enter-action" title="进入节点编辑" onclick="openProcessEditor('${esc(proc.id)}','${esc(node.id)}')">→</button>
             <button type="button" title="在下方添加节点" onclick="addProcessTaskAfter('${esc(proc.id)}','${esc(node.id)}')">+</button>
             <button type="button" title="上移" onclick="moveProcessTask('${esc(proc.id)}','${esc(node.id)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
             <button type="button" title="下移" onclick="moveProcessTask('${esc(proc.id)}','${esc(node.id)}',1)" ${index === nodes.length - 1 ? 'disabled' : ''}>↓</button>
@@ -683,8 +681,6 @@ function renderProcessFlowRoutingEditor(proc) {
       <div class="flow-routing-column">
         <h5>分支</h5>
         ${gateways.length ? gateways.map((gateway) => `<div class="flow-routing-row" data-testid="process-flow-gateway-row">
-          <input class="flow-id-input" type="text" data-testid="process-flow-gateway-id-input" value="${esc(gateway.id)}" title="分支业务ID"
-            onchange="renameGatewayId('${esc(proc.id)}','${esc(gateway.id)}',this.value)">
           <input type="text" data-testid="process-flow-gateway-title-input" value="${esc(gateway.title || '')}" placeholder="如：是否通过校验"
             oninput="setProcessGateway('${esc(proc.id)}','${esc(gateway.id)}','title',this.value)">
           <select onchange="setProcessGateway('${esc(proc.id)}','${esc(gateway.id)}','role_id',this.value)">
@@ -702,8 +698,6 @@ function renderProcessFlowRoutingEditor(proc) {
       <div class="flow-routing-column">
         <h5>连线</h5>
         ${flow.edges.length ? flow.edges.map((edge) => `<div class="flow-edge-row" data-testid="process-flow-edge-row">
-          <input class="flow-id-input" type="text" data-testid="process-flow-edge-id-input" value="${esc(edge.id)}" title="连线业务ID"
-            onchange="renameFlowEdgeId('${esc(proc.id)}','${esc(edge.id)}',this.value)">
           <select onchange="setProcessFlowEdge('${esc(proc.id)}','${esc(edge.id)}','from',this.value)">
             ${renderProcessFlowNodeOptions(proc, edge.from, 'from')}
           </select>
@@ -1627,7 +1621,7 @@ function addProcess(subDomain, stageId = '') {
   const pos = _nextFreePos(S.doc.processes, null); /* 自动填补空缺格子 */
   const stage = findStage(stageId, S.doc);
   const nextSubDomain = String(subDomain || stage?.subDomain || '').trim();
-  S.doc.processes.push({id, name:'\u65b0\u6d41\u7a0b', subDomain:nextSubDomain, flowGroup:'', stageId:'', stagePos:{ x: 0, y: 0 }, trigger:'', outcome:'', prototypeFiles:[], nodes:[], pos});
+  S.doc.processes.push({id, name:'', subDomain:nextSubDomain, flowGroup:'', stageId:'', stagePos:{ x: 0, y: 0 }, trigger:'', outcome:'', prototypeFiles:[], nodes:[], pos});
   hydrateDocumentForUi(S.doc);
   if (stage?.id) addStageProcessRef(stage.id, id, { silent: true });
   markModified();
@@ -1641,7 +1635,7 @@ function addStageFlowNode(stageId) {
   const pos = _nextFreePos(S.doc.processes || [], null);
   S.doc.processes.push({
     id,
-    name: '\u65b0\u6d41\u7a0b',
+    name: '',
     subDomain: String(stage.subDomain || '').trim(),
     flowGroup: '',
     stageId: '',
@@ -1660,7 +1654,7 @@ function addStageFlowNode(stageId) {
   S.ui.stageEditorCollapsed = false;
   markModified();
   renderSidebar();
-  rerenderStageWorkbench({ focusSelector: `[data-testid="stage-flow-name-input"][data-process-id="${id}"]` });
+  rerenderStageWorkbench({ focusSelector: `[data-testid="stage-flow-name-input"][data-process-id="${id}"]`, caretToEnd: true });
 }
 async function removeProcess(id) {
   if(!await showAppConfirm('确认删除此流程及所有任务？', {
@@ -2020,8 +2014,8 @@ function applyTaskDefinitionToNodeTask(item, definition) {
   item.constructId = definition.constructId || '';
   item.businessConstructId = definition.constructId || '';
   item.constructName = definition.constructName || '';
-  item.capabilityUnitId = definition.capabilityUnitId || '';
-  item.capabilityUnit = definition.capabilityUnit || '';
+  item.businessComponentId = definition.businessComponentId || '';
+  item.businessComponent = definition.businessComponent || '';
 }
 
 function ensureTaskDefinitionForNodeTask(item) {
@@ -2737,11 +2731,11 @@ function getReusableOrchestrationTaskItems(currentProcId, currentTaskId, filters
       if (usedBy.length && usedBy.every((usage) => usage.processId === currentProcId && usage.nodeId === currentTaskId)) {
         return;
       }
-      const capability = capabilityById.get(String(taskDefinition.capabilityUnitId || ''))
-        || capabilityByName.get(String(taskDefinition.capabilityUnit || ''));
+      const capability = capabilityById.get(String(taskDefinition.businessComponentId || ''))
+        || capabilityByName.get(String(taskDefinition.businessComponent || ''));
       const construct = constructById.get(String(taskDefinition.constructId || ''));
-      const capabilityId = String(capability?.id || taskDefinition.capabilityUnitId || taskDefinition.capabilityUnit || '__ungrouped_capability__');
-      const capabilityName = String(capability?.name || taskDefinition.capabilityUnit || taskDefinition.capabilityUnitId || '未归属组件');
+      const capabilityId = String(capability?.id || taskDefinition.businessComponentId || taskDefinition.businessComponent || '__ungrouped_capability__');
+      const capabilityName = String(capability?.name || taskDefinition.businessComponent || taskDefinition.businessComponentId || '未归属组件');
       const constructId = String(construct?.id || taskDefinition.constructId || '__ungrouped_construct__');
       const constructName = String(construct?.name || taskDefinition.constructName || taskDefinition.constructId || '未归属构件');
       addItem({
@@ -2786,8 +2780,8 @@ function findReusableOrchestrationTask(key) {
       constructId: taskDefinition.constructId || '',
       businessConstructId: taskDefinition.constructId || '',
       constructName: taskDefinition.constructName || '',
-      capabilityUnitId: taskDefinition.capabilityUnitId || '',
-      capabilityUnit: taskDefinition.capabilityUnit || '',
+      businessComponentId: taskDefinition.businessComponentId || '',
+      businessComponent: taskDefinition.businessComponent || '',
     };
   }
   const decoded = decodeReuseTaskKey(key);
@@ -2810,8 +2804,8 @@ function cloneReusableOrchestrationTask(item) {
     constructId: clone.constructId || clone.businessConstructId || '',
     businessConstructId: clone.constructId || clone.businessConstructId || '',
     constructName: clone.constructName || '',
-    capabilityUnitId: clone.capabilityUnitId || '',
-    capabilityUnit: clone.capabilityUnit || '',
+    businessComponentId: clone.businessComponentId || '',
+    businessComponent: clone.businessComponent || '',
   };
 }
 
@@ -3621,6 +3615,9 @@ function rerenderStageWorkbench(options = {}) {
         }
         if (options.selectText && typeof field.select === 'function') {
           field.select();
+        } else if (options.caretToEnd && typeof field.setSelectionRange === 'function') {
+          const end = String(field.value || '').length;
+          field.setSelectionRange(end, end);
         }
       }
     }
@@ -4621,7 +4618,7 @@ function renderStageFlowCanvasTools(stageItem, processRefs) {
     <div class="stage-flow-tool-group stage-flow-node-tools">
       <select data-testid="stage-process-select" id="stage-process-select" onchange="addProcessToStage('${esc(stage.id)}',this.value);this.value=''">
         <option value="">选择已有流程加入当前阶段...</option>
-        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</option>`).join('')}
+        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.name || '未命名流程')}</option>`).join('')}
       </select>
     </div>
   </div>`;
@@ -4691,9 +4688,9 @@ function renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText = '暂�
               return `<div class="stage-graph-node process-kind stage-flow-node is-editable${isDraftSource ? ' is-link-source' : ''}${isDraftTarget ? ' is-link-target' : ''}" data-node-id="${esc(node.id)}" data-testid="stage-graph-node" data-process-id="${esc(procId)}"
                 onmousedown="startStageNodeDrag('stage-ref','${esc(node.id)}',event)"
                 style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
-                <textarea class="stage-flow-name-input" data-testid="stage-flow-name-input" data-process-id="${esc(procId)}" aria-label="流程名称"
+                <textarea class="stage-flow-name-input" data-testid="stage-flow-name-input" data-process-id="${esc(procId)}" aria-label="流程名称" placeholder="新流程"
                   onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
-                  oninput="setProc('${esc(procId)}','name',this.value);renderSidebar()">${esc(node.label)}</textarea>
+                  oninput="setProc('${esc(procId)}','name',this.value);renderSidebar()">${esc(node.name || '')}</textarea>
                 <div class="stage-flow-node-actions" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
                   <button class="stage-quick-btn" type="button" data-testid="stage-member-view-button" title="查看流程" aria-label="查看流程" onclick="navigate('process',{procId:'${esc(procId)}',taskId:null})">↗</button>
                   ${linkButton}
@@ -4796,6 +4793,7 @@ function buildStageDetailGraphData(stageId) {
     return {
       id: ref.id,
       label: proc?.name || proc?.id || ref.processId,
+      name: proc?.name || '',
       meta: '',
       group: proc?.flowGroup || '',
       processId: proc?.id || ref.processId,
@@ -4903,7 +4901,7 @@ function renderStageProcessMembership(stageItem, processRefs) {
       ${processRefs.map((ref, index) => {
         const proc = getStageRefProcess(ref, S.doc);
         return `<div class="stage-member-chip" data-testid="stage-member-chip">
-        <span class="stage-member-label">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</span>
+        <span class="stage-member-label">${esc(proc.name || '未命名流程')}</span>
         <div class="stage-member-actions">
           <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="stage-member-view-button" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})">查看</button>
           <button class="stage-quick-btn" type="button" data-testid="stage-member-move-up" onclick="moveProcInStage('${esc(stageItem.id)}','${esc(proc.id)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
@@ -4917,7 +4915,7 @@ function renderStageProcessMembership(stageItem, processRefs) {
     ${!stageItem.virtual ? `<div class="stage-inline-row">
       <select data-testid="stage-process-select" id="stage-process-select">
         <option value="">选择已有流程加入当前阶段...</option>
-        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</option>`).join('')}
+        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.name || '未命名流程')}</option>`).join('')}
       </select>
       <button class="btn btn-outline btn-sm" type="button" data-testid="stage-member-join-button" onclick="addProcessToStage('${esc(stageItem.id)}',document.getElementById('stage-process-select').value)">加入</button>
     </div>` : '<p class="stage-tip">这些流程尚未归入真实业务阶段，可新建阶段后逐步迁移。</p>'}
@@ -5007,7 +5005,6 @@ function renderStagePanoramaEditor(stageItems) {
         const focused = S.ui.stageLinkFocusId === stage.id;
         const placement = resolveStagePanoramaPlacement({ stage, label: stage.name || stage.id, meta: stage.subDomain || '', searchText: '' }, index, model);
         return `<div class="stage-overview-editor-row${focused ? ' is-focused' : ''}" data-testid="stage-overview-row" data-stage-id="${esc(stage.id)}">
-        <span class="stage-overview-id-badge" data-testid="stage-overview-id-badge">${esc(stage.id)}</span>
         <input type="text" value="${esc(stage.name || '')}"
           aria-label="阶段名称"
           oninput="setStage('${esc(stage.id)}','name',this.value);renderSidebar();rerenderStageWorkbench({focusSelector:'[data-testid=&quot;stage-overview-row&quot;] input[aria-label=&quot;阶段名称&quot;]'})">
@@ -5046,7 +5043,7 @@ function renderStageDrawer(stageItem) {
   const panoramaMode = (S.ui.stageViewMode || 'panorama') === 'panorama';
   const drawerTitle = panoramaMode
     ? '业务全景编辑'
-    : (stageItem ? `${stageItem.id} ${stageItem.name || ''}`.trim() : '业务阶段');
+    : (stageItem ? `${stageItem.name || ''}`.trim() : '业务阶段');
   return `<div class="stage-drawer open" style="width:${drawerW}px" data-testid="stage-drawer">
     <div class="drawer-resize-handle" data-testid="stage-drawer-resize-handle" onmousedown="startDrawerResize(event)"></div>
     <div class="drawer-head">
@@ -5062,10 +5059,6 @@ function renderStageDrawer(stageItem) {
       ` : `
       ${warning}
       ${stage ? `<div class="form-grid">
-        <div class="field-group">
-          <label>阶段标识</label>
-          <div class="readonly-token" data-testid="stage-id-badge">${esc(stage.id)}</div>
-        </div>
         <div class="field-group">
           <label>阶段名称</label>
           <input data-testid="stage-name-input" type="text" value="${esc(stage.name || '')}"
@@ -5174,7 +5167,6 @@ function renderProcTaskFlow(containerId, proc, activeTaskId, onClickMap) {
     html += `<div class="ptf-outer-arrow">→</div>
       <div class="ptf-node-frame ${node.id === activeTaskId ? 'active' : ''}" data-id="${esc(node.id)}">
         <div class="ptf-node-head">
-          <span class="ptf-node-id">${esc(node.id)}</span>
           <span class="ptf-node-name">${esc(node.name || '未命名节点')}</span>
         </div>
         <div class="ptf-node-track">`;
@@ -5420,7 +5412,7 @@ function renderOrchestrationSection(proc, task) {
 function renderTaskFormEntityOptions(selectedEntityId) {
   const entities = S.doc?.entities || [];
   return `<option value="">不绑定实体</option>${entities.map((entity) => (
-    `<option value="${esc(entity.id)}" ${entity.id === selectedEntityId ? 'selected' : ''}>${esc(entity.id)} ${esc(entity.name || '')}</option>`
+    `<option value="${esc(entity.id)}" ${entity.id === selectedEntityId ? 'selected' : ''}>${esc(entity.name || '?????')}</option>`
   )).join('')}`;
 }
 
@@ -5714,7 +5706,7 @@ function buildRoleUsecaseMap(selectedRole, options = {}) {
         const actionAttr = readonly ? '' : ` type="button" onclick="navigate('process',{procId:'${esc(node.proc.id)}',taskId:null})"`;
         return `<${tagName} class="role-usecase-process${linked}${readonly ? ' readonly' : ''}" data-process-id="${esc(node.proc.id)}"
           style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"${actionAttr}>
-          <span class="role-usecase-process-name">${esc(node.proc.id)} ${esc(node.proc.name || '未命名流程')}</span>
+          <span class="role-usecase-process-name">${esc(node.proc.name || '未命名流程')}</span>
           ${taskCount ? `<span class="role-usecase-process-count">${taskCount}N</span>` : ''}
         </${tagName}>`;
       }).join('')}
@@ -5752,7 +5744,7 @@ function renderProcessRoleView() {
       <div class="proc-role-usage-card">
         <div class="proc-role-usage-head">
           <div>
-            <span class="proc-role-usage-proc">${esc(proc.id)} ${esc(proc.name || '未命名流程')}</span>
+            <span class="proc-role-usage-proc">${esc(proc.name || '未命名流程')}</span>
             ${proc.subDomain ? `<span class="proc-role-usage-subdomain">${esc(proc.subDomain)}</span>` : ''}
           </div>
           <button class="btn btn-ghost-sm" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})">查看流程</button>
@@ -5965,7 +5957,7 @@ function renderProcessFlowStage(proc, { editing = false, task = null, drawerW = 
       <div class="process-flow-head">
         <div class="process-flow-actions">
           ${procs.length ? `<select data-testid="process-flow-select" onchange="selectProcessFlow(this.value)">
-            ${procs.map((item) => `<option value="${esc(item.id)}" ${proc?.id===item.id?'selected':''}>${esc(item.id)} ${esc(item.name || '未命名流程')}</option>`).join('')}
+            ${procs.map((item) => `<option value="${esc(item.id)}" ${proc?.id===item.id?'selected':''}>${esc(item.name || '未命名流程')}</option>`).join('')}
           </select>` : ''}
           ${diagramControls}
           ${entityToggle}
@@ -6113,9 +6105,9 @@ function renderProcessTab() {
     h+=`<div class="drawer-head">
       <div class="drawer-crumb">
         <span class="drawer-crumb-proc" onclick="${task ? `openProcessEditor('${esc(proc.id)}', null)` : ''}"
-          title="回到流程">${esc(proc.id)} ${esc(proc.name||'')}</span>
+          title="回到流程">${esc(proc.name||'未命名流程')}</span>
         ${task?`<span class="dc-sep">›</span>
-          <span>节点 ${esc(task.id)} ${esc(task.name||'')}</span>`:''}
+          <span>节点 ${esc(task.name||'未命名节点')}</span>`:''}
       </div>
       <div class="drawer-actions">
         ${task?`<button class="btn btn-danger btn-sm" onclick="removeTask('${esc(proc.id)}','${esc(task.id)}')">\u5220\u9664\u8282\u70b9</button>`:''}
@@ -6130,11 +6122,6 @@ function renderProcessTab() {
     if(task) {
       /* ── 节点编辑 ── */
       h+=`<div class="form-grid" style="margin-bottom:16px">
-        <div class="field-group">
-          <label>节点ID</label>
-          <input type="text" data-testid="process-task-id-input" value="${esc(task.id || '')}" placeholder="节点业务ID"
-            onchange="renameTaskId('${esc(proc.id)}','${esc(task.id)}',this.value)">
-        </div>
         <div class="field-group">
           <label>节点名称</label>
           <input type="text" data-testid="process-task-name-input" value="${esc(task.name||'')}" placeholder="如：新增仓库"
@@ -6182,7 +6169,7 @@ function renderProcessTab() {
         h+=`<div class="add-eop-row">
           <select id="eop-sel-${task.id}">
             <option value="">选择实体...</option>
-            ${avail.map(e=>`<option value="${e.id}">${e.id} ${esc(e.name)}</option>`).join('')}
+            ${avail.map(e=>`<option value="${e.id}">${esc(e.name || '?????')}</option>`).join('')}
           </select>
           <button class="btn btn-outline btn-sm"
             onclick="addEntityOp('${esc(proc.id)}','${esc(task.id)}',document.getElementById('eop-sel-${task.id}').value)">关联</button>
@@ -6205,11 +6192,6 @@ function renderProcessTab() {
         })
         .join('');
       h+=`<div class="form-grid">
-        <div class="field-group">
-          <label>流程ID</label>
-          <input type="text" data-testid="process-id-input" value="${esc(proc.id || '')}" placeholder="流程业务ID"
-            onchange="renameProcessId('${esc(proc.id)}',this.value)">
-        </div>
         <div class="field-group">
           <label>流程名称</label>
           <input type="text" id="proc-name-input" value="${esc(proc.name||'')}"

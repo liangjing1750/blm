@@ -7,10 +7,23 @@ from pathlib import Path
 
 from blm_core.document import create_empty_document, migrate_document
 from blm_core.merge import analyze_merge, apply_merge, validate_document
+from blm_core.model_strategy import (
+    DESCRIPTORS,
+    ID_PREFIXES,
+    LEGACY_FIELD_RENAMES,
+    semantic_key,
+)
 from blm_core.storage import DocumentFileStore, WorkspaceStorage
 
 
 class DocumentIdentityTests(unittest.TestCase):
+    def test_model_strategy_is_the_identity_and_merge_entry(self):
+        self.assertEqual(DESCRIPTORS["document"]["lists"]["businessComponents"], "business_component")
+        self.assertEqual(DESCRIPTORS["business_component"]["set_lists"], ["constructIds", "taskDefinitionIds", "entityIds"])
+        self.assertEqual(ID_PREFIXES["business_component"], "BCP")
+        self.assertEqual(LEGACY_FIELD_RENAMES["capabilityUnitId"], "businessComponentId")
+        self.assertEqual(semantic_key("process", {"id": "P1", "name": "入库预约申请"}), "入库预约申请")
+
     def test_migrate_document_assigns_hidden_document_and_node_uids(self):
         document = migrate_document(
             {
@@ -64,6 +77,22 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertTrue(document["entities"][0]["state_transitions"][0]["uid"])
         self.assertTrue(document["relations"][0]["uid"])
         self.assertTrue(document["rules"][0]["uid"])
+
+    def test_migrate_document_unwraps_legacy_document_payload(self):
+        document = migrate_document(
+            {
+                "document": {
+                    "meta": {"title": "包装文档"},
+                    "roles": [{"id": "R1", "name": "经办人"}],
+                    "processes": [{"id": "P1", "name": "办理", "nodes": []}],
+                    "entities": [],
+                }
+            }
+        )
+
+        self.assertEqual(document["meta"]["title"], "包装文档")
+        self.assertEqual(document["roles"][0]["name"], "经办人")
+        self.assertEqual(document["processes"][0]["name"], "办理")
 
     def test_migrate_document_normalizes_node_business_rules(self):
         document = migrate_document(
@@ -380,8 +409,8 @@ class MergeEngineTests(unittest.TestCase):
                 ],
             }
         ]
-        right["capabilityUnits"] = [{"uid": "cap-1", "id": "CU1", "name": "申请办理", "kind": "业务能力", "note": "", "entityIds": ["E1"]}]
-        right["businessConstructs"] = [{"uid": "bc-1", "id": "BC1", "name": "申请构件", "capabilityUnitId": "CU1", "entityIds": ["E1"]}]
+        right["businessComponents"] = [{"uid": "cap-1", "id": "CU1", "name": "申请办理", "kind": "业务能力", "note": "", "entityIds": ["E1"]}]
+        right["businessConstructs"] = [{"uid": "bc-1", "id": "BC1", "name": "申请构件", "businessComponentId": "CU1", "entityIds": ["E1"]}]
         right["taskDefinitions"] = [{"uid": "td-1", "id": "TD1", "name": "提交任务", "type": "Service", "target": "ApplyService.submit", "constructId": "BC1", "entityIds": ["E1"]}]
         right["processes"][0]["nodes"][0]["orchestrationTasks"] = [
             {"uid": "orch-1", "name": "提交任务", "type": "Service", "target": "ApplyService.submit", "note": "", "taskDefinitionId": "TD1", "constructId": "BC1"}
@@ -393,7 +422,7 @@ class MergeEngineTests(unittest.TestCase):
         merged = analysis["merged_document"]
         self.assertEqual(merged["processes"][0]["prototypeFiles"][0]["name"], "submit.html")
         self.assertEqual(merged["processes"][0]["nodes"][0]["forms"][0]["sections"][0]["entity_id"], "E1")
-        self.assertEqual(merged["capabilityUnits"][0]["id"], "CU1")
+        self.assertEqual(merged["businessComponents"][0]["id"], "CU1")
         self.assertEqual(merged["businessConstructs"][0]["id"], "BC1")
         self.assertEqual(merged["taskDefinitions"][0]["id"], "TD1")
         self.assertEqual(merged["processes"][0]["nodes"][0]["orchestrationTasks"][0]["taskDefinitionId"], "TD1")
@@ -433,7 +462,123 @@ class MergeEngineTests(unittest.TestCase):
         self.assertEqual(analysis["suggested_name"], "示例平台-合并")
         self.assertEqual(analysis["merged_document"]["meta"]["title"], "示例平台-合并")
         self.assertEqual(analysis["merged_document"]["meta"]["domain"], "示例平台-合并")
+
+    def test_two_way_combine_renumbers_internal_ids_after_keep_both(self):
+        left = create_empty_document("左")
+        right = create_empty_document("右")
+        left["entities"] = [
+            {"uid": "entity-left", "id": "E1", "name": "申请单", "group": "", "note": "左", "fields": [], "state_transitions": []},
+            {"uid": "entity-left-detail", "id": "E2", "name": "申请明细", "group": "", "note": "左", "fields": [], "state_transitions": []},
+        ]
+        left["relations"] = [{"uid": "relation-left", "from": "E1", "to": "E2", "type": "1:N", "label": "左侧关系"}]
+        right["entities"] = [
+            {"uid": "entity-right", "id": "E1", "name": "申请单", "group": "", "note": "右", "fields": [], "state_transitions": []},
+            {"uid": "entity-right-detail", "id": "E2", "name": "申请明细", "group": "", "note": "右", "fields": [], "state_transitions": []},
+        ]
+        right["relations"] = [{"uid": "relation-right", "from": "E1", "to": "E2", "type": "1:N", "label": "右侧关系"}]
+
+        analysis = analyze_merge("combine", left, right)
+        resolutions = {conflict["id"]: {"choice": "keep_both"} for conflict in analysis["conflicts"]}
+        result = apply_merge("combine", left, right, resolutions=resolutions)
+
+        self.assertEqual(result["conflicts"], [])
+        self.assertEqual(result["validation_issues"], [])
+        self.assertEqual([entity["id"] for entity in result["merged_document"]["entities"]], ["E1", "E2", "E3", "E4"])
+        self.assertEqual(
+            [(relation["from"], relation["to"]) for relation in result["merged_document"]["relations"]],
+            [("E1", "E3"), ("E2", "E4")],
+        )
         self.assertFalse(any(conflict["path"] in {"meta.title", "meta.domain"} for conflict in analysis["conflicts"]))
+
+    def test_combine_repairs_internal_references_before_reporting_validation(self):
+        left = create_empty_document("左")
+        right = create_empty_document("右")
+        for document in (left, right):
+            document["roles"] = []
+            document["stages"] = []
+            document["stageLinks"] = []
+            document["stageFlowRefs"] = []
+            document["stageFlowLinks"] = []
+            document["processes"] = []
+            document["entities"] = []
+            document["relations"] = []
+            document["rules"] = []
+
+        right["stages"] = [
+            {"uid": "stage-a", "id": "S1", "name": "阶段一", "subDomain": "", "pos": {}, "processLinks": []},
+            {"uid": "stage-b", "id": "S2", "name": "阶段二", "subDomain": "", "pos": {}, "processLinks": []},
+        ]
+        right["processes"] = [
+            {"uid": "proc-a", "id": "P1", "name": "流程一", "stageId": "S2", "stagePos": {}, "prototypeFiles": [], "nodes": []},
+            {"uid": "proc-b", "id": "P2", "name": "流程二", "stageId": "S2", "stagePos": {}, "prototypeFiles": [], "nodes": []},
+        ]
+        right["stageFlowRefs"] = [
+            {"uid": "ref-a", "id": "SFR1", "stageId": "S2", "processId": "P1", "order": 1, "pos": {}},
+            {"uid": "ref-b", "id": "SFR2", "stageId": "S2", "processId": "P2", "order": 2, "pos": {}},
+        ]
+        right["stageFlowLinks"] = [
+            {"uid": "link-a", "id": "SFL1", "stageId": "S1", "fromRefId": "SFR1", "toRefId": "SFR2"},
+        ]
+        right["relations"] = [
+            {"uid": "relation-stale", "from": "E404", "to": "E405", "type": "1:N", "label": "历史悬空关系"},
+        ]
+
+        analysis = analyze_merge("combine", left, right)
+        merged = analysis["merged_document"]
+        ref_by_id = {ref["id"]: ref for ref in merged["stageFlowRefs"]}
+        link = merged["stageFlowLinks"][0]
+
+        self.assertEqual(analysis["validation_issues"], [])
+        self.assertGreaterEqual(analysis["summary"]["consistencyRepairCount"], 2)
+        self.assertEqual(link["stageId"], ref_by_id[link["fromRefId"]]["stageId"])
+        self.assertEqual(link["stageId"], ref_by_id[link["toRefId"]]["stageId"])
+        self.assertEqual(merged["relations"], [])
+
+    def test_combine_merges_panorama_axes_by_name_and_remaps_stage_references(self):
+        left = create_empty_document("Left")
+        right = create_empty_document("Right")
+        for document in (left, right):
+            document["roles"] = []
+            document["stageLinks"] = []
+            document["stageFlowRefs"] = []
+            document["stageFlowLinks"] = []
+            document["processes"] = []
+            document["entities"] = []
+            document["relations"] = []
+            document["rules"] = []
+
+        left["panorama"] = {
+            "columns": [{"uid": "left-col", "id": "C1", "name": "Business Handling"}],
+            "lanes": [{"uid": "left-lane", "id": "L1", "name": "Platform"}],
+            "cells": [{"uid": "left-cell", "columnId": "C1", "laneId": "L1", "status": "Left"}],
+        }
+        right["panorama"] = {
+            "columns": [{"uid": "right-col", "id": "businessHandling", "name": "Business Handling"}],
+            "lanes": [{"uid": "right-lane", "id": "platform-lane", "name": "Platform"}],
+            "cells": [{"uid": "right-cell", "columnId": "businessHandling", "laneId": "platform-lane", "text": "Right"}],
+        }
+        left["stages"] = [
+            {"uid": "left-stage", "id": "S1", "name": "Left Stage", "panoramaColumnId": "C1", "panoramaLaneId": "L1", "processLinks": []}
+        ]
+        right["stages"] = [
+            {
+                "uid": "right-stage",
+                "id": "S1",
+                "name": "Right Stage",
+                "panoramaColumnId": "businessHandling",
+                "panoramaLaneId": "platform-lane",
+                "processLinks": [],
+            }
+        ]
+
+        analysis = analyze_merge("combine", left, right)
+        merged = analysis["merged_document"]
+
+        self.assertEqual([(column["id"], column["name"]) for column in merged["panorama"]["columns"]], [("C1", "Business Handling")])
+        self.assertEqual([(lane["id"], lane["name"]) for lane in merged["panorama"]["lanes"]], [("L1", "Platform")])
+        self.assertEqual({stage["panoramaColumnId"] for stage in merged["stages"]}, {"C1"})
+        self.assertEqual({stage["panoramaLaneId"] for stage in merged["stages"]}, {"L1"})
+        self.assertEqual(len(merged["panorama"]["cells"]), 1)
 
     def test_apply_merge_resolves_same_field_conflict(self):
         base = create_empty_document("Billing")
@@ -557,6 +702,45 @@ class MergeEngineTests(unittest.TestCase):
 
         self.assertTrue(any("业务ID重复" in issue["message"] and "P1" in issue["message"] for issue in issues))
         self.assertTrue(any("业务ID重复" in issue["message"] and "T-SAME" in issue["message"] for issue in issues))
+
+    def test_validate_document_accepts_rules_applied_to_business_model_elements(self):
+        document = create_empty_document("Rule applies to model elements")
+        document["businessComponents"] = [
+            {"uid": "component-1", "id": "BCP1", "name": "User Permission", "kind": "core", "note": ""},
+        ]
+        document["businessConstructs"] = [
+            {
+                "uid": "construct-1",
+                "id": "BC1",
+                "name": "Permission Grant",
+                "note": "",
+                "businessComponentId": "BCP1",
+                "businessComponent": "User Permission",
+            },
+        ]
+        document["taskDefinitions"] = [
+            {
+                "uid": "task-definition-1",
+                "id": "TD1",
+                "name": "Grant Permission",
+                "type": "service",
+                "target": "",
+                "note": "",
+                "businessComponentId": "BCP1",
+                "businessComponent": "User Permission",
+                "constructId": "BC1",
+                "constructName": "Permission Grant",
+            },
+        ]
+        document["rules"] = [
+            {"uid": "rule-1", "id": "RULE1", "name": "Rule 1", "type": "check", "applies_to": "User Permission"},
+            {"uid": "rule-2", "id": "RULE2", "name": "Rule 2", "type": "check", "applies_to": "BC1"},
+            {"uid": "rule-3", "id": "RULE3", "name": "Rule 3", "type": "check", "applies_to": "Grant Permission"},
+        ]
+
+        issues = validate_document(document)
+
+        self.assertFalse([issue for issue in issues if issue["path"].startswith("rules.")])
 
     def test_validate_document_rejects_stage_flow_link_that_points_to_ref_from_other_stage(self):
         document = create_empty_document("Stage refs")

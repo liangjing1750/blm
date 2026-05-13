@@ -4,6 +4,8 @@ import re
 from copy import deepcopy
 from uuid import uuid4
 
+from blm_core.model_strategy import ID_PREFIXES, LEGACY_COLLECTION_RENAMES, LEGACY_FIELD_RENAMES
+
 
 DEFAULT_PROCESS_NAME = "主流程"
 DEFAULT_ROLE_NAME = "新角色"
@@ -202,6 +204,32 @@ def _normalize_stage_flow_links(stage_flow_links: list[dict]) -> list[dict]:
             }
         )
     return normalized_links
+
+
+def _pop_legacy_business_component_fields(item: dict) -> None:
+    for legacy_field, current_field in LEGACY_FIELD_RENAMES.items():
+        if current_field not in item and legacy_field in item:
+            item[current_field] = item.pop(legacy_field)
+        else:
+            item.pop(legacy_field, None)
+
+
+def _rename_legacy_business_component_keys(value) -> None:
+    if isinstance(value, list):
+        for item in value:
+            _rename_legacy_business_component_keys(item)
+        return
+    if not isinstance(value, dict):
+        return
+
+    for legacy_field, current_field in LEGACY_COLLECTION_RENAMES.items():
+        if current_field not in value and legacy_field in value:
+            value[current_field] = value.pop(legacy_field)
+        else:
+            value.pop(legacy_field, None)
+    _pop_legacy_business_component_fields(value)
+    for item in list(value.values()):
+        _rename_legacy_business_component_keys(item)
 
 
 def _supplement_stage_flow_refs_from_legacy(stage_flow_refs: list[dict], processes: list[dict]) -> list[dict]:
@@ -830,6 +858,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
 
     for process_index, process in enumerate(processes, start=1):
         _ensure_uid(process)
+        _pop_legacy_business_component_fields(process)
         process.setdefault("id", f"P{process_index}")
         process.setdefault("name", DEFAULT_PROCESS_NAME if process_index == 1 else f"\u6d41\u7a0b{process_index}")
         process.setdefault("trigger", "")
@@ -868,6 +897,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
 
         for node_index, node in enumerate(process["nodes"], start=1):
             _ensure_uid(node)
+            _pop_legacy_business_component_fields(node)
             node.setdefault("id", f"T{node_index}")
             node.setdefault("name", "")
             node_roles: list[dict] = []
@@ -948,6 +978,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
 
             for orchestration_task in node["orchestrationTasks"]:
                 _ensure_uid(orchestration_task)
+                _pop_legacy_business_component_fields(orchestration_task)
                 orchestration_task.setdefault("name", "")
                 orchestration_task.setdefault("target", "")
                 orchestration_task.setdefault("note", "")
@@ -1074,6 +1105,12 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
 
 def migrate_document(document: dict | None) -> dict:
     doc = deepcopy(document or {})
+    if (
+        isinstance(doc.get("document"), dict)
+        and not any(key in doc for key in ("roles", "stages", "processes", "entities", "businessComponents"))
+    ):
+        doc = deepcopy(doc["document"])
+    _rename_legacy_business_component_keys(doc)
     meta = _normalize_meta(doc.setdefault("meta", {}))
 
     if "process" in doc and "processes" not in doc:
@@ -1103,7 +1140,12 @@ def migrate_document(document: dict | None) -> dict:
     doc.setdefault("entities", [])
     doc.setdefault("relations", [])
     doc.setdefault("rules", [])
-    doc.setdefault("capabilityUnits", [])
+    for legacy_field, current_field in LEGACY_COLLECTION_RENAMES.items():
+        if current_field not in doc and legacy_field in doc:
+            doc[current_field] = doc.pop(legacy_field)
+        else:
+            doc.pop(legacy_field, None)
+    doc.setdefault("businessComponents", [])
     doc.setdefault("businessConstructs", [])
     doc.setdefault("taskDefinitions", [])
 
@@ -1138,17 +1180,63 @@ def migrate_document(document: dict | None) -> dict:
     _normalize_rules(doc["rules"])
     _normalize_language(doc["language"])
 
+    for component_index, component in enumerate(doc.get("businessComponents", []), start=1):
+        if not isinstance(component, dict):
+            continue
+        _ensure_uid(component)
+        component["id"] = str(component.get("id") or f"{ID_PREFIXES['business_component']}{component_index}").strip()
+        component["name"] = str(component.get("name") or component["id"]).strip()
+        component["kind"] = str(component.get("kind", "")).strip()
+        component["note"] = str(component.get("note", "")).strip()
+        for field in ("constructIds", "taskDefinitionIds", "entityIds"):
+            component[field] = list(component.get(field, [])) if isinstance(component.get(field), list) else []
+
+    for construct_index, construct in enumerate(doc.get("businessConstructs", []), start=1):
+        if not isinstance(construct, dict):
+            continue
+        _ensure_uid(construct)
+        _pop_legacy_business_component_fields(construct)
+        construct["id"] = str(construct.get("id") or f"{ID_PREFIXES['business_construct']}{construct_index}").strip()
+        construct["name"] = str(construct.get("name") or construct["id"]).strip()
+        construct["note"] = str(construct.get("note", "")).strip()
+        construct["businessComponentId"] = str(construct.get("businessComponentId", "")).strip()
+        construct["businessComponent"] = str(construct.get("businessComponent", "")).strip()
+        for field in ("taskDefinitionIds", "entityIds"):
+            construct[field] = list(construct.get(field, [])) if isinstance(construct.get(field), list) else []
+
+    for task_index, task_definition in enumerate(doc.get("taskDefinitions", []), start=1):
+        if not isinstance(task_definition, dict):
+            continue
+        _ensure_uid(task_definition)
+        _pop_legacy_business_component_fields(task_definition)
+        task_definition["id"] = str(task_definition.get("id") or f"{ID_PREFIXES['task_definition']}{task_index}").strip()
+        task_definition["name"] = str(task_definition.get("name") or task_definition["id"]).strip()
+        task_definition["type"] = normalize_orchestration_type(task_definition.get("type", "Custom"))
+        query_source_kind = normalize_query_source_kind(task_definition.get("querySourceKind", ""))
+        task_definition["querySourceKind"] = query_source_kind if task_definition["type"] == "Query" else ""
+        task_definition["target"] = str(task_definition.get("target", "")).strip()
+        task_definition["note"] = str(task_definition.get("note", "")).strip()
+        task_definition["businessComponentId"] = str(task_definition.get("businessComponentId", "")).strip()
+        task_definition["businessComponent"] = str(task_definition.get("businessComponent", "")).strip()
+        task_definition["constructId"] = str(task_definition.get("constructId", "")).strip()
+        task_definition["constructName"] = str(task_definition.get("constructName", "")).strip()
+        task_definition["entityIds"] = list(task_definition.get("entityIds", [])) if isinstance(task_definition.get("entityIds"), list) else []
+
     doc["meta"] = meta
     return doc
 
 
-def renumber_document_ids(document: dict | None) -> dict:
+def renumber_document_ids(document: dict | None, namespace: str = "") -> dict:
     doc = migrate_document(document)
+    namespace = str(namespace or "").strip()
+
+    def scoped(prefix: str, index: int) -> str:
+        return f"{namespace}{prefix}{index}"
 
     role_map: dict[str, str] = {}
     for index, role in enumerate(doc["roles"], start=1):
         old_id = str(role.get("id", "")).strip()
-        new_id = f"R{index}"
+        new_id = scoped("R", index)
         role["id"] = new_id
         if old_id:
             role_map[old_id] = new_id
@@ -1156,7 +1244,7 @@ def renumber_document_ids(document: dict | None) -> dict:
     stage_map: dict[str, str] = {}
     for stage_index, stage in enumerate(doc["stages"], start=1):
         old_stage_id = str(stage.get("id", "")).strip()
-        new_stage_id = f"S{stage_index}"
+        new_stage_id = scoped("S", stage_index)
         stage["id"] = new_stage_id
         if old_stage_id:
             stage_map[old_stage_id] = new_stage_id
@@ -1167,20 +1255,22 @@ def renumber_document_ids(document: dict | None) -> dict:
     next_node_index = 1
     for process_index, process in enumerate(doc["processes"], start=1):
         old_process_id = str(process.get("id", "")).strip()
-        new_process_id = f"P{process_index}"
+        new_process_id = scoped("P", process_index)
         process["id"] = new_process_id
         if old_process_id:
             process_map[old_process_id] = new_process_id
         if process.get("stageId") in stage_map:
             process["stageId"] = stage_map[process["stageId"]]
 
+        process_node_map: dict[str, str] = {}
         for node in process.get("nodes", []):
             old_node_id = str(node.get("id", "")).strip()
-            new_node_id = f"T{next_node_index}"
+            new_node_id = scoped("T", next_node_index)
             next_node_index += 1
             node["id"] = new_node_id
             if old_node_id:
                 node_map[old_node_id] = new_node_id
+                process_node_map[old_node_id] = new_node_id
             if node.get("role_id") in role_map:
                 node["role_id"] = role_map[node["role_id"]]
             role_ids = []
@@ -1202,9 +1292,25 @@ def renumber_document_ids(document: dict | None) -> dict:
             node["role_id"] = role_ids[0] if role_ids else ""
             node["role"] = "、".join(node["roles"])
 
+        flow = process.get("flow") if isinstance(process.get("flow"), dict) else {}
+        gateway_map: dict[str, str] = {}
+        for gateway_index, gateway in enumerate(flow.get("nodes", []) if isinstance(flow.get("nodes"), list) else [], start=1):
+            old_gateway_id = str(gateway.get("id", "")).strip()
+            new_gateway_id = scoped(f"B{process_index}_", gateway_index)
+            gateway["id"] = new_gateway_id
+            if old_gateway_id:
+                gateway_map[old_gateway_id] = new_gateway_id
+        flow_node_map = {**process_node_map, **gateway_map}
+        for edge_index, edge in enumerate(flow.get("edges", []) if isinstance(flow.get("edges"), list) else [], start=1):
+            edge["id"] = scoped(f"L{process_index}_", edge_index)
+            if edge.get("from") in flow_node_map:
+                edge["from"] = flow_node_map[edge["from"]]
+            if edge.get("to") in flow_node_map:
+                edge["to"] = flow_node_map[edge["to"]]
+
     for stage_flow_ref_index, stage_flow_ref in enumerate(doc.get("stageFlowRefs", []), start=1):
         old_ref_id = str(stage_flow_ref.get("id", "")).strip()
-        new_ref_id = f"SFR{stage_flow_ref_index}"
+        new_ref_id = scoped("SFR", stage_flow_ref_index)
         stage_flow_ref["id"] = new_ref_id
         if old_ref_id:
             stage_flow_ref_map[old_ref_id] = new_ref_id
@@ -1216,16 +1322,77 @@ def renumber_document_ids(document: dict | None) -> dict:
     entity_map: dict[str, str] = {}
     for entity_index, entity in enumerate(doc["entities"], start=1):
         old_entity_id = str(entity.get("id", "")).strip()
-        new_entity_id = f"E{entity_index}"
+        new_entity_id = scoped("E", entity_index)
         entity["id"] = new_entity_id
         if old_entity_id:
             entity_map[old_entity_id] = new_entity_id
 
+    component_map: dict[str, str] = {}
+    for component_index, component in enumerate(doc.get("businessComponents", []), start=1):
+        old_component_id = str(component.get("id", "")).strip()
+        new_component_id = scoped("BCP", component_index)
+        component["id"] = new_component_id
+        if old_component_id:
+            component_map[old_component_id] = new_component_id
+
+    construct_map: dict[str, str] = {}
+    for construct_index, construct in enumerate(doc.get("businessConstructs", []), start=1):
+        old_construct_id = str(construct.get("id", "")).strip()
+        new_construct_id = scoped("BC", construct_index)
+        construct["id"] = new_construct_id
+        if old_construct_id:
+            construct_map[old_construct_id] = new_construct_id
+        if construct.get("businessComponentId") in component_map:
+            construct["businessComponentId"] = component_map[construct["businessComponentId"]]
+
+    task_definition_map: dict[str, str] = {}
+    for task_definition_index, task_definition in enumerate(doc.get("taskDefinitions", []), start=1):
+        old_task_definition_id = str(task_definition.get("id", "")).strip()
+        new_task_definition_id = scoped("TD", task_definition_index)
+        task_definition["id"] = new_task_definition_id
+        if old_task_definition_id:
+            task_definition_map[old_task_definition_id] = new_task_definition_id
+        if task_definition.get("businessComponentId") in component_map:
+            task_definition["businessComponentId"] = component_map[task_definition["businessComponentId"]]
+        if task_definition.get("constructId") in construct_map:
+            task_definition["constructId"] = construct_map[task_definition["constructId"]]
+
     for process in doc["processes"]:
+        if isinstance(process.get("businessComponentIds"), list):
+            process["businessComponentIds"] = [
+                component_map.get(component_id, component_id)
+                for component_id in process["businessComponentIds"]
+            ]
+        if isinstance(process.get("businessConstructIds"), list):
+            process["businessConstructIds"] = [
+                construct_map.get(construct_id, construct_id)
+                for construct_id in process["businessConstructIds"]
+            ]
+        if process.get("businessComponentId") in component_map:
+            process["businessComponentId"] = component_map[process["businessComponentId"]]
+        if process.get("businessConstructId") in construct_map:
+            process["businessConstructId"] = construct_map[process["businessConstructId"]]
         for node in process.get("nodes", []):
+            if node.get("taskDefinitionId") in task_definition_map:
+                node["taskDefinitionId"] = task_definition_map[node["taskDefinitionId"]]
+            if node.get("businessComponentId") in component_map:
+                node["businessComponentId"] = component_map[node["businessComponentId"]]
+            if node.get("constructId") in construct_map:
+                node["constructId"] = construct_map[node["constructId"]]
+            if node.get("businessConstructId") in construct_map:
+                node["businessConstructId"] = construct_map[node["businessConstructId"]]
             for entity_op in node.get("entity_ops", []):
                 if entity_op.get("entity_id") in entity_map:
                     entity_op["entity_id"] = entity_map[entity_op["entity_id"]]
+            for orchestration_task in node.get("orchestrationTasks", []):
+                if orchestration_task.get("taskDefinitionId") in task_definition_map:
+                    orchestration_task["taskDefinitionId"] = task_definition_map[orchestration_task["taskDefinitionId"]]
+                if orchestration_task.get("businessComponentId") in component_map:
+                    orchestration_task["businessComponentId"] = component_map[orchestration_task["businessComponentId"]]
+                if orchestration_task.get("constructId") in construct_map:
+                    orchestration_task["constructId"] = construct_map[orchestration_task["constructId"]]
+                if orchestration_task.get("businessConstructId") in construct_map:
+                    orchestration_task["businessConstructId"] = construct_map[orchestration_task["businessConstructId"]]
             for form in node.get("forms", []):
                 if form.get("entity_id") in entity_map:
                     form["entity_id"] = entity_map[form["entity_id"]]
@@ -1233,13 +1400,19 @@ def renumber_document_ids(document: dict | None) -> dict:
                     if section.get("entity_id") in entity_map:
                         section["entity_id"] = entity_map[section["entity_id"]]
 
-    for capability in doc.get("capabilityUnits", []):
+    for capability in doc.get("businessComponents", []):
         if isinstance(capability.get("entityIds"), list):
             capability["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in capability["entityIds"]]
+        if isinstance(capability.get("constructIds"), list):
+            capability["constructIds"] = [construct_map.get(construct_id, construct_id) for construct_id in capability["constructIds"]]
+        if isinstance(capability.get("taskDefinitionIds"), list):
+            capability["taskDefinitionIds"] = [task_definition_map.get(task_id, task_id) for task_id in capability["taskDefinitionIds"]]
 
     for construct in doc.get("businessConstructs", []):
         if isinstance(construct.get("entityIds"), list):
             construct["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in construct["entityIds"]]
+        if isinstance(construct.get("taskDefinitionIds"), list):
+            construct["taskDefinitionIds"] = [task_definition_map.get(task_id, task_id) for task_id in construct["taskDefinitionIds"]]
 
     for task_definition in doc.get("taskDefinitions", []):
         if isinstance(task_definition.get("entityIds"), list):
@@ -1265,7 +1438,7 @@ def renumber_document_ids(document: dict | None) -> dict:
             stage_link["toStageId"] = stage_map[stage_link["toStageId"]]
 
     for stage_flow_link_index, stage_flow_link in enumerate(doc.get("stageFlowLinks", []), start=1):
-        stage_flow_link["id"] = f"SFL{stage_flow_link_index}"
+        stage_flow_link["id"] = scoped("SFL", stage_flow_link_index)
         if stage_flow_link.get("stageId") in stage_map:
             stage_flow_link["stageId"] = stage_map[stage_flow_link["stageId"]]
         if stage_flow_link.get("fromRefId") in stage_flow_ref_map:

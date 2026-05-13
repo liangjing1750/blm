@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const UNSAVED_CHANGES_MESSAGE = '当前有未保存修改，继续操作会丢失这些内容。是否继续？';
 const nativeAlert = window.alert.bind(window);
@@ -6,6 +6,7 @@ const nativeConfirm = window.confirm.bind(window);
 const nativePrompt = window.prompt.bind(window);
 
 let activeAppDialog = null;
+let appToastTimer = null;
 
 function getAppDialogElements() {
   return {
@@ -594,6 +595,21 @@ function openModalById(id) {
   document.getElementById(id)?.classList.remove('hidden');
 }
 
+function showAppToast(message, timeout = 3600) {
+  const toast = document.getElementById('app-toast');
+  if (!toast) return;
+  toast.textContent = String(message || '');
+  toast.classList.toggle('hidden', !message);
+  if (appToastTimer) clearTimeout(appToastTimer);
+  if (message && timeout > 0) {
+    appToastTimer = setTimeout(() => {
+      toast.classList.add('hidden');
+      toast.textContent = '';
+      appToastTimer = null;
+    }, timeout);
+  }
+}
+
 function renderWorkspaceFileList(files) {
   const fileList = document.getElementById('file-list');
   if (!fileList) return;
@@ -902,7 +918,7 @@ const COMPARE_TOP_LEVEL_LABELS = {
   entities: '实体',
   relations: '实体关系',
   rules: '规则',
-  capabilityUnits: '业务组件',
+  businessComponents: '业务组件',
   businessConstructs: '业务构件',
   taskDefinitions: '任务定义',
 };
@@ -1038,7 +1054,7 @@ const COMPARE_FIELD_LABELS = {
   content: '内容',
   constructId: '业务构件',
   businessConstructId: '业务构件',
-  capabilityUnitId: '业务组件',
+  businessComponentId: '业务组件',
   taskDefinitionId: '任务定义',
   querySourceKind: '查询来源',
   processId: '流程',
@@ -1064,7 +1080,7 @@ const COMPARE_COLLECTION_ITEM_LABELS = {
   state_transitions: '状态流转',
   relations: '关系',
   rules: '规则',
-  capabilityUnits: '业务组件',
+  businessComponents: '业务组件',
   businessConstructs: '业务构件',
   taskDefinitions: '任务定义',
   prototypeFiles: '流程原型',
@@ -2050,6 +2066,9 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
     return null;
   }
 
+  if (result.rebased) {
+    showAppToast('已检测到其他人的提交版本，系统已自动处理合并。');
+  }
   await loadWorkspaceDocumentNames();
   return result;
 }
@@ -2067,12 +2086,14 @@ function renderMergeAnalysis(analysis) {
   const summary = analysis.summary || {};
   const conflicts = analysis.conflicts || [];
   const validation = analysis.validation_issues || [];
+  const validationSummary = conflicts.length ? '待复检' : (validation.length ? '内部异常' : '0');
+  const validationSummaryLabel = conflicts.length ? '校验状态' : '校验问题';
 
   panel.innerHTML = `
     <div class="merge-summary">
       <div class="merge-summary-card"><strong>${summary.autoMergedCount || 0}</strong><span>自动合并项</span></div>
       <div class="merge-summary-card"><strong>${conflicts.length}</strong><span>冲突项</span></div>
-      <div class="merge-summary-card"><strong>${validation.length}</strong><span>校验问题</span></div>
+      <div class="merge-summary-card"><strong>${validationSummary}</strong><span>${validationSummaryLabel}</span></div>
       <div class="merge-summary-card"><strong>${(merged.processes || []).length}</strong><span>流程</span></div>
       <div class="merge-summary-card"><strong>${(merged.entities || []).length}</strong><span>实体</span></div>
     </div>
@@ -2082,7 +2103,7 @@ function renderMergeAnalysis(analysis) {
         ${conflicts.map((conflict, index) => renderMergeConflict(conflict, index)).join('')}
       </div>
     </div>` : '<div class="merge-block merge-ok">未检测到冲突，可以直接生成结果。</div>'}
-    ${renderMergeValidationGuide(validation, merged)}
+    ${conflicts.length ? renderMergeDeferredValidation(validation) : renderMergeInternalValidationFailure(validation)}
     <div class="merge-block">
       <h4>结果预览</h4>
       <div class="merge-preview-metrics">
@@ -2164,6 +2185,12 @@ function findMergeItemByToken(items, token) {
 
 function getMergeValidationTargetOptions(document) {
   const options = [];
+  const pushModelOption = (item, label) => {
+    const id = String(item?.id || '').trim();
+    const name = String(item?.name || '').trim();
+    if (id) options.push({ value: id, label: `${label} ${id} ${name}`.trim() });
+    if (name && name !== id) options.push({ value: name, label: `${label} ${name}`.trim() });
+  };
   (document.roles || []).forEach((role) => options.push({ value: role.id, label: `角色 ${role.id} ${role.name || ''}`.trim() }));
   (document.stages || []).forEach((stage) => options.push({ value: stage.id, label: `阶段 ${stage.id} ${stage.name || ''}`.trim() }));
   (document.processes || []).forEach((process) => {
@@ -2171,6 +2198,9 @@ function getMergeValidationTargetOptions(document) {
     (process.nodes || []).forEach((node) => options.push({ value: node.id, label: `节点 ${node.id} ${node.name || ''}`.trim() }));
   });
   (document.entities || []).forEach((entity) => options.push({ value: entity.id, label: `实体 ${entity.id} ${entity.name || ''}`.trim() }));
+  (document.businessComponents || []).forEach((item) => pushModelOption(item, '业务组件'));
+  (document.businessConstructs || []).forEach((item) => pushModelOption(item, '业务构件'));
+  (document.taskDefinitions || []).forEach((item) => pushModelOption(item, '任务定义'));
   return options;
 }
 
@@ -2331,6 +2361,34 @@ async function applyMergeValidationFix(index, action = 'recommended') {
   renderMergeAnalysis(S.merge.analysis);
 }
 
+async function autoApplyMergeValidationFixes(result) {
+  let nextResult = result;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const validation = nextResult.validation_issues || [];
+    if (!validation.length) return nextResult;
+    if (validation.some((issue) => getMergeValidationFix(issue).group !== 'auto')) return nextResult;
+    const draft = cloneDocument(nextResult.merged_document || {});
+    let changed = false;
+    validation.forEach((issue) => {
+      changed = applyMergeValidationFixToDocument(draft, issue, 'recommended') || changed;
+    });
+    if (!changed) return nextResult;
+    const validated = await api.validateDocument(draft);
+    if (validated.error) return nextResult;
+    nextResult = {
+      ...nextResult,
+      merged_document: validated.document,
+      validation_issues: validated.validation_issues || [],
+      summary: {
+        ...(nextResult.summary || {}),
+        validationIssueCount: (validated.validation_issues || []).length,
+        autoFixedValidationIssueCount: ((nextResult.summary || {}).autoFixedValidationIssueCount || 0) + validation.length,
+      },
+    };
+  }
+  return nextResult;
+}
+
 function renderMergeValidationIssue(issue, index, document) {
   const fix = getMergeValidationFix(issue);
   const targetOptions = getMergeValidationTargetOptions(document);
@@ -2370,6 +2428,28 @@ function renderMergeValidationGuide(validation, mergedDocument) {
     <div class="merge-validation-list">
       ${validation.map((item, index) => renderMergeValidationIssue(item, index, mergedDocument)).join('')}
     </div>
+  </div>`;
+}
+
+function renderMergeInternalValidationFailure(validation) {
+  if (!validation.length) return '';
+  return `<div class="merge-block merge-validation-deferred" data-testid="merge-internal-validation-error">
+    <h4>模型内部引用异常</h4>
+    <p class="merge-inline-note">合并结果仍有 ${validation.length} 个模型一致性问题。正常通过工具建模并完成冲突裁决后不应出现这种情况，请不要手动删除引用；这通常表示历史数据或合并修复逻辑需要升级。</p>
+    <div class="merge-validation-list">
+      ${validation.map((item) => `<div class="merge-validation-card manual">
+        <div class="merge-validation-card-head"><span>内部问题</span><strong>${esc(item.path || '')}</strong></div>
+        <p>${esc(item.message || '')}</p>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderMergeDeferredValidation(validation) {
+  if (!validation.length) return '';
+  return `<div class="merge-block merge-validation-deferred" data-testid="merge-validation-deferred">
+    <h4>冲突处理后重新校验</h4>
+    <p class="merge-inline-note">当前有 ${validation.length} 个预裁决临时校验项，通常由同名元素尚未裁决引起。请先处理上方冲突项，生成前系统会按裁决结果自动收敛附属引用并重新校验。</p>
   </div>`;
 }
 
@@ -2762,8 +2842,8 @@ const App = {
         return;
       }
     }
-    if ((analysis.validation_issues || []).length) {
-      alert('请先处理校验问题，再确认合并。');
+    if (!conflicts.length && (analysis.validation_issues || []).length) {
+      alert('合并结果出现模型内部引用异常，系统无法生成文档。请联系维护人员处理迁移或合并逻辑。');
       return;
     }
     await App.useMergeResult();
@@ -2795,7 +2875,7 @@ const App = {
     if ((result.validation_issues || []).length) {
       S.merge.analysis = result;
       renderMergeAnalysis(result);
-      alert('请先处理校验问题，再生成合并文档。');
+      alert('合并结果出现模型内部引用异常，系统无法生成文档。请联系维护人员处理迁移或合并逻辑。');
       return;
     }
 

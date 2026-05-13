@@ -586,7 +586,7 @@ class MarkdownExporter:
                 if value
             )
             line(
-                f"| {construct.get('businessDomain', '')} | {construct.get('capabilityUnit', '')} | "
+                f"| {construct.get('businessDomain', '')} | {construct.get('businessComponent', '')} | "
                 f"{construct.get('name', '')} | {'、'.join(entity_names) or '—'} | {task_summary or '—'} | "
                 f"{stage_process_text or '—'} |"
             )

@@ -136,15 +136,15 @@ function ensureDocumentArray(key) {
   return S.doc[key];
 }
 
-function findExplicitCapabilityUnit(capabilityId) {
+function findExplicitBusinessComponent(capabilityId) {
   const targetId = String(capabilityId || '').trim();
-  return getDocumentArray('capabilityUnits')
+  return getDocumentArray('businessComponents')
     .find((item) => String(item.id || item.name || '').trim() === targetId || String(item.name || '').trim() === targetId) || null;
 }
 
-function ensureCapabilityUnitRef(capabilityId) {
+function ensureBusinessComponentRef(capabilityId) {
   const targetId = String(capabilityId || '').trim();
-  let capability = findExplicitCapabilityUnit(targetId);
+  let capability = findExplicitBusinessComponent(targetId);
   if (capability) {
     if (!capability.id) capability.id = targetId || capability.name;
     return capability;
@@ -152,15 +152,15 @@ function ensureCapabilityUnitRef(capabilityId) {
   const inferred = (typeof getCapabilityItems === 'function' ? getCapabilityItems(S.doc) : [])
     .find((item) => String(item.id || item.name || '').trim() === targetId || String(item.name || '').trim() === targetId);
   capability = {
-    id: targetId || nextStableId('CU', ensureDocumentArray('capabilityUnits')),
-    name: getUniqueCapabilityUnitName(inferred?.name || targetId || '新业务组件'),
+    id: targetId || nextStableId('BCP', ensureDocumentArray('businessComponents')),
+    name: getUniqueBusinessComponentName(inferred?.name || targetId || '新业务组件'),
     kind: inferred?.kind === 'core' ? 'core' : 'generic',
     note: inferred?.note || '',
     entityIds: Array.isArray(inferred?.entityIds) ? inferred.entityIds.slice() : [],
     taskDefinitionIds: Array.isArray(inferred?.taskDefinitionIds) ? inferred.taskDefinitionIds.slice() : [],
     constructIds: Array.isArray(inferred?.constructIds) ? inferred.constructIds.slice() : [],
   };
-  ensureDocumentArray('capabilityUnits').push(capability);
+  ensureDocumentArray('businessComponents').push(capability);
   return capability;
 }
 
@@ -178,17 +178,17 @@ function findTaskDefinitionRef(taskDefinitionId) {
 
 function syncTaskDefinitionCapability(task, capability) {
   if (!task || !capability) return;
-  task.capabilityUnitId = capability.id || '';
-  task.capabilityUnit = capability.name || capability.id || '';
+  task.businessComponentId = capability.id || '';
+  task.businessComponent = capability.name || capability.id || '';
 }
 
 function syncTaskDefinitionConstruct(task, construct) {
   if (!task || !construct) return;
   task.constructId = construct.id || '';
   task.constructName = construct.name || construct.id || '';
-  if (construct.capabilityUnitId || construct.capabilityUnit) {
-    task.capabilityUnitId = construct.capabilityUnitId || task.capabilityUnitId || '';
-    task.capabilityUnit = construct.capabilityUnit || task.capabilityUnit || '';
+  if (construct.businessComponentId || construct.businessComponent) {
+    task.businessComponentId = construct.businessComponentId || task.businessComponentId || '';
+    task.businessComponent = construct.businessComponent || task.businessComponent || '';
   }
 }
 
@@ -196,9 +196,9 @@ function normalizeModelAssetName(name, fallback = '') {
   return String(name || fallback || '').trim();
 }
 
-function getUniqueCapabilityUnitName(baseName = '新业务组件', ignoreCapabilityId = '') {
+function getUniqueBusinessComponentName(baseName = '新业务组件', ignoreCapabilityId = '') {
   const rawName = normalizeModelAssetName(baseName, '新业务组件') || '新业务组件';
-  const names = new Set(ensureDocumentArray('capabilityUnits')
+  const names = new Set(ensureDocumentArray('businessComponents')
     .filter((capability) => String(capability.id || '') !== String(ignoreCapabilityId || ''))
     .map((capability) => normalizeModelAssetName(capability.name))
     .filter(Boolean));
@@ -208,28 +208,28 @@ function getUniqueCapabilityUnitName(baseName = '新业务组件', ignoreCapabil
   return `${rawName}${index}`;
 }
 
-function hasCapabilityUnitNameConflict(name, ignoreCapabilityId = '') {
+function hasBusinessComponentNameConflict(name, ignoreCapabilityId = '') {
   const nextName = normalizeModelAssetName(name);
   if (!nextName) return false;
-  return ensureDocumentArray('capabilityUnits').some((capability) => (
+  return ensureDocumentArray('businessComponents').some((capability) => (
     String(capability.id || '') !== String(ignoreCapabilityId || '')
     && normalizeModelAssetName(capability.name) === nextName
   ));
 }
 
 function getConstructScopeId(construct, fallbackCapabilityId = '') {
-  const explicitId = normalizeModelAssetName(fallbackCapabilityId || construct?.capabilityUnitId);
+  const explicitId = normalizeModelAssetName(fallbackCapabilityId || construct?.businessComponentId);
   if (explicitId) return explicitId;
-  const capabilityName = normalizeModelAssetName(construct?.capabilityUnit);
+  const capabilityName = normalizeModelAssetName(construct?.businessComponent);
   if (!capabilityName) return '';
-  const capability = findExplicitCapabilityUnit(capabilityName);
+  const capability = findExplicitBusinessComponent(capabilityName);
   return capability?.id || capabilityName;
 }
 
 function getUniqueBusinessConstructName(baseName = '新业务构件', capabilityId = '', ignoreConstructId = '') {
   const rawName = normalizeModelAssetName(baseName, '新业务构件') || '新业务构件';
   const rawScopeId = normalizeModelAssetName(capabilityId);
-  const scopeCapability = rawScopeId ? findExplicitCapabilityUnit(rawScopeId) : null;
+  const scopeCapability = rawScopeId ? findExplicitBusinessComponent(rawScopeId) : null;
   const scopeId = scopeCapability?.id || rawScopeId;
   const names = new Set(ensureDocumentArray('businessConstructs')
     .filter((construct) => String(construct.id || '') !== String(ignoreConstructId || ''))
@@ -246,7 +246,7 @@ function hasBusinessConstructNameConflict(name, capabilityId = '', ignoreConstru
   const nextName = normalizeModelAssetName(name);
   if (!nextName) return false;
   const rawScopeId = normalizeModelAssetName(capabilityId);
-  const scopeCapability = rawScopeId ? findExplicitCapabilityUnit(rawScopeId) : null;
+  const scopeCapability = rawScopeId ? findExplicitBusinessComponent(rawScopeId) : null;
   const scopeId = scopeCapability?.id || rawScopeId;
   return ensureDocumentArray('businessConstructs').some((construct) => (
     String(construct.id || '') !== String(ignoreConstructId || '')
@@ -255,11 +255,11 @@ function hasBusinessConstructNameConflict(name, capabilityId = '', ignoreConstru
   ));
 }
 
-function addCapabilityUnit(afterId = '') {
-  const items = ensureDocumentArray('capabilityUnits');
+function addBusinessComponent(afterId = '') {
+  const items = ensureDocumentArray('businessComponents');
   const capability = {
-    id: nextStableId('CU', items),
-    name: getUniqueCapabilityUnitName('新业务组件'),
+    id: nextStableId('BCP', items),
+    name: getUniqueBusinessComponentName('新业务组件'),
     kind: 'core',
     note: '',
     entityIds: [],
@@ -273,23 +273,23 @@ function addCapabilityUnit(afterId = '') {
   rerenderDomainTabPreserveScroll();
 }
 
-function setCapabilityUnit(capabilityId, key, value) {
-  const capability = ensureCapabilityUnitRef(capabilityId);
+function setBusinessComponent(capabilityId, key, value) {
+  const capability = ensureBusinessComponentRef(capabilityId);
   if (!['name', 'kind', 'note', 'businessDomain', 'businessDomainId'].includes(key)) return;
   if (key === 'name') {
     const nextName = normalizeModelAssetName(value);
-    if (hasCapabilityUnitNameConflict(nextName, capability.id)) {
+    if (hasBusinessComponentNameConflict(nextName, capability.id)) {
       alert(`业务组件“${nextName}”已存在，请换一个名称。`);
       rerenderDomainTabPreserveScroll();
       return;
     }
     capability.name = nextName;
     ensureDocumentArray('businessConstructs').forEach((construct) => {
-      if (construct.capabilityUnitId === capability.id) construct.capabilityUnit = nextName;
+      if (construct.businessComponentId === capability.id) construct.businessComponent = nextName;
     });
     ensureDocumentArray('taskDefinitions').forEach((task) => {
-      if (task.capabilityUnitId === capability.id) {
-        task.capabilityUnit = nextName;
+      if (task.businessComponentId === capability.id) {
+        task.businessComponent = nextName;
         syncProcessTaskDefinitionFields(task);
       }
     });
@@ -300,11 +300,11 @@ function setCapabilityUnit(capabilityId, key, value) {
   renderSidebar();
 }
 
-async function removeCapabilityUnit(capabilityId) {
-  const capability = findExplicitCapabilityUnit(capabilityId);
+async function removeBusinessComponent(capabilityId) {
+  const capability = findExplicitBusinessComponent(capabilityId);
   if (!capability) return false;
   const constructs = ensureDocumentArray('businessConstructs').filter((construct) => (
-    construct.capabilityUnitId === capability.id || construct.capabilityUnit === capability.name
+    construct.businessComponentId === capability.id || construct.businessComponent === capability.name
   ));
   if (constructs.length) {
     alert(`当前业务组件下还有 ${constructs.length} 个业务构件，请先调整或删除构件。`);
@@ -315,18 +315,18 @@ async function removeCapabilityUnit(capabilityId) {
     confirmLabel: '删除',
   })) return false;
   ensureDocumentArray('taskDefinitions').forEach((task) => {
-    if (task.capabilityUnitId === capability.id || task.capabilityUnit === capability.name) {
-      task.capabilityUnitId = '';
-      task.capabilityUnit = '';
+    if (task.businessComponentId === capability.id || task.businessComponent === capability.name) {
+      task.businessComponentId = '';
+      task.businessComponent = '';
       syncProcessTaskDefinitionFields(task);
     }
   });
   ensureDocumentArray('processes').forEach((proc) => {
-    if (Array.isArray(proc.capabilityUnitIds)) {
-      proc.capabilityUnitIds = proc.capabilityUnitIds.filter((id) => id !== capability.id);
+    if (Array.isArray(proc.businessComponentIds)) {
+      proc.businessComponentIds = proc.businessComponentIds.filter((id) => id !== capability.id);
     }
   });
-  S.doc.capabilityUnits = ensureDocumentArray('capabilityUnits').filter((item) => item !== capability);
+  S.doc.businessComponents = ensureDocumentArray('businessComponents').filter((item) => item !== capability);
   markModified();
   renderSidebar();
   rerenderDomainTabPreserveScroll();
@@ -335,14 +335,14 @@ async function removeCapabilityUnit(capabilityId) {
 
 function addBusinessConstruct(afterId = '', capabilityId = '') {
   const constructs = ensureDocumentArray('businessConstructs');
-  const capability = capabilityId ? ensureCapabilityUnitRef(capabilityId) : (getCapabilityItems(S.doc)[0] || null);
+  const capability = capabilityId ? ensureBusinessComponentRef(capabilityId) : (getCapabilityItems(S.doc)[0] || null);
   const capabilityScopeId = capability?.id || '';
   const construct = {
     id: nextStableId('BC', constructs),
     name: getUniqueBusinessConstructName('新业务构件', capabilityScopeId),
     note: '',
-    capabilityUnitId: capabilityScopeId,
-    capabilityUnit: capability?.name || '',
+    businessComponentId: capabilityScopeId,
+    businessComponent: capability?.name || '',
     entityIds: [],
     taskDefinitionIds: [],
     relatedProcessIds: [],
@@ -350,7 +350,7 @@ function addBusinessConstruct(afterId = '', capabilityId = '') {
   const afterIndex = constructs.findIndex((item) => item.id === afterId);
   constructs.splice(afterIndex >= 0 ? afterIndex + 1 : constructs.length, 0, construct);
   if (capability) {
-    const capRef = ensureCapabilityUnitRef(capability.id || capability.name);
+    const capRef = ensureBusinessComponentRef(capability.id || capability.name);
     capRef.constructIds = [...new Set([...(capRef.constructIds || []), construct.id])];
   }
   markModified();
@@ -360,9 +360,9 @@ function addBusinessConstruct(afterId = '', capabilityId = '') {
 
 function setBusinessConstruct(constructId, key, value) {
   const construct = findBusinessConstructRef(constructId);
-  if (!construct || !['name', 'note', 'capabilityUnitId'].includes(key)) return;
-  if (key === 'capabilityUnitId') {
-    const previousCapabilityId = construct.capabilityUnitId;
+  if (!construct || !['name', 'note', 'businessComponentId'].includes(key)) return;
+  if (key === 'businessComponentId') {
+    const previousCapabilityId = construct.businessComponentId;
     const nextCapabilityId = normalizeModelAssetName(value);
     if (hasBusinessConstructNameConflict(construct.name, nextCapabilityId, construct.id)) {
       const scopeLabel = nextCapabilityId ? '目标业务组件' : '未分组构件';
@@ -371,9 +371,9 @@ function setBusinessConstruct(constructId, key, value) {
       return;
     }
     if (!nextCapabilityId) {
-      construct.capabilityUnitId = '';
-      construct.capabilityUnit = '';
-      ensureDocumentArray('capabilityUnits').forEach((capability) => {
+      construct.businessComponentId = '';
+      construct.businessComponent = '';
+      ensureDocumentArray('businessComponents').forEach((capability) => {
         if (capability.id === previousCapabilityId && Array.isArray(capability.constructIds)) {
           capability.constructIds = capability.constructIds.filter((id) => id !== construct.id);
         }
@@ -382,14 +382,14 @@ function setBusinessConstruct(constructId, key, value) {
       renderSidebar();
       return;
     }
-    const capability = ensureCapabilityUnitRef(nextCapabilityId);
-    ensureDocumentArray('capabilityUnits').forEach((item) => {
+    const capability = ensureBusinessComponentRef(nextCapabilityId);
+    ensureDocumentArray('businessComponents').forEach((item) => {
       if (item.id !== capability.id && Array.isArray(item.constructIds)) {
         item.constructIds = item.constructIds.filter((id) => id !== construct.id);
       }
     });
-    construct.capabilityUnitId = capability.id || '';
-    construct.capabilityUnit = capability.name || capability.id || '';
+    construct.businessComponentId = capability.id || '';
+    construct.businessComponent = capability.name || capability.id || '';
     capability.constructIds = [...new Set([...(capability.constructIds || []), construct.id])];
     ensureDocumentArray('taskDefinitions').forEach((task) => {
       if (task.constructId === construct.id) {
@@ -429,7 +429,7 @@ async function removeBusinessConstruct(constructId) {
     confirmLabel: '删除',
   })) return false;
   S.doc.businessConstructs = ensureDocumentArray('businessConstructs').filter((item) => item !== construct);
-  ensureDocumentArray('capabilityUnits').forEach((capability) => {
+  ensureDocumentArray('businessComponents').forEach((capability) => {
     if (!Array.isArray(capability.constructIds)) return;
     capability.constructIds = capability.constructIds.filter((id) => id !== construct.id);
   });
@@ -476,8 +476,8 @@ function applyTaskDefinitionToProcessNodeTask(item, taskDefinition) {
   item.constructId = taskDefinition.constructId || '';
   item.businessConstructId = taskDefinition.constructId || '';
   item.constructName = taskDefinition.constructName || '';
-  item.capabilityUnitId = taskDefinition.capabilityUnitId || '';
-  item.capabilityUnit = taskDefinition.capabilityUnit || '';
+  item.businessComponentId = taskDefinition.businessComponentId || '';
+  item.businessComponent = taskDefinition.businessComponent || '';
 }
 
 function syncProcessTaskDefinitionFields(taskDefinition) {
@@ -503,8 +503,8 @@ function addTaskDefinition(afterId = '', capabilityId = '', constructId = '') {
   const tasks = ensureDocumentArray('taskDefinitions');
   const construct = constructId ? findBusinessConstructRef(constructId) : null;
   const capability = capabilityId
-    ? ensureCapabilityUnitRef(capabilityId)
-    : (construct?.capabilityUnitId ? ensureCapabilityUnitRef(construct.capabilityUnitId) : null);
+    ? ensureBusinessComponentRef(capabilityId)
+    : (construct?.businessComponentId ? ensureBusinessComponentRef(construct.businessComponentId) : null);
   const task = {
     id: nextStableId('TD', tasks),
     name: getUniqueTaskDefinitionName('新任务定义'),
@@ -520,7 +520,7 @@ function addTaskDefinition(afterId = '', capabilityId = '', constructId = '') {
   const afterIndex = tasks.findIndex((item) => item.id === afterId);
   tasks.splice(afterIndex >= 0 ? afterIndex + 1 : tasks.length, 0, task);
   if (capability) {
-    const capRef = ensureCapabilityUnitRef(capability.id);
+    const capRef = ensureBusinessComponentRef(capability.id);
     capRef.taskDefinitionIds = [...new Set([...(capRef.taskDefinitionIds || []), task.id])];
   }
   if (construct) {
@@ -539,7 +539,7 @@ function addTaskDefinitionAndOpen(capabilityId = '', constructId = '') {
 
 function setTaskDefinition(taskDefinitionId, key, value) {
   const task = findTaskDefinitionRef(taskDefinitionId);
-  if (!task || !['name', 'type', 'querySourceKind', 'target', 'note', 'capabilityUnitId', 'constructId'].includes(key)) return;
+  if (!task || !['name', 'type', 'querySourceKind', 'target', 'note', 'businessComponentId', 'constructId'].includes(key)) return;
   if (key === 'name') {
     const nextName = String(value || '').trim();
     if (nextName && ensureDocumentArray('taskDefinitions').some((item) => item.id !== task.id && String(item.name || '').trim() === nextName)) {
@@ -556,14 +556,14 @@ function setTaskDefinition(taskDefinitionId, key, value) {
     }
     task.name = nextName;
     syncProcessTaskDefinitionName(task);
-  } else if (key === 'capabilityUnitId') {
+  } else if (key === 'businessComponentId') {
     if (value) {
-      const capability = ensureCapabilityUnitRef(value);
+      const capability = ensureBusinessComponentRef(value);
       syncTaskDefinitionCapability(task, capability);
       capability.taskDefinitionIds = [...new Set([...(capability.taskDefinitionIds || []), task.id])];
     } else {
-      task.capabilityUnitId = '';
-      task.capabilityUnit = '';
+      task.businessComponentId = '';
+      task.businessComponent = '';
     }
   } else if (key === 'constructId') {
     ensureDocumentArray('businessConstructs').forEach((construct) => {
@@ -709,7 +709,7 @@ async function removeTaskDefinition(taskDefinitionId) {
     confirmLabel: '删除',
   })) return false;
   S.doc.taskDefinitions = ensureDocumentArray('taskDefinitions').filter((item) => item !== task);
-  ensureDocumentArray('capabilityUnits').forEach((capability) => {
+  ensureDocumentArray('businessComponents').forEach((capability) => {
     if (!Array.isArray(capability.taskDefinitionIds)) return;
     capability.taskDefinitionIds = capability.taskDefinitionIds.filter((id) => id !== task.id);
   });
@@ -726,8 +726,8 @@ async function removeTaskDefinition(taskDefinitionId) {
         item.constructId = '';
         item.businessConstructId = '';
         item.constructName = '';
-        item.capabilityUnitId = '';
-        item.capabilityUnit = '';
+        item.businessComponentId = '';
+        item.businessComponent = '';
       });
     });
   });
@@ -847,7 +847,7 @@ function languageItemMatchesDomainInfo(item, selectedDomainId) {
   }
 
   const capabilityRefs = [
-    ...(Array.isArray(item?.capabilityUnitIds) ? item.capabilityUnitIds : []),
+    ...(Array.isArray(item?.businessComponentIds) ? item.businessComponentIds : []),
     ...(Array.isArray(item?.subDomains) ? item.subDomains : []),
   ].map(String).filter(Boolean);
   if (capabilityRefs.length) {
@@ -919,7 +919,7 @@ function renderSubDomainMapCard(selectedDomainId = 'all', selectedDomainLabel = 
           <span class="subdomain-legend core">核心 ${coreItems.length}</span>
           <span class="subdomain-legend generic">通用 ${genericItems.length}</span>
         </div>
-        <button class="btn btn-outline btn-sm" type="button" data-testid="capability-add-button" onclick="addCapabilityUnit();openBusinessModelDialog('capability',S.doc.capabilityUnits[S.doc.capabilityUnits.length-1].id)">＋ 组件</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="capability-add-button" onclick="addBusinessComponent();openBusinessModelDialog('capability',S.doc.businessComponents[S.doc.businessComponents.length-1].id)">＋ 组件</button>
       </div>
     </div>
     <div class="domain-model-integrated" data-testid="business-model-card">
@@ -982,13 +982,13 @@ function renderCapabilityDialog(capability) {
   const capId = String(capability.id || capability.name || '');
   const groupedConstructs = getCapabilityConstructs(capability, S.doc);
   const groupedIds = new Set(groupedConstructs.map((construct) => construct.id));
-  const ungroupedConstructs = getBusinessConstructItems(S.doc).filter((construct) => !construct.capabilityUnitId && !groupedIds.has(construct.id));
+  const ungroupedConstructs = getBusinessConstructItems(S.doc).filter((construct) => !construct.businessComponentId && !groupedIds.has(construct.id));
   return `<div class="business-model-dialog-panel" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
       <h3>业务组件</h3>
       <div class="business-model-dialog-actions">
         <button class="btn btn-danger btn-sm" type="button" data-testid="capability-delete-button"
-          onclick="removeCapabilityUnit('${esc(jsString(capId))}').then((deleted)=>{if(deleted)closeBusinessModelDialog()})">删除</button>
+          onclick="removeBusinessComponent('${esc(jsString(capId))}').then((deleted)=>{if(deleted)closeBusinessModelDialog()})">删除</button>
         <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">✕</button>
       </div>
     </div>
@@ -997,11 +997,11 @@ function renderCapabilityDialog(capability) {
         <div class="field-group">
           <label>组件名称</label>
           <input data-testid="capability-name-input" type="text" value="${esc(capability.name || '')}"
-            oninput="setCapabilityUnit('${esc(jsString(capId))}','name',this.value)">
+            oninput="setBusinessComponent('${esc(jsString(capId))}','name',this.value)">
         </div>
         <div class="field-group">
           <label>组件类型</label>
-          <select data-testid="capability-kind-select" onchange="setCapabilityUnit('${esc(jsString(capId))}','kind',this.value);rerenderDomainTabPreserveScroll()">
+          <select data-testid="capability-kind-select" onchange="setBusinessComponent('${esc(jsString(capId))}','kind',this.value);rerenderDomainTabPreserveScroll()">
             <option value="core" ${capability.kind === 'core' ? 'selected' : ''}>核心组件</option>
             <option value="generic" ${capability.kind !== 'core' ? 'selected' : ''}>通用组件</option>
           </select>
@@ -1009,7 +1009,7 @@ function renderCapabilityDialog(capability) {
         <div class="field-group field-group-wide">
           <label>说明</label>
           <input data-testid="capability-note-input" type="text" value="${esc(capability.note || '')}"
-            oninput="setCapabilityUnit('${esc(jsString(capId))}','note',this.value)">
+            oninput="setBusinessComponent('${esc(jsString(capId))}','note',this.value)">
         </div>
       </div>
       <div class="business-model-dialog-section">
@@ -1025,7 +1025,7 @@ function renderCapabilityDialog(capability) {
           secondaryActionLabel: '移出',
           label: (construct) => construct.name || construct.id,
           onclick: (construct) => `openBusinessModelDialog('construct','${esc(jsString(capId))}','${esc(jsString(construct.id))}')`,
-          secondaryOnclick: (construct) => `setBusinessConstruct('${esc(jsString(construct.id))}','capabilityUnitId','');rerenderDomainTabPreserveScroll()`,
+          secondaryOnclick: (construct) => `setBusinessConstruct('${esc(jsString(construct.id))}','businessComponentId','');rerenderDomainTabPreserveScroll()`,
         })}
       </div>
       <div class="business-model-dialog-section">
@@ -1035,7 +1035,7 @@ function renderCapabilityDialog(capability) {
           testId: 'construct-attach-button',
           actionLabel: '加入',
           label: (construct) => construct.name || construct.id,
-          onclick: (construct) => `setBusinessConstruct('${esc(jsString(construct.id))}','capabilityUnitId','${esc(jsString(capId))}');rerenderDomainTabPreserveScroll()`,
+          onclick: (construct) => `setBusinessConstruct('${esc(jsString(construct.id))}','businessComponentId','${esc(jsString(capId))}');rerenderDomainTabPreserveScroll()`,
         })}
       </div>
     </div>
@@ -1046,7 +1046,7 @@ function renderConstructDialog(construct) {
   const constructId = String(construct.id || construct.name || '');
   const dialog = S.ui.businessModelDialog || {};
   const capabilities = getCapabilityItems(S.doc);
-  const parentCapabilityId = String(construct.capabilityUnitId || dialog.capabilityId || '').trim();
+  const parentCapabilityId = String(construct.businessComponentId || dialog.capabilityId || '').trim();
   const backButton = parentCapabilityId
     ? `<button class="btn btn-outline btn-sm business-model-back-btn" type="button" data-testid="business-model-dialog-back" onclick="openBusinessModelDialog('capability','${esc(jsString(parentCapabilityId))}')">返回</button>`
     : '';
@@ -1061,7 +1061,7 @@ function renderConstructDialog(construct) {
   const unassignedTasks = getTaskDefinitionItems(S.doc).filter((task) => !task.constructId);
   const capabilityOptions = capabilities.map((capability) => {
     const id = String(capability.id || capability.name || '');
-    return `<option value="${esc(id)}" ${id === construct.capabilityUnitId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
+    return `<option value="${esc(id)}" ${id === construct.businessComponentId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
   }).join('');
   return `<div class="business-model-dialog-panel" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
@@ -1082,7 +1082,7 @@ function renderConstructDialog(construct) {
         </div>
         <div class="field-group">
           <label>所属组件</label>
-          <select data-testid="construct-capability-select" onchange="setBusinessConstruct('${esc(jsString(constructId))}','capabilityUnitId',this.value);rerenderDomainTabPreserveScroll()">
+          <select data-testid="construct-capability-select" onchange="setBusinessConstruct('${esc(jsString(constructId))}','businessComponentId',this.value);rerenderDomainTabPreserveScroll()">
             <option value="">未分组</option>${capabilityOptions}
           </select>
         </div>
@@ -1119,7 +1119,7 @@ function renderConstructDialog(construct) {
         <div class="business-model-dialog-section">
           <div class="business-model-section-head">
             <h4>任务定义</h4>
-            <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-add-button" onclick="addTaskDefinitionAndOpen('${esc(jsString(construct.capabilityUnitId || ''))}','${esc(jsString(constructId))}')">＋ 任务定义</button>
+            <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-add-button" onclick="addTaskDefinitionAndOpen('${esc(jsString(construct.businessComponentId || ''))}','${esc(jsString(constructId))}')">＋ 任务定义</button>
           </div>
           ${renderMoveList(assignedTasks, {
             emptyText: '暂无任务定义',
@@ -1128,7 +1128,7 @@ function renderConstructDialog(construct) {
             secondaryTestId: 'construct-task-remove',
             secondaryActionLabel: '移出',
             label: (task) => task.name || task.id,
-            onclick: (task) => `openTaskDefinitionEditor('${esc(jsString(task.id))}','${esc(jsString(construct.capabilityUnitId || ''))}','${esc(jsString(constructId))}')`,
+            onclick: (task) => `openTaskDefinitionEditor('${esc(jsString(task.id))}','${esc(jsString(construct.businessComponentId || ''))}','${esc(jsString(constructId))}')`,
             secondaryOnclick: (task) => `removeTaskDefinitionFromConstruct('${esc(jsString(constructId))}','${esc(jsString(task.id))}')`,
           })}
           ${renderMoveList(unassignedTasks, {
@@ -1138,7 +1138,7 @@ function renderConstructDialog(construct) {
             secondaryTestId: 'construct-task-add',
             secondaryActionLabel: '移入组件',
             label: (task) => task.name || task.id,
-            onclick: (task) => `openTaskDefinitionEditor('${esc(jsString(task.id))}','${esc(jsString(construct.capabilityUnitId || ''))}','${esc(jsString(constructId))}')`,
+            onclick: (task) => `openTaskDefinitionEditor('${esc(jsString(task.id))}','${esc(jsString(construct.businessComponentId || ''))}','${esc(jsString(constructId))}')`,
             secondaryOnclick: (task) => `addTaskDefinitionToConstruct('${esc(jsString(constructId))}','${esc(jsString(task.id))}')`,
           })}
         </div>
@@ -1154,7 +1154,7 @@ function renderTaskDefinitionDialog(task) {
   const parentConstructId = String(task.constructId || dialog.constructId || '').trim();
   const parentConstruct = parentConstructId ? findBusinessConstructRef(parentConstructId) : null;
   const parentCapabilityId = String(
-    parentConstruct?.capabilityUnitId || task.capabilityUnitId || dialog.capabilityId || ''
+    parentConstruct?.businessComponentId || task.businessComponentId || dialog.capabilityId || ''
   ).trim();
   const backButton = parentConstructId
     ? `<button class="btn btn-outline btn-sm business-model-back-btn" type="button" data-testid="business-model-dialog-back" onclick="openBusinessModelDialog('construct','${esc(jsString(parentCapabilityId))}','${esc(jsString(parentConstructId))}')">返回</button>`
@@ -1169,7 +1169,7 @@ function renderTaskDefinitionDialog(task) {
   const typeValue = task.type || 'Service';
   const constructOptions = `<option value="">未归属构件</option>${constructs.map((construct) => {
     const id = String(construct.id || construct.name || '');
-    const capability = getCapabilityItems(S.doc).find((item) => item.id === construct.capabilityUnitId || item.name === construct.capabilityUnit);
+    const capability = getCapabilityItems(S.doc).find((item) => item.id === construct.businessComponentId || item.name === construct.businessComponent);
     const prefix = capability ? `${capability.name} / ` : '';
     return `<option value="${esc(id)}" ${id === task.constructId ? 'selected' : ''}>${esc(prefix + (construct.name || id))}</option>`;
   }).join('')}`;
@@ -1229,7 +1229,7 @@ function renderTaskDefinitionDialog(task) {
 function renderBusinessModelDialog() {
   const dialog = S.ui.businessModelDialog || {};
   if (!dialog.mode) return '';
-  const capability = findExplicitCapabilityUnit(dialog.capabilityId);
+  const capability = findExplicitBusinessComponent(dialog.capabilityId);
   const construct = findBusinessConstructRef(dialog.constructId);
   const task = findTaskDefinitionRef(dialog.taskDefinitionId);
   const panel = dialog.mode === 'task' && task

@@ -14,7 +14,7 @@ function getEntityModelMeta(entity, doc = S.doc) {
   const construct = constructId
     ? getBusinessConstructItems(doc).find((item) => item.id === constructId || item.name === constructId)
     : null;
-  const capabilityId = String(construct?.capabilityUnitId || construct?.capabilityUnit || '').trim();
+  const capabilityId = String(construct?.businessComponentId || construct?.businessComponent || '').trim();
   const capability = capabilityId
     ? getCapabilityItems(doc).find((item) => item.id === capabilityId || item.name === capabilityId)
     : null;
@@ -23,15 +23,15 @@ function getEntityModelMeta(entity, doc = S.doc) {
     capability,
     constructKey: construct?.id || construct?.name || '__ungrouped_construct__',
     constructLabel: construct?.name || '未归属构件',
-    capabilityKey: capability?.id || capability?.name || construct?.capabilityUnit || '__ungrouped_capability__',
-    capabilityLabel: capability?.name || construct?.capabilityUnit || '未归属组件',
+    capabilityKey: capability?.id || capability?.name || construct?.businessComponent || '__ungrouped_capability__',
+    capabilityLabel: capability?.name || construct?.businessComponent || '未归属组件',
   };
 }
 
 function renderBusinessConstructOptions(selectedConstructId = '') {
   return `<option value="">未归属构件</option>${getBusinessConstructItems(S.doc).map((construct) => {
     const id = String(construct.id || construct.name || '');
-    const capability = getCapabilityItems(S.doc).find((item) => item.id === construct.capabilityUnitId || item.name === construct.capabilityUnit);
+    const capability = getCapabilityItems(S.doc).find((item) => item.id === construct.businessComponentId || item.name === construct.businessComponent);
     const prefix = capability ? `${capability.name} / ` : '';
     return `<option value="${esc(id)}" ${id === selectedConstructId ? 'selected' : ''}>${esc(prefix + (construct.name || id))}</option>`;
   }).join('')}`;
@@ -645,8 +645,7 @@ function renderEntityFlow(containerId, doc, onClickMap) {
       : '';
     h += `<div class="ef-node${clickable}${draggable}${focusCls}" data-id="${e.id}" data-group="${esc(meta.constructKey)}" data-component="${esc(meta.capabilityKey)}"
       style="left:${e.pos.x}px;top:${e.pos.y}px;background:${c.fill};border-color:${c.stroke};color:${c.color}">`;
-    h += `<span class="ef-nid">${esc(e.id)}</span>`;
-    h += `<span class="ef-nname">${esc(e.name||e.id)}</span>`;
+    h += `<span class="ef-nname">${esc(e.name||'未命名实体')}</span>`;
     h += `</div>`;
   }
 
@@ -2249,7 +2248,7 @@ function renderStateEntityBrowser(groupedEntities, activeEntity) {
     <div class="entity-state-group">
       <div class="entity-state-group-title">${esc(groupName)}</div>
       <div class="entity-state-group-list">
-        ${items.map((item) => `<button class="entity-state-chip ${activeEntity?.id===item.id?'active':''}" onclick="setStateEntity('${esc(item.id)}')">${esc(item.id)} ${esc(item.name||'未命名')}</button>`).join('')}
+        ${items.map((item) => `<button class="entity-state-chip ${activeEntity?.id===item.id?'active':''}" onclick="setStateEntity('${esc(item.id)}')">${esc(item.name||'未命名')}</button>`).join('')}
       </div>
     </div>
   `).join('');
@@ -2493,7 +2492,7 @@ function renderEntityReferenceSection(refs) {
     <div class="task-ref-list">
       ${refs.map(({ proc, task }) => `<span class="task-ref"
         onclick="navigate('process',{procId:'${proc.id}',taskId:'${task.id}'})"
-        title="跳转到流程节点">${esc(task.id)} ${esc(task.name)}</span>`).join('')}
+        title="跳转到流程节点">${esc(task.name || '未命名节点')}</span>`).join('')}
     </div>
   </div>`;
 }
@@ -2535,13 +2534,13 @@ function renderEntityRelationsSection(entity, entities, scopedRelations) {
     ${scopedRelations.length ? `<div class="rel-list" data-testid="entity-relation-list">
       ${scopedRelations.map(({ relation, index }, localIndex) => `<div class="rel-row" data-relation-row="${localIndex}">
         <select onchange="setRelation('${esc(entity.id)}',${index},'from',this.value)">
-          ${entities.map((item) => `<option value="${item.id}" ${relation.from===item.id?'selected':''}>${item.id} ${esc(item.name)}</option>`).join('')}
+          ${entities.map((item) => `<option value="${item.id}" ${relation.from===item.id?'selected':''}>${esc(item.name || '未命名实体')}</option>`).join('')}
         </select>
         <select style="width:76px" onchange="setRelation('${esc(entity.id)}',${index},'type',this.value)">
           ${['1:1','1:N','N:N'].map((type) => `<option ${relation.type===type?'selected':''}>${type}</option>`).join('')}
         </select>
         <select onchange="setRelation('${esc(entity.id)}',${index},'to',this.value)">
-          ${entities.map((item) => `<option value="${item.id}" ${relation.to===item.id?'selected':''}>${item.id} ${esc(item.name)}</option>`).join('')}
+          ${entities.map((item) => `<option value="${item.id}" ${relation.to===item.id?'selected':''}>${esc(item.name || '未命名实体')}</option>`).join('')}
         </select>
         <input type="text" data-testid="entity-relation-label-${localIndex}" class="rel-label-input" value="${esc(relation.label||'')}" placeholder="关系说明"
           oninput="setRelation('${esc(entity.id)}',${index},'label',this.value)">
@@ -2566,7 +2565,6 @@ function renderEntityDrawer(showEntityDrawer, entity, entities, drawerW) {
     const selectedConstructId = getEntityBusinessConstructId(entity);
     markup += `<div class="drawer-head">
       <div class="drawer-crumb">
-        <span class="detail-id editable-id" onclick="startEditId(this,'entity','${esc(entity.id)}')" title="点击编辑ID">${esc(entity.id)}</span>
         <span style="font-weight:600">${esc(entity.name||'未命名')}</span>
       </div>
       <div class="drawer-actions">
@@ -2726,7 +2724,7 @@ function renderDataTab() {
         ? `<button class="btn btn-ghost-sm" onclick="resetEfLayout()" title="清除手动布局，恢复分组布局">重置布局</button>`
         : `<label class="data-state-select-inline"><span class="data-state-select-label">查看实体</span>
             <select data-testid="data-state-entity-select" onchange="setStateEntity(this.value)">
-              ${entities.map((item) => `<option value="${item.id}" ${entity?.id===item.id?'selected':''}>${esc(item.id)} ${esc(item.name||'未命名')}</option>`).join('')}
+              ${entities.map((item) => `<option value="${item.id}" ${entity?.id===item.id?'selected':''}>${esc(item.name||'未命名')}</option>`).join('')}
             </select>
           </label>`
       }

@@ -157,19 +157,30 @@ class FrontendStructureTests(unittest.TestCase):
             style_css.find("#toolbar .btn-ghost { background: transparent; color: var(--header-text);"),
         )
 
-    def test_business_ids_are_visible_for_process_flow_model(self):
+    def test_business_ids_are_hidden_from_business_modeling_ui(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
         process_js = (APP_DIR / "process.js").read_text("utf-8")
         entity_js = (APP_DIR / "entity.js").read_text("utf-8")
+        render_js = (APP_DIR / "render.js").read_text("utf-8")
 
         self.assertIn("function nextStableId", state_js)
-        self.assertIn('data-testid="process-id-input"', process_js)
-        self.assertIn('data-testid="process-task-id-input"', process_js)
-        self.assertIn('data-testid="process-flow-node-id-input"', process_js)
-        self.assertIn('data-testid="process-flow-gateway-id-input"', process_js)
-        self.assertIn('data-testid="process-flow-edge-id-input"', process_js)
+        self.assertNotIn('data-testid="process-id-input"', process_js)
+        self.assertNotIn('data-testid="process-task-id-input"', process_js)
+        self.assertNotIn('data-testid="process-flow-node-id-input"', process_js)
+        self.assertNotIn('data-testid="process-flow-gateway-id-input"', process_js)
+        self.assertNotIn('data-testid="process-flow-edge-id-input"', process_js)
+        self.assertNotIn("detail-id editable-id", entity_js)
+        self.assertNotIn("sb-id editable-id", render_js)
         self.assertIn("renameGatewayId", entity_js)
         self.assertIn("renameFlowEdgeId", entity_js)
+
+    def test_swimlane_tasklevel_view_uses_outer_vertical_scroll(self):
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn(".process-flow-view.is-swimlane.has-tasklevel", style_css)
+        self.assertIn(".process-flow-view.is-swimlane.has-tasklevel .process-flow-card", style_css)
+        self.assertIn("height: auto;", style_css)
+        self.assertIn("overflow: visible;", style_css)
 
 
 if __name__ == "__main__":
