@@ -17,6 +17,7 @@ from blm_core.document import create_empty_document, migrate_document
 from blm_core.markdown import MarkdownExporter
 from blm_core.server import create_handler
 from blm_core.storage import InvalidDocumentNameError, WorkspaceStorage
+from tools.migrations.upgrade_workspace_documents import upgrade_workspace_documents
 
 
 def package_dir(workspace: Path, name: str) -> Path:
@@ -1191,6 +1192,46 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(history_document["processes"][0]["nodes"][0]["uid"], base_document["processes"][0]["nodes"][0]["uid"])
             self.assertEqual(history_document["entities"][0]["uid"], base_document["entities"][0]["uid"])
             self.assertEqual(history_document["entities"][0]["fields"][0]["uid"], base_document["entities"][0]["fields"][0]["uid"])
+
+    def test_upgrade_workspace_documents_cleans_dirty_stage_flow_history_snapshots(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Guarantee")
+            document["stages"] = [{"uid": "stage-1", "name": "申请"}]
+            document["processes"] = [
+                {"uid": "process-1", "name": "提交", "stageUid": "stage-1", "nodes": []},
+                {"uid": "process-2", "name": "复核", "stageUid": "stage-1", "nodes": []},
+            ]
+            storage._write_package_dir(workspace / "Guarantee", "Guarantee", document)
+            snapshot_dir = workspace / ".history" / "Guarantee" / "20260514-120000-000001"
+            dirty_history = deepcopy(document)
+            dirty_history["meta"]["author"] = "old"
+            dirty_history["stageFlowRefs"] = [
+                {"uid": "dirty-ref", "stageUid": "", "processUid": "", "order": 1},
+            ]
+            dirty_history["stageFlowLinks"] = [
+                {"uid": "dirty-link", "stageUid": "", "fromRefUid": "", "toRefUid": ""},
+            ]
+            snapshot_dir.mkdir(parents=True)
+            (snapshot_dir / "manifest.json").write_text(json.dumps(dirty_history, ensure_ascii=False, indent=2), "utf-8")
+            (snapshot_dir / "Guarantee.md").write_text("# Guarantee\n", "utf-8")
+
+            result = upgrade_workspace_documents(workspace, documents=["Guarantee"])
+
+            current_manifest = json.loads((workspace / "Guarantee" / "manifest.json").read_text("utf-8"))
+            history_manifest = json.loads((snapshot_dir / "manifest.json").read_text("utf-8"))
+            self.assertEqual(result["documents"][0]["dirtyStageFlowAfter"], {"stageFlowRefs": 0, "stageFlowLinks": 0})
+            self.assertEqual(result["documents"][0]["historySnapshots"][0]["dirtyStageFlowAfter"], {"stageFlowRefs": 0, "stageFlowLinks": 0})
+            self.assertEqual(
+                [(ref["stageUid"], ref["processUid"]) for ref in current_manifest["stageFlowRefs"]],
+                [("stage-1", "process-1"), ("stage-1", "process-2")],
+            )
+            self.assertEqual(
+                [(ref["stageUid"], ref["processUid"]) for ref in history_manifest["stageFlowRefs"]],
+                [("stage-1", "process-1"), ("stage-1", "process-2")],
+            )
+            self.assertEqual(history_manifest["stageFlowLinks"], [])
 
     def test_history_snapshot_keeps_attachment_metadata_without_binary_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:

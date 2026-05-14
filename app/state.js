@@ -253,6 +253,15 @@ function nextStableId(prefix, items, preferredName = '') {
 function createUiUid(prefix = 'uid') {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
+function createDeterministicUiUid(prefix = 'uid', ...parts) {
+  const text = parts.map((part) => String(part || '').trim()).join('|');
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${prefix}-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
 const UNASSIGNED_STAGE_ID = '__unassigned__';
 const UNASSIGNED_STAGE_NAME = '未设置业务阶段';
 const DEFAULT_PANORAMA_COLUMNS = [
@@ -712,11 +721,13 @@ function normalizeStageLinkEntry(link) {
 }
 function normalizeStageFlowRefEntry(ref, index = 1) {
   const normalized = ref && typeof ref === 'object' ? ref : {};
+  const stageId = String(normalized.stageId || normalized.stageUid || normalized.stage_id || '').trim();
+  const processId = String(normalized.processId || normalized.processUid || normalized.process_id || '').trim();
   return {
-    uid: String(normalized.uid || '').trim() || createUiUid('stageref'),
+    uid: String(normalized.uid || '').trim() || (stageId && processId ? createDeterministicUiUid('stage-flow-ref', stageId, processId) : createUiUid('stageref')),
     id: String(normalized.id || '').trim() || `SFR${index}`,
-    stageId: String(normalized.stageId || normalized.stageUid || normalized.stage_id || '').trim(),
-    processId: String(normalized.processId || normalized.processUid || normalized.process_id || '').trim(),
+    stageId,
+    processId,
     order: Math.max(1, Math.round(Number(normalized.order || index) || index)),
     pos: normalizeGraphOffset(normalized.pos),
   };
@@ -804,7 +815,7 @@ function getStageFlowRefs(doc = S.doc) {
     }
     usedIds.add(nextId);
     refs.push({
-      uid: createUiUid('stageref'),
+      uid: createDeterministicUiUid('stage-flow-ref', stageId, processId),
       id: nextId,
       stageId,
       processId,
@@ -1046,7 +1057,7 @@ function hydrateDocumentForUi(doc) {
     if (!Array.isArray(proc.nodes)) proc.nodes = [];
     defineUiAlias(proc, 'tasks', 'nodes');
     proc.flowGroup = String(proc.flowGroup || '');
-    proc.stageId = String(proc.stageId || '').trim();
+    proc.stageId = String(proc.stageId || proc.stageUid || '').trim();
     proc.stagePos = normalizeGraphOffset(proc.stagePos);
     getProcPrototypeFiles(proc);
     normalizeProcessFlow(proc);

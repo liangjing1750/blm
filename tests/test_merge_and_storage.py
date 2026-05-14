@@ -128,6 +128,44 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(document["stageFlowRefs"][0]["processUid"], "process-1")
         self.assertEqual(document["stageFlowLinks"], [])
 
+    def test_canonical_document_supplements_stage_flow_refs_from_process_stage_uid(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "Stage refs"},
+                "stages": [{"uid": "stage-1", "name": "申请"}],
+                "processes": [
+                    {"uid": "process-1", "name": "提交", "stageUid": "stage-1", "stagePos": {"x": 12, "y": 34}},
+                    {"uid": "process-2", "name": "复核", "stageUid": "stage-1"},
+                ],
+                "stageFlowRefs": [
+                    {"uid": "dirty-ref", "stageUid": "", "processUid": "", "order": 9},
+                ],
+            }
+        )
+
+        self.assertEqual(len(document["stageFlowRefs"]), 2)
+        self.assertEqual(
+            [(ref["stageUid"], ref["processUid"]) for ref in document["stageFlowRefs"]],
+            [("stage-1", "process-1"), ("stage-1", "process-2")],
+        )
+        self.assertEqual(document["stageFlowRefs"][0]["pos"], {"x": 12, "y": 34})
+
+    def test_canonical_document_generates_stable_stage_flow_ref_uids(self):
+        source = {
+            "meta": {"title": "Stage refs"},
+            "stages": [{"uid": "stage-1", "name": "申请"}],
+            "processes": [
+                {"uid": "process-1", "name": "提交", "stageUid": "stage-1"},
+            ],
+            "stageFlowRefs": [],
+        }
+
+        first = canonical_document(source)
+        second = canonical_document(source)
+
+        self.assertEqual(first["stageFlowRefs"], second["stageFlowRefs"])
+        self.assertTrue(first["stageFlowRefs"][0]["uid"].startswith("stage-flow-ref-"))
+
     def test_migrate_document_normalizes_node_business_rules(self):
         document = migrate_document(
             {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from copy import deepcopy
 from uuid import uuid4
@@ -67,6 +68,12 @@ def _new_uid() -> str:
     return uuid4().hex
 
 
+def _deterministic_uid(prefix: str, *parts: object) -> str:
+    payload = "|".join(str(part or "").strip() for part in parts)
+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    return f"{prefix}-{digest}"
+
+
 def _ensure_uid(item: dict) -> str:
     uid = str(item.get("uid", "")).strip()
     if not uid:
@@ -75,38 +82,9 @@ def _ensure_uid(item: dict) -> str:
     return uid
 
 
-def strip_model_ids(value):
-    if isinstance(value, list):
-        return [strip_model_ids(item) for item in value]
-    if not isinstance(value, dict):
-        return value
-    result = {}
-    for key, child in value.items():
-        if key == "id" and value.get("uid"):
-            continue
-        result[key] = strip_model_ids(child)
-    return result
-
-
-def promote_ids_to_uids(value):
-    if isinstance(value, list):
-        for item in value:
-            promote_ids_to_uids(item)
-        return value
-    if not isinstance(value, dict):
-        return value
-    if "id" in value and "uid" not in value:
-        legacy_id = str(value.get("id", "")).strip()
-        if legacy_id:
-            value["uid"] = legacy_id
-    for child in value.values():
-        promote_ids_to_uids(child)
-    return value
-
 
 def canonicalize_model_references(document: dict | None) -> dict:
     doc = deepcopy(document or {})
-    promote_ids_to_uids(doc)
 
     def uid_map(items: list[dict] | None) -> dict[str, str]:
         result: dict[str, str] = {}
@@ -114,12 +92,8 @@ def canonicalize_model_references(document: dict | None) -> dict:
             if not isinstance(item, dict):
                 continue
             uid = str(item.get("uid", "")).strip()
-            if not uid:
-                continue
-            result[uid] = uid
-            legacy_id = str(item.get("id", "")).strip()
-            if legacy_id:
-                result[legacy_id] = uid
+            if uid:
+                result[uid] = uid
         return result
 
     def mapped(value: object, mapping: dict[str, str]) -> str:
@@ -139,20 +113,6 @@ def canonicalize_model_references(document: dict | None) -> dict:
         return result
 
     panorama = doc.get("panorama") if isinstance(doc.get("panorama"), dict) else {}
-    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
-    if isinstance(meta, dict):
-        for business_domain in meta.get("businessDomains", []) if isinstance(meta.get("businessDomains"), list) else []:
-            if isinstance(business_domain, dict):
-                if not str(business_domain.get("uid", "")).strip() and str(business_domain.get("id", "")).strip():
-                    business_domain["uid"] = str(business_domain.get("id", "")).strip()
-        sub_domain_catalog = meta.get("subDomainCatalog")
-        if isinstance(sub_domain_catalog, dict):
-            for item in sub_domain_catalog.values():
-                if isinstance(item, dict) and not str(item.get("uid", "")).strip() and str(item.get("id", "")).strip():
-                    item["uid"] = str(item.get("id", "")).strip()
-        for component in meta.get("businessComponents", []) if isinstance(meta.get("businessComponents"), list) else []:
-            if isinstance(component, dict) and not str(component.get("uid", "")).strip() and str(component.get("id", "")).strip():
-                component["uid"] = str(component.get("id", "")).strip()
     if isinstance(panorama, dict):
         for axis in ("columns", "lanes", "cells"):
             for item in panorama.get(axis, []) if isinstance(panorama.get(axis), list) else []:
@@ -168,14 +128,6 @@ def canonicalize_model_references(document: dict | None) -> dict:
     construct_map = uid_map(doc.get("businessConstructs", []))
     task_definition_map = uid_map(doc.get("taskDefinitions", []))
     stage_ref_map = uid_map(doc.get("stageFlowRefs", []))
-
-    if isinstance(meta, dict):
-        for component in meta.get("businessComponents", []) if isinstance(meta.get("businessComponents"), list) else []:
-            if not isinstance(component, dict):
-                continue
-            component["entityUids"] = mapped_list(component.get("entityUids") or component.get("entityIds"), entity_map)
-            component["relatedProcessUids"] = mapped_list(component.get("relatedProcessUids") or component.get("relatedProcessIds") or component.get("processUids") or component.get("processIds"), process_map)
-            component["taskDefinitionUids"] = mapped_list(component.get("taskDefinitionUids") or component.get("taskDefinitionIds"), task_definition_map)
 
     if isinstance(panorama, dict):
         for cell in panorama.get("cells", []) if isinstance(panorama.get("cells"), list) else []:
@@ -365,7 +317,7 @@ def rename_reference_fields_to_uid(value):
 
 
 def canonical_document(document: dict | None) -> dict:
-    return rename_reference_fields_to_uid(strip_model_ids(canonicalize_model_references(migrate_document(document))))
+    return rename_reference_fields_to_uid(canonicalize_model_references(migrate_document(document)))
 
 
 def _normalize_text_list(values: list[str] | None) -> list[str]:
@@ -435,14 +387,6 @@ def _normalize_stage_links(stage_links: list[dict]) -> list[dict]:
     return normalized_links
 
 
-def _next_seq_id(prefix: str, used_ids: set[str]) -> str:
-    index = 1
-    while f"{prefix}{index}" in used_ids:
-        index += 1
-    next_id = f"{prefix}{index}"
-    used_ids.add(next_id)
-    return next_id
-
 
 def _normalize_positive_int(value, fallback: int) -> int:
     try:
@@ -454,7 +398,7 @@ def _normalize_positive_int(value, fallback: int) -> int:
 
 def _normalize_stage_flow_refs(stage_flow_refs: list[dict]) -> list[dict]:
     normalized_refs: list[dict] = []
-    used_ids: set[str] = set()
+    used_uids: set[str] = set()
     for ref_index, ref in enumerate(stage_flow_refs or [], start=1):
         if not isinstance(ref, dict):
             continue
@@ -462,15 +406,13 @@ def _normalize_stage_flow_refs(stage_flow_refs: list[dict]) -> list[dict]:
         process_id = str(ref.get("processId") or ref.get("processUid") or ref.get("process_id", "")).strip()
         if not stage_id or not process_id:
             continue
-        ref_id = str(ref.get("id", "")).strip()
-        if not ref_id or ref_id in used_ids:
-            ref_id = _next_seq_id("SFR", used_ids)
-        else:
-            used_ids.add(ref_id)
+        ref_uid = str(ref.get("uid", "")).strip() or _deterministic_uid("stage-flow-ref", stage_id, process_id)
+        if ref_uid in used_uids:
+            continue
+        used_uids.add(ref_uid)
         normalized_refs.append(
             {
-                "uid": str(ref.get("uid", "")).strip() or _new_uid(),
-                "id": ref_id,
+                "uid": ref_uid,
                 "stageId": stage_id,
                 "processId": process_id,
                 "order": _normalize_positive_int(ref.get("order"), ref_index),
@@ -482,7 +424,7 @@ def _normalize_stage_flow_refs(stage_flow_refs: list[dict]) -> list[dict]:
 
 def _normalize_stage_flow_links(stage_flow_links: list[dict]) -> list[dict]:
     normalized_links: list[dict] = []
-    used_ids: set[str] = set()
+    used_uids: set[str] = set()
     for link_index, link in enumerate(stage_flow_links or [], start=1):
         if not isinstance(link, dict):
             continue
@@ -491,15 +433,13 @@ def _normalize_stage_flow_links(stage_flow_links: list[dict]) -> list[dict]:
         to_ref_id = str(link.get("toRefId") or link.get("toRefUid") or link.get("to_ref_id", "")).strip()
         if not stage_id or not from_ref_id or not to_ref_id:
             continue
-        link_id = str(link.get("id", "")).strip()
-        if not link_id or link_id in used_ids:
-            link_id = _next_seq_id("SFL", used_ids)
-        else:
-            used_ids.add(link_id)
+        link_uid = str(link.get("uid", "")).strip() or _new_uid()
+        if link_uid in used_uids:
+            continue
+        used_uids.add(link_uid)
         normalized_links.append(
             {
-                "uid": str(link.get("uid", "")).strip() or _new_uid(),
-                "id": link_id,
+                "uid": link_uid,
                 "stageId": stage_id,
                 "fromRefId": from_ref_id,
                 "toRefId": to_ref_id,
@@ -540,7 +480,7 @@ def _supplement_stage_flow_refs_from_legacy(stage_flow_refs: list[dict], process
         for ref in stage_flow_refs
         if str(ref.get("stageId", "")).strip() and str(ref.get("processId", "")).strip()
     }
-    used_ids = {str(ref.get("id", "")).strip() for ref in stage_flow_refs if str(ref.get("id", "")).strip()}
+    used_uids = {str(ref.get("uid", "")).strip() for ref in stage_flow_refs if str(ref.get("uid", "")).strip()}
     stage_orders: dict[str, int] = {}
     for ref in stage_flow_refs:
         stage_id = str(ref.get("stageId", "")).strip()
@@ -554,19 +494,19 @@ def _supplement_stage_flow_refs_from_legacy(stage_flow_refs: list[dict], process
     supplemented = list(stage_flow_refs)
     for process in processes or []:
         stage_id = str(process.get("stageId", "")).strip()
-        process_id = str(process.get("id", "")).strip()
-        if not stage_id or not process_id:
+        process_uid = str(process.get("uid", "")).strip()
+        if not stage_id or not process_uid:
             continue
-        pair = (stage_id, process_id)
-        if pair in existing_pairs:
+        process_aliases = {process_uid}
+        if any((stage_id, process_alias) in existing_pairs for process_alias in process_aliases):
             continue
+        pair = (stage_id, process_uid)
         stage_orders[stage_id] = stage_orders.get(stage_id, 0) + 1
         supplemented.append(
             {
-                "uid": _new_uid(),
-                "id": _next_seq_id("SFR", used_ids),
+                "uid": _deterministic_uid("stage-flow-ref", stage_id, process_uid),
                 "stageId": stage_id,
-                "processId": process_id,
+                "processId": process_uid,
                 "order": stage_orders[stage_id],
                 "pos": _normalize_graph_offset(process.get("stagePos", {})),
             }
@@ -577,34 +517,32 @@ def _supplement_stage_flow_refs_from_legacy(stage_flow_refs: list[dict], process
 
 def _build_stage_flow_links_from_legacy(stages: list[dict], stage_flow_refs: list[dict]) -> list[dict]:
     refs_by_stage_process: dict[tuple[str, str], str] = {}
-    used_ids: set[str] = set()
     generated: list[dict] = []
     for ref in stage_flow_refs:
         stage_id = str(ref.get("stageId", "")).strip()
         process_id = str(ref.get("processId", "")).strip()
-        ref_id = str(ref.get("id", "")).strip()
-        if not stage_id or not process_id or not ref_id:
+        ref_uid = str(ref.get("uid", "")).strip()
+        if not stage_id or not process_id or not ref_uid:
             continue
-        refs_by_stage_process.setdefault((stage_id, process_id), ref_id)
+        refs_by_stage_process.setdefault((stage_id, process_id), ref_uid)
 
     for stage in stages or []:
-        stage_id = str(stage.get("id", "")).strip()
+        stage_id = str(stage.get("uid", "")).strip()
         if not stage_id:
             continue
         for link in stage.get("processLinks", []):
             from_process_id = str(link.get("fromProcessId", "")).strip()
             to_process_id = str(link.get("toProcessId", "")).strip()
-            from_ref_id = refs_by_stage_process.get((stage_id, from_process_id), "")
-            to_ref_id = refs_by_stage_process.get((stage_id, to_process_id), "")
-            if not from_ref_id or not to_ref_id:
+            from_ref_uid = refs_by_stage_process.get((stage_id, from_process_id), "")
+            to_ref_uid = refs_by_stage_process.get((stage_id, to_process_id), "")
+            if not from_ref_uid or not to_ref_uid:
                 continue
             generated.append(
                 {
                     "uid": _new_uid(),
-                    "id": _next_seq_id("SFL", used_ids),
                     "stageId": stage_id,
-                    "fromRefId": from_ref_id,
-                    "toRefId": to_ref_id,
+                    "fromRefId": from_ref_uid,
+                    "toRefId": to_ref_uid,
                 }
             )
     return generated
@@ -616,14 +554,14 @@ def _normalize_stages(stages: list[dict], processes: list[dict]) -> None:
         if not isinstance(stage, dict):
             continue
         _ensure_uid(stage)
-        stage.setdefault("id", f"S{stage_index}")
+        # uid already set by _ensure_uid
         stage.setdefault("name", f"{DEFAULT_STAGE_NAME}{stage_index}")
         if not stage.get("subDomain"):
             stage_process = next(
                 (
                     process
                     for process in processes
-                    if str(process.get("stageId", "")).strip() == stage.get("id", "")
+                    if str(process.get("stageId", "")).strip() == stage.get("uid", "")
                     and str(process.get("subDomain", "")).strip()
                 ),
                 None,
@@ -802,12 +740,6 @@ def infer_role_group(role_name: str, tags: list[str] | None = None) -> str:
     return "业务参与方"
 
 
-def _next_role_id(existing_roles: list[dict]) -> str:
-    used = {normalize_role_name(role.get("id", "")) for role in existing_roles if isinstance(role, dict)}
-    index = 1
-    while f"R{index}" in used:
-        index += 1
-    return f"R{index}"
 
 
 def _normalize_role(raw_role, existing_roles: list[dict]) -> dict | None:
@@ -815,12 +747,12 @@ def _normalize_role(raw_role, existing_roles: list[dict]) -> dict | None:
         role_name = normalize_role_name(raw_role.get("name", ""))
         if not role_name:
             return None
-        role_id = normalize_role_name(raw_role.get("id", "")) or _next_role_id(existing_roles)
-        if any(existing.get("id") == role_id for existing in existing_roles):
-            role_id = _next_role_id(existing_roles)
+        role_uid = str(raw_role.get("uid", "")).strip() or _deterministic_uid("role", role_name)
+        # ensure uid uniqueness within existing roles
+        if any(existing.get("uid") == role_uid for existing in existing_roles):
+            role_uid = _deterministic_uid("role", role_name, str(len(existing_roles)))
         role = {
-            "uid": str(raw_role.get("uid", "")).strip() or _new_uid(),
-            "id": role_id,
+            "uid": role_uid,
             "name": role_name,
             "desc": normalize_role_name(raw_role.get("desc", "")),
             "group": normalize_role_name(raw_role.get("group", "")) or infer_role_group(
@@ -834,8 +766,7 @@ def _normalize_role(raw_role, existing_roles: list[dict]) -> dict | None:
     if not role_name:
         return None
     return {
-        "uid": _new_uid(),
-        "id": _next_role_id(existing_roles),
+        "uid": _deterministic_uid("role", role_name),
         "name": role_name,
         "desc": "",
         "group": infer_role_group(role_name, []),
@@ -854,17 +785,17 @@ def _merge_role(target: dict, source: dict) -> dict:
 
 def _ensure_role(
     roles: list[dict],
-    roles_by_id: dict[str, dict],
+    roles_by_uid: dict[str, dict],
     roles_by_name: dict[str, dict],
     *,
-    role_id: str = "",
+    role_uid: str = "",
     role_name: str = "",
 ) -> dict | None:
-    normalized_id = normalize_role_name(role_id)
+    normalized_uid = str(role_uid or "").strip()
     normalized_name = normalize_role_name(role_name)
 
-    if normalized_id and normalized_id in roles_by_id:
-        role = roles_by_id[normalized_id]
+    if normalized_uid and normalized_uid in roles_by_uid:
+        role = roles_by_uid[normalized_uid]
         if normalized_name and role["name"] != normalized_name:
             roles_by_name.pop(role["name"], None)
             role["name"] = normalized_name
@@ -873,18 +804,18 @@ def _ensure_role(
 
     if normalized_name and normalized_name in roles_by_name:
         role = roles_by_name[normalized_name]
-        if normalized_id:
-            roles_by_id[normalized_id] = role
+        if normalized_uid:
+            roles_by_uid[normalized_uid] = role
         return role
 
     if not normalized_name:
         return None
 
-    role = _normalize_role({"id": normalized_id, "name": normalized_name}, roles)
+    role = _normalize_role({"uid": normalized_uid, "name": normalized_name}, roles)
     if not role:
         return None
     roles.append(role)
-    roles_by_id[role["id"]] = role
+    roles_by_uid[role["uid"]] = role
     roles_by_name[role["name"]] = role
     return role
 
@@ -1012,7 +943,7 @@ def _normalize_node_business_rules(node: dict) -> None:
     for index, raw_rule in enumerate(raw_rules, start=1):
         rule = raw_rule if isinstance(raw_rule, dict) else {"content": str(raw_rule or "").strip()}
         _ensure_uid(rule)
-        rule["id"] = str(rule.get("id", "")).strip() or f"BR{index}"
+        # uid already set
         rule["name"] = str(rule.get("name", rule.get("title", f"规则{index}")) or "").strip()
         rule["content"] = str(
             rule.get("content", rule.get("description", rule.get("note", ""))) or ""
@@ -1037,7 +968,7 @@ def _normalize_node_business_rules(node: dict) -> None:
 def _normalize_entities(entities: list[dict]) -> None:
     for entity_index, entity in enumerate(entities, start=1):
         _ensure_uid(entity)
-        entity.setdefault("id", f"E{entity_index}")
+        # uid already set by _ensure_uid
         entity.setdefault("name", "")
         entity.setdefault("group", "")
         entity.setdefault("note", "")
@@ -1109,7 +1040,7 @@ def _normalize_node_forms(node: dict) -> None:
             continue
         form = raw_form
         _ensure_uid(form)
-        form["id"] = str(form.get("id") or f"F{form_index}").strip()
+        # uid already set by _ensure_uid
         form["name"] = str(form.get("name", "")).strip()
         form["purpose"] = str(form.get("purpose", "")).strip()
         legacy_entity_id = str(form.get("entity_id") or form.get("entityId") or "").strip()
@@ -1125,7 +1056,7 @@ def _normalize_node_forms(node: dict) -> None:
                 continue
             section = raw_section
             _ensure_uid(section)
-            section["id"] = str(section.get("id") or f"SEC{section_index}").strip()
+            # uid already set by _ensure_uid
             section["name"] = str(section.get("name", "")).strip()
             section["note"] = str(section.get("note", "")).strip()
             section["entity_id"] = str(
@@ -1140,7 +1071,7 @@ def _normalize_node_forms(node: dict) -> None:
                     continue
                 field = raw_field
                 _ensure_uid(field)
-                field["id"] = str(field.get("id") or f"FLD{field_index}").strip()
+                # uid already set by _ensure_uid
                 field["name"] = str(field.get("name", "")).strip()
                 field["type"] = str(field.get("type", "Text") or "Text").strip()
                 field["required"] = bool(field.get("required"))
@@ -1155,19 +1086,18 @@ def _normalize_node_forms(node: dict) -> None:
 
 
 def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
-    roles_by_id = {role["id"]: role for role in roles}
+    roles_by_uid = {role["uid"]: role for role in roles}
     roles_by_name = {role["name"]: role for role in roles}
 
     for process_index, process in enumerate(processes, start=1):
         _ensure_uid(process)
         _pop_legacy_business_component_fields(process)
-        process.setdefault("id", f"P{process_index}")
         process.setdefault("name", DEFAULT_PROCESS_NAME if process_index == 1 else f"\u6d41\u7a0b{process_index}")
         process.setdefault("trigger", "")
         process.setdefault("outcome", "")
         process.setdefault("subDomain", "")
         process.setdefault("flowGroup", "")
-        process["stageId"] = str(process.get("stageId", process.pop("stage_id", "")) or "").strip()
+        process["stageId"] = str(process.get("stageId") or process.get("stageUid") or process.pop("stage_id", "") or "").strip()
         process["stagePos"] = _normalize_graph_offset(process.get("stagePos", process.pop("stage_pos", {})))
         normalized_prototypes = []
         prototype_sources = process.get("prototypeFiles", [])
@@ -1200,32 +1130,31 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
         for node_index, node in enumerate(process["nodes"], start=1):
             _ensure_uid(node)
             _pop_legacy_business_component_fields(node)
-            node.setdefault("id", f"T{node_index}")
             node.setdefault("name", "")
             node_roles: list[dict] = []
-            seen_role_ids: set[str] = set()
+            seen_role_uids: set[str] = set()
 
             def push_node_role(role: dict | None) -> None:
-                if not role or role["id"] in seen_role_ids:
+                if not role or role["uid"] in seen_role_uids:
                     return
-                seen_role_ids.add(role["id"])
+                seen_role_uids.add(role["uid"])
                 node_roles.append(role)
 
-            raw_role_ids = []
+            raw_role_uids = []
+            if node.get("role_uid"):
+                raw_role_uids.append(node.get("role_uid", ""))
+            if isinstance(node.get("role_uids"), list):
+                raw_role_uids.extend(node.get("role_uids", []))
             if isinstance(node.get("role_ids"), list):
-                raw_role_ids.extend(node.get("role_ids", []))
-            else:
-                raw_role_ids.extend(_parse_role_tokens(node.get("role_ids", "")))
-            if node.get("role_id"):
-                raw_role_ids.append(node.get("role_id", ""))
+                raw_role_uids.extend(node.get("role_ids", []))
 
-            for raw_role_id in raw_role_ids:
+            for raw_role_uid in raw_role_uids:
                 push_node_role(
                     _ensure_role(
                         roles,
-                        roles_by_id,
+                        roles_by_uid,
                         roles_by_name,
-                        role_id=raw_role_id,
+                        role_uid=raw_role_uid,
                     )
                 )
 
@@ -1240,7 +1169,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                 push_node_role(
                     _ensure_role(
                         roles,
-                        roles_by_id,
+                        roles_by_uid,
                         roles_by_name,
                         role_name=raw_role_name,
                     )
@@ -1251,9 +1180,9 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                 if process_sub_domain and process_sub_domain not in node_role["subDomains"]:
                     node_role["subDomains"].append(process_sub_domain)
 
-            node["role_ids"] = [role["id"] for role in node_roles]
+            node["role_uids"] = [role["uid"] for role in node_roles]
             node["roles"] = [role["name"] for role in node_roles]
-            node["role_id"] = node["role_ids"][0] if node["role_ids"] else ""
+            node["role_uid"] = node["role_uids"][0] if node["role_uids"] else ""
             node["role"] = "、".join(node["roles"])
             node.setdefault("repeatable", False)
             legacy_steps = node.pop("steps", None)
@@ -1297,21 +1226,20 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
         raw_flow = process.get("flow")
         if not isinstance(raw_flow, dict):
             raw_flow = {}
-        task_ids = {str(node.get("id", "")).strip() for node in process["nodes"] if str(node.get("id", "")).strip()}
+        task_uids = {str(node.get("uid", "")).strip() for node in process["nodes"] if str(node.get("uid", "")).strip()}
         flow_nodes = []
-        flow_node_ids = set()
+        flow_node_uids = set()
         for flow_node_index, flow_node in enumerate(raw_flow.get("nodes", []), start=1):
             if not isinstance(flow_node, dict):
                 continue
             if str(flow_node.get("kind", "")).strip() != "gateway":
                 continue
-            node_id = str(flow_node.get("id", "")).strip() or f"G{flow_node_index}"
-            if not node_id or node_id in flow_node_ids or node_id in task_ids:
+            _ensure_uid(flow_node)
+            node_uid = str(flow_node.get("uid", "")).strip()
+            if not node_uid or node_uid in flow_node_uids or node_uid in task_uids:
                 continue
-            flow_node_ids.add(node_id)
+            flow_node_uids.add(node_uid)
             normalized_flow_node = dict(flow_node)
-            _ensure_uid(normalized_flow_node)
-            normalized_flow_node["id"] = node_id
             normalized_flow_node["kind"] = "gateway"
             normalized_flow_node["title"] = str(
                 flow_node.get("title") or flow_node.get("name") or ""
@@ -1319,12 +1247,12 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
             normalized_flow_node["gatewayType"] = str(
                 flow_node.get("gatewayType") or "exclusive"
             ).strip() or "exclusive"
-            normalized_flow_node["role_id"] = str(
-                flow_node.get("role_id") or flow_node.get("roleId") or ""
+            normalized_flow_node["role_uid"] = str(
+                flow_node.get("role_uid") or flow_node.get("role_id") or flow_node.get("roleId") or ""
             ).strip()
             flow_nodes.append(normalized_flow_node)
 
-        valid_flow_node_ids = task_ids | flow_node_ids
+        valid_flow_node_uids = task_uids | flow_node_uids
 
         def normalize_process_flow_endpoint(value: object, side: str) -> str:
             endpoint = str(value or "").strip()
@@ -1345,8 +1273,8 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
             if (
                 target == "START"
                 or source == "END"
-                or (source and source != "START" and source not in valid_flow_node_ids)
-                or (target and target != "END" and target not in valid_flow_node_ids)
+                or (source and source != "START" and source not in valid_flow_node_uids)
+                or (target and target != "END" and target not in valid_flow_node_uids)
             ):
                 continue
             edge_key = (source, target)
@@ -1356,7 +1284,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                 seen_flow_edges.add(edge_key)
             normalized_edge = dict(edge)
             _ensure_uid(normalized_edge)
-            normalized_edge["id"] = str(edge.get("id") or f"E{edge_index}").strip()
+            # uid already set by _ensure_uid at caller or from input
             normalized_edge["from"] = source
             normalized_edge["to"] = target
             normalized_edge["label"] = str(edge.get("label") or edge.get("name") or "").strip()
@@ -1452,7 +1380,7 @@ def migrate_document(document: dict | None) -> dict:
     doc.setdefault("taskDefinitions", [])
 
     normalized_roles: list[dict] = []
-    roles_by_id: dict[str, dict] = {}
+    roles_by_uid: dict[str, dict] = {}
     roles_by_name: dict[str, dict] = {}
     for raw_role in doc["roles"]:
         role = _normalize_role(raw_role, normalized_roles)
@@ -1463,7 +1391,7 @@ def migrate_document(document: dict | None) -> dict:
             _merge_role(existing_role, role)
             continue
         normalized_roles.append(role)
-        roles_by_id[role["id"]] = role
+        roles_by_uid[role["uid"]] = role
         roles_by_name[role["name"]] = role
     doc["roles"] = normalized_roles
 

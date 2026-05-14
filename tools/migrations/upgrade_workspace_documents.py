@@ -65,11 +65,80 @@ def remove_children(path: Path) -> int:
     return count
 
 
+def load_manifest(package_dir: Path) -> dict:
+    manifest_path = package_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text("utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def count_dirty_stage_flow_entries(document: dict) -> dict[str, int]:
+    dirty_refs = 0
+    for ref in document.get("stageFlowRefs", []) if isinstance(document.get("stageFlowRefs"), list) else []:
+        if not isinstance(ref, dict):
+            continue
+        if not str(ref.get("stageUid") or ref.get("stageId") or "").strip():
+            dirty_refs += 1
+            continue
+        if not str(ref.get("processUid") or ref.get("processId") or "").strip():
+            dirty_refs += 1
+    dirty_links = 0
+    for link in document.get("stageFlowLinks", []) if isinstance(document.get("stageFlowLinks"), list) else []:
+        if not isinstance(link, dict):
+            continue
+        if not str(link.get("stageUid") or link.get("stageId") or "").strip():
+            dirty_links += 1
+            continue
+        if not str(link.get("fromRefUid") or link.get("fromRefId") or "").strip():
+            dirty_links += 1
+            continue
+        if not str(link.get("toRefUid") or link.get("toRefId") or "").strip():
+            dirty_links += 1
+    return {"stageFlowRefs": dirty_refs, "stageFlowLinks": dirty_links}
+
+
+def upgrade_package_dir(storage: WorkspaceStorage, package_dir: Path, document_name: str, *, dry_run: bool) -> dict:
+    raw_before = load_manifest(package_dir)
+    document = storage._load_package_dir(package_dir)
+    issues_before = validate_document(document)
+    legacy_before = find_legacy_model_fields(document)
+    dirty_before = count_dirty_stage_flow_entries(raw_before)
+    if dry_run:
+        saved = document
+    else:
+        saved = storage._write_package_dir(package_dir, document_name, document, source_package_dir=package_dir)
+    raw_after = load_manifest(package_dir) if package_dir.is_dir() else saved
+    issues_after = validate_document(saved)
+    legacy_after = find_legacy_model_fields(raw_after)
+    dirty_after = count_dirty_stage_flow_entries(raw_after)
+    return {
+        "validationIssuesBefore": len(issues_before),
+        "validationIssuesAfter": len(issues_after),
+        "legacyFieldCountBefore": len(legacy_before),
+        "legacyFieldCountAfter": len(legacy_after),
+        "legacyFieldSamplesAfter": legacy_after[:10],
+        "dirtyStageFlowBefore": dirty_before,
+        "dirtyStageFlowAfter": dirty_after,
+    }
+
+
+def history_snapshot_dirs(workspace: Path, document_name: str) -> list[Path]:
+    history_root = workspace / ".history" / document_name
+    if not history_root.is_dir():
+        return []
+    return sorted(path for path in history_root.iterdir() if path.is_dir() and (path / "manifest.json").is_file())
+
+
 def upgrade_workspace_documents(
     workspace: Path,
     *,
     dry_run: bool = False,
     clear_history_trash: bool = False,
+    include_history: bool = True,
     documents: list[str] | None = None,
 ) -> dict:
     storage = WorkspaceStorage(workspace)
@@ -78,36 +147,37 @@ def upgrade_workspace_documents(
     results = []
 
     for name in names:
-        document = storage.load(name)
-        issues_before = validate_document(document)
-        legacy_before = find_legacy_model_fields(document)
+        package_dir = workspace / name
         if not dry_run:
             copy_workspace_entry(workspace, name, backup_root)
-            saved = storage.save(name, document)
-            issues_after = validate_document(saved)
-            manifest_path = workspace / name / "manifest.json"
-            saved_manifest = json.loads(manifest_path.read_text("utf-8")) if manifest_path.is_file() else saved
-            legacy_after = find_legacy_model_fields(saved_manifest)
-        else:
-            issues_after = issues_before
-            legacy_after = legacy_before
+            history_root = workspace / ".history" / name
+            if include_history and history_root.is_dir():
+                shutil.copytree(history_root, backup_root / ".history" / name, dirs_exist_ok=True)
+        document_result = upgrade_package_dir(storage, package_dir, name, dry_run=dry_run)
+        history_results = []
+        if include_history:
+            for snapshot_dir in history_snapshot_dirs(workspace, name):
+                history_results.append(
+                    {
+                        "id": snapshot_dir.name,
+                        **upgrade_package_dir(storage, snapshot_dir, name, dry_run=dry_run),
+                    }
+                )
+        saved_manifest = load_manifest(package_dir)
         results.append(
             {
                 "name": name,
                 "dry_run": dry_run,
                 "counts": {
-                    "stages": len(document.get("stages", [])),
-                    "processes": len(document.get("processes", [])),
-                    "entities": len(document.get("entities", [])),
-                    "businessComponents": len(document.get("businessComponents", [])),
-                    "businessConstructs": len(document.get("businessConstructs", [])),
-                    "taskDefinitions": len(document.get("taskDefinitions", [])),
+                    "stages": len(saved_manifest.get("stages", [])),
+                    "processes": len(saved_manifest.get("processes", [])),
+                    "entities": len(saved_manifest.get("entities", [])),
+                    "businessComponents": len(saved_manifest.get("businessComponents", [])),
+                    "businessConstructs": len(saved_manifest.get("businessConstructs", [])),
+                    "taskDefinitions": len(saved_manifest.get("taskDefinitions", [])),
                 },
-                "validationIssuesBefore": len(issues_before),
-                "validationIssuesAfter": len(issues_after),
-                "legacyFieldCountBefore": len(legacy_before),
-                "legacyFieldCountAfter": len(legacy_after),
-                "legacyFieldSamplesAfter": legacy_after[:10],
+                **document_result,
+                "historySnapshots": history_results,
             }
         )
 
@@ -130,6 +200,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workspace", default="workspace", help="Workspace directory. Default: workspace")
     parser.add_argument("--dry-run", action="store_true", help="Load and validate without writing files.")
     parser.add_argument("--clear-history-trash", action="store_true", help="Clear .history and .trash after successful upgrade.")
+    parser.add_argument("--skip-history", action="store_true", help="Only upgrade current workspace documents, not .history snapshots.")
     parser.add_argument("--document", action="append", dest="documents", help="Document name to upgrade. Repeatable.")
     return parser.parse_args()
 
@@ -140,6 +211,7 @@ def main() -> None:
         Path(args.workspace).resolve(),
         dry_run=args.dry_run,
         clear_history_trash=args.clear_history_trash,
+        include_history=not args.skip_history,
         documents=args.documents,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
