@@ -8,7 +8,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
-from blm_core.document import migrate_document
+from blm_core.document import canonical_document, migrate_document
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.storage import (
     InvalidDocumentNameError,
@@ -74,6 +74,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                         "supports_workspace": True,
                         "supports_merge": True,
                         "supports_docs": True,
+                        "supports_copy": True,
                     }
                 )
             if path == "/api/files":
@@ -108,6 +109,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._handle_attachment_upload(body)
             if path == "/api/rename":
                 return self._handle_rename(body)
+            if path == "/api/copy":
+                return self._handle_copy(body)
             if path == "/api/new":
                 return self._handle_new(body)
             if path.startswith("/api/delete/"):
@@ -256,6 +259,24 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
             except FileExistsError:
                 return self._json({"error": "已存在同名文档"}, 400)
 
+        def _handle_copy(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            try:
+                target_name = str(payload.get("target_name", "")).strip()
+                copied_document = storage.copy_document(
+                    str(payload.get("source_name", "")).strip(),
+                    target_name,
+                )
+                return self._json({"ok": True, "document": copied_document, "name": target_name})
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileExistsError:
+                return self._json({"error": "document already exists"}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+
         def _handle_new(self, body: bytes):
             payload = self._decode_json(body)
             if isinstance(payload, tuple):
@@ -340,13 +361,13 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
             if isinstance(payload, tuple):
                 return self._json(payload[0], payload[1])
             document = payload.get("document", {})
-            return self._json({"ok": True, "document": migrate_document(document)})
+            return self._json({"ok": True, "document": canonical_document(document)})
 
         def _handle_document_validate(self, body: bytes):
             payload = self._decode_json(body)
             if isinstance(payload, tuple):
                 return self._json(payload[0], payload[1])
-            document = migrate_document(payload.get("document", {}))
+            document = canonical_document(payload.get("document", {}))
             return self._json(
                 {
                     "ok": True,

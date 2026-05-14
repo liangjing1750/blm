@@ -112,6 +112,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("async loadHistory(name, snapshotId)", api_js)
         self.assertNotIn("paths:", state_js)
         self.assertIn("supportsDocs", state_js)
+        self.assertIn("supportsCopy", state_js)
         self.assertIn("flowGroup", state_js)
         self.assertIn("orchestrationTasks", state_js)
         self.assertIn("getNodeForms", state_js)
@@ -121,6 +122,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("const MANUAL_RUNTIME_ERROR", manual_js)
         self.assertIn("MANUAL_DOC_ID = 'user-manual'", manual_js)
         self.assertIn("supports_docs", manual_js)
+        self.assertIn("supports_copy", app_js)
         self.assertIn("manual-reader-head", manual_js)
         self.assertIn("toggleManualOutlineGroup", manual_js)
         self.assertIn("getActiveManualDoc", manual_js)
@@ -192,6 +194,27 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn(".flow-node-role-menu", style_css)
         self.assertNotIn('class="flow-node-role-select" multiple', process_js)
         self.assertNotIn('multiple size="1"', process_js)
+
+    def test_frontend_normalizers_preserve_existing_uids(self):
+        state_js = (APP_DIR / "state.js").read_text("utf-8")
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        app_js = (APP_DIR / "app.js").read_text("utf-8")
+        api_js = (APP_DIR / "api.js").read_text("utf-8")
+
+        self.assertIn("uid: String(source.uid || '').trim() || id", state_js)
+        self.assertIn("const uid = String(normalized.uid || '').trim();", state_js)
+        self.assertIn("...(uid ? { uid } : {})", state_js)
+        self.assertIn("const uid = createUiUid('rule');", process_js)
+        self.assertIn("const rule = { uid, id: uid, name, content: '' };", process_js)
+        self.assertIn("uid: String(transition?.uid || '').trim() || createUiUid('transition')", state_js)
+        self.assertIn("async copyDocument(sourceName, targetName)", api_js)
+        self.assertIn("return postJson('/api/copy'", api_js)
+        self.assertIn("copyWorkspaceDocument(S.currentFile, name)", app_js)
+        self.assertIn("当前运行的本地服务不支持复制接口", app_js)
+        self.assertIn("'meta.revision'", app_js)
+        self.assertIn("'versionUid'", app_js)
+        self.assertIn("function isImplicitDefaultCompareValue(path, value)", app_js)
+        self.assertIn("isImplicitDefaultCompareValue(path, rightMap[path])", app_js)
 
 
 if __name__ == "__main__":

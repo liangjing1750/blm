@@ -4,7 +4,7 @@ import re
 from copy import deepcopy
 from uuid import uuid4
 
-from blm_core.model_strategy import ID_PREFIXES, LEGACY_COLLECTION_RENAMES, LEGACY_FIELD_RENAMES
+from blm_core.model_strategy import LEGACY_COLLECTION_RENAMES, LEGACY_FIELD_RENAMES
 
 
 DEFAULT_PROCESS_NAME = "主流程"
@@ -73,6 +73,245 @@ def _ensure_uid(item: dict) -> str:
         uid = _new_uid()
         item["uid"] = uid
     return uid
+
+
+def strip_model_ids(value):
+    if isinstance(value, list):
+        return [strip_model_ids(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    for key, child in value.items():
+        if key == "id" and value.get("uid"):
+            continue
+        result[key] = strip_model_ids(child)
+    return result
+
+
+def canonicalize_model_references(document: dict | None) -> dict:
+    doc = deepcopy(document or {})
+
+    def uid_map(items: list[dict] | None) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            uid = str(item.get("uid", "")).strip()
+            if not uid:
+                continue
+            result[uid] = uid
+            legacy_id = str(item.get("id", "")).strip()
+            if legacy_id:
+                result[legacy_id] = uid
+        return result
+
+    def mapped(value: object, mapping: dict[str, str]) -> str:
+        text = str(value or "").strip()
+        return mapping.get(text, text)
+
+    def mapped_list(values: object, mapping: dict[str, str]) -> list[str]:
+        if not isinstance(values, list):
+            return []
+        result: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            normalized = mapped(value, mapping)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(normalized)
+        return result
+
+    panorama = doc.get("panorama") if isinstance(doc.get("panorama"), dict) else {}
+    if isinstance(panorama, dict):
+        for axis in ("columns", "lanes", "cells"):
+            for item in panorama.get(axis, []) if isinstance(panorama.get(axis), list) else []:
+                if isinstance(item, dict):
+                    _ensure_uid(item)
+    column_map = uid_map(panorama.get("columns", []) if isinstance(panorama, dict) else [])
+    lane_map = uid_map(panorama.get("lanes", []) if isinstance(panorama, dict) else [])
+    role_map = uid_map(doc.get("roles", []))
+    stage_map = uid_map(doc.get("stages", []))
+    process_map = uid_map(doc.get("processes", []))
+    entity_map = uid_map(doc.get("entities", []))
+    component_map = uid_map(doc.get("businessComponents", []))
+    construct_map = uid_map(doc.get("businessConstructs", []))
+    task_definition_map = uid_map(doc.get("taskDefinitions", []))
+    stage_ref_map = uid_map(doc.get("stageFlowRefs", []))
+
+    if isinstance(panorama, dict):
+        for cell in panorama.get("cells", []) if isinstance(panorama.get("cells"), list) else []:
+            if not isinstance(cell, dict):
+                continue
+            cell["columnId"] = mapped(cell.get("columnUid") or cell.get("columnId"), column_map)
+            cell["laneId"] = mapped(cell.get("laneUid") or cell.get("laneId"), lane_map)
+
+    for stage in doc.get("stages", []):
+        if not isinstance(stage, dict):
+            continue
+        stage["panoramaColumnId"] = mapped(stage.get("panoramaColumnUid") or stage.get("panoramaColumnId"), column_map)
+        stage["panoramaLaneId"] = mapped(stage.get("panoramaLaneUid") or stage.get("panoramaLaneId"), lane_map)
+        for link in stage.get("processLinks", []) if isinstance(stage.get("processLinks"), list) else []:
+            if not isinstance(link, dict):
+                continue
+            link["fromProcessId"] = mapped(link.get("fromProcessUid") or link.get("fromProcessId"), process_map)
+            link["toProcessId"] = mapped(link.get("toProcessUid") or link.get("toProcessId"), process_map)
+
+    for link in doc.get("stageLinks", []):
+        if not isinstance(link, dict):
+            continue
+        link["fromStageId"] = mapped(link.get("fromStageUid") or link.get("fromStageId"), stage_map)
+        link["toStageId"] = mapped(link.get("toStageUid") or link.get("toStageId"), stage_map)
+
+    for ref in doc.get("stageFlowRefs", []):
+        if not isinstance(ref, dict):
+            continue
+        ref["stageId"] = mapped(ref.get("stageUid") or ref.get("stageId"), stage_map)
+        ref["processId"] = mapped(ref.get("processUid") or ref.get("processId"), process_map)
+
+    for link in doc.get("stageFlowLinks", []):
+        if not isinstance(link, dict):
+            continue
+        link["stageId"] = mapped(link.get("stageUid") or link.get("stageId"), stage_map)
+        link["fromRefId"] = mapped(link.get("fromRefUid") or link.get("fromRefId"), stage_ref_map)
+        link["toRefId"] = mapped(link.get("toRefUid") or link.get("toRefId"), stage_ref_map)
+
+    for process in doc.get("processes", []):
+        if not isinstance(process, dict):
+            continue
+        process["stageId"] = mapped(process.get("stageUid") or process.get("stageId"), stage_map)
+        process["businessComponentIds"] = mapped_list(process.get("businessComponentUids") or process.get("businessComponentIds"), component_map)
+        process["businessConstructIds"] = mapped_list(process.get("businessConstructUids") or process.get("businessConstructIds"), construct_map)
+        process["businessComponentId"] = mapped(process.get("businessComponentUid") or process.get("businessComponentId"), component_map)
+        process["businessConstructId"] = mapped(process.get("businessConstructUid") or process.get("businessConstructId"), construct_map)
+
+        node_map = uid_map(process.get("nodes", []))
+        flow = process.get("flow") if isinstance(process.get("flow"), dict) else {}
+        gateway_map = uid_map(flow.get("nodes", []) if isinstance(flow.get("nodes"), list) else [])
+        flow_node_map = {**node_map, **gateway_map}
+        for gateway in flow.get("nodes", []) if isinstance(flow.get("nodes"), list) else []:
+            if isinstance(gateway, dict):
+                gateway["role_id"] = mapped(gateway.get("role_uid") or gateway.get("role_id"), role_map)
+        for edge in flow.get("edges", []) if isinstance(flow.get("edges"), list) else []:
+            if not isinstance(edge, dict):
+                continue
+            if edge.get("from") not in {"START", "END"}:
+                edge["from"] = mapped(edge.get("from"), flow_node_map)
+            if edge.get("to") not in {"START", "END"}:
+                edge["to"] = mapped(edge.get("to"), flow_node_map)
+
+        for node in process.get("nodes", []) if isinstance(process.get("nodes"), list) else []:
+            if not isinstance(node, dict):
+                continue
+            node["role_id"] = mapped(node.get("role_uid") or node.get("role_id"), role_map)
+            node["role_ids"] = mapped_list(node.get("role_uids") or node.get("role_ids"), role_map)
+            node["taskDefinitionId"] = mapped(node.get("taskDefinitionUid") or node.get("taskDefinitionId"), task_definition_map)
+            node["businessComponentId"] = mapped(node.get("businessComponentUid") or node.get("businessComponentId"), component_map)
+            node["constructId"] = mapped(node.get("constructUid") or node.get("constructId"), construct_map)
+            node["businessConstructId"] = mapped(node.get("businessConstructUid") or node.get("businessConstructId"), construct_map)
+            for entity_op in node.get("entity_ops", []) if isinstance(node.get("entity_ops"), list) else []:
+                if isinstance(entity_op, dict):
+                    entity_op["entity_id"] = mapped(entity_op.get("entity_uid") or entity_op.get("entity_id"), entity_map)
+            for task in node.get("orchestrationTasks", []) if isinstance(node.get("orchestrationTasks"), list) else []:
+                if not isinstance(task, dict):
+                    continue
+                task["taskDefinitionId"] = mapped(task.get("taskDefinitionUid") or task.get("taskDefinitionId"), task_definition_map)
+                task["businessComponentId"] = mapped(task.get("businessComponentUid") or task.get("businessComponentId"), component_map)
+                task["constructId"] = mapped(task.get("constructUid") or task.get("constructId"), construct_map)
+                task["businessConstructId"] = mapped(task.get("businessConstructUid") or task.get("businessConstructId"), construct_map)
+            for form in node.get("forms", []) if isinstance(node.get("forms"), list) else []:
+                if not isinstance(form, dict):
+                    continue
+                form["entity_id"] = mapped(form.get("entity_uid") or form.get("entity_id"), entity_map)
+                for section in form.get("sections", []) if isinstance(form.get("sections"), list) else []:
+                    if isinstance(section, dict):
+                        section["entity_id"] = mapped(section.get("entity_uid") or section.get("entity_id"), entity_map)
+
+    for relation in doc.get("relations", []):
+        if not isinstance(relation, dict):
+            continue
+        relation["from"] = mapped(relation.get("from"), entity_map)
+        relation["to"] = mapped(relation.get("to"), entity_map)
+
+    for component in doc.get("businessComponents", []):
+        if not isinstance(component, dict):
+            continue
+        component["constructIds"] = mapped_list(component.get("constructUids") or component.get("constructIds"), construct_map)
+        component["taskDefinitionIds"] = mapped_list(component.get("taskDefinitionUids") or component.get("taskDefinitionIds"), task_definition_map)
+        component["entityIds"] = mapped_list(component.get("entityUids") or component.get("entityIds"), entity_map)
+        component["relatedProcessIds"] = mapped_list(component.get("relatedProcessUids") or component.get("relatedProcessIds"), process_map)
+
+    for construct in doc.get("businessConstructs", []):
+        if not isinstance(construct, dict):
+            continue
+        construct["businessComponentId"] = mapped(construct.get("businessComponentUid") or construct.get("businessComponentId"), component_map)
+        construct["taskDefinitionIds"] = mapped_list(construct.get("taskDefinitionUids") or construct.get("taskDefinitionIds"), task_definition_map)
+        construct["entityIds"] = mapped_list(construct.get("entityUids") or construct.get("entityIds"), entity_map)
+        construct["relatedProcessIds"] = mapped_list(construct.get("relatedProcessUids") or construct.get("relatedProcessIds"), process_map)
+
+    for task_definition in doc.get("taskDefinitions", []):
+        if not isinstance(task_definition, dict):
+            continue
+        task_definition["businessComponentId"] = mapped(task_definition.get("businessComponentUid") or task_definition.get("businessComponentId"), component_map)
+        task_definition["constructId"] = mapped(task_definition.get("constructUid") or task_definition.get("constructId"), construct_map)
+        task_definition["entityIds"] = mapped_list(task_definition.get("entityUids") or task_definition.get("entityIds"), entity_map)
+        task_definition["processIds"] = mapped_list(task_definition.get("processUids") or task_definition.get("processIds"), process_map)
+
+    valid_rule_targets = {}
+    for collection in ("roles", "stages", "processes", "entities", "businessComponents", "businessConstructs", "taskDefinitions", "rules"):
+        valid_rule_targets.update(uid_map(doc.get(collection, [])))
+    for process in doc.get("processes", []):
+        valid_rule_targets.update(uid_map(process.get("nodes", []) if isinstance(process, dict) else []))
+    for rule in doc.get("rules", []):
+        if isinstance(rule, dict):
+            rule["applies_to"] = mapped(rule.get("appliesToUid") or rule.get("applies_to"), valid_rule_targets)
+
+    return doc
+
+
+def rename_reference_fields_to_uid(value):
+    if isinstance(value, list):
+        return [rename_reference_fields_to_uid(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    field_renames = {
+        "columnId": "columnUid",
+        "laneId": "laneUid",
+        "panoramaColumnId": "panoramaColumnUid",
+        "panoramaLaneId": "panoramaLaneUid",
+        "fromProcessId": "fromProcessUid",
+        "toProcessId": "toProcessUid",
+        "fromStageId": "fromStageUid",
+        "toStageId": "toStageUid",
+        "stageId": "stageUid",
+        "processId": "processUid",
+        "fromRefId": "fromRefUid",
+        "toRefId": "toRefUid",
+        "businessComponentId": "businessComponentUid",
+        "businessComponentIds": "businessComponentUids",
+        "businessConstructId": "businessConstructUid",
+        "businessConstructIds": "businessConstructUids",
+        "relatedProcessIds": "relatedProcessUids",
+        "processIds": "processUids",
+        "constructId": "constructUid",
+        "constructIds": "constructUids",
+        "taskDefinitionId": "taskDefinitionUid",
+        "taskDefinitionIds": "taskDefinitionUids",
+        "entityId": "entityUid",
+        "entityIds": "entityUids",
+        "entity_id": "entity_uid",
+        "role_id": "role_uid",
+        "role_ids": "role_uids",
+        "applies_to": "appliesToUid",
+    }
+    result = {}
+    for key, child in value.items():
+        next_key = field_renames.get(key, key)
+        result[next_key] = rename_reference_fields_to_uid(child)
+    return result
+
+
+def canonical_document(document: dict | None) -> dict:
+    return rename_reference_fields_to_uid(strip_model_ids(canonicalize_model_references(migrate_document(document))))
 
 
 def _normalize_text_list(values: list[str] | None) -> list[str]:
@@ -1184,8 +1423,7 @@ def migrate_document(document: dict | None) -> dict:
         if not isinstance(component, dict):
             continue
         _ensure_uid(component)
-        component["id"] = str(component.get("id") or f"{ID_PREFIXES['business_component']}{component_index}").strip()
-        component["name"] = str(component.get("name") or component["id"]).strip()
+        component["name"] = str(component.get("name") or f"业务组件{component_index}").strip()
         component["kind"] = str(component.get("kind", "")).strip()
         component["note"] = str(component.get("note", "")).strip()
         for field in ("constructIds", "taskDefinitionIds", "entityIds"):
@@ -1196,8 +1434,7 @@ def migrate_document(document: dict | None) -> dict:
             continue
         _ensure_uid(construct)
         _pop_legacy_business_component_fields(construct)
-        construct["id"] = str(construct.get("id") or f"{ID_PREFIXES['business_construct']}{construct_index}").strip()
-        construct["name"] = str(construct.get("name") or construct["id"]).strip()
+        construct["name"] = str(construct.get("name") or f"业务构件{construct_index}").strip()
         construct["note"] = str(construct.get("note", "")).strip()
         construct["businessComponentId"] = str(construct.get("businessComponentId", "")).strip()
         construct["businessComponent"] = str(construct.get("businessComponent", "")).strip()
@@ -1209,8 +1446,7 @@ def migrate_document(document: dict | None) -> dict:
             continue
         _ensure_uid(task_definition)
         _pop_legacy_business_component_fields(task_definition)
-        task_definition["id"] = str(task_definition.get("id") or f"{ID_PREFIXES['task_definition']}{task_index}").strip()
-        task_definition["name"] = str(task_definition.get("name") or task_definition["id"]).strip()
+        task_definition["name"] = str(task_definition.get("name") or f"任务定义{task_index}").strip()
         task_definition["type"] = normalize_orchestration_type(task_definition.get("type", "Custom"))
         query_source_kind = normalize_query_source_kind(task_definition.get("querySourceKind", ""))
         task_definition["querySourceKind"] = query_source_kind if task_definition["type"] == "Query" else ""
@@ -1223,238 +1459,4 @@ def migrate_document(document: dict | None) -> dict:
         task_definition["entityIds"] = list(task_definition.get("entityIds", [])) if isinstance(task_definition.get("entityIds"), list) else []
 
     doc["meta"] = meta
-    return doc
-
-
-def renumber_document_ids(document: dict | None, namespace: str = "") -> dict:
-    doc = migrate_document(document)
-    namespace = str(namespace or "").strip()
-
-    def scoped(prefix: str, index: int) -> str:
-        return f"{namespace}{prefix}{index}"
-
-    role_map: dict[str, str] = {}
-    for index, role in enumerate(doc["roles"], start=1):
-        old_id = str(role.get("id", "")).strip()
-        new_id = scoped("R", index)
-        role["id"] = new_id
-        if old_id:
-            role_map[old_id] = new_id
-
-    stage_map: dict[str, str] = {}
-    for stage_index, stage in enumerate(doc["stages"], start=1):
-        old_stage_id = str(stage.get("id", "")).strip()
-        new_stage_id = scoped("S", stage_index)
-        stage["id"] = new_stage_id
-        if old_stage_id:
-            stage_map[old_stage_id] = new_stage_id
-
-    process_map: dict[str, str] = {}
-    stage_flow_ref_map: dict[str, str] = {}
-    node_map: dict[str, str] = {}
-    next_node_index = 1
-    for process_index, process in enumerate(doc["processes"], start=1):
-        old_process_id = str(process.get("id", "")).strip()
-        new_process_id = scoped("P", process_index)
-        process["id"] = new_process_id
-        if old_process_id:
-            process_map[old_process_id] = new_process_id
-        if process.get("stageId") in stage_map:
-            process["stageId"] = stage_map[process["stageId"]]
-
-        process_node_map: dict[str, str] = {}
-        for node in process.get("nodes", []):
-            old_node_id = str(node.get("id", "")).strip()
-            new_node_id = scoped("T", next_node_index)
-            next_node_index += 1
-            node["id"] = new_node_id
-            if old_node_id:
-                node_map[old_node_id] = new_node_id
-                process_node_map[old_node_id] = new_node_id
-            if node.get("role_id") in role_map:
-                node["role_id"] = role_map[node["role_id"]]
-            role_ids = []
-            seen_role_ids: set[str] = set()
-            for role_id in node.get("role_ids", []):
-                normalized_role_id = role_map.get(role_id, role_id)
-                if normalized_role_id and normalized_role_id not in seen_role_ids:
-                    seen_role_ids.add(normalized_role_id)
-                    role_ids.append(normalized_role_id)
-            if node.get("role_id") and node["role_id"] not in seen_role_ids:
-                role_ids.insert(0, node["role_id"])
-            node["role_ids"] = role_ids
-            node["roles"] = [
-                role["name"]
-                for role_id in role_ids
-                for role in doc["roles"]
-                if role["id"] == role_id
-            ]
-            node["role_id"] = role_ids[0] if role_ids else ""
-            node["role"] = "、".join(node["roles"])
-
-        flow = process.get("flow") if isinstance(process.get("flow"), dict) else {}
-        gateway_map: dict[str, str] = {}
-        for gateway_index, gateway in enumerate(flow.get("nodes", []) if isinstance(flow.get("nodes"), list) else [], start=1):
-            old_gateway_id = str(gateway.get("id", "")).strip()
-            new_gateway_id = scoped(f"B{process_index}_", gateway_index)
-            gateway["id"] = new_gateway_id
-            if old_gateway_id:
-                gateway_map[old_gateway_id] = new_gateway_id
-        flow_node_map = {**process_node_map, **gateway_map}
-        for edge_index, edge in enumerate(flow.get("edges", []) if isinstance(flow.get("edges"), list) else [], start=1):
-            edge["id"] = scoped(f"L{process_index}_", edge_index)
-            if edge.get("from") in flow_node_map:
-                edge["from"] = flow_node_map[edge["from"]]
-            if edge.get("to") in flow_node_map:
-                edge["to"] = flow_node_map[edge["to"]]
-
-    for stage_flow_ref_index, stage_flow_ref in enumerate(doc.get("stageFlowRefs", []), start=1):
-        old_ref_id = str(stage_flow_ref.get("id", "")).strip()
-        new_ref_id = scoped("SFR", stage_flow_ref_index)
-        stage_flow_ref["id"] = new_ref_id
-        if old_ref_id:
-            stage_flow_ref_map[old_ref_id] = new_ref_id
-        if stage_flow_ref.get("stageId") in stage_map:
-            stage_flow_ref["stageId"] = stage_map[stage_flow_ref["stageId"]]
-        if stage_flow_ref.get("processId") in process_map:
-            stage_flow_ref["processId"] = process_map[stage_flow_ref["processId"]]
-
-    entity_map: dict[str, str] = {}
-    for entity_index, entity in enumerate(doc["entities"], start=1):
-        old_entity_id = str(entity.get("id", "")).strip()
-        new_entity_id = scoped("E", entity_index)
-        entity["id"] = new_entity_id
-        if old_entity_id:
-            entity_map[old_entity_id] = new_entity_id
-
-    component_map: dict[str, str] = {}
-    for component_index, component in enumerate(doc.get("businessComponents", []), start=1):
-        old_component_id = str(component.get("id", "")).strip()
-        new_component_id = scoped("BCP", component_index)
-        component["id"] = new_component_id
-        if old_component_id:
-            component_map[old_component_id] = new_component_id
-
-    construct_map: dict[str, str] = {}
-    for construct_index, construct in enumerate(doc.get("businessConstructs", []), start=1):
-        old_construct_id = str(construct.get("id", "")).strip()
-        new_construct_id = scoped("BC", construct_index)
-        construct["id"] = new_construct_id
-        if old_construct_id:
-            construct_map[old_construct_id] = new_construct_id
-        if construct.get("businessComponentId") in component_map:
-            construct["businessComponentId"] = component_map[construct["businessComponentId"]]
-
-    task_definition_map: dict[str, str] = {}
-    for task_definition_index, task_definition in enumerate(doc.get("taskDefinitions", []), start=1):
-        old_task_definition_id = str(task_definition.get("id", "")).strip()
-        new_task_definition_id = scoped("TD", task_definition_index)
-        task_definition["id"] = new_task_definition_id
-        if old_task_definition_id:
-            task_definition_map[old_task_definition_id] = new_task_definition_id
-        if task_definition.get("businessComponentId") in component_map:
-            task_definition["businessComponentId"] = component_map[task_definition["businessComponentId"]]
-        if task_definition.get("constructId") in construct_map:
-            task_definition["constructId"] = construct_map[task_definition["constructId"]]
-
-    for process in doc["processes"]:
-        if isinstance(process.get("businessComponentIds"), list):
-            process["businessComponentIds"] = [
-                component_map.get(component_id, component_id)
-                for component_id in process["businessComponentIds"]
-            ]
-        if isinstance(process.get("businessConstructIds"), list):
-            process["businessConstructIds"] = [
-                construct_map.get(construct_id, construct_id)
-                for construct_id in process["businessConstructIds"]
-            ]
-        if process.get("businessComponentId") in component_map:
-            process["businessComponentId"] = component_map[process["businessComponentId"]]
-        if process.get("businessConstructId") in construct_map:
-            process["businessConstructId"] = construct_map[process["businessConstructId"]]
-        for node in process.get("nodes", []):
-            if node.get("taskDefinitionId") in task_definition_map:
-                node["taskDefinitionId"] = task_definition_map[node["taskDefinitionId"]]
-            if node.get("businessComponentId") in component_map:
-                node["businessComponentId"] = component_map[node["businessComponentId"]]
-            if node.get("constructId") in construct_map:
-                node["constructId"] = construct_map[node["constructId"]]
-            if node.get("businessConstructId") in construct_map:
-                node["businessConstructId"] = construct_map[node["businessConstructId"]]
-            for entity_op in node.get("entity_ops", []):
-                if entity_op.get("entity_id") in entity_map:
-                    entity_op["entity_id"] = entity_map[entity_op["entity_id"]]
-            for orchestration_task in node.get("orchestrationTasks", []):
-                if orchestration_task.get("taskDefinitionId") in task_definition_map:
-                    orchestration_task["taskDefinitionId"] = task_definition_map[orchestration_task["taskDefinitionId"]]
-                if orchestration_task.get("businessComponentId") in component_map:
-                    orchestration_task["businessComponentId"] = component_map[orchestration_task["businessComponentId"]]
-                if orchestration_task.get("constructId") in construct_map:
-                    orchestration_task["constructId"] = construct_map[orchestration_task["constructId"]]
-                if orchestration_task.get("businessConstructId") in construct_map:
-                    orchestration_task["businessConstructId"] = construct_map[orchestration_task["businessConstructId"]]
-            for form in node.get("forms", []):
-                if form.get("entity_id") in entity_map:
-                    form["entity_id"] = entity_map[form["entity_id"]]
-                for section in form.get("sections", []):
-                    if section.get("entity_id") in entity_map:
-                        section["entity_id"] = entity_map[section["entity_id"]]
-
-    for capability in doc.get("businessComponents", []):
-        if isinstance(capability.get("entityIds"), list):
-            capability["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in capability["entityIds"]]
-        if isinstance(capability.get("constructIds"), list):
-            capability["constructIds"] = [construct_map.get(construct_id, construct_id) for construct_id in capability["constructIds"]]
-        if isinstance(capability.get("taskDefinitionIds"), list):
-            capability["taskDefinitionIds"] = [task_definition_map.get(task_id, task_id) for task_id in capability["taskDefinitionIds"]]
-
-    for construct in doc.get("businessConstructs", []):
-        if isinstance(construct.get("entityIds"), list):
-            construct["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in construct["entityIds"]]
-        if isinstance(construct.get("taskDefinitionIds"), list):
-            construct["taskDefinitionIds"] = [task_definition_map.get(task_id, task_id) for task_id in construct["taskDefinitionIds"]]
-
-    for task_definition in doc.get("taskDefinitions", []):
-        if isinstance(task_definition.get("entityIds"), list):
-            task_definition["entityIds"] = [entity_map.get(entity_id, entity_id) for entity_id in task_definition["entityIds"]]
-
-    for relation in doc["relations"]:
-        if relation.get("from") in entity_map:
-            relation["from"] = entity_map[relation["from"]]
-        if relation.get("to") in entity_map:
-            relation["to"] = entity_map[relation["to"]]
-
-    for stage in doc["stages"]:
-        for process_link in stage.get("processLinks", []):
-            if process_link.get("fromProcessId") in process_map:
-                process_link["fromProcessId"] = process_map[process_link["fromProcessId"]]
-            if process_link.get("toProcessId") in process_map:
-                process_link["toProcessId"] = process_map[process_link["toProcessId"]]
-
-    for stage_link in doc.get("stageLinks", []):
-        if stage_link.get("fromStageId") in stage_map:
-            stage_link["fromStageId"] = stage_map[stage_link["fromStageId"]]
-        if stage_link.get("toStageId") in stage_map:
-            stage_link["toStageId"] = stage_map[stage_link["toStageId"]]
-
-    for stage_flow_link_index, stage_flow_link in enumerate(doc.get("stageFlowLinks", []), start=1):
-        stage_flow_link["id"] = scoped("SFL", stage_flow_link_index)
-        if stage_flow_link.get("stageId") in stage_map:
-            stage_flow_link["stageId"] = stage_map[stage_flow_link["stageId"]]
-        if stage_flow_link.get("fromRefId") in stage_flow_ref_map:
-            stage_flow_link["fromRefId"] = stage_flow_ref_map[stage_flow_link["fromRefId"]]
-        if stage_flow_link.get("toRefId") in stage_flow_ref_map:
-            stage_flow_link["toRefId"] = stage_flow_ref_map[stage_flow_link["toRefId"]]
-
-    id_map = {}
-    id_map.update(role_map)
-    id_map.update(stage_map)
-    id_map.update(process_map)
-    id_map.update(node_map)
-    id_map.update(entity_map)
-    for rule in doc["rules"]:
-        applies_to = str(rule.get("applies_to", "")).strip()
-        if applies_to in id_map:
-            rule["applies_to"] = id_map[applies_to]
-
     return doc

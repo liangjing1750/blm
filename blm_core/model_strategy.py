@@ -16,8 +16,7 @@ Rules expressed here:
 - which list fields are set-like references
 - which child lists are merged recursively
 - which semantic fields identify the same business object when uid is missing
-- which legacy field names migrate to the current model
-- which internal ID prefix is used when the system has to create an id
+- which legacy collection names are normalized before strategy-based merge
 """
 
 
@@ -41,17 +40,18 @@ DOCUMENT_LISTS: dict[str, str] = {
 DESCRIPTORS: dict[str, dict[str, Any]] = {
     "document": {"scalars": [], "lists": DOCUMENT_LISTS},
     "meta": {"scalars": ["title", "domain", "author", "date"], "lists": {}},
-    "role": {"scalars": ["id", "name", "desc", "group"], "set_lists": ["subDomains"], "lists": {}},
+    "role": {"scalars": ["name", "desc", "group"], "set_lists": ["subDomains"], "lists": {}},
     "language": {"scalars": ["term", "definition"], "lists": {}},
     "stage": {
-        "scalars": ["id", "name", "subDomain", "pos"],
+        "scalars": ["name", "subDomain", "pos"],
         "lists": {"processLinks": "process_link"},
     },
-    "stage_link": {"scalars": ["fromStageId", "toStageId"], "lists": {}},
-    "stage_flow_ref": {"scalars": ["id", "stageId", "processId", "order", "pos"], "lists": {}},
-    "stage_flow_link": {"scalars": ["id", "stageId", "fromRefId", "toRefId"], "lists": {}},
+    "stage_link": {"scalars": ["fromStageUid", "toStageUid"], "lists": {}},
+    "stage_flow_ref": {"scalars": ["stageUid", "processUid", "order", "pos"], "lists": {}},
+    "stage_flow_link": {"scalars": ["stageUid", "fromRefUid", "toRefUid"], "lists": {}},
     "process": {
-        "scalars": ["id", "name", "subDomain", "flowGroup", "stageId", "stagePos", "trigger", "outcome", "pos", "flow"],
+        "scalars": ["name", "subDomain", "flowGroup", "stageUid", "stagePos", "trigger", "outcome", "pos", "flow", "businessComponentUid", "businessConstructUid"],
+        "set_lists": ["businessComponentUids", "businessConstructUids"],
         "lists": {"prototypeFiles": "prototype_file", "nodes": "node"},
     },
     "prototype_file": {
@@ -59,10 +59,10 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
         "lists": {"versions": "prototype_version"},
     },
     "prototype_version": {"scalars": ["number", "name", "content", "contentType", "uploadedAt"], "lists": {}},
-    "process_link": {"scalars": ["fromProcessId", "toProcessId"], "lists": {}},
+    "process_link": {"scalars": ["fromProcessUid", "toProcessUid"], "lists": {}},
     "node": {
-        "scalars": ["id", "name", "role_id", "role", "repeatable", "rules_note"],
-        "set_lists": ["role_ids", "roles"],
+        "scalars": ["name", "role_uid", "role", "repeatable", "rules_note", "taskDefinitionUid", "businessComponentUid", "constructUid", "businessConstructUid"],
+        "set_lists": ["role_uids", "roles"],
         "lists": {
             "userSteps": "user_step",
             "entity_ops": "entity_op",
@@ -72,7 +72,7 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
         },
     },
     "user_step": {"scalars": ["name", "type", "note"], "lists": {}},
-    "business_rule": {"scalars": ["id", "name", "content"], "lists": {}},
+    "business_rule": {"scalars": ["name", "content"], "lists": {}},
     "orchestration_task": {
         "scalars": [
             "name",
@@ -80,22 +80,22 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
             "querySourceKind",
             "target",
             "note",
-            "taskDefinitionId",
-            "constructId",
-            "businessConstructId",
+            "taskDefinitionUid",
+            "constructUid",
+            "businessConstructUid",
             "constructName",
-            "businessComponentId",
+            "businessComponentUid",
             "businessComponent",
         ],
         "lists": {},
     },
-    "entity_op": {"scalars": ["entity_id"], "set_lists": ["ops"], "lists": {}},
-    "form": {"scalars": ["id", "name", "purpose", "entity_id"], "lists": {"sections": "form_section"}},
-    "form_section": {"scalars": ["id", "name", "note", "entity_id"], "lists": {"fields": "form_field"}},
-    "form_field": {"scalars": ["id", "name", "type", "required", "entity_field", "note"], "lists": {}},
+    "entity_op": {"scalars": ["entity_uid"], "set_lists": ["ops"], "lists": {}},
+    "form": {"scalars": ["name", "purpose", "entity_uid"], "lists": {"sections": "form_section"}},
+    "form_section": {"scalars": ["name", "note", "entity_uid"], "lists": {"fields": "form_field"}},
+    "form_field": {"scalars": ["name", "type", "required", "entity_field", "note"], "lists": {}},
     "entity": {
-        "scalars": ["id", "name", "group", "note", "pos", "businessConstructId"],
-        "set_lists": ["businessConstructIds"],
+        "scalars": ["name", "group", "note", "pos", "businessConstructUid"],
+        "set_lists": ["businessConstructUids"],
         "lists": {"fields": "field", "state_transitions": "transition"},
     },
     "field": {
@@ -105,31 +105,30 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "state_node": {"scalars": ["name", "kind", "pos", "markerPos"], "lists": {}},
     "transition": {"scalars": ["from", "to", "action", "note", "field_name", "labelPos"], "lists": {}},
     "relation": {"scalars": ["from", "to", "type", "label"], "lists": {}},
-    "rule": {"scalars": ["id", "name", "type", "applies_to", "description", "formula"], "lists": {}},
+    "rule": {"scalars": ["name", "type", "appliesToUid", "description", "formula"], "lists": {}},
     "business_component": {
-        "scalars": ["id", "name", "kind", "note"],
-        "set_lists": ["constructIds", "taskDefinitionIds", "entityIds"],
+        "scalars": ["name", "kind", "note"],
+        "set_lists": ["constructUids", "taskDefinitionUids", "entityUids"],
         "lists": {},
     },
     "business_construct": {
-        "scalars": ["id", "name", "note", "businessComponentId", "businessComponent"],
-        "set_lists": ["taskDefinitionIds", "entityIds"],
+        "scalars": ["name", "note", "businessComponentUid", "businessComponent"],
+        "set_lists": ["taskDefinitionUids", "entityUids"],
         "lists": {},
     },
     "task_definition": {
         "scalars": [
-            "id",
             "name",
             "type",
             "querySourceKind",
             "target",
             "note",
-            "businessComponentId",
+            "businessComponentUid",
             "businessComponent",
-            "constructId",
+            "constructUid",
             "constructName",
         ],
-        "set_lists": ["entityIds"],
+        "set_lists": ["entityUids"],
         "lists": {},
     },
 }
@@ -165,22 +164,6 @@ COLLECTION_LABELS: dict[str, str] = {
 }
 
 
-ID_PREFIXES: dict[str, str] = {
-    "role": "R",
-    "stage": "S",
-    "stage_flow_ref": "SFR",
-    "stage_flow_link": "SFL",
-    "process": "P",
-    "node": "T",
-    "flow_gateway": "B",
-    "flow_edge": "L",
-    "entity": "E",
-    "business_component": "BCP",
-    "business_construct": "BC",
-    "task_definition": "TD",
-}
-
-
 LEGACY_COLLECTION_RENAMES: dict[str, str] = {
     "capabilityUnits": "businessComponents",
 }
@@ -207,33 +190,36 @@ RULE_APPLIES_TO_COLLECTIONS = (
 )
 
 
+INTERNAL_SCALAR_FIELDS = set()
+
+
 # Each tuple describes one fallback semantic identity candidate. A tuple with
 # several fields is joined as a scoped composite key.
 SEMANTIC_KEY_FIELDS: dict[str, list[tuple[str, ...]]] = {
-    "stage_flow_ref": [("stageId", "processId", "id")],
-    "stage_flow_link": [("stageId", "fromRefId", "toRefId")],
-    "role": [("name",), ("id",)],
+    "stage_flow_ref": [("stageUid", "processUid")],
+    "stage_flow_link": [("stageUid", "fromRefUid", "toRefUid")],
+    "role": [("name",), ("uid",)],
     "language": [("term",)],
-    "process": [("name",), ("id",)],
-    "node": [("name",), ("id",)],
+    "process": [("name",), ("uid",)],
+    "node": [("name",), ("uid",)],
     "user_step": [("name",)],
-    "business_rule": [("name",), ("id",)],
-    "orchestration_task": [("taskDefinitionId",), ("name",), ("target",)],
-    "form": [("name",), ("id",)],
-    "form_section": [("name",), ("id",)],
-    "form_field": [("name",), ("id",)],
+    "business_rule": [("name",), ("uid",)],
+    "orchestration_task": [("taskDefinitionUid",), ("name",), ("target",)],
+    "form": [("name",), ("uid",)],
+    "form_section": [("name",), ("uid",)],
+    "form_field": [("name",), ("uid",)],
     "prototype_file": [("name",), ("uid",)],
     "prototype_version": [("uid",), ("number",), ("name",)],
-    "business_component": [("name",), ("id",)],
-    "business_construct": [("name",), ("id",)],
-    "task_definition": [("name",), ("target",), ("id",)],
-    "entity": [("name",), ("id",)],
+    "business_component": [("name",), ("uid",)],
+    "business_construct": [("name",), ("uid",)],
+    "task_definition": [("name",), ("target",), ("uid",)],
+    "entity": [("name",), ("uid",)],
     "field": [("name",)],
     "state_node": [("name",)],
     "transition": [("field_name", "from", "to")],
     "relation": [("from", "to", "type", "label")],
-    "rule": [("name",), ("id",)],
-    "entity_op": [("entity_id",)],
+    "rule": [("name",), ("uid",)],
+    "entity_op": [("entity_uid",)],
 }
 
 
@@ -243,10 +229,6 @@ def normalize_strategy_text(text: Any) -> str:
 
 def collection_label(item_type: str) -> str:
     return COLLECTION_LABELS.get(item_type, item_type)
-
-
-def id_prefix(item_type: str, fallback: str = "X") -> str:
-    return ID_PREFIXES.get(item_type, fallback)
 
 
 def semantic_key(item_type: str, item: dict) -> str:
@@ -259,4 +241,4 @@ def semantic_key(item_type: str, item: dict) -> str:
         normalized = normalize_strategy_text(candidate)
         if normalized:
             return normalized
-    return normalize_strategy_text(item.get("id") or item.get("uid"))
+    return normalize_strategy_text(item.get("uid"))

@@ -90,6 +90,12 @@ const api = {
       overwrite,
     }, onProgress);
   },
+  async copyDocument(sourceName, targetName) {
+    return postJson('/api/copy', {
+      source_name: sourceName,
+      target_name: targetName,
+    });
+  },
   async create(name) {
     return postJson('/api/new', { name });
   },

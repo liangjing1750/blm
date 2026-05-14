@@ -858,8 +858,22 @@ function normalizeCompareValue(value) {
   return value;
 }
 
+const COMPARE_INTERNAL_META_PATHS = new Set([
+  'meta.document_uid',
+  'meta.schema_version',
+  'meta.revision',
+  'meta.title',
+  'meta.domain',
+]);
+
+const COMPARE_INTERNAL_UID_KEYS = new Set([
+  'uid',
+  'versionUid',
+  'currentVersionUid',
+]);
+
 function shouldSkipCompareKey(key, path) {
-  return key === 'uid' || path === 'meta.document_uid' || path === 'meta.schema_version';
+  return COMPARE_INTERNAL_UID_KEYS.has(key) || COMPARE_INTERNAL_META_PATHS.has(path);
 }
 
 function flattenCompareValue(value, prefix = '', output = {}) {
@@ -890,6 +904,14 @@ function valueDigest(value) {
 function isEmptyCompareContainer(value) {
   if (Array.isArray(value)) return value.length === 0;
   return Boolean(value && typeof value === 'object' && !Object.keys(value).length);
+}
+
+function isImplicitDefaultCompareValue(path, value) {
+  if (value === '' || value === null || value === undefined) return true;
+  if (isEmptyCompareContainer(value)) return true;
+  if (/\.pos\.[rc]$/.test(path) && Number(value) === 1) return true;
+  if (/\.(pos|stagePos|markerPos|labelPos|panoramaPos)\.[xy]$/.test(path) && Number(value) === 0) return true;
+  return false;
 }
 
 function hasCompareDescendant(map, path) {
@@ -1294,12 +1316,14 @@ function buildDocumentCompareResult(leftDocument, rightDocument) {
     const inRight = Object.prototype.hasOwnProperty.call(rightMap, path);
     const view = describeComparePath(path, leftDocument, rightDocument);
     if (!inLeft && inRight) {
+      if (isImplicitDefaultCompareValue(path, rightMap[path])) return;
       if (isEmptyCompareContainer(rightMap[path]) && hasCompareDescendant(leftMap, path)) return;
       const scope = getCompareChangeScope(tokens, leftDocument, rightDocument, 'right', view.section);
       added.push({ path, right: rightMap[path], ...view, ...scope });
       return;
     }
     if (inLeft && !inRight) {
+      if (isImplicitDefaultCompareValue(path, leftMap[path])) return;
       if (isEmptyCompareContainer(leftMap[path]) && hasCompareDescendant(rightMap, path)) return;
       const scope = getCompareChangeScope(tokens, leftDocument, rightDocument, 'left', view.section);
       removed.push({ path, left: leftMap[path], ...view, ...scope });
@@ -2073,6 +2097,55 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
   return result;
 }
 
+async function copyWorkspaceDocument(sourceName, targetName) {
+  if (S.isSaving) return null;
+  if (!S.runtime.checked) {
+    try {
+      const runtime = await api.runtime();
+      S.runtime.checked = true;
+      S.runtime.apiVersion = Number(runtime?.api_version || 0);
+      S.runtime.supportsDocs = !!runtime?.supports_docs;
+      S.runtime.supportsCopy = !!runtime?.supports_copy;
+    } catch (error) {
+      S.runtime.checked = true;
+      S.runtime.supportsCopy = false;
+    }
+  }
+  if (!S.runtime.supportsCopy) {
+    alert('当前运行的本地服务不支持复制接口，请重启 BLM 服务后再复制。');
+    return null;
+  }
+  const normalizedSource = String(sourceName || '').trim();
+  const normalizedTarget = String(targetName || '').trim();
+  if (!normalizedSource || !normalizedTarget) {
+    alert('请输入文档名称');
+    return null;
+  }
+  const workspaceFiles = await loadWorkspaceDocumentNames();
+  if (!workspaceFiles) return null;
+  if (workspaceFiles.includes(normalizedTarget)) {
+    alert(`已存在同名文档“${normalizedTarget}”，请使用其他名称。`);
+    return null;
+  }
+
+  S.isSaving = true;
+  syncSavingControls();
+  try {
+    setSaveProgress(true, 18, '正在复制文档...', '正在复制文档包和附件。');
+    const result = await api.copyDocument(normalizedSource, normalizedTarget);
+    setSaveProgress(true, 100, '复制完成', '文档已写入工作区。');
+    if (!result || result.error) {
+      alert(result?.error || '复制失败');
+      return null;
+    }
+    await loadWorkspaceDocumentNames();
+    return result;
+  } finally {
+    S.isSaving = false;
+    syncSavingControls();
+    setTimeout(() => setSaveProgress(false), 350);
+  }
+}
 function renderMergeAnalysis(analysis) {
   const panel = document.getElementById('merge-analysis');
   if (!panel) return;
@@ -2616,6 +2689,25 @@ const App = {
     if (!name) return alert('请输入业务域名称');
 
     const mode = S.saveDialogMode === 'copy' ? 'copy' : 'save';
+    if (mode === 'copy' && S.currentFile) {
+      if (S.modified) {
+        const savedCurrent = await saveWorkspaceDocument(S.currentFile, S.doc, { currentName: S.currentFile });
+        if (!savedCurrent) return;
+        setActiveDocumentSession(savedCurrent.document || S.doc, {
+          fileName: savedCurrent.name || S.currentFile,
+          preserveUiState: true,
+        });
+      }
+      const copyResult = await copyWorkspaceDocument(S.currentFile, name);
+      if (!copyResult) return;
+      App.closeSaveAsModal();
+      setActiveDocumentSession(copyResult.document || S.doc, {
+        fileName: copyResult.name || name,
+        preserveUiState: true,
+      });
+      return;
+    }
+
     const nextDocument = cloneDocument(S.doc);
     nextDocument.meta = nextDocument.meta || {};
     nextDocument.meta.domain = name;
@@ -3043,3 +3135,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 window.App = App;
 window.toggleMergeCustomInput = toggleMergeCustomInput;
+

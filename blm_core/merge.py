@@ -6,9 +6,10 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from blm_core.document import SCHEMA_VERSION, migrate_document, renumber_document_ids
+from blm_core.document import SCHEMA_VERSION, canonical_document, migrate_document
 from blm_core.model_strategy import (
     DESCRIPTORS,
+    INTERNAL_SCALAR_FIELDS,
     RULE_APPLIES_TO_COLLECTIONS,
     SEMANTIC_UNIQUE_IN_COMBINE,
     collection_label,
@@ -46,7 +47,7 @@ def _copy(value: Any) -> Any:
 
 def _reference_tokens(item: dict) -> set[str]:
     tokens = set()
-    for key in ("uid", "id", "name"):
+    for key in ("uid", "name"):
         value = str(item.get(key, "")).strip()
         if value:
             tokens.add(value)
@@ -80,6 +81,26 @@ def _should_trust_identity(raw_document: dict | None) -> bool:
 def _prepare_input(document: dict | None) -> tuple[dict, bool]:
     raw = deepcopy(document or {})
     return migrate_document(raw), _should_trust_identity(raw)
+
+
+def _collect_model_uids(value: Any) -> set[str]:
+    uids: set[str] = set()
+    if isinstance(value, dict):
+        uid = str(value.get("uid", "")).strip()
+        if uid:
+            uids.add(uid)
+        for child_value in value.values():
+            uids.update(_collect_model_uids(child_value))
+    elif isinstance(value, list):
+        for item in value:
+            uids.update(_collect_model_uids(item))
+    return uids
+
+
+def _has_shared_model_identity(left: MergeInput, right: MergeInput) -> bool:
+    if not (left.trust_identity and right.trust_identity):
+        return False
+    return bool(_collect_model_uids(left.document) & _collect_model_uids(right.document))
 
 
 def _merge_set_values(base_value: Any, left_value: Any, right_value: Any) -> list[Any]:
@@ -180,17 +201,12 @@ class MergeEngine:
         left = MergeInput(*_prepare_input(left_raw))
         right = MergeInput(*_prepare_input(right_raw))
         base = MergeInput(*_prepare_input(base_raw)) if base_raw is not None else None
-        if self.mode == "combine":
-            left = MergeInput(renumber_document_ids(left.document, "L"), False)
-            right = MergeInput(renumber_document_ids(right.document, "R"), False)
-
         merged = self._merge_document(base, left, right)
         merged = migrate_document(merged)
-        if self.mode == "combine":
-            merged = renumber_document_ids(merged)
         merged, self.consistency_repairs = repair_document_consistency(merged)
         self.validation_issues = validate_document(merged)
 
+        merged = canonical_document(merged)
         return {
             "mode": self.mode,
             "suggested_name": self.suggested_name,
@@ -399,6 +415,13 @@ class MergeEngine:
                 return self._resolve_object_conflict(item_type, path, left_value, right_value)
 
         for field in descriptor.get("scalars", []):
+            if field in INTERNAL_SCALAR_FIELDS:
+                merged[field] = _copy(
+                    left_value.get(field)
+                    or right_value.get(field)
+                    or (base_value.get(field) if isinstance(base_value, dict) and base_value is not MISSING else "")
+                )
+                continue
             merged[field] = self._merge_scalar(
                 path + [field],
                 base_value.get(field) if isinstance(base_value, dict) and base_value is not MISSING else MISSING,
@@ -430,6 +453,8 @@ class MergeEngine:
     def _needs_object_conflict(self, item_type: str, left_value: dict, right_value: dict) -> bool:
         descriptor = DESCRIPTORS[item_type]
         for field in descriptor.get("scalars", []):
+            if field in INTERNAL_SCALAR_FIELDS:
+                continue
             left_field = left_value.get(field)
             right_field = right_value.get(field)
             if _value_equal(left_field, right_field):
@@ -667,8 +692,9 @@ class MergeEngine:
     def _item_changed(self, base_item: dict, candidate_item: dict) -> bool:
         if base_item is MISSING or candidate_item is MISSING:
             return True
-        comparable_base = {key: value for key, value in base_item.items() if key != "uid"}
-        comparable_candidate = {key: value for key, value in candidate_item.items() if key != "uid"}
+        ignored_fields = {"uid", *INTERNAL_SCALAR_FIELDS}
+        comparable_base = {key: value for key, value in base_item.items() if key not in ignored_fields}
+        comparable_candidate = {key: value for key, value in candidate_item.items() if key not in ignored_fields}
         return comparable_base != comparable_candidate
 
     def _group_items(self, item_type: str, items: list[dict], trust_identity: bool) -> dict[tuple[str, str], list[dict]]:
@@ -740,22 +766,22 @@ def apply_merge(
 
 
 def repair_document_consistency(document: dict) -> tuple[dict, list[dict]]:
-    doc = migrate_document(document)
+    doc = canonical_document(document)
     repairs: list[dict] = []
 
     def add_repair(kind: str, path: str, action: str) -> None:
         repairs.append({"kind": kind, "path": path, "action": action})
 
-    role_ids = {str(role.get("id", "")).strip() for role in doc.get("roles", [])}
-    stage_ids = {str(stage.get("id", "")).strip() for stage in doc.get("stages", [])}
-    process_ids = {str(process.get("id", "")).strip() for process in doc.get("processes", [])}
-    entity_ids = {str(entity.get("id", "")).strip() for entity in doc.get("entities", [])}
+    role_uids = {str(role.get("uid", "")).strip() for role in doc.get("roles", [])}
+    stage_uids = {str(stage.get("uid", "")).strip() for stage in doc.get("stages", [])}
+    process_uids = {str(process.get("uid", "")).strip() for process in doc.get("processes", [])}
+    entity_uids = {str(entity.get("uid", "")).strip() for entity in doc.get("entities", [])}
 
     stage_links = []
     for link in doc.get("stageLinks", []):
-        from_stage_id = str(link.get("fromStageId", "")).strip()
-        to_stage_id = str(link.get("toStageId", "")).strip()
-        if from_stage_id and to_stage_id and from_stage_id in stage_ids and to_stage_id in stage_ids:
+        from_stage_uid = str(link.get("fromStageUid", "")).strip()
+        to_stage_uid = str(link.get("toStageUid", "")).strip()
+        if from_stage_uid and to_stage_uid and from_stage_uid in stage_uids and to_stage_uid in stage_uids:
             stage_links.append(link)
         else:
             add_repair("stage_link", f"stageLinks.{link.get('uid', '')}", "remove dangling stage link")
@@ -763,61 +789,61 @@ def repair_document_consistency(document: dict) -> tuple[dict, list[dict]]:
 
     for stage in doc.get("stages", []):
         next_links = []
-        stage_id = str(stage.get("id", "")).strip()
-        stage_process_ids = {
-            str(process.get("id", "")).strip()
+        stage_uid = str(stage.get("uid", "")).strip()
+        stage_process_uids = {
+            str(process.get("uid", "")).strip()
             for process in doc.get("processes", [])
-            if str(process.get("stageId", "")).strip() == stage_id
+            if str(process.get("stageUid", "")).strip() == stage_uid
         }
         for link in stage.get("processLinks", []):
-            from_process_id = str(link.get("fromProcessId", "")).strip()
-            to_process_id = str(link.get("toProcessId", "")).strip()
+            from_process_uid = str(link.get("fromProcessUid", "")).strip()
+            to_process_uid = str(link.get("toProcessUid", "")).strip()
             if (
-                from_process_id
-                and to_process_id
-                and from_process_id in process_ids
-                and to_process_id in process_ids
-                and (not stage_process_ids or (from_process_id in stage_process_ids and to_process_id in stage_process_ids))
+                from_process_uid
+                and to_process_uid
+                and from_process_uid in process_uids
+                and to_process_uid in process_uids
+                and (not stage_process_uids or (from_process_uid in stage_process_uids and to_process_uid in stage_process_uids))
             ):
                 next_links.append(link)
             else:
-                add_repair("stage_process_link", f"stages.{stage_id}.processLinks.{link.get('uid', '')}", "remove dangling process link")
+                add_repair("stage_process_link", f"stages.{stage_uid}.processLinks.{link.get('uid', '')}", "remove dangling process link")
         stage["processLinks"] = next_links
 
     stage_flow_refs = []
     for ref in doc.get("stageFlowRefs", []):
-        ref_id = str(ref.get("id", "")).strip()
-        stage_id = str(ref.get("stageId", "")).strip()
-        process_id = str(ref.get("processId", "")).strip()
-        if stage_id in stage_ids and process_id in process_ids:
+        ref_uid = str(ref.get("uid", "")).strip()
+        stage_uid = str(ref.get("stageUid", "")).strip()
+        process_uid = str(ref.get("processUid", "")).strip()
+        if stage_uid in stage_uids and process_uid in process_uids:
             stage_flow_refs.append(ref)
         else:
-            add_repair("stage_flow_ref", f"stageFlowRefs.{ref_id}", "remove dangling stage flow ref")
+            add_repair("stage_flow_ref", f"stageFlowRefs.{ref_uid}", "remove dangling stage flow ref")
     doc["stageFlowRefs"] = stage_flow_refs
 
-    stage_flow_ref_by_id = {
-        str(ref.get("id", "")).strip(): ref
+    stage_flow_ref_by_uid = {
+        str(ref.get("uid", "")).strip(): ref
         for ref in doc.get("stageFlowRefs", [])
-        if str(ref.get("id", "")).strip()
+        if str(ref.get("uid", "")).strip()
     }
     stage_flow_links = []
     for link in doc.get("stageFlowLinks", []):
-        link_id = str(link.get("id", "")).strip() or str(link.get("uid", "")).strip()
-        from_ref_id = str(link.get("fromRefId", "")).strip()
-        to_ref_id = str(link.get("toRefId", "")).strip()
-        from_ref = stage_flow_ref_by_id.get(from_ref_id)
-        to_ref = stage_flow_ref_by_id.get(to_ref_id)
+        link_uid = str(link.get("uid", "")).strip()
+        from_ref_uid = str(link.get("fromRefUid", "")).strip()
+        to_ref_uid = str(link.get("toRefUid", "")).strip()
+        from_ref = stage_flow_ref_by_uid.get(from_ref_uid)
+        to_ref = stage_flow_ref_by_uid.get(to_ref_uid)
         if not from_ref or not to_ref:
-            add_repair("stage_flow_link", f"stageFlowLinks.{link_id}", "remove dangling stage flow link")
+            add_repair("stage_flow_link", f"stageFlowLinks.{link_uid}", "remove dangling stage flow link")
             continue
-        from_stage_id = str(from_ref.get("stageId", "")).strip()
-        to_stage_id = str(to_ref.get("stageId", "")).strip()
-        if from_stage_id != to_stage_id:
-            add_repair("stage_flow_link", f"stageFlowLinks.{link_id}", "remove cross-stage flow link")
+        from_stage_uid = str(from_ref.get("stageUid", "")).strip()
+        to_stage_uid = str(to_ref.get("stageUid", "")).strip()
+        if from_stage_uid != to_stage_uid:
+            add_repair("stage_flow_link", f"stageFlowLinks.{link_uid}", "remove cross-stage flow link")
             continue
-        if link.get("stageId") != from_stage_id:
-            link["stageId"] = from_stage_id
-            add_repair("stage_flow_link", f"stageFlowLinks.{link_id}.stageId", "realign stage flow link owner")
+        if link.get("stageUid") != from_stage_uid:
+            link["stageUid"] = from_stage_uid
+            add_repair("stage_flow_link", f"stageFlowLinks.{link_uid}.stageUid", "realign stage flow link owner")
         stage_flow_links.append(link)
     doc["stageFlowLinks"] = stage_flow_links
 
@@ -825,49 +851,48 @@ def repair_document_consistency(document: dict) -> tuple[dict, list[dict]]:
     for relation in doc.get("relations", []):
         relation_from = str(relation.get("from", "")).strip()
         relation_to = str(relation.get("to", "")).strip()
-        if relation_from in entity_ids and relation_to in entity_ids:
+        if relation_from in entity_uids and relation_to in entity_uids:
             relations.append(relation)
         else:
             add_repair("relation", f"relations.{relation.get('uid', '')}", "remove dangling entity relation")
     doc["relations"] = relations
 
     for process in doc.get("processes", []):
-        process_id = str(process.get("id", "")).strip()
+        process_uid = str(process.get("uid", "")).strip()
         for node in process.get("nodes", []):
-            node_id = str(node.get("id", "")).strip()
-            next_role_ids = []
-            for role_id in node.get("role_ids", []):
-                normalized = str(role_id or "").strip()
-                if normalized in role_ids:
-                    next_role_ids.append(normalized)
+            node_uid = str(node.get("uid", "")).strip()
+            next_role_uids = []
+            for role_uid in node.get("role_uids", []):
+                normalized = str(role_uid or "").strip()
+                if normalized in role_uids:
+                    next_role_uids.append(normalized)
                 elif normalized:
-                    add_repair("node_role", f"processes.{process_id}.nodes.{node_id}.role_ids", "remove dangling role reference")
-            node["role_ids"] = next_role_ids
-            node["roles"] = [role_id for role_id in node.get("roles", []) if str(role_id or "").strip() in role_ids]
-            if str(node.get("role_id", "")).strip() and str(node.get("role_id", "")).strip() not in role_ids:
-                node["role_id"] = ""
+                    add_repair("node_role", f"processes.{process_uid}.nodes.{node_uid}.role_uids", "remove dangling role reference")
+            node["role_uids"] = next_role_uids
+            if str(node.get("role_uid", "")).strip() and str(node.get("role_uid", "")).strip() not in role_uids:
+                node["role_uid"] = ""
                 node["role"] = ""
-                add_repair("node_role", f"processes.{process_id}.nodes.{node_id}.role_id", "clear dangling role reference")
+                add_repair("node_role", f"processes.{process_uid}.nodes.{node_uid}.role_uid", "clear dangling role reference")
 
             entity_ops = []
             for entity_op in node.get("entity_ops", []):
-                entity_id = str(entity_op.get("entity_id", "")).strip()
-                if entity_id in entity_ids:
+                entity_uid = str(entity_op.get("entity_uid", "")).strip()
+                if entity_uid in entity_uids:
                     entity_ops.append(entity_op)
-                elif entity_id:
-                    add_repair("entity_op", f"processes.{process_id}.nodes.{node_id}.entity_ops", "remove dangling entity op")
+                elif entity_uid:
+                    add_repair("entity_op", f"processes.{process_uid}.nodes.{node_uid}.entity_ops", "remove dangling entity op")
             node["entity_ops"] = entity_ops
 
             for form in node.get("forms", []):
-                form_id = str(form.get("id", "")).strip()
-                if str(form.get("entity_id", "")).strip() and str(form.get("entity_id", "")).strip() not in entity_ids:
-                    form["entity_id"] = ""
-                    add_repair("form_entity", f"processes.{process_id}.nodes.{node_id}.forms.{form_id}.entity_id", "clear dangling form entity")
+                form_uid = str(form.get("uid", "")).strip()
+                if str(form.get("entity_uid", "")).strip() and str(form.get("entity_uid", "")).strip() not in entity_uids:
+                    form["entity_uid"] = ""
+                    add_repair("form_entity", f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.entity_uid", "clear dangling form entity")
                 for section in form.get("sections", []):
-                    section_id = str(section.get("id", "")).strip()
-                    if str(section.get("entity_id", "")).strip() and str(section.get("entity_id", "")).strip() not in entity_ids:
-                        section["entity_id"] = ""
-                        add_repair("form_entity", f"processes.{process_id}.nodes.{node_id}.forms.{form_id}.sections.{section_id}.entity_id", "clear dangling form section entity")
+                    section_uid = str(section.get("uid", "")).strip()
+                    if str(section.get("entity_uid", "")).strip() and str(section.get("entity_uid", "")).strip() not in entity_uids:
+                        section["entity_uid"] = ""
+                        add_repair("form_entity", f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.sections.{section_uid}.entity_uid", "clear dangling form section entity")
 
     valid_applies_to = set()
     for collection in RULE_APPLIES_TO_COLLECTIONS:
@@ -879,291 +904,182 @@ def repair_document_consistency(document: dict) -> tuple[dict, list[dict]]:
             if isinstance(node, dict):
                 valid_applies_to.update(_reference_tokens(node))
     for rule in doc.get("rules", []):
-        applies_to = str(rule.get("applies_to", "")).strip()
+        applies_to = str(rule.get("appliesToUid", "")).strip()
         if applies_to and applies_to not in valid_applies_to:
-            rule["applies_to"] = ""
-            add_repair("rule_applies_to", f"rules.{rule.get('uid', '')}.applies_to", "clear dangling rule target")
+            rule["appliesToUid"] = ""
+            add_repair("rule_applies_to", f"rules.{rule.get('uid', '')}.appliesToUid", "clear dangling rule target")
 
     return doc, repairs
 
 
 def validate_document(document: dict) -> list[dict]:
-    doc = migrate_document(document)
+    doc = canonical_document(document)
     issues: list[dict] = []
 
-    def add_duplicate_id_issues(items: list[dict], item_type: str, path_prefix: str, scope_label: str = "") -> None:
-        seen: dict[str, dict] = {}
+    def add_issue(path: str, message: str, level: str = "error") -> None:
+        issues.append({"level": level, "path": path, "message": message})
+
+    def duplicate_uid_issues(items: list[dict], item_type: str, path_prefix: str, scope_label: str = "") -> None:
+        seen: set[str] = set()
         for item in items or []:
             if not isinstance(item, dict):
                 continue
-            item_id = str(item.get("id", "")).strip()
-            if not item_id:
+            uid = str(item.get("uid", "")).strip()
+            if not uid:
+                add_issue(f"{path_prefix}.missingUid", f"{collection_label(item_type)} ?? UID")
                 continue
-            if item_id in seen:
-                suffix = f"（{scope_label}）" if scope_label else ""
-                issues.append(
-                    {
-                        "level": "error",
-                        "path": f"{path_prefix}.{item_id}.id",
-                        "message": f"{collection_label(item_type)}业务ID重复{suffix}: {item_id}",
-                    }
-                )
-            else:
-                seen[item_id] = item
+            if uid in seen:
+                suffix = f"?{scope_label}?" if scope_label else ""
+                add_issue(f"{path_prefix}.{uid}.uid", f"{collection_label(item_type)} UID ??{suffix}: {uid}")
+            seen.add(uid)
 
-    role_ids = {role["id"] for role in doc.get("roles", [])}
-    stage_ids = {stage["id"] for stage in doc.get("stages", [])}
-    entity_ids = {entity["id"] for entity in doc.get("entities", [])}
-    process_ids = {process["id"] for process in doc.get("processes", [])}
-    stage_flow_refs = doc.get("stageFlowRefs", [])
-    stage_flow_ref_ids = {str(ref.get("id", "")).strip() for ref in stage_flow_refs}
-    stage_flow_ref_by_id = {
-        str(ref.get("id", "")).strip(): ref
-        for ref in stage_flow_refs
-        if str(ref.get("id", "")).strip()
-    }
-    node_ids = {node["id"] for process in doc.get("processes", []) for node in process.get("nodes", [])}
+    role_uids = {str(role.get("uid", "")).strip() for role in doc.get("roles", []) if isinstance(role, dict)}
+    stage_uids = {str(stage.get("uid", "")).strip() for stage in doc.get("stages", []) if isinstance(stage, dict)}
+    process_uids = {str(process.get("uid", "")).strip() for process in doc.get("processes", []) if isinstance(process, dict)}
+    entity_uids = {str(entity.get("uid", "")).strip() for entity in doc.get("entities", []) if isinstance(entity, dict)}
 
-    add_duplicate_id_issues(doc.get("roles", []), "role", "roles")
-    add_duplicate_id_issues(doc.get("stages", []), "stage", "stages")
-    add_duplicate_id_issues(doc.get("processes", []), "process", "processes")
-    add_duplicate_id_issues(doc.get("entities", []), "entity", "entities")
-    add_duplicate_id_issues(doc.get("rules", []), "rule", "rules")
-    add_duplicate_id_issues(doc.get("businessComponents", []), "business_component", "businessComponents")
-    add_duplicate_id_issues(doc.get("businessConstructs", []), "business_construct", "businessConstructs")
-    add_duplicate_id_issues(doc.get("taskDefinitions", []), "task_definition", "taskDefinitions")
+    duplicate_uid_issues(doc.get("roles", []), "role", "roles")
+    duplicate_uid_issues(doc.get("stages", []), "stage", "stages")
+    duplicate_uid_issues(doc.get("processes", []), "process", "processes")
+    duplicate_uid_issues(doc.get("entities", []), "entity", "entities")
+    duplicate_uid_issues(doc.get("rules", []), "rule", "rules")
+    duplicate_uid_issues(doc.get("businessComponents", []), "business_component", "businessComponents")
+    duplicate_uid_issues(doc.get("businessConstructs", []), "business_construct", "businessConstructs")
+    duplicate_uid_issues(doc.get("taskDefinitions", []), "task_definition", "taskDefinitions")
     for process in doc.get("processes", []):
-        process_id = str(process.get("id", "")).strip()
-        add_duplicate_id_issues(process.get("nodes", []), "node", f"processes.{process_id}.nodes", process_id)
+        if not isinstance(process, dict):
+            continue
+        process_uid = str(process.get("uid", "")).strip()
+        duplicate_uid_issues(process.get("nodes", []), "node", f"processes.{process_uid}.nodes", process_uid)
         flow = process.get("flow") if isinstance(process.get("flow"), dict) else {}
-        add_duplicate_id_issues(flow.get("nodes", []), "stage_flow_ref", f"processes.{process_id}.flow.nodes", process_id)
-        add_duplicate_id_issues(flow.get("edges", []), "stage_flow_link", f"processes.{process_id}.flow.edges", process_id)
-
-    process_stage_map = {
-        process["id"]: str(process.get("stageId", "")).strip()
-        for process in doc.get("processes", [])
-    }
-    stage_process_ref_map: dict[str, set[str]] = {}
+        duplicate_uid_issues(flow.get("nodes", []), "stage_flow_ref", f"processes.{process_uid}.flow.nodes", process_uid)
+        duplicate_uid_issues(flow.get("edges", []), "stage_flow_link", f"processes.{process_uid}.flow.edges", process_uid)
 
     for process in doc.get("processes", []):
-        stage_id = str(process.get("stageId", "")).strip()
-        if stage_id and stage_id not in stage_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"processes.{process['id']}.stageId",
-                    "message": f"流程 {process['id']} 引用了不存在的业务阶段 {stage_id}",
-                }
-            )
+        if not isinstance(process, dict):
+            continue
+        process_uid = str(process.get("uid", "")).strip()
+        stage_uid = str(process.get("stageUid", "")).strip()
+        if stage_uid and stage_uid not in stage_uids:
+            add_issue(f"processes.{process_uid}.stageUid", f"?? {process_uid} ????????? {stage_uid}")
 
-    for stage_flow_ref in stage_flow_refs:
-        ref_id = str(stage_flow_ref.get("id", "")).strip() or str(stage_flow_ref.get("uid", "")).strip()
-        stage_id = str(stage_flow_ref.get("stageId", "")).strip()
-        process_id = str(stage_flow_ref.get("processId", "")).strip()
-        if stage_id and stage_id not in stage_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageFlowRefs.{ref_id}.stageId",
-                    "message": f"阶段流程引用 {ref_id} 引用了不存在的业务阶段 {stage_id}",
-                }
-            )
-        if process_id and process_id not in process_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageFlowRefs.{ref_id}.processId",
-                    "message": f"阶段流程引用 {ref_id} 引用了不存在的流程 {process_id}",
-                }
-            )
-        if stage_id and process_id:
-            stage_process_ref_map.setdefault(stage_id, set()).add(process_id)
+    stage_member_processes: dict[str, set[str]] = {}
+    stage_flow_refs = [ref for ref in doc.get("stageFlowRefs", []) if isinstance(ref, dict)]
+    stage_flow_ref_by_uid = {str(ref.get("uid", "")).strip(): ref for ref in stage_flow_refs if str(ref.get("uid", "")).strip()}
+    for ref in stage_flow_refs:
+        ref_uid = str(ref.get("uid", "")).strip()
+        stage_uid = str(ref.get("stageUid", "")).strip()
+        process_uid = str(ref.get("processUid", "")).strip()
+        if stage_uid and stage_uid not in stage_uids:
+            add_issue(f"stageFlowRefs.{ref_uid}.stageUid", f"?????? {ref_uid} ????????? {stage_uid}")
+        if process_uid and process_uid not in process_uids:
+            add_issue(f"stageFlowRefs.{ref_uid}.processUid", f"?????? {ref_uid} ????????? {process_uid}")
+        if stage_uid and process_uid:
+            stage_member_processes.setdefault(stage_uid, set()).add(process_uid)
 
     for stage in doc.get("stages", []):
-        stage_member_processes = stage_process_ref_map.get(stage["id"], set())
-        if not stage_member_processes:
-            stage_member_processes = {
-                process_id
-                for process_id, owner_stage_id in process_stage_map.items()
-                if owner_stage_id == stage["id"]
-            }
-        for link in stage.get("processLinks", []):
-            from_process_id = str(link.get("fromProcessId", "")).strip()
-            to_process_id = str(link.get("toProcessId", "")).strip()
-            if from_process_id and from_process_id not in process_ids:
-                issues.append(
-                    {
-                        "level": "error",
-                        "path": f"stages.{stage['id']}.processLinks.{link.get('uid', '')}.fromProcessId",
-                        "message": f"业务阶段 {stage['id']} 的流程连线引用了不存在的流程 {from_process_id}",
-                    }
-                )
-            if to_process_id and to_process_id not in process_ids:
-                issues.append(
-                    {
-                        "level": "error",
-                        "path": f"stages.{stage['id']}.processLinks.{link.get('uid', '')}.toProcessId",
-                        "message": f"业务阶段 {stage['id']} 的流程连线引用了不存在的流程 {to_process_id}",
-                    }
-                )
-            if from_process_id and from_process_id not in stage_member_processes:
-                issues.append(
-                    {
-                        "level": "error",
-                        "path": f"stages.{stage['id']}.processLinks.{link.get('uid', '')}.fromProcessId",
-                        "message": f"业务阶段 {stage['id']} 的流程连线引用了不属于该阶段的流程 {from_process_id}",
-                    }
-                )
-            if to_process_id and to_process_id not in stage_member_processes:
-                issues.append(
-                    {
-                        "level": "error",
-                        "path": f"stages.{stage['id']}.processLinks.{link.get('uid', '')}.toProcessId",
-                        "message": f"业务阶段 {stage['id']} 的流程连线引用了不属于该阶段的流程 {to_process_id}",
-                    }
-                )
+        if not isinstance(stage, dict):
+            continue
+        stage_uid = str(stage.get("uid", "")).strip()
+        members = stage_member_processes.get(stage_uid, set()) or {
+            str(process.get("uid", "")).strip()
+            for process in doc.get("processes", [])
+            if isinstance(process, dict) and str(process.get("stageUid", "")).strip() == stage_uid
+        }
+        for link in stage.get("processLinks", []) if isinstance(stage.get("processLinks"), list) else []:
+            if not isinstance(link, dict):
+                continue
+            from_process_uid = str(link.get("fromProcessUid", "")).strip()
+            to_process_uid = str(link.get("toProcessUid", "")).strip()
+            if from_process_uid and from_process_uid not in process_uids:
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.fromProcessUid", f"?? {stage_uid} ?????????????? {from_process_uid}")
+            if to_process_uid and to_process_uid not in process_uids:
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.toProcessUid", f"?? {stage_uid} ?????????????? {to_process_uid}")
+            if from_process_uid and members and from_process_uid not in members:
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.fromProcessUid", f"?? {stage_uid} ????????????????? {from_process_uid}")
+            if to_process_uid and members and to_process_uid not in members:
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.toProcessUid", f"?? {stage_uid} ????????????????? {to_process_uid}")
 
     for stage_link in doc.get("stageLinks", []):
-        from_stage_id = str(stage_link.get("fromStageId", "")).strip()
-        to_stage_id = str(stage_link.get("toStageId", "")).strip()
-        if from_stage_id and from_stage_id not in stage_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageLinks.{stage_link.get('uid', '')}.fromStageId",
-                    "message": f"业务阶段连线引用了不存在的起点阶段 {from_stage_id}",
-                }
-            )
-        if to_stage_id and to_stage_id not in stage_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageLinks.{stage_link.get('uid', '')}.toStageId",
-                    "message": f"业务阶段连线引用了不存在的终点阶段 {to_stage_id}",
-                }
-            )
+        if not isinstance(stage_link, dict):
+            continue
+        from_stage_uid = str(stage_link.get("fromStageUid", "")).strip()
+        to_stage_uid = str(stage_link.get("toStageUid", "")).strip()
+        if from_stage_uid and from_stage_uid not in stage_uids:
+            add_issue(f"stageLinks.{stage_link.get('uid', '')}.fromStageUid", f"??????????????? {from_stage_uid}")
+        if to_stage_uid and to_stage_uid not in stage_uids:
+            add_issue(f"stageLinks.{stage_link.get('uid', '')}.toStageUid", f"??????????????? {to_stage_uid}")
 
     for stage_flow_link in doc.get("stageFlowLinks", []):
-        link_id = str(stage_flow_link.get("id", "")).strip() or str(stage_flow_link.get("uid", "")).strip()
-        stage_id = str(stage_flow_link.get("stageId", "")).strip()
-        from_ref_id = str(stage_flow_link.get("fromRefId", "")).strip()
-        to_ref_id = str(stage_flow_link.get("toRefId", "")).strip()
-        if stage_id and stage_id not in stage_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageFlowLinks.{link_id}.stageId",
-                    "message": f"阶段流程引用连线引用了不存在的业务阶段 {stage_id}",
-                }
-            )
-        if from_ref_id and from_ref_id not in stage_flow_ref_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageFlowLinks.{link_id}.fromRefId",
-                    "message": f"阶段流程引用连线引用了不存在的起点引用 {from_ref_id}",
-                }
-            )
-        if to_ref_id and to_ref_id not in stage_flow_ref_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageFlowLinks.{link_id}.toRefId",
-                    "message": f"阶段流程引用连线引用了不存在的终点引用 {to_ref_id}",
-                }
-            )
-        from_ref = stage_flow_ref_by_id.get(from_ref_id)
-        to_ref = stage_flow_ref_by_id.get(to_ref_id)
-        if stage_id and from_ref and str(from_ref.get("stageId", "")).strip() != stage_id:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageFlowLinks.{link_id}.fromRefId",
-                    "message": f"阶段流程引用连线引用了不属于该阶段的起点引用 {from_ref_id}",
-                }
-            )
-        if stage_id and to_ref and str(to_ref.get("stageId", "")).strip() != stage_id:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"stageFlowLinks.{link_id}.toRefId",
-                    "message": f"阶段流程引用连线引用了不属于该阶段的终点引用 {to_ref_id}",
-                }
-            )
+        if not isinstance(stage_flow_link, dict):
+            continue
+        link_uid = str(stage_flow_link.get("uid", "")).strip()
+        stage_uid = str(stage_flow_link.get("stageUid", "")).strip()
+        from_ref_uid = str(stage_flow_link.get("fromRefUid", "")).strip()
+        to_ref_uid = str(stage_flow_link.get("toRefUid", "")).strip()
+        if stage_uid and stage_uid not in stage_uids:
+            add_issue(f"stageFlowLinks.{link_uid}.stageUid", f"????????????????? {stage_uid}")
+        if from_ref_uid and from_ref_uid not in stage_flow_ref_by_uid:
+            add_issue(f"stageFlowLinks.{link_uid}.fromRefUid", f"??????????????????? {from_ref_uid}")
+        if to_ref_uid and to_ref_uid not in stage_flow_ref_by_uid:
+            add_issue(f"stageFlowLinks.{link_uid}.toRefUid", f"??????????????????? {to_ref_uid}")
+        from_ref = stage_flow_ref_by_uid.get(from_ref_uid)
+        to_ref = stage_flow_ref_by_uid.get(to_ref_uid)
+        if stage_uid and from_ref and str(from_ref.get("stageUid", "")).strip() != stage_uid:
+            add_issue(f"stageFlowLinks.{link_uid}.fromRefUid", f"?????????????????????? {from_ref_uid}")
+        if stage_uid and to_ref and str(to_ref.get("stageUid", "")).strip() != stage_uid:
+            add_issue(f"stageFlowLinks.{link_uid}.toRefUid", f"?????????????????????? {to_ref_uid}")
 
     for process in doc.get("processes", []):
-        for node in process.get("nodes", []):
-            referenced_role_ids = []
-            seen_role_ids = set()
-            for role_id in node.get("role_ids", []):
-                normalized_role_id = str(role_id or "").strip()
-                if not normalized_role_id or normalized_role_id in seen_role_ids:
+        if not isinstance(process, dict):
+            continue
+        process_uid = str(process.get("uid", "")).strip()
+        for node in process.get("nodes", []) if isinstance(process.get("nodes"), list) else []:
+            if not isinstance(node, dict):
+                continue
+            node_uid = str(node.get("uid", "")).strip()
+            referenced_role_uids = []
+            seen_role_uids = set()
+            for role_uid in node.get("role_uids", []) if isinstance(node.get("role_uids"), list) else []:
+                normalized_role_uid = str(role_uid or "").strip()
+                if not normalized_role_uid or normalized_role_uid in seen_role_uids:
                     continue
-                seen_role_ids.add(normalized_role_id)
-                referenced_role_ids.append(normalized_role_id)
-            legacy_role_id = str(node.get("role_id", "")).strip()
-            if legacy_role_id and legacy_role_id not in seen_role_ids:
-                referenced_role_ids.insert(0, legacy_role_id)
-            for index, role_id in enumerate(referenced_role_ids):
-                if role_id in role_ids:
+                seen_role_uids.add(normalized_role_uid)
+                referenced_role_uids.append(normalized_role_uid)
+            role_uid = str(node.get("role_uid", "")).strip()
+            if role_uid and role_uid not in seen_role_uids:
+                referenced_role_uids.insert(0, role_uid)
+            for index, role_uid in enumerate(referenced_role_uids):
+                if role_uid not in role_uids:
+                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.role_uids.{index}", f"?? {node_uid} ????????? {role_uid}")
+            for entity_op in node.get("entity_ops", []) if isinstance(node.get("entity_ops"), list) else []:
+                entity_uid = str((entity_op or {}).get("entity_uid", "")).strip() if isinstance(entity_op, dict) else ""
+                if entity_uid and entity_uid not in entity_uids:
+                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.entity_ops", f"?? {node_uid} ????????? {entity_uid}")
+            for form in node.get("forms", []) if isinstance(node.get("forms"), list) else []:
+                if not isinstance(form, dict):
                     continue
-                issues.append(
-                    {
-                        "level": "error",
-                        "path": f"processes.{process['id']}.nodes.{node['id']}.role_ids.{index}",
-                        "message": f"任务 {node['id']} 引用了不存在的角色 {role_id}",
-                    }
-                )
-            for entity_op in node.get("entity_ops", []):
-                entity_id = str(entity_op.get("entity_id", "")).strip()
-                if entity_id and entity_id not in entity_ids:
-                    issues.append(
-                        {
-                            "level": "error",
-                            "path": f"processes.{process['id']}.nodes.{node['id']}.entity_ops",
-                            "message": f"任务 {node['id']} 引用了不存在的实体 {entity_id}",
-                        }
-                    )
-            for form in node.get("forms", []):
-                form_entity_id = str(form.get("entity_id", "")).strip()
-                if form_entity_id and form_entity_id not in entity_ids:
-                    issues.append(
-                        {
-                            "level": "error",
-                            "path": f"processes.{process['id']}.nodes.{node['id']}.forms.{form.get('id', '')}.entity_id",
-                            "message": f"表单 {form.get('id', '')} 引用了不存在的实体 {form_entity_id}",
-                        }
-                    )
-                for section in form.get("sections", []):
-                    section_entity_id = str(section.get("entity_id", "")).strip()
-                    if section_entity_id and section_entity_id not in entity_ids:
-                        issues.append(
-                            {
-                                "level": "error",
-                                "path": f"processes.{process['id']}.nodes.{node['id']}.forms.{form.get('id', '')}.sections.{section.get('id', '')}.entity_id",
-                                "message": f"表单分组 {section.get('id', '')} 引用了不存在的实体 {section_entity_id}",
-                            }
-                        )
+                form_uid = str(form.get("uid", "")).strip()
+                form_entity_uid = str(form.get("entity_uid", "")).strip()
+                if form_entity_uid and form_entity_uid not in entity_uids:
+                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.entity_uid", f"?? {form_uid} ????????? {form_entity_uid}")
+                for section in form.get("sections", []) if isinstance(form.get("sections"), list) else []:
+                    if not isinstance(section, dict):
+                        continue
+                    section_uid = str(section.get("uid", "")).strip()
+                    section_entity_uid = str(section.get("entity_uid", "")).strip()
+                    if section_entity_uid and section_entity_uid not in entity_uids:
+                        add_issue(f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.sections.{section_uid}.entity_uid", f"???? {section_uid} ????????? {section_entity_uid}")
 
     for relation in doc.get("relations", []):
+        if not isinstance(relation, dict):
+            continue
         relation_from = str(relation.get("from", "")).strip()
         relation_to = str(relation.get("to", "")).strip()
-        if relation_from and relation_from not in entity_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"relations.{relation.get('uid', '')}.from",
-                    "message": f"关系引用了不存在的起点实体 {relation_from}",
-                }
-            )
-        if relation_to and relation_to not in entity_ids:
-            issues.append(
-                {
-                    "level": "error",
-                    "path": f"relations.{relation.get('uid', '')}.to",
-                    "message": f"关系引用了不存在的终点实体 {relation_to}",
-                }
-            )
+        if relation_from and relation_from not in entity_uids:
+            add_issue(f"relations.{relation.get('uid', '')}.from", f"????????????? {relation_from}")
+        if relation_to and relation_to not in entity_uids:
+            add_issue(f"relations.{relation.get('uid', '')}.to", f"????????????? {relation_to}")
 
     valid_applies_to = set()
     for collection in RULE_APPLIES_TO_COLLECTIONS:
@@ -1171,18 +1087,14 @@ def validate_document(document: dict) -> list[dict]:
             if isinstance(item, dict):
                 valid_applies_to.update(_reference_tokens(item))
     for process in doc.get("processes", []):
-        for node in process.get("nodes", []):
+        for node in process.get("nodes", []) if isinstance(process.get("nodes"), list) else []:
             if isinstance(node, dict):
                 valid_applies_to.update(_reference_tokens(node))
     for rule in doc.get("rules", []):
-        applies_to = str(rule.get("applies_to", "")).strip()
+        if not isinstance(rule, dict):
+            continue
+        applies_to = str(rule.get("appliesToUid", "")).strip()
         if applies_to and applies_to not in valid_applies_to:
-            issues.append(
-                {
-                    "level": "warning",
-                    "path": f"rules.{rule.get('uid', '')}.applies_to",
-                    "message": f"规则 {rule.get('name', '') or rule.get('id', '')} 的 applies_to 找不到对应对象 {applies_to}",
-                }
-            )
+            add_issue(f"rules.{rule.get('uid', '')}.appliesToUid", f"?? {rule.get('name', '') or rule.get('uid', '')} ? appliesToUid ??????? {applies_to}", "warning")
 
     return issues

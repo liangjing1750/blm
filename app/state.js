@@ -16,6 +16,7 @@ const S = {
     checked: false,
     apiVersion: 0,
     supportsDocs: false,
+    supportsCopy: false,
   },
   merge: {
     workspaceFiles: [],
@@ -447,6 +448,7 @@ function normalizeBusinessRuleEntry(rule, index = 1) {
   const rawName = source.name ?? source.title ?? `规则${index}`;
   const rawContent = source.content ?? source.description ?? source.note ?? '';
   return {
+    uid: String(source.uid || '').trim() || id,
     id,
     name: String(rawName),
     content: String(rawContent),
@@ -460,7 +462,8 @@ function getNodeBusinessRules(node) {
     : (Array.isArray(node.business_rules) ? node.business_rules : []);
   const rules = source.map((rule, index) => normalizeBusinessRuleEntry(rule, index + 1));
   if (!rules.length && !hasExplicitRules && String(node.rules_note || '').trim()) {
-    rules.push({ id: createUiUid('rule'), name: '业务规则', content: String(node.rules_note || '').trim() });
+    const uid = createUiUid('rule');
+    rules.push({ uid, id: uid, name: '业务规则', content: String(node.rules_note || '').trim() });
   }
   node.businessRules = rules;
   return node.businessRules;
@@ -609,7 +612,9 @@ function normalizePanoramaColumnEntry(column, index = 1, usedIds = new Set()) {
   const normalized = column && typeof column === 'object' ? column : {};
   const fallback = DEFAULT_PANORAMA_COLUMNS[index - 1] || {};
   const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
+  const uid = String(normalized.uid || '').trim();
   return {
+    ...(uid ? { uid } : {}),
     id: normalizePanoramaId(normalized.id || normalized.key, 'C', index, usedIds),
     name: hasName ? String(normalized.name || '').trim() : (fallback.name || `价值流${index}`),
     scope: String(normalized.scope || '').trim(),
@@ -620,7 +625,9 @@ function normalizePanoramaLaneEntry(lane, index = 1, usedIds = new Set()) {
   const normalized = lane && typeof lane === 'object' ? lane : {};
   const fallback = DEFAULT_PANORAMA_LANES[index - 1] || {};
   const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
+  const uid = String(normalized.uid || '').trim();
   return {
+    ...(uid ? { uid } : {}),
     id: normalizePanoramaId(normalized.id || normalized.key, 'L', index, usedIds),
     name: hasName ? String(normalized.name || '').trim() : (fallback.name || `业务域${index}`),
     badge: String(normalized.badge || '').trim(),
@@ -629,7 +636,9 @@ function normalizePanoramaLaneEntry(lane, index = 1, usedIds = new Set()) {
 }
 function normalizePanoramaCellEntry(cell) {
   const normalized = cell && typeof cell === 'object' ? cell : {};
+  const uid = String(normalized.uid || '').trim();
   return {
+    ...(uid ? { uid } : {}),
     columnId: String(normalized.columnId || normalized.streamId || normalized.valueStreamId || '').trim(),
     laneId: String(normalized.laneId || '').trim(),
     status: String(normalized.status || '').trim(),
@@ -934,6 +943,53 @@ function defineUiAlias(target, aliasKey, actualKey) {
   });
 }
 
+function defineModelUidAliasDeep(value) {
+  if (Array.isArray(value)) {
+    value.forEach(defineModelUidAliasDeep);
+    return value;
+  }
+  if (!value || typeof value !== 'object') return value;
+  if (String(value.uid || '').trim()) {
+    defineUiAlias(value, 'id', 'uid');
+  }
+  const referenceAliases = {
+    columnId: 'columnUid',
+    laneId: 'laneUid',
+    panoramaColumnId: 'panoramaColumnUid',
+    panoramaLaneId: 'panoramaLaneUid',
+    fromProcessId: 'fromProcessUid',
+    toProcessId: 'toProcessUid',
+    fromStageId: 'fromStageUid',
+    toStageId: 'toStageUid',
+    stageId: 'stageUid',
+    processId: 'processUid',
+    fromRefId: 'fromRefUid',
+    toRefId: 'toRefUid',
+    businessComponentId: 'businessComponentUid',
+    businessComponentIds: 'businessComponentUids',
+    businessConstructId: 'businessConstructUid',
+    businessConstructIds: 'businessConstructUids',
+    relatedProcessIds: 'relatedProcessUids',
+    constructId: 'constructUid',
+    constructIds: 'constructUids',
+    taskDefinitionId: 'taskDefinitionUid',
+    taskDefinitionIds: 'taskDefinitionUids',
+    entityId: 'entityUid',
+    entityIds: 'entityUids',
+    entity_id: 'entity_uid',
+    role_id: 'role_uid',
+    role_ids: 'role_uids',
+    applies_to: 'appliesToUid',
+  };
+  Object.entries(referenceAliases).forEach(([aliasKey, actualKey]) => {
+    if (Object.prototype.hasOwnProperty.call(value, actualKey)) {
+      defineUiAlias(value, aliasKey, actualKey);
+    }
+  });
+  Object.values(value).forEach(defineModelUidAliasDeep);
+  return value;
+}
+
 function normalizeLegacyBusinessComponentKeys(value) {
   if (Array.isArray(value)) {
     value.forEach((item) => normalizeLegacyBusinessComponentKeys(item));
@@ -967,6 +1023,7 @@ function normalizeLegacyBusinessComponentKeys(value) {
 
 function hydrateDocumentForUi(doc) {
   if (!doc || typeof doc !== 'object') return doc;
+  defineModelUidAliasDeep(doc);
   if (doc.document && typeof doc.document === 'object' && !doc.processes && !doc.entities && !doc.businessComponents) {
     Object.assign(doc, doc.document);
     delete doc.document;
@@ -999,6 +1056,7 @@ function hydrateDocumentForUi(doc) {
       syncTaskRole(node);
     });
   });
+  defineModelUidAliasDeep(doc);
   return doc;
 }
 function currentStage() { return getStageItems(S.doc).find((stage) => stage.id === S.ui.stageId) || null; }
@@ -1200,6 +1258,7 @@ function ensureEntityStateShape(entity) {
     }
   });
   entity.state_transitions = entity.state_transitions.map((transition) => ({
+    uid: String(transition?.uid || '').trim() || createUiUid('transition'),
     from: String(transition?.from || ''),
     to: String(transition?.to || ''),
     action: String(transition?.action || ''),
@@ -1219,6 +1278,7 @@ function createStateTransitionDraft(entity, preferredFieldName = '') {
     || initialState
     || '';
   return {
+    uid: createUiUid('transition'),
     from: initialState,
     to: nextState,
     action: '',

@@ -9,7 +9,6 @@ from blm_core.document import create_empty_document, migrate_document
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.model_strategy import (
     DESCRIPTORS,
-    ID_PREFIXES,
     LEGACY_FIELD_RENAMES,
     semantic_key,
 )
@@ -19,10 +18,9 @@ from blm_core.storage import DocumentFileStore, WorkspaceStorage
 class DocumentIdentityTests(unittest.TestCase):
     def test_model_strategy_is_the_identity_and_merge_entry(self):
         self.assertEqual(DESCRIPTORS["document"]["lists"]["businessComponents"], "business_component")
-        self.assertEqual(DESCRIPTORS["business_component"]["set_lists"], ["constructIds", "taskDefinitionIds", "entityIds"])
-        self.assertEqual(ID_PREFIXES["business_component"], "BCP")
+        self.assertEqual(DESCRIPTORS["business_component"]["set_lists"], ["constructUids", "taskDefinitionUids", "entityUids"])
         self.assertEqual(LEGACY_FIELD_RENAMES["capabilityUnitId"], "businessComponentId")
-        self.assertEqual(semantic_key("process", {"id": "P1", "name": "入库预约申请"}), "入库预约申请")
+        self.assertEqual(semantic_key("process", {"uid": "P1", "name": "入库预约申请"}), "入库预约申请")
 
     def test_migrate_document_assigns_hidden_document_and_node_uids(self):
         document = migrate_document(
@@ -214,6 +212,42 @@ class DocumentFileStoreTests(unittest.TestCase):
             self.assertTrue(path.exists())
             self.assertTrue(path.with_suffix(".md").exists())
 
+    def test_workspace_package_manifest_does_not_persist_model_ids(self):
+        document = create_empty_document("Uid Only")
+        document["roles"].append({"uid": "role-1", "id": "R1", "name": "Operator", "desc": "", "group": "", "subDomains": []})
+        document["entities"].append({"uid": "entity-1", "id": "E1", "name": "Application", "group": "", "note": "", "fields": [], "state_transitions": []})
+        document["processes"][0]["nodes"].append(
+            {
+                "uid": "node-1",
+                "id": "T1",
+                "name": "Submit",
+                "role_id": "R1",
+                "role_ids": ["R1"],
+                "roles": [],
+                "entity_ops": [{"uid": "entity-op-1", "entity_id": "E1", "ops": ["R"]}],
+                "userSteps": [],
+                "orchestrationTasks": [],
+                "businessRules": [],
+                "forms": [],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir))
+            storage.save("Uid Only", document)
+            manifest_path = Path(temp_dir) / "Uid Only" / "manifest.json"
+            raw = manifest_path.read_text("utf-8")
+
+            self.assertNotIn('"id": "R1"', raw)
+            self.assertNotIn('"id": "E1"', raw)
+            self.assertNotIn('"role_ids"', raw)
+            self.assertNotIn('"role_id"', raw)
+            self.assertNotIn('"entity_id"', raw)
+            self.assertIn('"uid": "role-1"', raw)
+            self.assertIn('"uid": "entity-1"', raw)
+            self.assertIn('"role_uids"', raw)
+            self.assertIn('"entity_uid"', raw)
+
 
 class WorkspaceRevisionTests(unittest.TestCase):
     def test_save_with_revision_rebases_non_overlapping_stale_changes(self):
@@ -302,6 +336,43 @@ class WorkspaceRevisionTests(unittest.TestCase):
 
 
 class MergeEngineTests(unittest.TestCase):
+    def test_combine_uses_model_uid_identity_for_copied_documents(self):
+        left = create_empty_document("Copied")
+        left["roles"] = [
+            {"uid": "role-1", "id": "R1", "name": "Operator", "desc": "", "group": "Business", "subDomains": []}
+        ]
+        left["businessComponents"] = [
+            {"uid": "component-1", "id": "BCP1", "name": "Apply", "kind": "core", "note": "", "constructIds": [], "taskDefinitionIds": [], "entityIds": []}
+        ]
+        left["entities"] = [
+            {"uid": "entity-1", "id": "E1", "name": "Application", "group": "", "note": "", "fields": [], "state_transitions": []}
+        ]
+        right = deepcopy(left)
+        right["meta"]["document_uid"] = "copied-document-uid"
+        right["meta"]["title"] = "Copied - copy"
+        right["meta"]["domain"] = "Copied - copy"
+
+        analysis = analyze_merge("combine", left, right)
+
+        self.assertEqual(analysis["conflicts"], [])
+        self.assertEqual(analysis["validation_issues"], [])
+        self.assertEqual(len(analysis["merged_document"]["roles"]), 1)
+        self.assertEqual(len(analysis["merged_document"]["businessComponents"]), 1)
+        self.assertEqual(len(analysis["merged_document"]["entities"]), 1)
+
+    def test_combine_does_not_treat_internal_ids_as_user_conflicts(self):
+        left = create_empty_document("Internal ids")
+        left["roles"] = [
+            {"uid": "role-1", "id": "R1", "name": "Operator", "desc": "", "group": "Business", "subDomains": []}
+        ]
+        right = deepcopy(left)
+        right["roles"][0]["id"] = "R999"
+
+        analysis = analyze_merge("combine", left, right)
+
+        self.assertEqual(analysis["conflicts"], [])
+        self.assertEqual(analysis["merged_document"]["roles"][0]["id"], "R1")
+
     def test_three_way_merge_auto_merges_non_overlapping_changes(self):
         base = create_empty_document("Supply")
         left = deepcopy(base)

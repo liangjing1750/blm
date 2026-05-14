@@ -1540,6 +1540,108 @@ class MergeApiTests(unittest.TestCase):
         self.assertEqual(result["document"]["meta"]["title"], "示例平台")
         self.assertEqual(result["document"]["meta"]["domain"], "示例平台")
 
+    def test_copy_api_duplicates_package_without_rewriting_model_uids(self):
+        def uid_map(value, path=""):
+            result = {}
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    result.update(uid_map(item, f"{path}[{index}]"))
+                return result
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    child_path = f"{path}.{key}" if path else key
+                    if key in {"uid", "versionUid"}:
+                        result[child_path] = str(child or "")
+                    result.update(uid_map(child, child_path))
+            return result
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_dir = Path(temp_dir) / "workspace"
+            workspace_dir.mkdir()
+            storage = WorkspaceStorage(workspace_dir)
+            document = create_empty_document("Source")
+            document["roles"] = [{"uid": "role-u1", "id": "R1", "name": "Role"}]
+            document["stages"] = [{"uid": "stage-u1", "id": "S1", "name": "Stage"}]
+            document["processes"] = [
+                {
+                    "uid": "proc-u1",
+                    "id": "P1",
+                    "name": "Process",
+                    "stageId": "S1",
+                    "prototypeFiles": [
+                        {
+                            "uid": "attach-u1",
+                            "name": "test.txt",
+                            "versionUid": "attach-u1-v1",
+                            "versions": [
+                                {
+                                    "uid": "attach-u1-v1",
+                                    "number": 1,
+                                    "name": "test.txt",
+                                    "content": "hello",
+                                    "contentType": "text/plain",
+                                }
+                            ],
+                        }
+                    ],
+                    "nodes": [
+                        {
+                            "uid": "node-u1",
+                            "id": "T1",
+                            "name": "Node",
+                            "userSteps": [{"uid": "step-u1", "id": "U1", "action": "Do"}],
+                            "businessRules": [{"uid": "rule-u1", "id": "BR1", "name": "Rule", "content": ""}],
+                        }
+                    ],
+                    "flow": {"nodes": [], "edges": [{"uid": "edge-u1", "id": "E1", "from": "START", "to": "T1"}]},
+                }
+            ]
+            storage.save("Source", document)
+
+            app_dir = Path(__file__).resolve().parent.parent / "app"
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            payload = json.dumps({"source_name": "Source", "target_name": "Copy"}, ensure_ascii=False).encode("utf-8")
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/api/copy",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(request) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+            source = storage.load("Source")
+            copied = storage.load("Copy")
+            attachment = copied["processes"][0]["prototypeFiles"][0]
+            filename, content_type, attachment_payload = storage.load_attachment_payload(
+                "Copy",
+                attachment["uid"],
+                attachment["versionUid"],
+            )
+            has_target_markdown = (workspace_dir / "Copy" / "Copy.md").is_file()
+            has_stale_markdown = (workspace_dir / "Copy" / "Source.md").exists()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(copied["meta"]["title"], "Copy")
+        self.assertEqual(copied["meta"]["domain"], "Copy")
+        self.assertNotEqual(copied["meta"]["document_uid"], source["meta"]["document_uid"])
+        self.assertEqual(uid_map(source), uid_map(copied))
+        self.assertTrue(has_target_markdown)
+        self.assertFalse(has_stale_markdown)
+        self.assertEqual(filename, "test.txt")
+        self.assertEqual(content_type, "text/plain")
+        self.assertEqual(attachment_payload, b"hello")
+
     def test_rename_api_can_overwrite_existing_document(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace_dir = Path(temp_dir) / "workspace"
@@ -1763,6 +1865,7 @@ class DocsApiTests(unittest.TestCase):
 
         self.assertEqual(result["api_version"], 2)
         self.assertTrue(result["supports_docs"])
+        self.assertTrue(result["supports_copy"])
         self.assertEqual(result["mode"], "browser")
 
     def test_docs_api_lists_builtin_documents(self):

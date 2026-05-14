@@ -15,7 +15,7 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
-from blm_core.document import create_empty_document, migrate_document
+from blm_core.document import canonical_document, create_empty_document, migrate_document
 from blm_core.markdown import MarkdownExporter
 from blm_core.merge import apply_merge
 
@@ -56,7 +56,7 @@ class DocumentFileStore:
     def save_path(self, path: str | Path, document: dict) -> dict:
         file_path = self._normalize_path(path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        migrated_document = migrate_document(document)
+        migrated_document = canonical_document(document)
         file_path.write_text(
             json.dumps(migrated_document, ensure_ascii=False, indent=2),
             "utf-8",
@@ -387,6 +387,46 @@ class WorkspaceStorage(DocumentFileStore):
             self._move_workspace_document_to_trash(old_safe_name, self._timestamp())
             return new_safe_name, saved_document
 
+    def copy_document(self, source_name: str, target_name: str) -> dict:
+        with self._write_lock:
+            source_safe_name = self._validate_name(source_name)
+            target_safe_name = self._validate_name(target_name)
+            if self._workspace_document_exists(target_safe_name):
+                raise FileExistsError(target_safe_name)
+            if not self._workspace_document_exists(source_safe_name):
+                raise FileNotFoundError(source_safe_name)
+
+            self.temp_dir.mkdir(exist_ok=True)
+            temp_dir = self.temp_dir / f"{target_safe_name}.copy-{self._timestamp()}"
+            target_dir = self._package_dir(target_safe_name)
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            try:
+                source_package_dir = self._package_dir(source_safe_name)
+                source_legacy_json_path = self._legacy_json_path(source_safe_name)
+                if self._is_package_dir(source_package_dir):
+                    shutil.copytree(source_package_dir, temp_dir)
+                elif source_legacy_json_path.exists():
+                    self._write_package_dir(temp_dir, target_safe_name, self.load_path(source_legacy_json_path))
+                else:
+                    raise FileNotFoundError(source_safe_name)
+
+                document = self._load_package_dir(temp_dir)
+                document["meta"] = document.get("meta") if isinstance(document.get("meta"), dict) else {}
+                document["meta"]["title"] = target_safe_name
+                document["meta"]["domain"] = target_safe_name
+                document["meta"]["document_uid"] = uuid.uuid4().hex
+                document["meta"]["revision"] = 1
+                saved_document = self._write_package_dir(temp_dir, target_safe_name, document, source_package_dir=temp_dir)
+                if target_dir.exists():
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                shutil.move(str(temp_dir), str(target_dir))
+                self._remove_legacy_workspace_files(target_safe_name)
+                return self._load_package_dir(target_dir) or saved_document
+            finally:
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+
     def create(self, name: str) -> dict:
         with self._write_lock:
             safe_name = self._validate_name(name)
@@ -403,7 +443,7 @@ class WorkspaceStorage(DocumentFileStore):
 
     def build_export_bundle(self, name: str) -> tuple[str, bytes]:
         safe_name = self._validate_name(name)
-        document = migrate_document(self.load(safe_name))
+        document = canonical_document(self.load(safe_name))
         package_dir = self._package_dir(safe_name)
         package_document_uid = ""
         package_attachments_by_uid: dict[str, dict] = {}
@@ -415,7 +455,7 @@ class WorkspaceStorage(DocumentFileStore):
         packaged_files: list[tuple[Path, bytes]] = []
         export_attachments: list[dict] = []
         for process_index, process in enumerate(bundle_manifest.get("processes", []), start=1):
-            process_id = str(process.get("id", "")).strip() or f"P{process_index}"
+            process_uid = str(process.get("uid", "")).strip() or f"process-{process_index}"
             process_name = str(process.get("name", "")).strip()
             prototype_refs: list[dict] = []
             prototype_sources = process.get("prototypeFiles", [])
@@ -466,7 +506,7 @@ class WorkspaceStorage(DocumentFileStore):
                             version_number,
                             version_name,
                             content_type,
-                            process_id=process_id,
+                            process_uid=process_uid,
                             process_name=process_name,
                         )
                     )
@@ -488,7 +528,7 @@ class WorkspaceStorage(DocumentFileStore):
                         "uid": attachment_uid,
                         "name": str((package_attachment or {}).get("name", "")).strip() or str(normalized.get("name", "")).strip() or export_versions[-1]["name"],
                         "ownerType": "process",
-                        "ownerId": process_id,
+                        "ownerUid": process_uid,
                         "ownerName": process_name,
                         "versions": export_versions,
                     }
@@ -563,6 +603,14 @@ class WorkspaceStorage(DocumentFileStore):
     def _package_markdown_path(self, package_dir: Path, name: str) -> Path:
         return package_dir / f"{self._validate_name(name)}.md"
 
+    def _remove_stale_package_markdown_files(self, package_dir: Path, name: str) -> None:
+        expected_path = self._package_markdown_path(package_dir, name).resolve()
+        if not package_dir.exists():
+            return
+        for markdown_path in package_dir.glob("*.md"):
+            if markdown_path.resolve() != expected_path:
+                markdown_path.unlink(missing_ok=True)
+
     def _legacy_json_path(self, name: str) -> Path:
         return self.workspace_dir / f"{self._validate_name(name)}.json"
 
@@ -588,14 +636,14 @@ class WorkspaceStorage(DocumentFileStore):
         version_name: str,
         content_type: str,
         *,
-        process_id: str = "",
+        process_uid: str = "",
         process_name: str = "",
     ) -> Path:
         safe_attachment_uid = self._safe_path_component(attachment_uid, "attachment")
-        safe_process_id = self._safe_path_component(process_id or "process", "process")
+        safe_process_uid = self._safe_path_component(process_uid or "process", "process")
         process_label = str(process_name or "").strip()
         safe_process_name = self._safe_path_component(process_label, "") if process_label else ""
-        safe_process_dir = safe_process_id if not safe_process_name else f"{safe_process_id}__{safe_process_name}"
+        safe_process_dir = safe_process_uid if not safe_process_name else f"{safe_process_uid}__{safe_process_name}"
         safe_name = self._build_attachment_filename(version_name, content_type)
         return Path("processes") / safe_process_dir / safe_attachment_uid / f"v{max(int(version_number or 1), 1)}__{safe_name}"
 
@@ -642,7 +690,7 @@ class WorkspaceStorage(DocumentFileStore):
                     version_number,
                     version_name,
                     content_type,
-                    process_id=str(attachment.get("ownerId", "")).strip(),
+                    process_uid=str(attachment.get("ownerUid", "")).strip(),
                     process_name=str(attachment.get("ownerName", "")).strip(),
                 ).as_posix()
                 normalized_versions.append(
@@ -665,7 +713,7 @@ class WorkspaceStorage(DocumentFileStore):
                 "uid": attachment_uid,
                 "name": attachment_name,
                 "ownerType": str(attachment.get("ownerType", "")).strip() or "process",
-                "ownerId": str(attachment.get("ownerId", "")).strip(),
+                "ownerUid": str(attachment.get("ownerUid", "")).strip(),
                 "ownerName": str(attachment.get("ownerName", "")).strip(),
                 "versions": normalized_versions,
             }
@@ -683,7 +731,7 @@ class WorkspaceStorage(DocumentFileStore):
                     "uid": attachment_uid,
                     "name": str(attachment.get("name", "")).strip(),
                     "ownerType": str(attachment.get("ownerType", "")).strip() or "process",
-                    "ownerId": str(attachment.get("ownerId", "")).strip(),
+                    "ownerUid": str(attachment.get("ownerUid", "")).strip(),
                     "ownerName": str(attachment.get("ownerName", "")).strip(),
                     "versions": [
                         {
@@ -712,7 +760,7 @@ class WorkspaceStorage(DocumentFileStore):
         *,
         package_dir: Path | None = None,
         source_package_dir: Path | None = None,
-        process_id: str = "",
+        process_uid: str = "",
         process_name: str = "",
         attachment_index: int,
         existing_attachment: dict | None,
@@ -833,7 +881,7 @@ class WorkspaceStorage(DocumentFileStore):
                     version_number,
                     version_name,
                     content_type,
-                    process_id=process_id,
+                    process_uid=process_uid,
                     process_name=process_name,
                 ).as_posix()
             )
@@ -879,7 +927,7 @@ class WorkspaceStorage(DocumentFileStore):
             "uid": attachment_uid,
             "name": attachment_name,
             "ownerType": "process",
-            "ownerId": process_id,
+            "ownerUid": process_uid,
             "ownerName": process_name,
             "versions": stored_versions,
         }, current_version_uid
@@ -1066,7 +1114,7 @@ class WorkspaceStorage(DocumentFileStore):
         attachments_by_uid: dict[str, dict] = {}
         fallback_uploaded_at = self._format_uploaded_at()
         for process_index, process in enumerate(manifest_document.get("processes", []), start=1):
-            process_id = str(process.get("id", "")).strip() or f"P{process_index}"
+            process_uid = str(process.get("uid", "")).strip() or f"process-{process_index}"
             process_name = str(process.get("name", "")).strip()
             prototype_refs: list[dict] = []
             prototype_sources = process.get("prototypeFiles", [])
@@ -1079,7 +1127,7 @@ class WorkspaceStorage(DocumentFileStore):
                     normalized,
                     package_dir=package_dir,
                     source_package_dir=source_package_dir,
-                    process_id=process_id,
+                    process_uid=process_uid,
                     process_name=process_name,
                     attachment_index=(process_index * 1000) + prototype_index,
                     existing_attachment=existing_attachments_by_uid.get(str(normalized.get("uid", "")).strip()),
@@ -1095,13 +1143,14 @@ class WorkspaceStorage(DocumentFileStore):
             process["prototypeFiles"] = prototype_refs
         package_dir.mkdir(parents=True, exist_ok=True)
         self._manifest_path(package_dir).write_text(
-            json.dumps(manifest_document, ensure_ascii=False, indent=2),
+            json.dumps(canonical_document(manifest_document), ensure_ascii=False, indent=2),
             "utf-8",
         )
         self._package_markdown_path(package_dir, safe_name).write_text(
             self.exporter.export(migrated_document),
             "utf-8",
         )
+        self._remove_stale_package_markdown_files(package_dir, safe_name)
         if attachments_by_uid or self._attachment_index_path(document_uid, package_dir).exists():
             self._write_attachment_index(document_uid, attachments_by_uid, package_dir)
         return self._load_package_dir(package_dir)
@@ -1168,7 +1217,7 @@ class WorkspaceStorage(DocumentFileStore):
                     }
                 )
             process["prototypeFiles"] = prototype_entries
-        return migrate_document(document)
+        return canonical_document(document)
 
     def _resolve_relative_path(self, base_dir: Path, relative_path: str) -> Path | None:
         candidate = (base_dir / relative_path).resolve()

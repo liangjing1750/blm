@@ -2183,8 +2183,10 @@ function addTaskBusinessRule(procId, taskId, presetName = '') {
   const { task } = getTaskByIds(procId, taskId);
   if (!task) return;
   const rules = getNodeBusinessRules(task);
+  const uid = createUiUid('rule');
   const rule = {
-    id: createUiUid('rule'),
+    uid,
+    id: uid,
     name: String(presetName || `规则${rules.length + 1}`).trim(),
     content: '',
   };
@@ -2205,7 +2207,8 @@ function ensureTaskBusinessRuleTemplates(procId, taskId) {
   let firstAddedId = '';
   TASK_RULE_TEMPLATE_NAMES.forEach((name) => {
     if (existingNames.has(name)) return;
-    const rule = { id: createUiUid('rule'), name, content: '' };
+    const uid = createUiUid('rule');
+    const rule = { uid, id: uid, name, content: '' };
     rules.push(rule);
     existingNames.add(name);
     if (!firstAddedId) firstAddedId = rule.id;
