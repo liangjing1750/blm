@@ -23,6 +23,7 @@ from blm_core.merge import apply_merge
 TRASH_ENTRY_RE = re.compile(r"^(?P<name>.+)-(?P<timestamp>\d{8}-\d{6}-\d{6})$")
 INVALID_PATH_COMPONENT_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 PACKAGE_MANIFEST_NAME = "manifest.json"
+SNAPSHOT_META_NAME = "snapshot.json"
 ATTACHMENTS_DIR_NAME = ".attachments"
 ATTACHMENTS_INDEX_NAME = "attachments.json"
 EXPORT_ATTACHMENTS_DIR_NAME = "attachments"
@@ -121,11 +122,17 @@ class WorkspaceStorage(DocumentFileStore):
             if snapshot_id in seen_ids:
                 continue
             seen_ids.add(snapshot_id)
+            snapshot_meta = self._read_snapshot_meta(snapshot)
+            message = str(snapshot_meta.get("message", "")).strip()
+            timestamp_label = str(snapshot_meta.get("timestampLabel", "")).strip() or self._format_timestamp_label(snapshot_id)
             entries.append(
                 {
                     "id": snapshot_id,
-                    "label": snapshot_id,
+                    "label": f"{message}（{timestamp_label}）" if message else timestamp_label,
                     "doc_name": safe_name,
+                    "message": message,
+                    "timestamp": snapshot_id,
+                    "timestamp_label": timestamp_label,
                 }
             )
         return entries
@@ -293,11 +300,11 @@ class WorkspaceStorage(DocumentFileStore):
             target_index.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(attachments_index, target_index)
 
-    def save(self, name: str, document: dict) -> dict:
+    def save(self, name: str, document: dict, *, save_message: str = "") -> dict:
         with self._write_lock:
             safe_name = self._validate_name(name)
             if self._workspace_document_exists(safe_name):
-                self._snapshot_document(safe_name)
+                self._snapshot_document(safe_name, save_message=save_message)
             current_revision = self._current_document_revision(safe_name)
             document_to_save = self._with_document_revision(document, current_revision + 1)
             saved_document = self._save_workspace_document(safe_name, document_to_save)
@@ -312,6 +319,7 @@ class WorkspaceStorage(DocumentFileStore):
         base_revision: int | str | None = None,
         base_document: dict | None = None,
         rebase: bool = False,
+        save_message: str = "",
     ) -> dict:
         with self._write_lock:
             safe_name = self._validate_name(name)
@@ -352,7 +360,7 @@ class WorkspaceStorage(DocumentFileStore):
                 rebased = True
 
             if exists:
-                self._snapshot_document(safe_name)
+                self._snapshot_document(safe_name, save_message=save_message)
             document_to_save = self._with_document_revision(document_to_save, current_revision + 1)
             saved_document = self._save_workspace_document(safe_name, document_to_save)
             self._remove_legacy_workspace_files(safe_name)
@@ -371,16 +379,17 @@ class WorkspaceStorage(DocumentFileStore):
         document: dict,
         *,
         overwrite: bool = False,
+        save_message: str = "",
     ) -> tuple[str, dict]:
         with self._write_lock:
             old_safe_name = self._validate_name(old_name)
             new_safe_name = self._validate_name(new_name)
             if old_safe_name == new_safe_name:
-                return new_safe_name, self.save(new_safe_name, document)
+                return new_safe_name, self.save(new_safe_name, document, save_message=save_message)
             if self._workspace_document_exists(new_safe_name) and not overwrite:
                 raise FileExistsError(new_safe_name)
             if overwrite and self._workspace_document_exists(new_safe_name):
-                saved_document = self.save(new_safe_name, document)
+                saved_document = self.save(new_safe_name, document, save_message=save_message)
             else:
                 saved_document = self._save_workspace_document(new_safe_name, document)
                 self._remove_legacy_workspace_files(new_safe_name)
@@ -1048,10 +1057,11 @@ class WorkspaceStorage(DocumentFileStore):
         next_document["meta"]["revision"] = max(0, int(revision or 0))
         return next_document
 
-    def _snapshot_document(self, name: str) -> None:
+    def _snapshot_document(self, name: str, *, save_message: str = "") -> None:
         safe_name = self._validate_name(name)
         target_root = self.history_dir / safe_name
-        snapshot_dir = target_root / self._timestamp()
+        snapshot_id = self._timestamp()
+        snapshot_dir = target_root / snapshot_id
         target_root.mkdir(parents=True, exist_ok=True)
         package_dir = self._package_dir(safe_name)
         legacy_json_path = self._legacy_json_path(safe_name)
@@ -1061,6 +1071,7 @@ class WorkspaceStorage(DocumentFileStore):
             self._write_package_dir(snapshot_dir, safe_name, self.load_path(legacy_json_path))
         else:
             return
+        self._write_snapshot_meta(snapshot_dir, snapshot_id, save_message)
         self._trim_history(target_root)
 
     def _load_history_snapshot(self, name: str, snapshot_id: str) -> dict:
@@ -1071,6 +1082,41 @@ class WorkspaceStorage(DocumentFileStore):
         if snapshot_json_path.exists():
             return self.load_raw_path(snapshot_json_path)
         raise FileNotFoundError(snapshot_id)
+
+    def _snapshot_meta_path(self, snapshot_path: Path) -> Path:
+        if snapshot_path.is_dir():
+            return snapshot_path / SNAPSHOT_META_NAME
+        return snapshot_path.with_suffix(".snapshot.json")
+
+    def _read_snapshot_meta(self, snapshot_path: Path) -> dict:
+        meta_path = self._snapshot_meta_path(snapshot_path)
+        if not meta_path.is_file():
+            return {}
+        try:
+            payload = json.loads(meta_path.read_text("utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_snapshot_meta(self, snapshot_dir: Path, snapshot_id: str, message: str) -> None:
+        payload = {
+            "id": snapshot_id,
+            "message": str(message or "").strip(),
+            "timestamp": snapshot_id,
+            "timestampLabel": self._format_timestamp_label(snapshot_id),
+        }
+        (snapshot_dir / SNAPSHOT_META_NAME).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            "utf-8",
+        )
+
+    def _format_timestamp_label(self, snapshot_id: str) -> str:
+        text = str(snapshot_id or "").strip()
+        try:
+            value = datetime.strptime(text[:15], "%Y%m%d-%H%M%S")
+        except ValueError:
+            return text
+        return value.strftime("%Y年%m月%d日 %H时%M分%S秒")
 
     def _move_workspace_document_to_trash(self, name: str, timestamp: str) -> None:
         safe_name = self._validate_name(name)

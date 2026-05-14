@@ -231,6 +231,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                         base_revision=payload.get("base_revision"),
                         base_document=payload.get("base_document"),
                         rebase=bool(payload.get("rebase")),
+                        save_message=str(payload.get("save_message", "")).strip(),
                     )
                     if not result.get("ok"):
                         return self._json(result, 409)
@@ -252,6 +253,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                     str(payload.get("new_name", "")).strip(),
                     payload.get("document", {}),
                     overwrite=bool(payload.get("overwrite")),
+                    save_message=str(payload.get("save_message", "")).strip(),
                 )
                 return self._json({"ok": True, "document": saved_document, "name": new_name})
             except InvalidDocumentNameError as exc:

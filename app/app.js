@@ -876,10 +876,62 @@ function shouldSkipCompareKey(key, path) {
   return COMPARE_INTERNAL_UID_KEYS.has(key) || COMPARE_INTERNAL_META_PATHS.has(path);
 }
 
+function getCompareCollectionKeyFromPrefix(prefix) {
+  const part = String(prefix || '').split('.').filter(Boolean).pop() || '';
+  const match = part.match(/^([^\[]+)/);
+  return match ? match[1] : part;
+}
+
+function getCompareArrayItemIdentity(collectionKey, item, index) {
+  if (!item || typeof item !== 'object') return String(index + 1);
+  const uid = String(item.uid || '').trim();
+  if (uid) return `uid:${uid}`;
+  if (collectionKey === 'language') {
+    const term = String(item.term || item.name || '').trim();
+    if (term) return `term:${term}`;
+  }
+  if (collectionKey === 'relations') {
+    const parts = [item.from, item.to, item.type, item.label].map((value) => String(value || '').trim());
+    if (parts.some(Boolean)) return `relation:${parts.join('|')}`;
+  }
+  if (collectionKey === 'state_transitions') {
+    const parts = [item.field_name, item.from, item.to, item.action].map((value) => String(value || '').trim());
+    if (parts.some(Boolean)) return `transition:${parts.join('|')}`;
+  }
+  if (collectionKey === 'edges') {
+    const parts = [item.from, item.to, item.label].map((value) => String(value || '').trim());
+    if (parts.some(Boolean)) return `edge:${parts.join('|')}`;
+  }
+  const name = String(item.name || item.title || item.term || item.target || '').trim();
+  if (name) return `name:${name}`;
+  return String(index + 1);
+}
+
+function buildCompareArrayPathToken(collectionKey, item, index, usedKeys) {
+  const rawKey = getCompareArrayItemIdentity(collectionKey, item, index);
+  const duplicateIndex = usedKeys.get(rawKey) || 0;
+  usedKeys.set(rawKey, duplicateIndex + 1);
+  const scopedKey = duplicateIndex ? `${rawKey}#${duplicateIndex + 1}` : rawKey;
+  return encodeURIComponent(scopedKey);
+}
+
+function findCompareArrayItemByToken(items, collectionKey, encodedToken) {
+  const targetToken = String(encodedToken || '');
+  const usedKeys = new Map();
+  return (items || []).find((item, index) => (
+    buildCompareArrayPathToken(collectionKey, item, index, usedKeys) === targetToken
+  ));
+}
+
 function flattenCompareValue(value, prefix = '', output = {}) {
   const normalized = normalizeCompareValue(value);
   if (Array.isArray(normalized)) {
-    normalized.forEach((item, index) => flattenCompareValue(item, `${prefix}[${index}]`, output));
+    const collectionKey = getCompareCollectionKeyFromPrefix(prefix);
+    const usedKeys = new Map();
+    normalized.forEach((item, index) => {
+      const token = buildCompareArrayPathToken(collectionKey, item, index, usedKeys);
+      flattenCompareValue(item, `${prefix}[${token}]`, output);
+    });
     if (!normalized.length && prefix) output[prefix] = [];
     return output;
   }
@@ -1111,10 +1163,11 @@ const COMPARE_COLLECTION_ITEM_LABELS = {
 
 function tokenizeComparePath(path) {
   return String(path || '').split('.').filter(Boolean).map((part) => {
-    const match = part.match(/^([^\[]+)(?:\[(\d+)\])?$/);
+    const match = part.match(/^([^\[]+)(?:\[([^\]]+)\])?$/);
+    const rawIndex = match?.[2];
     return {
       key: match ? match[1] : part,
-      index: match && match[2] !== undefined ? Number(match[2]) : null,
+      index: rawIndex !== undefined ? (/^\d+$/.test(rawIndex) ? Number(rawIndex) : rawIndex) : null,
     };
   });
 }
@@ -1125,7 +1178,11 @@ function getCompareValueAtTokens(document, tokens) {
     if (cursor == null) return null;
     cursor = cursor[token.key];
     if (token.index !== null) {
-      cursor = Array.isArray(cursor) ? cursor[token.index] : null;
+      cursor = Array.isArray(cursor)
+        ? (typeof token.index === 'number'
+          ? cursor[token.index]
+          : findCompareArrayItemByToken(cursor, token.key, token.index))
+        : null;
     }
   }
   return cursor;
@@ -1149,7 +1206,7 @@ function getCompareItemTitle(collectionKey, item, index) {
   if (id && name && id !== name) return `${prefix} ${id} ${name}`;
   if (name) return `${prefix} ${name}`;
   if (id) return `${prefix} ${id}`;
-  return `${prefix} ${index + 1}`;
+  return `${prefix} ${typeof index === 'number' ? index + 1 : decodeURIComponent(String(index || ''))}`;
 }
 
 function getCompareFieldLabel(tokens) {
@@ -1170,7 +1227,7 @@ function isCompareBusinessRulePath(tokens) {
   const keys = tokens.map((token) => token.key);
   const lastKey = keys[keys.length - 1] || '';
   const topKey = keys[0] || '';
-  const layoutKeys = new Set(['pos', 'stagePos', 'markerPos', 'labelPos', 'panoramaPos', 'panoramaSlot']);
+  const layoutKeys = new Set(['pos', 'stagePos', 'markerPos', 'labelPos', 'panoramaPos', 'panoramaSlot', 'panoramaColumnUid', 'panoramaLaneUid']);
   if (keys.some((key) => layoutKeys.has(key))) return false;
   const businessKeys = new Set([
     'from',
@@ -1196,7 +1253,8 @@ function isCompareBusinessRulePath(tokens) {
 function isCompareLayoutPath(tokens) {
   if (isCompareBusinessRulePath(tokens)) return false;
   const keys = tokens.map((token) => token.key);
-  const layoutKeys = new Set(['pos', 'stagePos', 'markerPos', 'labelPos', 'panoramaPos', 'panoramaSlot']);
+  if (keys[0] === 'panorama') return true;
+  const layoutKeys = new Set(['pos', 'stagePos', 'markerPos', 'labelPos', 'panoramaPos', 'panoramaSlot', 'panoramaColumnUid', 'panoramaLaneUid']);
   if (keys.some((key) => layoutKeys.has(key))) return true;
   const lastKey = keys[keys.length - 1] || '';
   const parentKey = keys[keys.length - 2] || '';
@@ -1959,6 +2017,21 @@ function setSaveProgress(visible, percent = 0, message = '正在保存...', deta
   if (detail) detail.textContent = detailText || (visible ? '请稍候，正在处理文档。' : '');
 }
 
+async function requestSaveHistoryMessage(shouldCreateHistory) {
+  if (!shouldCreateHistory) return '';
+  const message = await showAppPrompt(
+    '可以填写本次保存说明，便于以后查看历史版本；也可以留空，只记录保存时间。',
+    '',
+    {
+      title: '保存信息',
+      confirmLabel: '继续保存',
+      cancelLabel: '取消保存',
+    },
+  );
+  if (message === null) return null;
+  return String(message || '').trim();
+}
+
 function syncSavingControls() {
   const disabled = Boolean(S.isSaving);
   ['btn-save', 'toolbar-save-as-label'].forEach((id) => {
@@ -2047,6 +2120,8 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
       return null;
     }
   }
+  const saveMessage = await requestSaveHistoryMessage(workspaceFiles.includes(normalizedName));
+  if (saveMessage === null) return null;
 
   let result;
   S.isSaving = true;
@@ -2072,8 +2147,8 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
       }
       : {};
     result = currentName && currentName !== normalizedName
-      ? await api.rename(currentName, normalizedName, document, willOverwrite, handleSaveUploadProgress)
-      : await api.save(normalizedName, document, handleSaveUploadProgress, revisionOptions);
+      ? await api.rename(currentName, normalizedName, document, willOverwrite, handleSaveUploadProgress, { saveMessage })
+      : await api.save(normalizedName, document, handleSaveUploadProgress, { ...revisionOptions, saveMessage });
     setSaveProgress(true, 100, '保存完成', '文档已写入工作区。');
   } finally {
     S.isSaving = false;

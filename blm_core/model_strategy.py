@@ -190,7 +190,7 @@ RULE_APPLIES_TO_COLLECTIONS = (
 )
 
 
-INTERNAL_SCALAR_FIELDS = set()
+INTERNAL_SCALAR_FIELDS = {"pos", "stagePos", "labelPos", "markerPos"}
 
 
 # Each tuple describes one fallback semantic identity candidate. A tuple with

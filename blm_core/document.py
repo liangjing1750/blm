@@ -271,6 +271,12 @@ def canonicalize_model_references(document: dict | None) -> dict:
         relation["from"] = mapped(relation.get("from"), entity_map)
         relation["to"] = mapped(relation.get("to"), entity_map)
 
+    for entity in doc.get("entities", []):
+        if not isinstance(entity, dict):
+            continue
+        entity["businessConstructId"] = mapped(entity.get("businessConstructUid") or entity.get("businessConstructId"), construct_map)
+        entity["businessConstructIds"] = mapped_list(entity.get("businessConstructUids") or entity.get("businessConstructIds"), construct_map)
+
     for component in doc.get("businessComponents", []):
         if not isinstance(component, dict):
             continue

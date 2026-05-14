@@ -5,7 +5,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from blm_core.document import create_empty_document, migrate_document
+from blm_core.document import canonical_document, create_empty_document, migrate_document
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.model_strategy import (
     DESCRIPTORS,
@@ -91,6 +91,21 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(document["meta"]["title"], "包装文档")
         self.assertEqual(document["roles"][0]["name"], "经办人")
         self.assertEqual(document["processes"][0]["name"], "办理")
+
+    def test_canonical_document_maps_entity_business_construct_reference_to_uid(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "Legacy construct ref"},
+                "businessConstructs": [
+                    {"id": "BC1", "uid": "construct-uid-1", "name": "Application"},
+                ],
+                "entities": [
+                    {"id": "E1", "uid": "entity-uid-1", "name": "Application Entity", "businessConstructId": "BC1"},
+                ],
+            }
+        )
+
+        self.assertEqual(document["entities"][0]["businessConstructUid"], "construct-uid-1")
 
     def test_migrate_document_normalizes_node_business_rules(self):
         document = migrate_document(
@@ -372,6 +387,19 @@ class MergeEngineTests(unittest.TestCase):
 
         self.assertEqual(analysis["conflicts"], [])
         self.assertEqual(analysis["merged_document"]["roles"][0]["id"], "R1")
+
+    def test_combine_does_not_treat_layout_positions_as_user_conflicts(self):
+        left = create_empty_document("Layout")
+        left["entities"] = [
+            {"uid": "entity-1", "id": "E1", "name": "Application", "group": "", "note": "", "pos": {"x": 100, "y": 100}, "fields": [], "state_transitions": []}
+        ]
+        right = deepcopy(left)
+        right["entities"][0]["pos"] = {"x": 300, "y": 220}
+
+        analysis = analyze_merge("combine", left, right)
+
+        self.assertEqual(analysis["conflicts"], [])
+        self.assertEqual(analysis["merged_document"]["entities"][0]["pos"], {"x": 100, "y": 100})
 
     def test_three_way_merge_auto_merges_non_overlapping_changes(self):
         base = create_empty_document("Supply")

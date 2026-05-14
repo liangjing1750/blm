@@ -1115,6 +1115,42 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(snapshot_document["meta"]["title"], "Loans")
             self.assertEqual(storage.load("Loans")["meta"]["title"], "Loans v2")
 
+    def test_history_snapshot_label_uses_friendly_time_when_message_empty(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+
+            storage.save("Loans", document)
+            document["meta"]["title"] = "Loans v2"
+            storage.save("Loans", document, save_message="")
+
+            history_entries = storage.list_history("Loans")
+
+            self.assertEqual(len(history_entries), 1)
+            self.assertEqual(history_entries[0]["message"], "")
+            for marker in ["年", "月", "日", "时", "分", "秒"]:
+                self.assertIn(marker, history_entries[0]["label"])
+            self.assertEqual(history_entries[0]["label"], history_entries[0]["timestamp_label"])
+
+    def test_history_snapshot_label_includes_optional_save_message(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+
+            storage.save("Loans", document)
+            document["meta"]["title"] = "Loans v2"
+            storage.save("Loans", document, save_message="补充流程说明")
+
+            history_entries = storage.list_history("Loans")
+            snapshot_meta = json.loads((history_snapshot_dirs(workspace, "Loans")[0] / "snapshot.json").read_text("utf-8"))
+
+            self.assertEqual(len(history_entries), 1)
+            self.assertEqual(history_entries[0]["message"], "补充流程说明")
+            self.assertEqual(snapshot_meta["message"], "补充流程说明")
+            self.assertEqual(history_entries[0]["label"], f"补充流程说明（{history_entries[0]['timestamp_label']}）")
+
     def test_history_snapshot_keeps_attachment_metadata_without_binary_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

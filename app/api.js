@@ -73,6 +73,7 @@ const api = {
       base_revision: options.baseRevision,
       base_document: options.baseDocument,
       rebase: options.rebase !== false,
+      save_message: options.saveMessage || '',
     }, onProgress);
   },
   async uploadAttachment(file, onProgress) {
@@ -82,12 +83,13 @@ const api = {
     const url = `/api/attachment/${encodeURIComponent(name)}/${encodeURIComponent(attachmentUid)}/${encodeURIComponent(versionUid)}`;
     return options.download ? `${url}?download=1` : url;
   },
-  async rename(oldName, newName, document, overwrite = false, onProgress) {
+  async rename(oldName, newName, document, overwrite = false, onProgress, options = {}) {
     return postJsonWithProgress('/api/rename', {
       old_name: oldName,
       new_name: newName,
       document,
       overwrite,
+      save_message: options.saveMessage || '',
     }, onProgress);
   },
   async copyDocument(sourceName, targetName) {
