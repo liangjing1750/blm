@@ -15,6 +15,30 @@ from blm_core.merge import validate_document
 from blm_core.storage import WorkspaceStorage
 
 
+LEGACY_FIELD_PATTERNS = ("Id", "Ids", "_id", "_ids")
+
+
+def find_legacy_model_fields(value, path: str = "") -> list[str]:
+    result: list[str] = []
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            result.extend(find_legacy_model_fields(item, f"{path}[{index}]"))
+        return result
+    if not isinstance(value, dict):
+        return result
+    for key, child in value.items():
+        child_path = f"{path}.{key}" if path else key
+        if (
+            key == "id"
+            or key == "ownerId"
+            or key == "applies_to"
+            or any(key.endswith(suffix) for suffix in LEGACY_FIELD_PATTERNS)
+        ):
+            result.append(child_path)
+        result.extend(find_legacy_model_fields(child, child_path))
+    return result
+
+
 def copy_workspace_entry(workspace: Path, name: str, backup_root: Path) -> None:
     package_dir = workspace / name
     json_path = workspace / f"{name}.json"
@@ -56,12 +80,17 @@ def upgrade_workspace_documents(
     for name in names:
         document = storage.load(name)
         issues_before = validate_document(document)
+        legacy_before = find_legacy_model_fields(document)
         if not dry_run:
             copy_workspace_entry(workspace, name, backup_root)
             saved = storage.save(name, document)
             issues_after = validate_document(saved)
+            manifest_path = workspace / name / "manifest.json"
+            saved_manifest = json.loads(manifest_path.read_text("utf-8")) if manifest_path.is_file() else saved
+            legacy_after = find_legacy_model_fields(saved_manifest)
         else:
             issues_after = issues_before
+            legacy_after = legacy_before
         results.append(
             {
                 "name": name,
@@ -76,6 +105,9 @@ def upgrade_workspace_documents(
                 },
                 "validationIssuesBefore": len(issues_before),
                 "validationIssuesAfter": len(issues_after),
+                "legacyFieldCountBefore": len(legacy_before),
+                "legacyFieldCountAfter": len(legacy_after),
+                "legacyFieldSamplesAfter": legacy_after[:10],
             }
         )
 

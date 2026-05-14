@@ -88,8 +88,25 @@ def strip_model_ids(value):
     return result
 
 
+def promote_ids_to_uids(value):
+    if isinstance(value, list):
+        for item in value:
+            promote_ids_to_uids(item)
+        return value
+    if not isinstance(value, dict):
+        return value
+    if "id" in value and "uid" not in value:
+        legacy_id = str(value.get("id", "")).strip()
+        if legacy_id:
+            value["uid"] = legacy_id
+    for child in value.values():
+        promote_ids_to_uids(child)
+    return value
+
+
 def canonicalize_model_references(document: dict | None) -> dict:
     doc = deepcopy(document or {})
+    promote_ids_to_uids(doc)
 
     def uid_map(items: list[dict] | None) -> dict[str, str]:
         result: dict[str, str] = {}
@@ -122,6 +139,20 @@ def canonicalize_model_references(document: dict | None) -> dict:
         return result
 
     panorama = doc.get("panorama") if isinstance(doc.get("panorama"), dict) else {}
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    if isinstance(meta, dict):
+        for business_domain in meta.get("businessDomains", []) if isinstance(meta.get("businessDomains"), list) else []:
+            if isinstance(business_domain, dict):
+                if not str(business_domain.get("uid", "")).strip() and str(business_domain.get("id", "")).strip():
+                    business_domain["uid"] = str(business_domain.get("id", "")).strip()
+        sub_domain_catalog = meta.get("subDomainCatalog")
+        if isinstance(sub_domain_catalog, dict):
+            for item in sub_domain_catalog.values():
+                if isinstance(item, dict) and not str(item.get("uid", "")).strip() and str(item.get("id", "")).strip():
+                    item["uid"] = str(item.get("id", "")).strip()
+        for component in meta.get("businessComponents", []) if isinstance(meta.get("businessComponents"), list) else []:
+            if isinstance(component, dict) and not str(component.get("uid", "")).strip() and str(component.get("id", "")).strip():
+                component["uid"] = str(component.get("id", "")).strip()
     if isinstance(panorama, dict):
         for axis in ("columns", "lanes", "cells"):
             for item in panorama.get(axis, []) if isinstance(panorama.get(axis), list) else []:
@@ -137,6 +168,14 @@ def canonicalize_model_references(document: dict | None) -> dict:
     construct_map = uid_map(doc.get("businessConstructs", []))
     task_definition_map = uid_map(doc.get("taskDefinitions", []))
     stage_ref_map = uid_map(doc.get("stageFlowRefs", []))
+
+    if isinstance(meta, dict):
+        for component in meta.get("businessComponents", []) if isinstance(meta.get("businessComponents"), list) else []:
+            if not isinstance(component, dict):
+                continue
+            component["entityUids"] = mapped_list(component.get("entityUids") or component.get("entityIds"), entity_map)
+            component["relatedProcessUids"] = mapped_list(component.get("relatedProcessUids") or component.get("relatedProcessIds") or component.get("processUids") or component.get("processIds"), process_map)
+            component["taskDefinitionUids"] = mapped_list(component.get("taskDefinitionUids") or component.get("taskDefinitionIds"), task_definition_map)
 
     if isinstance(panorama, dict):
         for cell in panorama.get("cells", []) if isinstance(panorama.get("cells"), list) else []:
@@ -306,6 +345,15 @@ def rename_reference_fields_to_uid(value):
     result = {}
     for key, child in value.items():
         next_key = field_renames.get(key, key)
+        if next_key == key:
+            if key.endswith("Ids"):
+                next_key = f"{key[:-3]}Uids"
+            elif key.endswith("Id"):
+                next_key = f"{key[:-2]}Uid"
+            elif key.endswith("_ids"):
+                next_key = f"{key[:-4]}_uids"
+            elif key.endswith("_id"):
+                next_key = f"{key[:-3]}_uid"
         result[next_key] = rename_reference_fields_to_uid(child)
     return result
 
