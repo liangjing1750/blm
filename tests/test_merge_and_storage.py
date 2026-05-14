@@ -107,6 +107,27 @@ class DocumentIdentityTests(unittest.TestCase):
 
         self.assertEqual(document["entities"][0]["businessConstructUid"], "construct-uid-1")
 
+    def test_canonical_document_filters_empty_stage_flow_references(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "Stage refs"},
+                "stages": [{"uid": "stage-1", "name": "申请"}],
+                "processes": [{"uid": "process-1", "name": "提交", "stageUid": "stage-1"}],
+                "stageFlowRefs": [
+                    {"uid": "empty-ref", "stageUid": "", "processUid": "", "order": 1},
+                    {"uid": "valid-ref", "stageUid": "stage-1", "processUid": "process-1", "order": 2},
+                ],
+                "stageFlowLinks": [
+                    {"uid": "empty-link", "stageUid": "", "fromRefUid": "", "toRefUid": ""},
+                ],
+            }
+        )
+
+        self.assertEqual([ref["uid"] for ref in document["stageFlowRefs"]], ["valid-ref"])
+        self.assertEqual(document["stageFlowRefs"][0]["stageUid"], "stage-1")
+        self.assertEqual(document["stageFlowRefs"][0]["processUid"], "process-1")
+        self.assertEqual(document["stageFlowLinks"], [])
+
     def test_migrate_document_normalizes_node_business_rules(self):
         document = migrate_document(
             {

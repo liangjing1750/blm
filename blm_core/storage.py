@@ -360,7 +360,8 @@ class WorkspaceStorage(DocumentFileStore):
                 rebased = True
 
             if exists:
-                self._snapshot_document(safe_name, save_message=save_message)
+                snapshot_source = base_document if expected_revision is not None and expected_revision == current_revision and isinstance(base_document, dict) else None
+                self._snapshot_document(safe_name, save_message=save_message, snapshot_document=snapshot_source)
             document_to_save = self._with_document_revision(document_to_save, current_revision + 1)
             saved_document = self._save_workspace_document(safe_name, document_to_save)
             self._remove_legacy_workspace_files(safe_name)
@@ -1057,7 +1058,7 @@ class WorkspaceStorage(DocumentFileStore):
         next_document["meta"]["revision"] = max(0, int(revision or 0))
         return next_document
 
-    def _snapshot_document(self, name: str, *, save_message: str = "") -> None:
+    def _snapshot_document(self, name: str, *, save_message: str = "", snapshot_document: dict | None = None) -> None:
         safe_name = self._validate_name(name)
         target_root = self.history_dir / safe_name
         snapshot_id = self._timestamp()
@@ -1065,10 +1066,19 @@ class WorkspaceStorage(DocumentFileStore):
         target_root.mkdir(parents=True, exist_ok=True)
         package_dir = self._package_dir(safe_name)
         legacy_json_path = self._legacy_json_path(safe_name)
+        snapshot_document = deepcopy(snapshot_document) if isinstance(snapshot_document, dict) else self.load(safe_name)
         if self._is_package_dir(package_dir):
             self._copy_package_metadata(package_dir, snapshot_dir, safe_name)
+            self._manifest_path(snapshot_dir).write_text(
+                json.dumps(canonical_document(snapshot_document), ensure_ascii=False, indent=2),
+                "utf-8",
+            )
+            self._package_markdown_path(snapshot_dir, safe_name).write_text(
+                self.exporter.export(snapshot_document),
+                "utf-8",
+            )
         elif legacy_json_path.exists():
-            self._write_package_dir(snapshot_dir, safe_name, self.load_path(legacy_json_path))
+            self._write_package_dir(snapshot_dir, safe_name, snapshot_document)
         else:
             return
         self._write_snapshot_meta(snapshot_dir, snapshot_id, save_message)

@@ -715,8 +715,8 @@ function normalizeStageFlowRefEntry(ref, index = 1) {
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stageref'),
     id: String(normalized.id || '').trim() || `SFR${index}`,
-    stageId: String(normalized.stageId || normalized.stage_id || '').trim(),
-    processId: String(normalized.processId || normalized.process_id || '').trim(),
+    stageId: String(normalized.stageId || normalized.stageUid || normalized.stage_id || '').trim(),
+    processId: String(normalized.processId || normalized.processUid || normalized.process_id || '').trim(),
     order: Math.max(1, Math.round(Number(normalized.order || index) || index)),
     pos: normalizeGraphOffset(normalized.pos),
   };
@@ -726,9 +726,9 @@ function normalizeStageFlowLinkEntry(link, index = 1) {
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stagereflink'),
     id: String(normalized.id || '').trim() || `SFL${index}`,
-    stageId: String(normalized.stageId || normalized.stage_id || '').trim(),
-    fromRefId: String(normalized.fromRefId || normalized.from_ref_id || '').trim(),
-    toRefId: String(normalized.toRefId || normalized.to_ref_id || '').trim(),
+    stageId: String(normalized.stageId || normalized.stageUid || normalized.stage_id || '').trim(),
+    fromRefId: String(normalized.fromRefId || normalized.fromRefUid || normalized.from_ref_id || '').trim(),
+    toRefId: String(normalized.toRefId || normalized.toRefUid || normalized.to_ref_id || '').trim(),
   };
 }
 function normalizeStageEntry(stage, index = 1, processes = [], stageFlowRefs = []) {
@@ -775,7 +775,9 @@ function getStageLinks(doc = S.doc) {
 function getStageFlowRefs(doc = S.doc) {
   if (!doc || typeof doc !== 'object') return [];
   if (!Array.isArray(doc.stageFlowRefs)) doc.stageFlowRefs = [];
-  let refs = doc.stageFlowRefs.map((ref, index) => normalizeStageFlowRefEntry(ref, index + 1));
+  let refs = doc.stageFlowRefs
+    .map((ref, index) => normalizeStageFlowRefEntry(ref, index + 1))
+    .filter((ref) => ref.stageId && ref.processId);
   const existingPairs = new Set(
     refs
       .filter((ref) => ref.stageId && ref.processId)
@@ -822,7 +824,9 @@ function getStageFlowRefs(doc = S.doc) {
 function getStageFlowLinks(doc = S.doc) {
   if (!doc || typeof doc !== 'object') return [];
   if (!Array.isArray(doc.stageFlowLinks)) doc.stageFlowLinks = [];
-  let links = doc.stageFlowLinks.map((link, index) => normalizeStageFlowLinkEntry(link, index + 1));
+  let links = doc.stageFlowLinks
+    .map((link, index) => normalizeStageFlowLinkEntry(link, index + 1))
+    .filter((link) => link.stageId && link.fromRefId && link.toRefId);
   if (!links.length) {
     const refs = getStageFlowRefs(doc);
     const refByStageProcess = new Map(refs.map((ref) => [`${ref.stageId}::${ref.processId}`, ref.id]));

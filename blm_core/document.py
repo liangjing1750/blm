@@ -458,6 +458,10 @@ def _normalize_stage_flow_refs(stage_flow_refs: list[dict]) -> list[dict]:
     for ref_index, ref in enumerate(stage_flow_refs or [], start=1):
         if not isinstance(ref, dict):
             continue
+        stage_id = str(ref.get("stageId") or ref.get("stageUid") or ref.get("stage_id", "")).strip()
+        process_id = str(ref.get("processId") or ref.get("processUid") or ref.get("process_id", "")).strip()
+        if not stage_id or not process_id:
+            continue
         ref_id = str(ref.get("id", "")).strip()
         if not ref_id or ref_id in used_ids:
             ref_id = _next_seq_id("SFR", used_ids)
@@ -467,8 +471,8 @@ def _normalize_stage_flow_refs(stage_flow_refs: list[dict]) -> list[dict]:
             {
                 "uid": str(ref.get("uid", "")).strip() or _new_uid(),
                 "id": ref_id,
-                "stageId": str(ref.get("stageId", ref.get("stage_id", ""))).strip(),
-                "processId": str(ref.get("processId", ref.get("process_id", ""))).strip(),
+                "stageId": stage_id,
+                "processId": process_id,
                 "order": _normalize_positive_int(ref.get("order"), ref_index),
                 "pos": _normalize_graph_offset(ref.get("pos", {})),
             }
@@ -482,6 +486,11 @@ def _normalize_stage_flow_links(stage_flow_links: list[dict]) -> list[dict]:
     for link_index, link in enumerate(stage_flow_links or [], start=1):
         if not isinstance(link, dict):
             continue
+        stage_id = str(link.get("stageId") or link.get("stageUid") or link.get("stage_id", "")).strip()
+        from_ref_id = str(link.get("fromRefId") or link.get("fromRefUid") or link.get("from_ref_id", "")).strip()
+        to_ref_id = str(link.get("toRefId") or link.get("toRefUid") or link.get("to_ref_id", "")).strip()
+        if not stage_id or not from_ref_id or not to_ref_id:
+            continue
         link_id = str(link.get("id", "")).strip()
         if not link_id or link_id in used_ids:
             link_id = _next_seq_id("SFL", used_ids)
@@ -491,9 +500,9 @@ def _normalize_stage_flow_links(stage_flow_links: list[dict]) -> list[dict]:
             {
                 "uid": str(link.get("uid", "")).strip() or _new_uid(),
                 "id": link_id,
-                "stageId": str(link.get("stageId", link.get("stage_id", ""))).strip(),
-                "fromRefId": str(link.get("fromRefId", link.get("from_ref_id", ""))).strip(),
-                "toRefId": str(link.get("toRefId", link.get("to_ref_id", ""))).strip(),
+                "stageId": stage_id,
+                "fromRefId": from_ref_id,
+                "toRefId": to_ref_id,
             }
         )
     return normalized_links

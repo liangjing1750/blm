@@ -1151,6 +1151,47 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(snapshot_meta["message"], "补充流程说明")
             self.assertEqual(history_entries[0]["label"], f"补充流程说明（{history_entries[0]['timestamp_label']}）")
 
+    def test_revision_save_snapshots_loaded_base_document_with_stable_uids(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            legacy_dir = workspace / "Legacy"
+            legacy_dir.mkdir()
+            (legacy_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "meta": {"title": "Legacy", "author": "old", "revision": 0},
+                        "businessAreas": [{"name": "会员客户"}],
+                        "valueStreams": [{"name": "业务办理"}],
+                        "processes": [{"name": "申请提交", "nodes": [{"name": "填写申请"}]}],
+                        "entities": [{"name": "申请单", "fields": [{"name": "编号"}]}],
+                    },
+                    ensure_ascii=False,
+                ),
+                "utf-8",
+            )
+            base_document = storage.load("Legacy")
+            edited_document = deepcopy(base_document)
+            edited_document["meta"]["author"] = "new"
+
+            storage.save_with_revision(
+                "Legacy",
+                edited_document,
+                base_revision=base_document["meta"]["revision"],
+                base_document=base_document,
+                rebase=True,
+            )
+
+            history_entries = storage.list_history("Legacy")
+            history_document = storage.load_history("Legacy", history_entries[0]["id"])
+
+            self.assertEqual(history_document["meta"]["author"], "old")
+            self.assertEqual(storage.load("Legacy")["meta"]["author"], "new")
+            self.assertEqual(history_document["processes"][0]["uid"], base_document["processes"][0]["uid"])
+            self.assertEqual(history_document["processes"][0]["nodes"][0]["uid"], base_document["processes"][0]["nodes"][0]["uid"])
+            self.assertEqual(history_document["entities"][0]["uid"], base_document["entities"][0]["uid"])
+            self.assertEqual(history_document["entities"][0]["fields"][0]["uid"], base_document["entities"][0]["fields"][0]["uid"])
+
     def test_history_snapshot_keeps_attachment_metadata_without_binary_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
