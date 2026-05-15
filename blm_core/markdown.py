@@ -130,7 +130,7 @@ def get_stage_items(document: dict) -> list[dict]:
     }
     unassigned_processes = [
         process for process in processes
-        if str(process.get("id", "")).strip() and str(process.get("id", "")).strip() not in referenced_process_ids
+        if str(process.get("uid", "") or process.get("id", "")).strip() and str(process.get("uid", "") or process.get("id", "")).strip() not in referenced_process_ids
     ]
     if unassigned_processes:
         items.append(
@@ -157,7 +157,7 @@ def get_stage_process_refs(document: dict, stage_id: str) -> list[dict]:
         }
         virtual_refs = []
         for index, process in enumerate(processes, start=1):
-            process_id = str(process.get("id", "")).strip()
+            process_id = str(process.get("uid", "") or process.get("id", "")).strip()
             if not process_id or process_id in referenced_process_ids:
                 continue
             virtual_refs.append(
@@ -175,7 +175,7 @@ def get_stage_process_refs(document: dict, stage_id: str) -> list[dict]:
             ref for ref in refs
             if str(ref.get("stageId", "")).strip() == str(stage_id or "").strip()
         ],
-        key=lambda item: (int(item.get("order", 0) or 0), str(item.get("id", "")).strip()),
+        key=lambda item: (int(item.get("order", 0) or 0), str(item.get("uid", "") or item.get("id", "")).strip()),
     )
 
 
@@ -186,15 +186,15 @@ def get_process_stage_refs(document: dict, process_id: str) -> list[dict]:
             ref for ref in get_stage_flow_refs(document)
             if str(ref.get("processId", "")).strip() == target_process_id
         ],
-        key=lambda item: (str(item.get("stageId", "")).strip(), int(item.get("order", 0) or 0), str(item.get("id", "")).strip()),
+        key=lambda item: (str(item.get("stageId", "")).strip(), int(item.get("order", 0) or 0), str(item.get("uid", "") or item.get("id", "")).strip()),
     )
 
 
 def get_stage_processes(document: dict, stage_id: str) -> list[dict]:
     processes_by_id = {
-        str(process.get("id", "")).strip(): process
+        str(process.get("uid", "") or process.get("id", "")).strip(): process
         for process in document.get("processes", [])
-        if isinstance(process, dict) and str(process.get("id", "")).strip()
+        if isinstance(process, dict) and str(process.get("uid", "") or process.get("id", "")).strip()
     }
     return [
         processes_by_id[ref["processId"]]
@@ -221,25 +221,25 @@ def build_stage_panorama_mermaid(document: dict) -> str | None:
 
 
 def build_stage_process_mermaid(document: dict, stage: dict) -> str | None:
-    process_refs = get_stage_process_refs(document, stage.get("id", ""))
+    process_refs = get_stage_process_refs(document, str(stage.get("uid", "") or stage.get("id", "")))
     if not process_refs:
         return None
     processes_by_id = {
-        str(process.get("id", "")).strip(): process
+        str(process.get("uid", "") or process.get("id", "")).strip(): process
         for process in document.get("processes", [])
-        if isinstance(process, dict) and str(process.get("id", "")).strip()
+        if isinstance(process, dict) and str(process.get("uid", "") or process.get("id", "")).strip()
     }
-    stage_id = str(stage.get("id", "")).strip()
+    stage_id = str(stage.get("uid", "") or stage.get("id", "")).strip()
     lines = ["flowchart TD"]
     valid_ref_ids = set()
     for ref in process_refs:
         process = processes_by_id.get(str(ref.get("processId", "")).strip())
         if not process:
             continue
-        ref_id = str(ref.get("id", "")).strip()
+        ref_id = str(ref.get("uid", "") or ref.get("id", "")).strip()
         if not ref_id:
             continue
-        process_name = str(process.get("name", "") or process.get("id", "")).replace('"', "'")
+        process_name = str(process.get("name", "") or process.get("uid", "") or process.get("id", "")).replace('"', "'")
         lines.append(f'  {ref_id}["{process_name}"]')
         valid_ref_ids.add(ref_id)
     for process_link in get_stage_flow_links(document):
@@ -594,8 +594,8 @@ class MarkdownExporter:
         line()
 
     def _render_stage(self, line, document: dict, stage: dict) -> None:
-        stage_processes = get_stage_processes(document, stage.get("id", ""))
-        line(f"### 阶段视图: {stage.get('name', '') or stage.get('id', 'S')}")
+        stage_processes = get_stage_processes(document, str(stage.get("uid", "") or stage.get("id", "")))
+        line(f"### 阶段视图: {stage.get('name', '') or stage.get('uid', '') or stage.get('id', 'S')}")
         line()
         stage_meta = []
         if stage.get("subDomain"):
@@ -621,11 +621,11 @@ class MarkdownExporter:
 
     def _render_process(self, line, document: dict, process: dict, entities_by_id: dict) -> None:
         nodes = process.get("nodes", [])
-        line(f"### {process.get('id', 'P')}: {process.get('name', '')}")
+        line(f"### {process.get('uid', '') or process.get('id', 'P')}: {process.get('name', '')}")
         line()
         process_meta = []
         stage_names = []
-        for ref in get_process_stage_refs(document, process.get("id", "")):
+        for ref in get_process_stage_refs(document, str(process.get("uid", "") or process.get("id", ""))):
             ref_stage_id = str(ref.get("stageId", "")).strip()
             if not ref_stage_id:
                 continue
@@ -633,7 +633,7 @@ class MarkdownExporter:
                 (
                     str(stage.get("name", "")).strip() or ref_stage_id
                     for stage in get_stage_items(document)
-                    if str(stage.get("id", "")).strip() == ref_stage_id
+                    if str(stage.get("uid", "") or stage.get("id", "")).strip() == ref_stage_id
                 ),
                 ref_stage_id,
             )
