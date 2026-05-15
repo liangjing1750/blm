@@ -209,8 +209,9 @@ def build_stage_panorama_mermaid(document: dict) -> str | None:
         return None
     lines = ["flowchart TD"]
     for stage in stages:
-        stage_name = str(stage.get("name", "") or stage.get("id", "")).replace('"', "'")
-        lines.append(f'  {stage["id"]}["{stage_name}"]')
+        stage_uid = str(stage.get("uid", "") or stage.get("id", ""))
+        stage_name = str(stage.get("name", "") or stage_uid).replace('"', "'")
+        lines.append(f'  {stage_uid}["{stage_name}"]')
     for stage_link in document.get("stageLinks", []):
         from_stage_id = str(stage_link.get("fromStageId", "")).strip()
         to_stage_id = str(stage_link.get("toStageId", "")).strip()
@@ -483,7 +484,7 @@ class MarkdownExporter:
             separator()
 
         processes = doc.get("processes", [])
-        entities_by_id = {entity["id"]: entity for entity in doc.get("entities", [])}
+        entities_by_id = {str(entity.get("uid", "") or entity.get("id", "")): entity for entity in doc.get("entities", [])}
         line(f"## {next_section_number()}、流程视图")
         line()
         for process in processes:
@@ -547,10 +548,10 @@ class MarkdownExporter:
         return "\n".join(lines)
 
     def _render_business_constructs(self, line, document: dict, constructs: list[dict]) -> None:
-        entities_by_id = {entity.get("id", ""): entity for entity in document.get("entities", [])}
-        stages_by_id = {stage.get("id", ""): stage for stage in get_stage_items(document)}
-        processes_by_id = {process.get("id", ""): process for process in document.get("processes", [])}
-        tasks_by_id = {task.get("id", ""): task for task in document.get("taskDefinitions", [])}
+        entities_by_id = {str(entity.get("uid", "") or entity.get("id", "")): entity for entity in document.get("entities", [])}
+        stages_by_id = {str(stage.get("uid", "") or stage.get("id", "")): stage for stage in get_stage_items(document)}
+        processes_by_id = {str(process.get("uid", "") or process.get("id", "")): process for process in document.get("processes", [])}
+        tasks_by_id = {str(task.get("uid", "") or task.get("id", "")): task for task in document.get("taskDefinitions", [])}
 
         line("| 业务系统 | 业务组件 | 业务构件 | 实体 | 任务定义 | 关联阶段/流程 |")
         line("|----------|----------|----------|------|----------|----------------|")
@@ -664,17 +665,19 @@ class MarkdownExporter:
             line("flowchart LR")
             line("  Start([\u5f00\u59cb])")
             for node in nodes:
+                node_uid = str(node.get("uid", "") or node.get("id", ""))
                 node_name = node.get("name", "").replace('"', "'")
                 role = node.get("role", "")
                 label = f"{node_name}\\n({role})" if role else node_name
-                line(f'  {node["id"]}["{label}"]')
+                line(f'  {node_uid}["{label}"]')
             line("  End([\u7ed3\u675f])")
-            line("  " + " --> ".join(["Start"] + [node["id"] for node in nodes] + ["End"]))
+            line("  " + " --> ".join(["Start"] + [str(node.get("uid", "") or node.get("id", "")) for node in nodes] + ["End"]))
             line("```")
             line()
 
             for node in nodes:
-                line(f"#### {node['id']}. {node.get('name', '')}\uff08\u89d2\u8272\uff1a{node.get('role', '')}\uff09")
+                node_uid = str(node.get("uid", "") or node.get("id", ""))
+                line(f"#### {node_uid}. {node.get('name', '')}\uff08\u89d2\u8272\uff1a{node.get('role', '')}\uff09")
                 line()
                 if node.get("repeatable"):
                     line("> \u21ba \u53ef\u91cd\u590d\u8282\u70b9")
@@ -793,8 +796,9 @@ class MarkdownExporter:
         line("```mermaid")
         line("flowchart LR")
         for entity in entities:
-            name = entity.get("name", "").replace('"', "'") or entity.get("id", "")
-            line(f'  {entity["id"]}["{name}"]')
+            entity_uid = str(entity.get("uid", "") or entity.get("id", ""))
+            name = entity.get("name", "").replace('"', "'") or entity_uid
+            line(f'  {entity_uid}["{name}"]')
         for relation in relations:
             relation_type = RELATION_LABELS.get(relation.get("type", ""), relation.get("type", ""))
             if relation.get("label"):

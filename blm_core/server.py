@@ -278,6 +278,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._json({"error": "document already exists"}, 400)
             except FileNotFoundError:
                 return self._json({"error": "not found"}, 404)
+            except Exception as exc:
+                return self._json({"error": f"复制文档失败: {exc}"}, 500)
 
         def _handle_new(self, body: bytes):
             payload = self._decode_json(body)

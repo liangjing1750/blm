@@ -2215,6 +2215,10 @@ async function copyWorkspaceDocument(sourceName, targetName) {
     }
     await loadWorkspaceDocumentNames();
     return result;
+  } catch (err) {
+    console.error('copyWorkspaceDocument error:', err);
+    alert('复制文档时发生异常，请检查控制台日志。');
+    return null;
   } finally {
     S.isSaving = false;
     syncSavingControls();
