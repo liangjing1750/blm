@@ -115,6 +115,50 @@ test('预览页导出会下载文档包 ZIP，并保留流程原型', async ({ p
   expect(inspection.markdown).toContain('login-a.html');
 });
 
+test('预览页导出时显示进度并禁止重复点击', async ({ page, request }) => {
+  const documentName = `preview-export-busy-${Date.now()}`;
+  let releaseExport;
+  const exportStarted = new Promise((resolve) => {
+    releaseExport = () => resolve();
+  });
+  await createDocument(request, documentName, {
+    meta: {
+      title: documentName,
+      domain: documentName,
+      author: '',
+      date: '2026-05-26',
+    },
+    roles: [],
+    language: [],
+    stages: [],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.route('**/api/export-bundle/**', async (route) => {
+    await exportStarted;
+    await route.continue();
+  });
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-preview').click();
+
+  const exportButton = page.getByTestId('preview-export-bundle');
+  await exportButton.click();
+  await expect(page.getByTestId('save-progress')).toBeVisible();
+  await expect(page.getByTestId('save-progress')).toContainText(/正在准备导出|正在生成导出文件/);
+  await expect(exportButton).toBeDisabled();
+  await expect(page.getByTestId('toolbar-export-button')).toBeDisabled();
+  releaseExport();
+  await expect(page.getByTestId('save-progress')).toHaveClass(/hidden/);
+});
+
 test('preview export supports non-ASCII workspace document names', async ({ page, request }) => {
   const documentName = `\u4ea4\u5272\u667a\u6167\u76d1\u7ba1\u5e73\u53f0v2-${Date.now()}`;
   const downloads = [];

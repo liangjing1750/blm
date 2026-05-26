@@ -101,6 +101,42 @@ function previewAnchorId(prefix, value) {
     .replace(/^-+|-+$/g, '') || 'section'}`;
 }
 
+function previewItemUid(item) {
+  return String(item?.uid || item?.id || '').trim();
+}
+
+function previewDisplayName(item, fallback) {
+  return String(item?.name || '').trim() || fallback;
+}
+
+function previewSafeId(value, fallback = 'section') {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-') || fallback;
+}
+
+let previewLazyObserver = null;
+
+function previewLazySectionHtml(anchorId, kind, title, index = '') {
+  return `<section id="${esc(anchorId)}" class="pv-lazy-section" data-preview-lazy="${esc(kind)}" data-preview-index="${esc(index)}" data-preview-loaded="false">
+    <h3>${esc(title)}</h3>
+    <div class="pv-lazy-placeholder">
+      <span>滚动到这里或点击大纲后生成内容</span>
+      <button class="btn btn-outline btn-sm" type="button" onclick="ensurePreviewSection('${esc(anchorId)}')">生成</button>
+    </div>
+  </section>`;
+}
+
+function previewManualLazySectionHtml(anchorId, kind, title) {
+  return `<section id="${esc(anchorId)}" class="pv-lazy-section" data-preview-lazy="${esc(kind)}" data-preview-manual="true" data-preview-loaded="false">
+    <h3>${esc(title)}</h3>
+    <div class="pv-lazy-placeholder">
+      <span>内容较重，需要时再生成。</span>
+      <button class="btn btn-outline btn-sm" type="button" onclick="ensurePreviewSection('${esc(anchorId)}')">生成</button>
+    </div>
+  </section>`;
+}
+
 function buildPreviewOutlineItems(doc) {
   const items = [{ id: 'preview-top', label: doc?.meta?.title || doc?.meta?.domain || '文档概览', depth: 0 }];
   if ((doc?.roles || []).length) items.push({ id: 'preview-roles', label: '角色', depth: 0 });
@@ -110,8 +146,8 @@ function buildPreviewOutlineItems(doc) {
     items.push({ id: 'preview-stage-panorama', label: '全景视图', depth: 1 });
     getStageItems(doc).forEach((stage) => {
       items.push({
-        id: previewAnchorId('stage', stage.id || stage.name || 'stage'),
-        label: `阶段视图 · ${stage.name || stage.id || '未命名业务阶段'}`,
+        id: previewAnchorId('stage', previewItemUid(stage) || stage.name || 'stage'),
+        label: `阶段视图 · ${previewDisplayName(stage, '未命名业务阶段')}`,
         depth: 1,
       });
     });
@@ -120,8 +156,8 @@ function buildPreviewOutlineItems(doc) {
     items.push({ id: 'preview-processes', label: '流程视图', depth: 0 });
     (doc.processes || []).forEach((proc) => {
       items.push({
-        id: previewAnchorId('proc', proc.id || proc.name || 'process'),
-        label: `${proc.id || ''} ${proc.name || ''}`.trim() || '未命名流程',
+        id: previewAnchorId('proc', previewItemUid(proc) || proc.name || 'process'),
+        label: previewDisplayName(proc, '未命名流程'),
         depth: 1,
       });
     });
@@ -130,8 +166,8 @@ function buildPreviewOutlineItems(doc) {
     items.push({ id: 'preview-entities', label: '数据建模', depth: 0 });
     (doc.entities || []).forEach((entity) => {
       items.push({
-        id: previewAnchorId('entity', entity.id || entity.name || 'entity'),
-        label: `${entity.id || ''} ${entity.name || ''}`.trim() || '未命名实体',
+        id: previewAnchorId('entity', previewItemUid(entity) || entity.name || 'entity'),
+        label: previewDisplayName(entity, '未命名实体'),
         depth: 1,
       });
     });
@@ -154,6 +190,7 @@ function renderPreviewOutline(doc) {
 }
 
 function previewJumpTo(anchorId) {
+  ensurePreviewSection(anchorId);
   const target = document.getElementById(anchorId);
   if (!target) return;
   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -174,7 +211,6 @@ function renderPreviewTab() {
     </div>`;
 
   if(!S.doc) return;
-  document.getElementById('preview-raw').textContent = buildMdFromDoc(S.doc);
   renderPreviewOutline(S.doc);
   buildHtmlPreview();
 }
@@ -213,7 +249,7 @@ function renderPreviewRolesHtml(roles) {
         <td>${esc(getRoleSubDomains(role))}</td>
       </tr>`).join('')}
     </tbody></table>
-    ${renderPreviewRoleUsecaseHtml(roles)}`;
+    ${previewManualLazySectionHtml('preview-role-usecases', 'role-usecases', '角色用例图')}`;
 }
 
 function renderPreviewLanguageHtml(languageItems) {
@@ -373,31 +409,42 @@ function renderPreviewStageGraphMarkup(nodes, links, kind = 'stage', testId = 'p
   </div>`;
 }
 
-function renderPreviewStagesHtml(doc) {
+function renderPreviewStagePanoramaHtml(doc) {
   const stageItems = getStageItems(doc);
   if (!stageItems.length) return '';
   const panorama = buildPreviewStagePanoramaData(doc);
+  return `<div class="pv-stage-section">
+    <h3 id="preview-stage-panorama">全景视图</h3>
+    ${renderPreviewPanoramaMatrix(doc, panorama)}
+  </div>`;
+}
+
+function renderPreviewStageDetailHtml(doc, stageItem) {
+  const detail = buildPreviewStageDetailData(doc, stageItem);
+  const stageAnchor = previewAnchorId('stage', previewItemUid(stageItem) || stageItem.name || 'stage');
+  const graphTestId = `preview-stage-detail-${previewSafeId(previewItemUid(stageItem) || stageItem.name || 'stage', 'stage')}`;
+  return `<div class="pv-stage-section" id="${stageAnchor}">
+    <h3>阶段视图: ${esc(previewDisplayName(stageItem, '未命名业务阶段'))}</h3>
+    <p class="pv-note">
+      <strong>所属业务域</strong>: ${esc(getStageBusinessDomainLabel(stageItem) || '—')}
+      | <strong>流程数</strong>: ${detail.processes.length}
+      ${stageItem.virtual ? ' | <strong>说明</strong>: 未设置业务阶段' : ''}
+    </p>
+    ${renderPreviewStageGraphMarkup(detail.nodes, detail.links, 'stage-ref', graphTestId, {
+      stageItem,
+      processRefs: detail.processRefs,
+    })}
+  </div>`;
+}
+
+function renderPreviewStagesHtml(doc) {
+  const stageItems = getStageItems(doc);
+  if (!stageItems.length) return '';
   return `<h2 id="preview-stages">全景与阶段视图</h2>
-    <div class="pv-stage-section">
-      <h3 id="preview-stage-panorama">全景视图</h3>
-      ${renderPreviewPanoramaMatrix(doc, panorama)}
-    </div>
-    ${stageItems.map((stageItem) => {
-      const detail = buildPreviewStageDetailData(doc, stageItem);
-      const stageAnchor = previewAnchorId('stage', stageItem.id || stageItem.name || 'stage');
-      const graphTestId = `preview-stage-detail-${String(stageItem.id || 'stage').replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
-      return `<div class="pv-stage-section">
-        <h3 id="${stageAnchor}">阶段视图: ${esc(stageItem.name || stageItem.id)}</h3>
-        <p class="pv-note">
-          <strong>所属业务域</strong>: ${esc(getStageBusinessDomainLabel(stageItem) || '—')}
-          | <strong>流程数</strong>: ${detail.processes.length}
-          ${stageItem.virtual ? ' | <strong>说明</strong>: 未设置业务阶段' : ''}
-        </p>
-        ${renderPreviewStageGraphMarkup(detail.nodes, detail.links, 'stage-ref', graphTestId, {
-          stageItem,
-          processRefs: detail.processRefs,
-        })}
-      </div>`;
+    ${previewLazySectionHtml('preview-stage-panorama', 'stage-panorama', '全景视图')}
+    ${stageItems.map((stageItem, index) => {
+      const stageAnchor = previewAnchorId('stage', previewItemUid(stageItem) || stageItem.name || 'stage');
+      return previewLazySectionHtml(stageAnchor, 'stage', `阶段视图: ${previewDisplayName(stageItem, '未命名业务阶段')}`, index);
     }).join('')}`;
 }
 
@@ -484,30 +531,29 @@ function getPreviewNodeTaskConstructName(item) {
   return construct?.name || item?.constructName || definition?.constructName || constructId;
 }
 
-function renderPreviewProcessesHtml(processes, entityMap, stepLabels, orchestrationLabels, querySourceLabels) {
-  if (!processes.length) return '';
-  return `<h2 id="preview-processes">流程视图</h2>
-    ${processes.map((proc) => {
+function renderPreviewProcessHtml(proc, entityMap, stepLabels, orchestrationLabels, querySourceLabels) {
       const nodes = getProcNodes(proc);
       const prototypeFiles = getProcPrototypeFiles(proc);
       const processStageSummary = formatProcessStageSummary(proc, S.doc);
-      return `<h3 id="${previewAnchorId('proc', proc.id || proc.name || 'process')}">${esc(proc.id)}: ${esc(proc.name||'')}</h3>
+  return `<section class="pv-process-section" id="${previewAnchorId('proc', previewItemUid(proc) || proc.name || 'process')}">
+        <h3>${esc(previewDisplayName(proc, '未命名流程'))}</h3>
         ${processStageSummary || proc.flowGroup ? `<p class="pv-note">
           ${processStageSummary ? `<strong>业务阶段</strong>: ${esc(processStageSummary)}` : ''}
           ${proc.flowGroup ? `${processStageSummary ? ' | ' : ''}<strong>流程分组</strong>: ${esc(proc.flowGroup)}` : ''}
         </p>` : ''}
         ${proc.trigger || proc.outcome ? `<p class="pv-note"><strong>触发</strong>: ${esc(proc.trigger||'—')} → <strong>预期结果</strong>: ${esc(proc.outcome||'—')}</p>` : ''}
         ${prototypeFiles.length ? `<p class="pv-note"><strong>流程原型/附件</strong>: ${esc(formatPrototypeSummary(prototypeFiles))}</p>` : ''}
-        <div id="pv-proc-${proc.id}" class="pv-diag"></div>
+        <div id="pv-proc-${previewAnchorId('proc-diag', previewItemUid(proc) || proc.name || 'process')}" class="pv-diag"></div>
         ${nodes.length ? `<div class="pv-tasks">
-          ${nodes.map((node) => {
+          ${nodes.map((node, index) => {
             const roleName = getTaskRoleName(node);
             const entityOps = node.entity_ops || [];
             const userSteps = getNodeUserSteps(node);
             const orchestrationTasks = getNodeOrchestrationTasks(node);
             const forms = getTaskForms(node);
+            const nodeName = previewDisplayName(node, `未命名节点 ${index + 1}`);
             return `<div class="pv-task-detail">
-              <h4>流程节点 ${esc(node.id)}: ${esc(node.name||'')}${roleName ? ` <span class="pv-role">(${esc(roleName)})</span>` : ''}</h4>
+              <h4>流程节点: ${esc(nodeName)}${roleName ? ` <span class="pv-role">(${esc(roleName)})</span>` : ''}</h4>
               ${node.repeatable ? '<p class="pv-note">可退回节点</p>' : ''}
               ${userSteps.length ? `<table><thead><tr><th>#</th><th>用户操作步骤</th><th>类型</th><th>条件/备注</th></tr></thead><tbody>
                 ${userSteps.map((step, index) => `<tr><td>${index + 1}</td><td>${esc(step.name||'')}</td><td>${esc(stepLabels[step.type]||step.type||'')}</td><td>${esc(step.note||'')}</td></tr>`).join('')}
@@ -523,16 +569,24 @@ function renderPreviewProcessesHtml(processes, entityMap, stepLabels, orchestrat
               ${renderPreviewTaskBusinessRulesHtml(node)}
             </div>`;
           }).join('')}
-        </div>` : ''}`;
-    }).join('')}`;
+        </div>` : ''}
+      </section>`;
 }
 
-function renderPreviewEntitiesHtml(entities, fieldLabels) {
-  if (!entities.length) return '';
-  return `<h2 id="preview-entities">数据建模</h2>
-    <div id="pv-entity-diag" class="pv-diag pv-entity-diag"></div>
-    ${entities.map((entity) => `<div class="pv-entity-section">
-      <h3 id="${previewAnchorId('entity', entity.id || entity.name || 'entity')}">实体: ${esc(entity.name||entity.id)}</h3>
+function renderPreviewProcessesHtml(processes) {
+  if (!processes.length) return '';
+  return `<h2 id="preview-processes">流程视图</h2>
+    ${processes.map((proc, index) => previewLazySectionHtml(
+      previewAnchorId('proc', previewItemUid(proc) || proc.name || 'process'),
+      'process',
+      previewDisplayName(proc, '未命名流程'),
+      index
+    )).join('')}`;
+}
+
+function renderPreviewEntityHtml(entity, fieldLabels) {
+  return `<div class="pv-entity-section" id="${previewAnchorId('entity', previewItemUid(entity) || entity.name || 'entity')}">
+      <h3>实体: ${esc(previewDisplayName(entity, '未命名实体'))}</h3>
       ${entity.note ? `<p class="pv-note">${esc(entity.note)}</p>` : ''}
       ${entity.fields?.length ? `<table><thead><tr><th>字段</th><th>类型</th><th>主键</th><th>状态字段</th><th>字段规则</th></tr></thead><tbody>
         ${entity.fields.map((field) => `<tr>
@@ -555,7 +609,19 @@ function renderPreviewEntitiesHtml(entities, fieldLabels) {
               ${entity.state_transitions.map((transition) => `<tr><td>${esc(transition.from || '')}</td><td>${esc(transition.to || '')}</td><td>${esc(transition.note || transition.action || '')}</td></tr>`).join('')}
             </tbody></table>`;
         })()}` : ''}
-    </div>`).join('')}`;
+    </div>`;
+}
+
+function renderPreviewEntitiesHtml(entities) {
+  if (!entities.length) return '';
+  return `<h2 id="preview-entities">数据建模</h2>
+    ${previewLazySectionHtml('preview-entity-overview', 'entity-overview', '实体关系图')}
+    ${entities.map((entity, index) => previewLazySectionHtml(
+      previewAnchorId('entity', previewItemUid(entity) || entity.name || 'entity'),
+      'entity',
+      `实体: ${previewDisplayName(entity, '未命名实体')}`,
+      index
+    )).join('')}`;
 }
 
 function renderPreviewEntityStateGraphs(entity) {
@@ -576,19 +642,90 @@ function renderPreviewEntityStateGraphs(entity) {
   return graphs ? `<div class="pv-entity-state-graphs">${graphs}</div>` : '';
 }
 
+function getPreviewRenderContext(doc = S.doc) {
+  const entities = doc?.entities || [];
+  return {
+    stepLabels: {Query:'查询',Check:'校验',Fill:'填写',Select:'选择',Compute:'计算',Mutate:'变更'},
+    orchestrationLabels: {Query:'查询',Check:'校验',Compute:'计算',Service:'服务',Mutate:'变更',Custom:'自定义'},
+    querySourceLabels: {Dictionary:'字典',Enum:'枚举',QueryService:'查询服务',Custom:'自定义'},
+    fieldLabels: {string:'字符',number:'数值',decimal:'金额',date:'日期',datetime:'日期时间',boolean:'布尔',enum:'枚举',text:'长文本',id:'标识ID'},
+    entityMap: Object.fromEntries(entities.map(e=>[e.id,e])),
+  };
+}
+
+function replacePreviewLazySection(anchorId, html, afterRender) {
+  const el = document.getElementById(anchorId);
+  if (!el || el.dataset.previewLoaded === 'true') return;
+  if (previewLazyObserver) previewLazyObserver.unobserve(el);
+  el.outerHTML = html;
+  if (typeof afterRender === 'function') afterRender();
+}
+
+function ensurePreviewSection(anchorId) {
+  if (!S.doc || !anchorId) return;
+  const el = document.getElementById(anchorId);
+  if (!el || el.dataset.previewLoaded === 'true') return;
+  const kind = el.dataset.previewLazy || '';
+  const index = Number(el.dataset.previewIndex || 0) || 0;
+  const ctx = getPreviewRenderContext(S.doc);
+  if (kind === 'role-usecases') {
+    replacePreviewLazySection(anchorId, renderPreviewRoleUsecaseHtml(S.doc.roles || []));
+    return;
+  }
+  if (kind === 'stage-panorama') {
+    replacePreviewLazySection(anchorId, renderPreviewStagePanoramaHtml(S.doc));
+    return;
+  }
+  if (kind === 'stage') {
+    const stageItem = getStageItems(S.doc)[index];
+    if (stageItem) replacePreviewLazySection(anchorId, renderPreviewStageDetailHtml(S.doc, stageItem));
+    return;
+  }
+  if (kind === 'process') {
+    const proc = (S.doc.processes || [])[index];
+    if (!proc) return;
+    replacePreviewLazySection(anchorId, renderPreviewProcessHtml(proc, ctx.entityMap, ctx.stepLabels, ctx.orchestrationLabels, ctx.querySourceLabels), () => {
+      if (getProcNodes(proc).length) {
+        renderProcFlow(`pv-proc-${previewAnchorId('proc-diag', previewItemUid(proc) || proc.name || 'process')}`, proc, null);
+      }
+    });
+    return;
+  }
+  if (kind === 'entity-overview') {
+    replacePreviewLazySection(anchorId, `<section id="preview-entity-overview" class="pv-entity-section"><h3>实体关系图</h3><div id="pv-entity-diag" class="pv-diag pv-entity-diag"></div></section>`, () => {
+      if ((S.doc.entities || []).length) renderEntityFlow('pv-entity-diag', S.doc, null);
+    });
+    return;
+  }
+  if (kind === 'entity') {
+    const entity = (S.doc.entities || [])[index];
+    if (entity) replacePreviewLazySection(anchorId, renderPreviewEntityHtml(entity, ctx.fieldLabels));
+  }
+}
+
+function initPreviewLazyRendering() {
+  if (previewLazyObserver) previewLazyObserver.disconnect();
+  const root = document.getElementById('preview-rendered');
+  const sections = Array.from(document.querySelectorAll('[data-preview-lazy]'));
+  if (!root || !sections.length) return;
+  previewLazyObserver = new IntersectionObserver((entries) => {
+    entries
+      .filter((entry) => entry.isIntersecting)
+      .forEach((entry) => ensurePreviewSection(entry.target.id));
+  }, { root, rootMargin: '600px 0px', threshold: 0.01 });
+  sections
+    .filter((section) => section.dataset.previewManual !== 'true')
+    .forEach((section) => previewLazyObserver.observe(section));
+}
+
 function buildHtmlPreview() {
   const container = document.getElementById('preview-rendered');
   if(!container || !S.doc) return;
   const doc = S.doc;
   const m   = doc.meta||{};
-  const STEP_LBL  = {Query:'查询',Check:'校验',Fill:'填写',Select:'选择',Compute:'计算',Mutate:'变更'};
-  const ORCH_LBL = {Query:'查询',Check:'校验',Compute:'计算',Service:'服务',Mutate:'变更',Custom:'自定义'};
-  const QUERY_SOURCE_LBL = {Dictionary:'字典',Enum:'枚举',QueryService:'查询服务',Custom:'自定义'};
-  const FIELD_LBL = {string:'字符',number:'数值',decimal:'金额',date:'日期',datetime:'日期时间',boolean:'布尔',enum:'枚举',text:'长文本',id:'标识ID'};
   const roles = doc.roles||[];
   const lang = doc.language||[];
   const procs = doc.processes||[];
-  const emap  = Object.fromEntries((doc.entities||[]).map(e=>[e.id,e]));
   const entities  = doc.entities||[];
   container.innerHTML = [
     `<h1 id="preview-top">${esc(m.title||m.domain||'未命名')}</h1>`,
@@ -597,21 +734,11 @@ function buildHtmlPreview() {
     renderPreviewRolesHtml(roles),
     renderPreviewLanguageHtml(lang),
     renderPreviewStagesHtml(doc),
-    renderPreviewProcessesHtml(procs, emap, STEP_LBL, ORCH_LBL, QUERY_SOURCE_LBL),
-    renderPreviewEntitiesHtml(entities, FIELD_LBL),
+    renderPreviewProcessesHtml(procs),
+    renderPreviewEntitiesHtml(entities),
   ].filter(Boolean).join('');
-
-  /* Render proc flow diagrams */
-  for(const proc of procs) {
-    if(getProcNodes(proc).length) {
-      renderProcFlow(`pv-proc-${proc.id}`, proc, null);
-    }
-  }
-
-  /* Render entity flow diagram */
-  if(entities.length) {
-    renderEntityFlow('pv-entity-diag', doc, null);
-  }
+  initPreviewLazyRendering();
+  ensurePreviewSection('preview-stage-panorama');
 }
 
 function appendPreviewRolesMd(add, roles) {
@@ -897,6 +1024,10 @@ function togglePreviewRaw() {
   const toggle   = document.getElementById('preview-raw-toggle');
   if(!body || !raw) return;
   const goRaw = !body.classList.contains('hidden');
+  if (goRaw && raw.dataset.loaded !== 'true') {
+    raw.textContent = buildMdFromDoc(S.doc);
+    raw.dataset.loaded = 'true';
+  }
   body.classList.toggle('hidden', goRaw);
   raw.classList.toggle('hidden', !goRaw);
   if (toggle) toggle.textContent = goRaw ? '返回预览' : '显示原文 MD';

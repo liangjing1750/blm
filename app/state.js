@@ -12,6 +12,8 @@ const S = {
   doc: null,
   modified: false,
   isSaving: false,
+  isExporting: false,
+  isPreviewRendering: false,
   runtime: {
     checked: false,
     apiVersion: 0,

@@ -2033,7 +2033,7 @@ async function requestSaveHistoryMessage(shouldCreateHistory) {
 }
 
 function syncSavingControls() {
-  const disabled = Boolean(S.isSaving);
+  const disabled = Boolean(S.isSaving || S.isExporting || S.isPreviewRendering);
   ['btn-save', 'toolbar-save-as-label'].forEach((id) => {
     const button = document.getElementById(id);
     if (button) button.disabled = disabled;
@@ -2804,19 +2804,31 @@ const App = {
   },
 
   async cmdExport() {
-    if (S.isSaving) return;
+    if (S.isSaving || S.isExporting) return;
     if (!S.doc) return;
-    await App.cmdSave();
-    if (!S.currentFile || S.modified) return;
+    S.isExporting = true;
+    syncSavingControls();
+    try {
+      if (!S.currentFile || S.modified) {
+        await App.cmdSave();
+      }
+      if (!S.currentFile || S.modified) return;
 
-    const bundleName = `${S.currentFile || S.doc.meta?.domain || getCurrentDocumentLabel() || 'blm-document'}.zip`;
-    const response = await api.exportBundle(S.currentFile);
-    if (!response.ok) {
-      alert('导出文档包失败，请稍后重试。');
-      return;
+      setSaveProgress(true, 72, '正在生成导出文件...', '正在打包文档、预览内容和附件。');
+      const bundleName = `${S.currentFile || S.doc.meta?.domain || getCurrentDocumentLabel() || 'blm-document'}.zip`;
+      const response = await api.exportBundle(S.currentFile);
+      if (!response.ok) {
+        alert('导出文档包失败，请稍后重试。');
+        return;
+      }
+      const bundleBlob = await response.blob();
+      setSaveProgress(true, 96, '正在下载导出文件...', '导出文件已生成，正在交给浏览器下载。');
+      App._downloadBlob(bundleBlob, bundleBlob.type || 'application/zip', bundleName);
+    } finally {
+      S.isExporting = false;
+      setSaveProgress(false);
+      syncSavingControls();
     }
-    const bundleBlob = await response.blob();
-    App._downloadBlob(bundleBlob, bundleBlob.type || 'application/zip', bundleName);
   },
 
   cmdManual() {
@@ -3214,4 +3226,3 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 window.App = App;
 window.toggleMergeCustomInput = toggleMergeCustomInput;
-

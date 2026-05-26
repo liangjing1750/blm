@@ -8,19 +8,19 @@ function buildPreviewStageDoc(name) {
     roles: [],
     language: [],
     stages: [
-      { id: 'S1', name: 'Account opening', subDomain: 'Account', processLinks: [] },
+      { uid: 'S1', name: 'Account opening', subDomain: 'Account', processLinks: [] },
     ],
     stageLinks: [],
     stageFlowRefs: [
-      { id: 'SFR1', stageId: 'S1', processId: 'P1', order: 1, pos: { x: 0, y: 0 } },
-      { id: 'SFR2', stageId: 'S1', processId: 'P2', order: 2, pos: { x: 0, y: 0 } },
+      { uid: 'SFR1', stageUid: 'S1', processUid: 'P1', order: 1, pos: { x: 0, y: 0 } },
+      { uid: 'SFR2', stageUid: 'S1', processUid: 'P2', order: 2, pos: { x: 0, y: 0 } },
     ],
     stageFlowLinks: [
-      { id: 'SFL1', stageId: 'S1', fromRefId: 'SFR1', toRefId: 'SFR2' },
+      { uid: 'SFL1', stageUid: 'S1', fromRefUid: 'SFR1', toRefUid: 'SFR2' },
     ],
     processes: [
-      { id: 'P1', name: 'Capture application', subDomain: 'Account', flowGroup: 'Onboarding', trigger: '', outcome: '', nodes: [] },
-      { id: 'P2', name: 'Review application', subDomain: 'Account', flowGroup: 'Onboarding', trigger: '', outcome: '', nodes: [] },
+      { uid: 'P1', name: 'Capture application', subDomain: 'Account', flowGroup: 'Onboarding', trigger: '', outcome: '', nodes: [] },
+      { uid: 'P2', name: 'Review application', subDomain: 'Account', flowGroup: 'Onboarding', trigger: '', outcome: '', nodes: [] },
     ],
     entities: [],
     relations: [],
@@ -171,20 +171,109 @@ test('预览页提供大纲视图并支持跳转', async ({ page, request }) => 
   await expect(page.locator('#preview-outline')).toContainText('全景与阶段视图');
   await expect(page.locator('#preview-outline')).toContainText('全景视图');
   await expect(page.locator('#preview-outline')).toContainText('流程视图');
-  await expect(page.locator('#preview-outline')).toContainText('E2 现货仓单');
+  await expect(page.locator('#preview-outline')).toContainText('现货仓单');
+  await expect(page.locator('#preview-outline')).not.toContainText('E2 现货仓单');
+  await expect(page.locator('#preview-outline')).not.toContainText('P1 入库预约管理');
   await expect(page.getByTestId('preview-stage-panorama')).toBeVisible();
+  await page.locator('#preview-role-usecases').getByRole('button', { name: '生成' }).click();
   await expect(page.getByTestId('preview-role-usecase-section')).toBeVisible();
   await expect(page.getByTestId('role-usecase-map')).toHaveCount(2);
-  await expect(page.getByTestId('preview-entity-state-graph')).toHaveCount(2);
   await expect(previewRendered).toContainText('阶段视图');
-  await expect(previewRendered).toContainText('流程节点 T1');
+  await page.locator('.preview-outline-link', { hasText: '入库预约管理' }).click();
+  await expect(previewRendered).toContainText('流程节点: 提交预约');
+  await expect(previewRendered).not.toContainText('流程节点 T1');
   await expect(previewRendered).toContainText('节点任务');
   await expect(previewRendered).toContainText('保存预约信息');
   await expect(previewRendered).toContainText('表单模型');
   await expect(previewRendered).toContainText('预约提交表单');
+  await page.locator('.preview-outline-link', { hasText: '现货仓单' }).click();
+  await expect(page.getByTestId('preview-entity-state-graph')).toHaveCount(1);
 
-  const initialScrollTop = await previewRendered.evaluate((el) => el.scrollTop);
-  expect(initialScrollTop).toBe(0);
-  await page.locator('.preview-outline-link', { hasText: 'E2 现货仓单' }).click();
   await page.waitForFunction(() => document.getElementById('preview-rendered')?.scrollTop > 50);
+});
+
+test('点击预览页签时先显示等待态再渲染预览', async ({ page, request }) => {
+  const documentName = `preview-loading-${Date.now()}`;
+  await createDocument(request, documentName, {
+    meta: { title: documentName, domain: documentName, author: 'tester', date: '2026-05' },
+    roles: [],
+    language: [],
+    stages: [],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [{ uid: 'proc-1', name: '示例流程', trigger: '', outcome: '', nodes: [] }],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.evaluate(() => {
+    const original = window.renderPreviewTab;
+    window.__previewProgressVisibleAtRender = false;
+    window.renderPreviewTab = function wrappedRenderPreviewTab(...args) {
+      window.__previewProgressVisibleAtRender = !document.getElementById('save-progress')?.classList.contains('hidden');
+      return original.apply(this, args);
+    };
+  });
+
+  await page.getByTestId('tab-preview').click();
+  await expect.poll(() => page.evaluate(() => window.__previewProgressVisibleAtRender)).toBe(true);
+  await expect(page.getByTestId('save-progress')).toHaveClass(/hidden/);
+  await expect(page.locator('#preview-outline')).toContainText('示例流程');
+});
+
+test('大文档预览先打开骨架，流程图和原文按需生成', async ({ page, request }) => {
+  const documentName = `preview-large-lazy-${Date.now()}`;
+  const processes = Array.from({ length: 80 }, (_, index) => ({
+    uid: `proc-${index + 1}`,
+    name: `流程 ${index + 1}`,
+    trigger: '',
+    outcome: '',
+    nodes: [{ uid: `node-${index + 1}`, name: `节点 ${index + 1}`, roleIds: [] }],
+  }));
+  await createDocument(request, documentName, {
+    meta: { title: documentName, domain: documentName, author: 'tester', date: '2026-05' },
+    roles: [],
+    language: [],
+    stages: [],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes,
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.evaluate(() => {
+    const original = window.renderProcFlow;
+    window.__previewProcRenderCount = 0;
+    window.renderProcFlow = function wrappedRenderProcFlow(...args) {
+      window.__previewProcRenderCount += 1;
+      return original.apply(this, args);
+    };
+    const originalMd = window.buildMdFromDoc;
+    window.__previewMdBuildCount = 0;
+    window.buildMdFromDoc = function wrappedBuildMdFromDoc(...args) {
+      window.__previewMdBuildCount += 1;
+      return originalMd.apply(this, args);
+    };
+  });
+
+  await page.getByTestId('tab-preview').click();
+  await expect(page.locator('#preview-outline')).toContainText('流程 80');
+  await expect.poll(() => page.evaluate(() => window.__previewMdBuildCount)).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.__previewProcRenderCount)).toBeLessThan(10);
+
+  await page.locator('.preview-outline-link', { hasText: '流程 80' }).click();
+  await expect(page.locator('#preview-rendered')).toContainText('节点 80');
+  await expect.poll(() => page.evaluate(() => window.__previewProcRenderCount)).toBeGreaterThan(0);
+
+  await page.getByText('显示原文 MD').click();
+  await expect.poll(() => page.evaluate(() => window.__previewMdBuildCount)).toBe(1);
 });

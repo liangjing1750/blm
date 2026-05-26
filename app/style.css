@@ -3952,6 +3952,36 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
   padding: 6px 16px; border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+.preview-loading-placeholder {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--text-m);
+  font-size: 13px;
+  background: #fff;
+}
+.pv-lazy-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 12px;
+  margin: 12px 0;
+}
+.pv-lazy-section h3 {
+  margin-top: 0;
+}
+.pv-lazy-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-m);
+  font-size: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 12px;
+}
 .btn-ghost-sm {
   background: none; border: 1px solid var(--border); cursor: pointer;
   color: var(--text-m); padding: 3px 10px; border-radius: var(--radius);

@@ -112,6 +112,10 @@ async function renderDiagram(containerId, code, onClickMap) {
 }
 
 function navigate(tab, opts, navOptions = {}) {
+  if (tab === 'preview') {
+    void navigatePreviewTab(opts, navOptions);
+    return;
+  }
   queueUiNavigationHistoryFor((next) => {
     next.tab = tab;
     if (opts) {
@@ -134,6 +138,45 @@ function navigate(tab, opts, navOptions = {}) {
     S.ui.procView = opts.taskId ? 'list' : 'flow';
   }
   render();
+}
+
+async function navigatePreviewTab(opts = {}, navOptions = {}) {
+  if (S.isPreviewRendering) return;
+  queueUiNavigationHistoryFor((next) => {
+    next.tab = 'preview';
+    return next;
+  }, navOptions);
+  S.ui.tab = 'preview';
+  if (opts) {
+    if('procId'   in opts) S.ui.procId   = opts.procId;
+    if('taskId'   in opts) S.ui.taskId   = opts.taskId;
+    if('entityId' in opts) S.ui.entityId = opts.entityId;
+  }
+  S.isPreviewRendering = true;
+  renderToolbar();
+  renderTabBar();
+  if (S.doc) renderSidebar();
+  document.getElementById('tab-content').innerHTML = '<div class="preview-loading-placeholder">正在生成预览...</div>';
+  if (typeof setSaveProgress === 'function') {
+    setSaveProgress(true, 18, '正在生成预览...', '正在整理大纲、流程视图和数据模型。');
+  }
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  try {
+    if (S.ui.tab === 'preview' && S.doc) {
+      if (typeof setSaveProgress === 'function') {
+        setSaveProgress(true, 72, '正在渲染预览...', '正在绘制流程图和数据图。');
+      }
+      renderPreviewTab();
+      setTimeout(initAutoResize, 0);
+    } else {
+      render();
+    }
+  } finally {
+    S.isPreviewRendering = false;
+    if (typeof setSaveProgress === 'function') setSaveProgress(false);
+    if (typeof syncSavingControls === 'function') syncSavingControls();
+    renderTabBar();
+  }
 }
 
 function toggleCollapse(key) {
@@ -1230,8 +1273,9 @@ function renderTabBar() {
   const backTitle = esc(getBackNavigationTitle());
   const tabHtml = tabs.map(t=>{
     const onclick = t.id === 'process' ? 'openProcessHome()' : `navigate('${t.id}',{})`;
+    const disabled = S.isPreviewRendering ? 'disabled' : '';
     return `<button class="tab-btn ${S.ui.tab===t.id?'active':''}" data-testid="tab-${t.id}"
-      onclick="${onclick}">${t.label}</button>`;
+      onclick="${onclick}" ${disabled}>${t.label}</button>`;
   }).join('');
   document.getElementById('tab-bar').innerHTML = `
     <div class="tab-btn-group">${tabHtml}</div>
