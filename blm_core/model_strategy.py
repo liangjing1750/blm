@@ -43,7 +43,7 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "role": {"scalars": ["name", "desc", "group"], "set_lists": ["subDomains"], "lists": {}},
     "language": {"scalars": ["term", "definition"], "lists": {}},
     "stage": {
-        "scalars": ["name", "subDomain", "pos"],
+        "scalars": ["name", "subDomain", "panoramaColumnUid", "panoramaLaneUid", "pos"],
         "lists": {"processLinks": "process_link"},
     },
     "stage_link": {"scalars": ["fromStageUid", "toStageUid"], "lists": {}},

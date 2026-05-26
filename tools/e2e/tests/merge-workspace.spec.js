@@ -27,6 +27,52 @@ function buildDocument(name, processName) {
   };
 }
 
+function buildPanoramaDocument(name) {
+  return {
+    meta: {
+      title: name,
+      domain: name,
+      author: '',
+      date: '',
+    },
+    roles: [],
+    language: [],
+    panorama: {
+      columns: [
+        { uid: 'participants', name: '参与人', scope: '参与方' },
+        { uid: 'businessHandling', name: '业务办理', scope: '申请、审核、撤销' },
+      ],
+      lanes: [
+        { uid: 'collateral-system', name: '担保品管理系统', badge: '目标平台', note: '' },
+      ],
+      cells: [],
+    },
+    stages: [
+      {
+        uid: 'stage-pledge',
+        name: '仓单作为保证金',
+        panoramaColumnUid: 'participants',
+        panoramaLaneUid: 'collateral-system',
+        processLinks: [],
+      },
+      {
+        uid: 'stage-release',
+        name: '解除仓单作为保证金',
+        panoramaColumnUid: 'businessHandling',
+        panoramaLaneUid: 'collateral-system',
+        processLinks: [],
+      },
+    ],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  };
+}
+
 async function getFirstHistoryOptionValue(page, kind = 'right') {
   const select = page.getByTestId(`compare-${kind}-version-select`);
   await expect.poll(async () => (
@@ -67,6 +113,56 @@ test('用户可以从工作区选择两个文档并确认合并', async ({ page,
   await page.getByTestId('merge-confirm-button').click();
   await expect(page.getByTestId('merge-modal')).toHaveClass(/hidden/);
   await expect(page.getByTestId('current-file-name')).toContainText('-合并');
+});
+
+test('复制文档合并后保留阶段的全景价值流归类', async ({ page, request }) => {
+  const leftName = `merge-panorama-left-${Date.now()}`;
+  const rightName = `${leftName}-副本`;
+  const leftDocument = buildPanoramaDocument(leftName);
+  const rightDocument = {
+    ...buildPanoramaDocument(rightName),
+    meta: {
+      title: rightName,
+      domain: rightName,
+      author: '副本作者',
+      date: '',
+    },
+  };
+
+  await createDocument(request, leftName, leftDocument);
+  await createDocument(request, rightName, rightDocument);
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-merge-button').click();
+  await expect(page.getByTestId('merge-modal')).not.toHaveClass(/hidden/);
+  await page.locator('#merge-left-select').selectOption(leftName);
+  await page.locator('#merge-right-select').selectOption(rightName);
+
+  await page.getByTestId('merge-confirm-button').click();
+  await expect(page.getByTestId('merge-analysis')).toContainText('未检测到冲突');
+  await page.getByTestId('merge-confirm-button').click();
+  await expect(page.getByTestId('merge-modal')).toHaveClass(/hidden/);
+
+  const mergedState = await page.evaluate(() => ({
+    columns: (S.doc?.panorama?.columns || []).map((item) => item.uid),
+    lanes: (S.doc?.panorama?.lanes || []).map((item) => item.uid),
+    stages: (S.doc?.stages || []).map((stage) => ({
+      name: stage.name,
+      column: stage.panoramaColumnUid,
+      lane: stage.panoramaLaneUid,
+    })),
+  }));
+  expect(mergedState.stages.length).toBe(2);
+  for (const stage of mergedState.stages) {
+    expect(mergedState.columns).toContain(stage.column);
+    expect(mergedState.lanes).toContain(stage.lane);
+    expect(stage.column).not.toBe('');
+    expect(stage.lane).not.toBe('');
+  }
+
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('process-switch-panorama').click();
+  await expect(page.getByTestId('sidebar-stage-browse')).not.toContainText('未归类价值流');
 });
 
 test('用户可以选择当前版本和历史版本做只读比对', async ({ page, request }) => {

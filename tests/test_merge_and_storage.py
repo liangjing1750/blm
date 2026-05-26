@@ -806,6 +806,47 @@ class MergeEngineTests(unittest.TestCase):
         self.assertEqual({cell["columnUid"] for cell in merged["panorama"]["cells"]}, {merged_column_uid})
         self.assertEqual({cell["laneUid"] for cell in merged["panorama"]["cells"]}, {merged_lane_uid})
 
+    def test_combine_preserves_panorama_assignment_for_copied_documents(self):
+        left = create_empty_document("Left")
+        for field in ("roles", "stageLinks", "stageFlowRefs", "stageFlowLinks", "processes", "entities", "relations", "rules"):
+            left[field] = []
+        left["panorama"] = {
+            "columns": [{"uid": "businessHandling", "name": "业务办理"}],
+            "lanes": [{"uid": "collateral-system", "name": "担保品管理系统"}],
+            "cells": [{"uid": "cell-one", "columnUid": "businessHandling", "laneUid": "collateral-system"}],
+        }
+        left["stages"] = [
+            {
+                "uid": "stage-apply",
+                "name": "仓单作为保证金",
+                "panoramaColumnUid": "businessHandling",
+                "panoramaLaneUid": "collateral-system",
+                "processLinks": [],
+            },
+            {
+                "uid": "stage-release",
+                "name": "解除仓单作为保证金",
+                "panoramaColumnUid": "businessHandling",
+                "panoramaLaneUid": "collateral-system",
+                "processLinks": [],
+            },
+        ]
+        right = deepcopy(left)
+        right["meta"]["title"] = "Left-副本"
+        right["meta"]["domain"] = "Left-副本"
+        right["meta"]["author"] = "复制后修改作者"
+
+        analysis = analyze_merge("combine", left, right)
+        merged = analysis["merged_document"]
+        column_uid = merged["panorama"]["columns"][0]["uid"]
+        lane_uid = merged["panorama"]["lanes"][0]["uid"]
+
+        self.assertEqual(analysis["validation_issues"], [])
+        self.assertEqual({stage["panoramaColumnUid"] for stage in merged["stages"]}, {column_uid})
+        self.assertEqual({stage["panoramaLaneUid"] for stage in merged["stages"]}, {lane_uid})
+        self.assertNotIn("", {stage["panoramaColumnUid"] for stage in merged["stages"]})
+        self.assertNotIn("", {stage["panoramaLaneUid"] for stage in merged["stages"]})
+
     def test_combine_remaps_panorama_references_with_alias_from_another_source(self):
         left = create_empty_document("Left")
         right = create_empty_document("Right")
