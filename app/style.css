@@ -7378,6 +7378,14 @@ body.is-saving * {
   font-size: 11px;
   font-weight: 600;
 }
+.role-usecase-group-title small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-l);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+}
 .role-usecase-role,
 .role-usecase-process {
   position: absolute;

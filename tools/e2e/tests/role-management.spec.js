@@ -12,21 +12,21 @@ function buildRoleDoc(documentName) {
     },
     roles: [
       {
-        id: 'R1',
+        uid: 'R1',
         name: '仓库管理员',
         desc: '负责仓库日常业务办理与现场协调',
         group: '仓库作业方',
         subDomains: ['仓储仓单管理'],
       },
       {
-        id: 'R2',
+        uid: 'R2',
         name: '现场操作员',
         desc: '负责现场作业与影像留痕',
         group: '仓库作业方',
         subDomains: ['仓储仓单管理'],
       },
       {
-        id: 'R3',
+        uid: 'R3',
         name: '会员',
         desc: '代表会员单位发起业务申请并查询进度',
         group: '业务参与方',
@@ -39,24 +39,24 @@ function buildRoleDoc(documentName) {
     ],
     processes: [
       {
-        id: 'P1',
+        uid: 'P1',
         name: '入库办理',
         subDomain: '仓储仓单管理',
         trigger: '预约通过且货物到库',
         outcome: '完成入库并生成现货仓单',
         tasks: [
           {
-            id: 'T1',
+            uid: 'T1',
             name: '确认到货',
-            role_id: 'R1',
+            role_uid: 'R1',
             steps: [{ name: '核对车辆与预约单', type: 'Check', note: '' }],
             entity_ops: [],
             repeatable: false,
           },
           {
-            id: 'T2',
+            uid: 'T2',
             name: '生成现货仓单',
-            role_id: 'R1',
+            role_uid: 'R1',
             steps: [{ name: '落仓后生成仓单', type: 'Mutate', note: '' }],
             entity_ops: [],
             repeatable: false,
@@ -64,22 +64,43 @@ function buildRoleDoc(documentName) {
         ],
       },
       {
-        id: 'P2',
+        uid: 'P2',
         name: '入库预约',
         subDomain: '仓储仓单管理',
         trigger: '客户计划发货入库',
         outcome: '形成待审核预约',
         tasks: [
           {
-            id: 'T3',
+            uid: 'T3',
             name: '提交预约',
-            role_id: 'R3',
+            role_uid: 'R3',
             steps: [{ name: '填写预约信息', type: 'Fill', note: '' }],
             entity_ops: [],
             repeatable: false,
           },
         ],
       },
+    ],
+    panorama: {
+      columns: [
+        { uid: 'value-stream-inbound', name: '入库与仓单注册', scope: '预约、入库、仓单生成' },
+      ],
+      lanes: [
+        { uid: 'domain-warehouse', name: '仓库业务系统', badge: '目标平台', note: '仓储与仓单业务办理入口' },
+      ],
+      cells: [],
+    },
+    stages: [
+      {
+        uid: 'stage-inbound',
+        name: '入库办理阶段',
+        panoramaColumnUid: 'value-stream-inbound',
+        panoramaLaneUid: 'domain-warehouse',
+      },
+    ],
+    stageFlowRefs: [
+      { uid: 'stage-inbound-p1', stageUid: 'stage-inbound', processUid: 'P1', order: 1 },
+      { uid: 'stage-inbound-p2', stageUid: 'stage-inbound', processUid: 'P2', order: 2 },
     ],
     entities: [],
     relations: [],
@@ -167,8 +188,12 @@ test('流程角色视图可以按角色聚合流程和节点', async ({ page, re
   await expect(page.getByTestId('role-usecase-map')).toBeVisible();
   await expect(page.locator('.proc-role-detail')).toContainText('仓库管理员');
   await expect(page.getByTestId('role-projection-summary')).toContainText('涉及节点');
+  await expect(page.getByTestId('role-usecase-map')).toContainText('仓库业务系统 / 入库与仓单注册');
+  await expect(page.getByTestId('role-usecase-map')).toContainText('阶段：入库办理阶段');
+  await expect(page.getByTestId('role-usecase-map')).not.toContainText('未归类业务组件');
   await expect(page.locator('.proc-role-detail')).toContainText('入库办理');
   await expect(page.locator('.proc-role-detail')).toContainText('确认到货');
+  await expect(page.locator('.proc-role-detail')).not.toContainText('节点 T1');
 
   await page.getByTestId('role-view-task-chip').first().click();
 
@@ -201,16 +226,16 @@ test('角色视图右侧详情面板启用滚动，并在用例图中展示全�
   const doc = buildRoleDoc(documentName);
   for (let index = 0; index < 10; index += 1) {
     doc.processes.push({
-      id: `PX${index + 1}`,
+      uid: `PX${index + 1}`,
       name: `扩展流程${index + 1}`,
       subDomain: index % 2 === 0 ? '仓储仓单管理' : '示例服务机构管理',
       trigger: '扩展测试',
       outcome: '验证滚动',
       tasks: [
         {
-          id: `TX${index + 1}`,
+          uid: `TX${index + 1}`,
           name: `扩展任务${index + 1}`,
-          role_id: 'R1',
+          role_uid: 'R1',
           steps: [{ name: '执行动作', type: 'Mutate', note: '' }],
           entity_ops: [],
           repeatable: false,

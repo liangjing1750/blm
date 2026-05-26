@@ -5732,6 +5732,101 @@ function renderTaskBusinessRulesSection(proc, task) {
 /* ═══════════════════════════════════════════════════════════
    RENDER — Process Tab  (上：实时图 | 下：编辑)
 ═══════════════════════════════════════════════════════════ */
+function getProcessPanoramaContexts(proc, doc = S.doc) {
+  const processId = String(proc?.id || '').trim();
+  if (!processId) return [];
+  const stageRefs = getProcessStageRefs(processId, doc);
+  const stages = getStages(doc);
+  const stageById = new Map(stages.map((stage, index) => [String(stage.id || '').trim(), { stage, index }]));
+  const panorama = getPanoramaModel(doc);
+  const columns = Array.isArray(panorama?.columns) ? panorama.columns : [];
+  const lanes = Array.isArray(panorama?.lanes) ? panorama.lanes : [];
+  const columnById = new Map(columns.map((column, index) => [String(column.id || '').trim(), { column, index }]));
+  const laneById = new Map(lanes.map((lane, index) => [String(lane.id || '').trim(), { lane, index }]));
+  const contexts = [];
+
+  for (const ref of stageRefs) {
+    const stageEntry = stageById.get(String(ref.stageId || '').trim());
+    if (!stageEntry?.stage || stageEntry.stage.id === UNASSIGNED_STAGE_ID) continue;
+    const stage = stageEntry.stage;
+    const columnEntry = columnById.get(String(stage.panoramaColumnUid || '').trim());
+    const laneEntry = laneById.get(String(stage.panoramaLaneUid || '').trim());
+    const hasPanoramaPosition = Boolean(columnEntry?.column && laneEntry?.lane);
+    const laneName = String(laneEntry?.lane?.name || '').trim();
+    const columnName = String(columnEntry?.column?.name || '').trim();
+    contexts.push({
+      key: hasPanoramaPosition
+        ? `panorama:${laneEntry.lane.id}:${columnEntry.column.id}:stage:${stage.id}`
+        : `stage-unclassified:${stage.id}`,
+      title: hasPanoramaPosition ? `${laneName || '未命名业务域'} / ${columnName || '未命名价值流'}` : '未归类阶段',
+      subtitle: `阶段：${String(stage.name || '未命名阶段').trim() || '未命名阶段'}`,
+      sortKey: [
+        hasPanoramaPosition ? 0 : 1,
+        laneEntry?.index ?? 9999,
+        columnEntry?.index ?? 9999,
+        stageEntry.index,
+        ref.order ?? 9999,
+      ],
+    });
+  }
+
+  if (!contexts.length) {
+    contexts.push({
+      key: 'process-unassigned-stage',
+      title: '未放入阶段',
+      subtitle: '流程尚未归入任何阶段',
+      sortKey: [2, 9999, 9999, 9999, 9999],
+    });
+  }
+
+  return contexts;
+}
+
+function buildRoleProcessContextGroups(processes, doc = S.doc) {
+  const groupMap = new Map();
+  for (const proc of processes) {
+    const contexts = getProcessPanoramaContexts(proc, doc);
+    for (const context of contexts) {
+      if (!groupMap.has(context.key)) {
+        groupMap.set(context.key, {
+          key: context.key,
+          name: context.title,
+          subtitle: context.subtitle,
+          sortKey: context.sortKey,
+          items: [],
+          processIds: new Set(),
+        });
+      }
+      const group = groupMap.get(context.key);
+      const procId = String(proc.id || '').trim();
+      if (!group.processIds.has(procId)) {
+        group.processIds.add(procId);
+        group.items.push(proc);
+      }
+    }
+  }
+  return Array.from(groupMap.values())
+    .sort((left, right) => {
+      for (let index = 0; index < Math.max(left.sortKey.length, right.sortKey.length); index += 1) {
+        const diff = (left.sortKey[index] ?? 0) - (right.sortKey[index] ?? 0);
+        if (diff) return diff;
+      }
+      return left.name.localeCompare(right.name, 'zh-Hans-CN');
+    })
+    .map((group) => {
+      group.items.sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), 'zh-Hans-CN'));
+      delete group.processIds;
+      return group;
+    });
+}
+
+function getProcessRoleContextLabel(proc) {
+  const context = getProcessPanoramaContexts(proc)[0];
+  if (!context) return '';
+  if (context.title === '未放入阶段') return context.title;
+  return `${context.title} · ${context.subtitle.replace(/^阶段：/, '')}`;
+}
+
 function buildRoleUsecaseMap(selectedRole, options = {}) {
   const readonly = Boolean(options.readonly);
   const usageByProcess = selectedRole ? getRoleUsageByProcess(selectedRole.id) : new Map();
@@ -5742,14 +5837,7 @@ function buildRoleUsecaseMap(selectedRole, options = {}) {
   const processes = participatingOnly
     ? Array.from(usageByProcess.values()).map(({ proc }) => proc)
     : (S.doc?.processes || []);
-  const subdomainGroups = Array.from(
-    processes.reduce((map, proc) => {
-      const subDomain = (proc.subDomain || '未归类业务组件').trim();
-      if(!map.has(subDomain)) map.set(subDomain, []);
-      map.get(subDomain).push(proc);
-      return map;
-    }, new Map()).entries(),
-  ).map(([name, items]) => ({ name, items }));
+  const processGroups = buildRoleProcessContextGroups(processes);
 
   const roleFrames = [];
   const roleNodes = [];
@@ -5773,17 +5861,18 @@ function buildRoleUsecaseMap(selectedRole, options = {}) {
   const processNodes = [];
   const columnX = [340, 650];
   const columnHeights = [24, 24];
-  for(const group of subdomainGroups) {
-    const frameHeight = 52 + group.items.length * 40;
+  for(const group of processGroups) {
+    const frameHeight = 72 + group.items.length * 40;
     const columnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
     const frameX = columnX[columnIndex];
     const frameY = columnHeights[columnIndex];
-    processFrames.push({ name: group.name, x: frameX, y: frameY, width: 270, height: frameHeight });
+    processFrames.push({ name: group.name, subtitle: group.subtitle, x: frameX, y: frameY, width: 270, height: frameHeight });
     group.items.forEach((proc, index) => {
       processNodes.push({
         proc,
+        groupKey: group.key,
         x: frameX + 18,
-        y: frameY + 34 + index * 36,
+        y: frameY + 54 + index * 36,
         width: 234,
         height: 28,
       });
@@ -5827,7 +5916,10 @@ function buildRoleUsecaseMap(selectedRole, options = {}) {
       `).join('')}
       ${processFrames.map((frame) => `
         <div class="role-usecase-group role-proc-group" style="left:${frame.x}px;top:${frame.y}px;width:${frame.width}px;height:${frame.height}px">
-          <div class="role-usecase-group-title">${esc(frame.name)}</div>
+          <div class="role-usecase-group-title">
+            <span>${esc(frame.name)}</span>
+            ${frame.subtitle ? `<small>${esc(frame.subtitle)}</small>` : ''}
+          </div>
         </div>
       `).join('')}
       ${roleNodes.map((node) => {
@@ -5887,16 +5979,17 @@ function renderProcessRoleView() {
         <div class="proc-role-usage-head">
           <div>
             <span class="proc-role-usage-proc">${esc(proc.name || '未命名流程')}</span>
-            ${proc.subDomain ? `<span class="proc-role-usage-subdomain">${esc(proc.subDomain)}</span>` : ''}
+            ${getProcessRoleContextLabel(proc) ? `<span class="proc-role-usage-subdomain">${esc(getProcessRoleContextLabel(proc))}</span>` : ''}
           </div>
           <button class="btn btn-ghost-sm" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})">查看流程</button>
         </div>
         <div class="proc-role-task-list">
-          ${tasks.map((task) => {
+          ${tasks.map((task, index) => {
             const nodeTaskCount = getNodeOrchestrationTasks(task).length;
+            const nodeName = String(task.name || '').trim() || `未命名节点 ${index + 1}`;
             return `<button class="role-task-chip" data-testid="role-view-task-chip"
             onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:'${esc(task.id)}'})">
-            节点 ${esc(task.id)} ${esc(task.name || '未命名节点')}${nodeTaskCount ? ` · ${nodeTaskCount} 任务` : ''}
+            ${esc(nodeName)}${nodeTaskCount ? ` · ${nodeTaskCount} 任务` : ''}
           </button>`;
           }).join('')}
         </div>
