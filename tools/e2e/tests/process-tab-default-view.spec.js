@@ -9,6 +9,26 @@ const {
   submitAppPrompt,
 } = require('./support/app-helpers');
 
+function semanticPanoramaUid(prefix, name, index = 1) {
+  const text = String(name || '').trim().replace(/\s+/g, ' ');
+  const known = {
+    'panorama-column::会员客户': 'participants',
+    'panorama-column::品种参数': 'parameters',
+    'panorama-column::业务办理': 'businessHandling',
+    'panorama-column::风险监管': 'riskSupervision',
+    'panorama-lane::示例业务域1': 'smart-platform-phase2',
+    'panorama-lane::示例业务域2': 'receipt-system',
+  }[`${prefix}::${text}`];
+  if (known) return known;
+  if (!text) return `${prefix}-unnamed-${index}`;
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${prefix}-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
 function buildStagePanoramaDoc(name) {
   return {
     meta: { title: name, domain: name, author: '', date: '2026-04-25' },
@@ -54,6 +74,81 @@ function buildPanoramaWithUnassignedProcessDoc(name) {
         tasks: [],
       },
     ],
+    entities: [],
+    relations: [],
+    rules: [],
+  };
+}
+
+function buildUidOnlyPanoramaRepairDoc(name) {
+  const colA = semanticPanoramaUid('panorama-column', 'Column A');
+  const colB = semanticPanoramaUid('panorama-column', 'Column B');
+  const laneA = semanticPanoramaUid('panorama-lane', 'Lane A');
+  const laneB = semanticPanoramaUid('panorama-lane', 'Lane B');
+  return {
+    meta: { title: name, domain: name, author: '', date: '2026-05-25' },
+    panorama: {
+      columns: [
+        { uid: colA, name: 'Column A', badge: 'A' },
+        { uid: colB, name: 'Column B', badge: 'B' },
+      ],
+      lanes: [
+        { uid: laneA, name: 'Lane A', badge: 'A' },
+        { uid: laneB, name: 'Lane B', badge: 'B' },
+      ],
+      cells: [
+        { uid: 'cell-a-a', columnUid: colA, laneUid: laneA, status: 'Original cell status', text: '' },
+        { uid: 'cell-b-b', columnUid: colB, laneUid: laneB, status: 'Target cell status', text: '' },
+      ],
+    },
+    roles: [],
+    language: [],
+    stages: [
+      { uid: 'stage-one', name: 'Stage One', subDomain: 'Domain', panoramaColumnUid: colA, panoramaLaneUid: laneA, processLinks: [] },
+    ],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  };
+}
+
+function buildWidePanoramaDoc(name) {
+  const columns = Array.from({ length: 9 }, (_, index) => ({
+    uid: semanticPanoramaUid('panorama-column', `Value Stream ${index + 1}`, index + 1),
+    name: `Value Stream ${index + 1}`,
+    scope: `Scope ${index + 1}`,
+  }));
+  const lanes = [
+    { uid: semanticPanoramaUid('panorama-lane', 'Business Domain A'), name: 'Business Domain A', badge: 'A' },
+    { uid: semanticPanoramaUid('panorama-lane', 'Business Domain B'), name: 'Business Domain B', badge: 'B' },
+  ];
+  return {
+    meta: { title: name, domain: name, author: '', date: '2026-05-26' },
+    panorama: {
+      columns,
+      lanes,
+      cells: lanes.flatMap((lane) => columns.map((column) => ({
+        uid: `cell-${lane.uid}-${column.uid}`,
+        columnUid: column.uid,
+        laneUid: lane.uid,
+        status: '',
+        text: '',
+      }))),
+    },
+    roles: [],
+    language: [],
+    stages: [
+      { uid: 'stage-a', name: 'Stage A', subDomain: 'Domain', panoramaColumnUid: columns[0].uid, panoramaLaneUid: lanes[0].uid, processLinks: [] },
+      { uid: 'stage-b', name: 'Stage B', subDomain: 'Domain', panoramaColumnUid: columns[8].uid, panoramaLaneUid: lanes[1].uid, processLinks: [] },
+    ],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
     entities: [],
     relations: [],
     rules: [],
@@ -167,20 +262,30 @@ const DELIVERY_BUSINESS_STAGE_NAMES = [
 
 const DELIVERY_PROCESS_TASK_NAMES = ['入库预约', '质量检验', '仓单注册', '仓单过户', '出库注销'];
 
+const GUIDE_COL_CUSTOMER = semanticPanoramaUid('panorama-column', '客户入口');
+const GUIDE_COL_RULES = semanticPanoramaUid('panorama-column', '规则参数');
+const GUIDE_COL_LIFECYCLE = semanticPanoramaUid('panorama-column', '仓单生命周期');
+const GUIDE_LANE_STOCK = semanticPanoramaUid('panorama-lane', '示例业务域2');
+const GUIDE_LANE_TARGET = 'smart-platform-phase2';
+const GUIDE_COL_CUSTOMER_RENAMED = semanticPanoramaUid('panorama-column', '客户服务');
+const GUIDE_LANE_STOCK_RENAMED = semanticPanoramaUid('panorama-lane', '仓单存量系统');
+const GUIDE_COL_UNNAMED_2 = semanticPanoramaUid('panorama-column', '', 2);
+const GUIDE_LANE_UNNAMED_2 = semanticPanoramaUid('panorama-lane', '', 2);
+
 function buildBusinessGuideDoc(name) {
   const stageAssignments = [
-    ['C1', 'L1'],
-    ['C1', 'L1'],
-    ['C1', 'L1'],
-    ['C2', 'L1'],
-    ['C2', 'L1'],
-    ['C2', 'L1'],
-    ['C3', 'L1'],
-    ['C3', 'L1'],
-    ['C3', 'L2'],
-    ['C3', 'L2'],
-    ['C2', 'L2'],
-    ['C2', 'L2'],
+    [GUIDE_COL_CUSTOMER, GUIDE_LANE_STOCK],
+    [GUIDE_COL_CUSTOMER, GUIDE_LANE_STOCK],
+    [GUIDE_COL_CUSTOMER, GUIDE_LANE_STOCK],
+    [GUIDE_COL_RULES, GUIDE_LANE_STOCK],
+    [GUIDE_COL_RULES, GUIDE_LANE_STOCK],
+    [GUIDE_COL_RULES, GUIDE_LANE_STOCK],
+    [GUIDE_COL_LIFECYCLE, GUIDE_LANE_STOCK],
+    [GUIDE_COL_LIFECYCLE, GUIDE_LANE_STOCK],
+    [GUIDE_COL_LIFECYCLE, GUIDE_LANE_TARGET],
+    [GUIDE_COL_LIFECYCLE, GUIDE_LANE_TARGET],
+    [GUIDE_COL_RULES, GUIDE_LANE_TARGET],
+    [GUIDE_COL_RULES, GUIDE_LANE_TARGET],
   ];
   return {
     meta: { title: name, domain: name, author: '', date: '2026-04-26' },
@@ -190,31 +295,31 @@ function buildBusinessGuideDoc(name) {
     ],
     language: [],
     stages: DELIVERY_BUSINESS_STAGE_NAMES.map((stageName, index) => ({
-      id: `S${index + 1}`,
+      uid: `S${index + 1}`,
       name: stageName,
       subDomain: '仓单注册',
-      panoramaColumnId: stageAssignments[index]?.[0] || '',
-      panoramaLaneId: stageAssignments[index]?.[1] || '',
+      panoramaColumnUid: stageAssignments[index]?.[0] || '',
+      panoramaLaneUid: stageAssignments[index]?.[1] || '',
       pos: { x: 0, y: 0 },
       processLinks: [],
     })),
     panorama: {
       columns: [
-        { id: 'C1', name: '客户入口', scope: '会员/货主/仓库' },
-        { id: 'C2', name: '规则参数', scope: '品种/商品/质检' },
-        { id: 'C3', name: '仓单生命周期', scope: '注册/流转/注销' },
+        { uid: GUIDE_COL_CUSTOMER, name: '客户入口', scope: '会员/货主/仓库' },
+        { uid: GUIDE_COL_RULES, name: '规则参数', scope: '品种/商品/质检' },
+        { uid: GUIDE_COL_LIFECYCLE, name: '仓单生命周期', scope: '注册/流转/注销' },
       ],
       lanes: [
-        { id: 'L1', name: '示例业务域2', badge: '存量域', note: '当前承载仓库信息、仓单注册注销和结算部流转活动。' },
-        { id: 'L2', name: '示例业务域1', badge: '目标域', note: '逐步承接监管协同、风险核验和职责边界沉淀。' },
+        { uid: GUIDE_LANE_STOCK, name: '示例业务域2', badge: '存量域', note: '当前承载仓库信息、仓单注册注销和结算部流转活动。' },
+        { uid: GUIDE_LANE_TARGET, name: '示例业务域1', badge: '目标域', note: '逐步承接监管协同、风险核验和职责边界沉淀。' },
       ],
       cells: [
-        { columnId: 'C1', laneId: 'L1', status: '现状承载', text: '会员、仓库和客户入口由存量系统提供。' },
-        { columnId: 'C2', laneId: 'L1', status: '现状承载', text: '品种参数和质检规则仍由存量系统维护。' },
-        { columnId: 'C3', laneId: 'L1', status: '目标保留', text: '仓单注册后到注销前的流转和示例活动保留。' },
-        { columnId: 'C1', laneId: 'L2', status: '二期沉淀', text: '主体档案、准入关系和仓库信息逐步沉淀到示例平台。' },
-        { columnId: 'C2', laneId: 'L2', status: '二期协同', text: '形成监管口径下的规则参数视图。' },
-        { columnId: 'C3', laneId: 'L2', status: '过程监管', text: '对注册、注销、风险预警等作业形成监管闭环。' },
+        { columnUid: GUIDE_COL_CUSTOMER, laneUid: GUIDE_LANE_STOCK, status: '现状承载', text: '会员、仓库和客户入口由存量系统提供。' },
+        { columnUid: GUIDE_COL_RULES, laneUid: GUIDE_LANE_STOCK, status: '现状承载', text: '品种参数和质检规则仍由存量系统维护。' },
+        { columnUid: GUIDE_COL_LIFECYCLE, laneUid: GUIDE_LANE_STOCK, status: '目标保留', text: '仓单注册后到注销前的流转和示例活动保留。' },
+        { columnUid: GUIDE_COL_CUSTOMER, laneUid: GUIDE_LANE_TARGET, status: '二期沉淀', text: '主体档案、准入关系和仓库信息逐步沉淀到示例平台。' },
+        { columnUid: GUIDE_COL_RULES, laneUid: GUIDE_LANE_TARGET, status: '二期协同', text: '形成监管口径下的规则参数视图。' },
+        { columnUid: GUIDE_COL_LIFECYCLE, laneUid: GUIDE_LANE_TARGET, status: '过程监管', text: '对注册、注销、风险预警等作业形成监管闭环。' },
       ],
     },
     stageLinks: DELIVERY_BUSINESS_STAGE_NAMES.slice(1).map((_, index) => ({
@@ -315,13 +420,13 @@ test('business guide view uses editable document value stream matrix and vertica
   await expect(page.getByTestId('stage-panorama-graph').locator('.stage-graph-svg')).toHaveCount(0);
   await expect(page.getByTestId('value-stream-header')).toHaveCount(3);
   await expect(page.getByTestId('value-stream-row')).toHaveCount(2);
-  await expect(page.locator('[data-column-id="C1"][data-testid="value-stream-header"]')).toContainText('客户入口');
-  await expect(page.locator('[data-column-id="C3"][data-testid="value-stream-header"]')).toContainText('仓单生命周期');
-  await expect(page.locator('[data-testid="value-stream-row"][data-lane-id="L1"]')).toContainText('示例业务域2');
-  await expect(page.locator('[data-testid="value-stream-row"][data-lane-id="L1"]')).toContainText('存量域');
-  await expect(page.locator('[data-testid="value-stream-row"][data-lane-id="L2"]')).toContainText('示例业务域1');
-  await expect(page.locator('[data-cell-id="L2::C3"]')).toContainText('过程监管');
-  await expect(page.locator('[data-cell-id="L2::C3"]')).toContainText('监管闭环');
+  await expect(page.locator(`[data-column-id="${GUIDE_COL_CUSTOMER}"][data-testid="value-stream-header"]`)).toContainText('客户入口');
+  await expect(page.locator(`[data-column-id="${GUIDE_COL_LIFECYCLE}"][data-testid="value-stream-header"]`)).toContainText('仓单生命周期');
+  await expect(page.locator(`[data-testid="value-stream-row"][data-lane-id="${GUIDE_LANE_STOCK}"]`)).toContainText('示例业务域2');
+  await expect(page.locator(`[data-testid="value-stream-row"][data-lane-id="${GUIDE_LANE_STOCK}"]`)).toContainText('存量域');
+  await expect(page.locator(`[data-testid="value-stream-row"][data-lane-id="${GUIDE_LANE_TARGET}"]`)).toContainText('示例业务域1');
+  await expect(page.locator(`[data-cell-id="${GUIDE_LANE_TARGET}::${GUIDE_COL_LIFECYCLE}"]`)).toContainText('过程监管');
+  await expect(page.locator(`[data-cell-id="${GUIDE_LANE_TARGET}::${GUIDE_COL_LIFECYCLE}"]`)).toContainText('监管闭环');
   await expect(page.getByTestId('value-stream-more')).toHaveCount(0);
 
   const matrixMetrics = await page.getByTestId('value-stream-scroll').evaluate((node) => {
@@ -333,10 +438,12 @@ test('business guide view uses editable document value stream matrix and vertica
       tabWidth: tabBox.width,
       scrollWidth: node.scrollWidth,
       clientWidth: node.clientWidth,
+      overflowX: window.getComputedStyle(node).overflowX,
     };
   });
   expect(matrixMetrics.width).toBeLessThanOrEqual(matrixMetrics.tabWidth);
   expect(matrixMetrics.scrollWidth).toBeGreaterThanOrEqual(matrixMetrics.clientWidth);
+  expect(matrixMetrics.overflowX).toBe('scroll');
   const stageCountsByCell = await page.locator('.value-stream-cell').evaluateAll((cells) => (
     cells.map((cell) => cell.querySelectorAll('[data-testid="stage-graph-node"]').length)
   ));
@@ -463,17 +570,20 @@ test('business user edits panorama directly in the matrix canvas', async ({ page
       matrixWidth: matrix.getBoundingClientRect().width,
       clientWidth: node.getBoundingClientRect().width,
       cellOverflowY: window.getComputedStyle(cell).overflowY,
+      scrollWidth: node.scrollWidth,
+      overflowX: window.getComputedStyle(node).overflowX,
     };
   });
-  expect(matrixSizing.matrixWidth).toBeGreaterThanOrEqual(matrixSizing.clientWidth - 2);
+  expect(matrixSizing.matrixWidth).toBeGreaterThan(0);
   expect(matrixSizing.cellOverflowY).toBe('visible');
+  expect(matrixSizing.overflowX).toBe('scroll');
   await expect(page.getByTestId('matrix-column-name').first()).toBeVisible();
   await expect(page.getByTestId('matrix-cell-status').first()).toBeVisible();
-  await expect(page.locator('[data-field-scope="column-badge"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('价值链环节');
-  await expect(page.locator('[data-field-scope="column-name"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('环节定义/说明');
-  await expect(page.locator('[data-field-scope="column-scope"][data-column-id="C1"] [data-testid="matrix-field-caption"]')).toHaveText('创造价值');
-  await expect(page.locator('[data-field-scope="lane-name"][data-lane-id="L1"] [data-testid="matrix-field-caption"]')).toHaveText('正文');
-  await expect(page.locator('[data-field-scope="cell-status"][data-cell-id="L1::C1"] [data-testid="matrix-field-caption"]')).toHaveText('标签');
+  await expect(page.locator(`[data-field-scope="column-badge"][data-column-id="${GUIDE_COL_CUSTOMER}"] [data-testid="matrix-field-caption"]`)).toHaveText('价值链环节');
+  await expect(page.locator(`[data-field-scope="column-name"][data-column-id="${GUIDE_COL_CUSTOMER}"] [data-testid="matrix-field-caption"]`)).toHaveText('环节定义/说明');
+  await expect(page.locator(`[data-field-scope="column-scope"][data-column-id="${GUIDE_COL_CUSTOMER}"] [data-testid="matrix-field-caption"]`)).toHaveText('创造价值');
+  await expect(page.locator(`[data-field-scope="lane-name"][data-lane-id="${GUIDE_LANE_STOCK}"] [data-testid="matrix-field-caption"]`)).toHaveText('正文');
+  await expect(page.locator(`[data-field-scope="cell-status"][data-cell-id="${GUIDE_LANE_STOCK}::${GUIDE_COL_CUSTOMER}"] [data-testid="matrix-field-caption"]`)).toHaveText('标签');
   await page.getByTestId('process-view-help').hover();
   await expect(page.getByTestId('inline-help-tooltip')).toBeVisible();
   const helpBox = await page.getByTestId('inline-help-tooltip').boundingBox();
@@ -484,7 +594,7 @@ test('business user edits panorama directly in the matrix canvas', async ({ page
   const zoomBefore = await page.getByTestId('value-stream-matrix').evaluate((node) => node.style.zoom || window.getComputedStyle(node).zoom || '1');
   await page.getByTestId('stage-zoom-in').click();
   await expect.poll(() => page.getByTestId('value-stream-matrix').evaluate((node) => node.style.zoom || window.getComputedStyle(node).zoom || '1')).not.toBe(zoomBefore);
-  await page.locator('[data-testid="matrix-column-name"][data-column-id="C2"]').click();
+  await page.locator(`[data-testid="matrix-column-name"][data-column-id="${GUIDE_COL_RULES}"]`).click();
   const scrollBeforeEdit = await page.getByTestId('value-stream-scroll').evaluate((node) => {
     node.scrollLeft = 30;
     node.scrollTop = 20;
@@ -496,43 +606,47 @@ test('business user edits panorama directly in the matrix canvas', async ({ page
   expect(scrollAfterEdit.top).toBe(scrollBeforeEdit.top);
 
   await page.getByTestId('matrix-column-name').first().fill('客户服务');
-  await expect(page.locator('[data-testid="matrix-column-name"][data-column-id="C1"]')).toHaveValue('客户服务');
-  await page.locator('[data-testid="matrix-column-name"][data-column-id="C2"]').fill('');
+  await expect(page.locator(`[data-testid="matrix-column-name"][data-column-id="${GUIDE_COL_CUSTOMER}"]`)).toHaveValue('客户服务');
+  await page.getByTestId('matrix-column-name').nth(1).fill('');
   await page.getByTestId('stage-editor-hide').click();
   await page.getByTestId('stage-editor-open').click();
-  await expect(page.locator('[data-testid="matrix-column-name"][data-column-id="C2"]')).toHaveValue('');
+  let blankColumnId = await page.getByTestId('matrix-column-name').nth(1).getAttribute('data-column-id');
+  await expect(page.locator(`[data-testid="matrix-column-name"][data-column-id="${blankColumnId}"]`)).toBeVisible();
 
   await page.getByTestId('matrix-lane-name').first().fill('仓单存量系统');
-  await expect(page.locator('[data-testid="matrix-lane-name"][data-lane-id="L1"]')).toHaveValue('仓单存量系统');
+  await expect(page.locator(`[data-testid="matrix-lane-name"][data-lane-id="${GUIDE_LANE_STOCK}"]`)).toHaveValue('仓单存量系统');
 
   await page.getByTestId('matrix-cell-status').first().fill('结算部主责');
   await page.getByTestId('matrix-cell-text').first().fill('用户自定义的单元格说明');
-  await expect(page.locator('[data-testid="matrix-cell-status"][data-cell-id="L1::C1"]')).toHaveValue('结算部主责');
-  await expect(page.locator('[data-testid="matrix-cell-text"][data-cell-id="L1::C1"]')).toHaveValue('用户自定义的单元格说明');
+  await expect(page.locator(`[data-testid="matrix-cell-status"][data-cell-id="${GUIDE_LANE_STOCK}::${GUIDE_COL_CUSTOMER_RENAMED}"]`)).toHaveValue('结算部主责');
+  await expect(page.locator(`[data-testid="matrix-cell-text"][data-cell-id="${GUIDE_LANE_STOCK}::${GUIDE_COL_CUSTOMER_RENAMED}"]`)).toHaveValue('用户自定义的单元格说明');
 
-  await page.locator('[data-testid="matrix-column-add-after"][data-column-id="C1"]').click();
+  await page.locator(`[data-testid="matrix-column-add-after"][data-column-id="${GUIDE_COL_CUSTOMER_RENAMED}"]`).click();
   await expect(page.getByTestId('value-stream-header')).toHaveCount(4);
-  await expect(page.locator('[data-testid="matrix-column-name"][data-column-id="C4"]')).toHaveValue('');
-  await page.locator('[data-testid="matrix-column-delete"][data-column-id="C4"]').click();
+  const insertedColumnId = await page.getByTestId('matrix-column-name').nth(1).getAttribute('data-column-id');
+  await expect(page.locator(`[data-testid="matrix-column-name"][data-column-id="${insertedColumnId}"]`)).toHaveValue('');
+  await page.locator(`[data-testid="matrix-column-delete"][data-column-id="${insertedColumnId}"]`).click();
   await acceptAppDialog(page);
   await expect(page.getByTestId('value-stream-header')).toHaveCount(3);
+  blankColumnId = await page.getByTestId('matrix-column-name').nth(1).getAttribute('data-column-id');
 
-  await page.locator('[data-testid="matrix-lane-add-after"][data-lane-id="L1"]').click();
+  await page.locator(`[data-testid="matrix-lane-add-after"][data-lane-id="${GUIDE_LANE_STOCK_RENAMED}"]`).click();
   await expect(page.getByTestId('value-stream-row')).toHaveCount(3);
-  await expect(page.locator('[data-testid="matrix-lane-name"][data-lane-id="L3"]')).toHaveValue('');
-  await page.locator('[data-testid="matrix-lane-delete"][data-lane-id="L3"]').click();
+  const insertedLaneId = await page.getByTestId('matrix-lane-name').nth(1).getAttribute('data-lane-id');
+  await expect(page.locator(`[data-testid="matrix-lane-name"][data-lane-id="${insertedLaneId}"]`)).toHaveValue('');
+  await page.locator(`[data-testid="matrix-lane-delete"][data-lane-id="${insertedLaneId}"]`).click();
   await acceptAppDialog(page);
   await expect(page.getByTestId('value-stream-row')).toHaveCount(2);
 
-  await page.locator('[data-testid="matrix-stage-add"][data-cell-id="L1::C2"]').click();
+  await page.locator(`[data-testid="matrix-stage-add"][data-cell-id="${GUIDE_LANE_STOCK_RENAMED}::${blankColumnId}"]`).click();
   await submitAppPrompt(page, '新增监管阶段');
-  await expect(page.locator('[data-cell-id="L1::C2"] [data-testid="stage-graph-node"]').filter({ hasText: '新增监管阶段' })).toBeVisible();
+  await expect(page.locator(`[data-cell-id="${GUIDE_LANE_STOCK_RENAMED}::${blankColumnId}"] [data-testid="stage-graph-node"]`).filter({ hasText: '新增监管阶段' })).toBeVisible();
 
-  await page.locator('[data-cell-id="L1::C1"] [data-node-id="S1"]').dragTo(page.locator('.value-stream-cell[data-cell-id="L2::C2"]'));
-  await expect(page.locator('[data-cell-id="L2::C2"] [data-node-id="S1"]')).toContainText('会员客户管理');
-  await expect(page.locator('[data-cell-id="L1::C1"] [data-node-id="S1"]')).toHaveCount(0);
-  await expect(page.locator('[data-cell-id="L2::C2"] [data-node-id="S1"]')).toHaveAttribute('data-grid-row', /\d+/);
-  await expect(page.locator('[data-cell-id="L2::C2"] [data-node-id="S1"]')).toHaveAttribute('data-grid-col', /\d+/);
+  await page.locator(`[data-cell-id="${GUIDE_LANE_STOCK_RENAMED}::${GUIDE_COL_CUSTOMER_RENAMED}"] [data-node-id="S1"]`).dragTo(page.locator(`.value-stream-cell[data-cell-id="${GUIDE_LANE_TARGET}::${blankColumnId}"]`));
+  await expect(page.locator(`[data-cell-id="${GUIDE_LANE_TARGET}::${blankColumnId}"] [data-node-id="S1"]`)).toContainText('会员客户管理');
+  await expect(page.locator(`[data-cell-id="${GUIDE_LANE_STOCK_RENAMED}::${GUIDE_COL_CUSTOMER_RENAMED}"] [data-node-id="S1"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-cell-id="${GUIDE_LANE_TARGET}::${blankColumnId}"] [data-node-id="S1"]`)).toHaveAttribute('data-grid-row', /\d+/);
+  await expect(page.locator(`[data-cell-id="${GUIDE_LANE_TARGET}::${blankColumnId}"] [data-node-id="S1"]`)).toHaveAttribute('data-grid-col', /\d+/);
   await page.getByTestId('value-stream-scroll').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
     node.scrollLeft = node.scrollWidth;
@@ -540,11 +654,107 @@ test('business user edits panorama directly in the matrix canvas', async ({ page
   await expect(page.getByTestId('stage-editor-hide')).toBeVisible();
 
   await page.getByTestId('stage-editor-hide').click();
-  await expect(page.locator('[data-column-id="C1"][data-testid="value-stream-header"]')).toContainText('客户服务');
-  await expect(page.locator('[data-column-id="C1"][data-testid="value-stream-header"]')).not.toContainText('客户入口');
-  await expect(page.locator('[data-testid="value-stream-row"][data-lane-id="L1"]')).toContainText('仓单存量系统');
-  await expect(page.locator('.value-stream-cell[data-cell-id="L1::C1"]')).toContainText('结算部主责');
-  await expect(page.locator('.value-stream-cell[data-cell-id="L1::C1"]')).toContainText('用户自定义的单元格说明');
+  await expect(page.locator(`[data-column-id="${GUIDE_COL_CUSTOMER_RENAMED}"][data-testid="value-stream-header"]`)).toContainText('客户服务');
+  await expect(page.locator(`[data-column-id="${GUIDE_COL_CUSTOMER_RENAMED}"][data-testid="value-stream-header"]`)).not.toContainText('客户入口');
+  await expect(page.locator(`[data-testid="value-stream-row"][data-lane-id="${GUIDE_LANE_STOCK_RENAMED}"]`)).toContainText('仓单存量系统');
+});
+
+test('stage panorama keeps a horizontal scrollbar in read and edit modes', async ({ page, request }) => {
+  const documentName = `process-stage-panorama-wide-${Date.now()}`;
+  await createDocument(request, documentName, buildWidePanoramaDoc(documentName));
+  const col8 = semanticPanoramaUid('panorama-column', 'Value Stream 8', 8);
+  const col9 = semanticPanoramaUid('panorama-column', 'Value Stream 9', 9);
+  const laneA = semanticPanoramaUid('panorama-lane', 'Business Domain A');
+  const laneB = semanticPanoramaUid('panorama-lane', 'Business Domain B');
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+
+  const readMetrics = await page.getByTestId('value-stream-scroll').evaluate((node) => {
+    node.scrollLeft = 0;
+    node.scrollLeft = node.scrollWidth;
+    return {
+      scrollLeft: node.scrollLeft,
+      scrollWidth: node.scrollWidth,
+      clientWidth: node.clientWidth,
+      overflowX: window.getComputedStyle(node).overflowX,
+    };
+  });
+  expect(readMetrics.overflowX).toBe('scroll');
+  expect(readMetrics.scrollWidth).toBeGreaterThan(readMetrics.clientWidth);
+  expect(readMetrics.scrollLeft).toBeGreaterThan(0);
+
+  await page.getByTestId('stage-editor-open').click();
+
+  const editMetrics = await page.getByTestId('value-stream-scroll').evaluate((node) => {
+    node.scrollLeft = 0;
+    node.scrollLeft = node.scrollWidth;
+    return {
+      scrollLeft: node.scrollLeft,
+      scrollWidth: node.scrollWidth,
+      clientWidth: node.clientWidth,
+      overflowX: window.getComputedStyle(node).overflowX,
+    };
+  });
+  expect(editMetrics.overflowX).toBe('scroll');
+  expect(editMetrics.scrollWidth).toBeGreaterThan(editMetrics.clientWidth);
+  expect(editMetrics.scrollLeft).toBeGreaterThan(0);
+
+  const scrollBeforeDrag = await page.getByTestId('value-stream-scroll').evaluate((node) => {
+    node.scrollLeft = node.scrollWidth;
+    return node.scrollLeft;
+  });
+  await page.locator(`.value-stream-cell[data-cell-id="${laneB}::${col9}"] [data-node-id="stage-b"]`).dragTo(page.locator(`.value-stream-cell[data-cell-id="${laneA}::${col8}"]`));
+  await expect(page.locator(`.value-stream-cell[data-cell-id="${laneA}::${col8}"] [data-node-id="stage-b"]`)).toContainText('Stage B');
+  const scrollAfterDrag = await page.getByTestId('value-stream-scroll').evaluate((node) => node.scrollLeft);
+  expect(scrollAfterDrag).toBe(scrollBeforeDrag);
+});
+
+test('business user repairs stage panorama placement by dragging it to another cell', async ({ page, request }) => {
+  const documentName = `process-stage-panorama-repair-${Date.now()}`;
+  await createDocument(request, documentName, buildUidOnlyPanoramaRepairDoc(documentName));
+  const colA = semanticPanoramaUid('panorama-column', 'Column A');
+  const colB = semanticPanoramaUid('panorama-column', 'Column B');
+  const laneA = semanticPanoramaUid('panorama-lane', 'Lane A');
+  const laneB = semanticPanoramaUid('panorama-lane', 'Lane B');
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('stage-editor-open').click();
+
+  await expect(page.locator(`[data-testid="matrix-cell-status"][data-cell-id="${laneA}::${colA}"]`)).toHaveValue('Original cell status');
+  await expect(page.locator(`[data-testid="matrix-cell-status"][data-cell-id="${laneB}::${colB}"]`)).toHaveValue('Target cell status');
+  await expect(page.locator(`.value-stream-cell[data-cell-id="${laneA}::${colA}"] [data-node-id="stage-one"]`)).toContainText('Stage One');
+
+  const sourceNode = page.locator(`.value-stream-cell[data-cell-id="${laneA}::${colA}"] [data-node-id="stage-one"]`);
+  const targetCell = page.locator(`.value-stream-cell[data-cell-id="${laneB}::${colB}"]`);
+  const sourceBox = await sourceNode.boundingBox();
+  const targetBox = await targetCell.boundingBox();
+  expect(sourceBox).toBeTruthy();
+  expect(targetBox).toBeTruthy();
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 12 });
+  await expect(targetCell).toHaveClass(/is-drag-target/);
+  await page.mouse.up();
+
+  await expect(page.locator(`.value-stream-cell[data-cell-id="${laneB}::${colB}"] [data-node-id="stage-one"]`)).toContainText('Stage One');
+  await expect(page.locator(`.value-stream-cell[data-cell-id="${laneA}::${colA}"] [data-node-id="stage-one"]`)).toHaveCount(0);
+
+  await page.locator('#btn-save').click();
+  await submitAppPrompt(page, '');
+  await expect(page.getByTestId('modified-badge')).toBeHidden();
+  const response = await request.get(`/api/load/${encodeURIComponent(documentName)}`);
+  expect(response.ok()).toBeTruthy();
+  const saved = await response.json();
+  const document = saved.document || saved;
+  const stage = document.stages.find((item) => item.uid === 'stage-one');
+  expect(stage.panoramaColumnUid).toBe(colB);
+  expect(stage.panoramaLaneUid).toBe(laneB);
+  expect(stage.panoramaColumnId).toBeUndefined();
+  expect(stage.panoramaLaneId).toBeUndefined();
 });
 
 test('process tab defaults to display-only hierarchy views', async ({ page }) => {

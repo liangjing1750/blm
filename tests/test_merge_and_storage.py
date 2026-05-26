@@ -5,7 +5,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from blm_core.document import canonical_document, create_empty_document, migrate_document
+from blm_core.document import _deterministic_ui_uid, canonical_document, create_empty_document, migrate_document
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.model_strategy import (
     DESCRIPTORS,
@@ -106,6 +106,28 @@ class DocumentIdentityTests(unittest.TestCase):
         )
 
         self.assertEqual(document["entities"][0]["businessConstructUid"], "construct-uid-1")
+
+    def test_canonical_document_maps_legacy_panorama_stage_references_to_uid(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "Legacy panorama"},
+                "panorama": {
+                    "columns": [{"id": "C1", "uid": "column-uid-1", "name": "业务办理"}],
+                    "lanes": [{"id": "L1", "uid": "lane-uid-1", "name": "会员客户"}],
+                    "cells": [{"columnId": "C1", "laneId": "L1", "status": "主责"}],
+                },
+                "stages": [
+                    {"id": "S1", "uid": "stage-uid-1", "name": "申请", "panoramaColumnId": "C1", "panoramaLaneId": "L1"},
+                ],
+            }
+        )
+
+        self.assertEqual(document["panorama"]["cells"][0]["columnUid"], "businessHandling")
+        self.assertEqual(document["panorama"]["cells"][0]["laneUid"], _deterministic_ui_uid("panorama-lane", "会员客户"))
+        self.assertEqual(document["stages"][0]["panoramaColumnUid"], "businessHandling")
+        self.assertEqual(document["stages"][0]["panoramaLaneUid"], _deterministic_ui_uid("panorama-lane", "会员客户"))
+        self.assertNotIn("columnId", document["panorama"]["cells"][0])
+        self.assertNotIn("panoramaColumnId", document["stages"][0])
 
     def test_canonical_document_filters_empty_stage_flow_references(self):
         document = canonical_document(
@@ -445,7 +467,8 @@ class MergeEngineTests(unittest.TestCase):
         analysis = analyze_merge("combine", left, right)
 
         self.assertEqual(analysis["conflicts"], [])
-        self.assertEqual(analysis["merged_document"]["roles"][0]["id"], "R1")
+        self.assertEqual(analysis["merged_document"]["roles"][0]["uid"], "role-1")
+        self.assertNotIn("id", analysis["merged_document"]["roles"][0])
 
     def test_combine_does_not_treat_layout_positions_as_user_conflicts(self):
         left = create_empty_document("Layout")
@@ -579,11 +602,11 @@ class MergeEngineTests(unittest.TestCase):
         self.assertEqual(analysis["conflicts"], [])
         merged = analysis["merged_document"]
         self.assertEqual(merged["processes"][0]["prototypeFiles"][0]["name"], "submit.html")
-        self.assertEqual(merged["processes"][0]["nodes"][0]["forms"][0]["sections"][0]["entity_id"], "E1")
-        self.assertEqual(merged["businessComponents"][0]["id"], "CU1")
-        self.assertEqual(merged["businessConstructs"][0]["id"], "BC1")
-        self.assertEqual(merged["taskDefinitions"][0]["id"], "TD1")
-        self.assertEqual(merged["processes"][0]["nodes"][0]["orchestrationTasks"][0]["taskDefinitionId"], "TD1")
+        self.assertEqual(merged["processes"][0]["nodes"][0]["forms"][0]["sections"][0]["entity_uid"], "entity-1")
+        self.assertEqual(merged["businessComponents"][0]["uid"], "cap-1")
+        self.assertEqual(merged["businessConstructs"][0]["uid"], "bc-1")
+        self.assertEqual(merged["taskDefinitions"][0]["uid"], "td-1")
+        self.assertEqual(merged["processes"][0]["nodes"][0]["orchestrationTasks"][0]["taskDefinitionUid"], "td-1")
 
     def test_two_way_combine_reports_same_name_conflict_for_legacy_documents(self):
         left = {
@@ -621,7 +644,7 @@ class MergeEngineTests(unittest.TestCase):
         self.assertEqual(analysis["merged_document"]["meta"]["title"], "示例平台-合并")
         self.assertEqual(analysis["merged_document"]["meta"]["domain"], "示例平台-合并")
 
-    def test_two_way_combine_renumbers_internal_ids_after_keep_both(self):
+    def test_two_way_combine_remaps_legacy_ids_to_uids_after_keep_both(self):
         left = create_empty_document("左")
         right = create_empty_document("右")
         left["entities"] = [
@@ -641,10 +664,10 @@ class MergeEngineTests(unittest.TestCase):
 
         self.assertEqual(result["conflicts"], [])
         self.assertEqual(result["validation_issues"], [])
-        self.assertEqual([entity["id"] for entity in result["merged_document"]["entities"]], ["E1", "E2", "E3", "E4"])
+        self.assertEqual([entity["uid"] for entity in result["merged_document"]["entities"]], ["entity-left", "entity-left-detail", "entity-right", "entity-right-detail"])
         self.assertEqual(
             [(relation["from"], relation["to"]) for relation in result["merged_document"]["relations"]],
-            [("E1", "E3"), ("E2", "E4")],
+            [("entity-left", "entity-left-detail"), ("entity-right", "entity-right-detail")],
         )
         self.assertFalse(any(conflict["path"] in {"meta.title", "meta.domain"} for conflict in analysis["conflicts"]))
 
@@ -683,13 +706,13 @@ class MergeEngineTests(unittest.TestCase):
 
         analysis = analyze_merge("combine", left, right)
         merged = analysis["merged_document"]
-        ref_by_id = {ref["id"]: ref for ref in merged["stageFlowRefs"]}
+        ref_by_uid = {ref["uid"]: ref for ref in merged["stageFlowRefs"]}
         link = merged["stageFlowLinks"][0]
 
         self.assertEqual(analysis["validation_issues"], [])
         self.assertGreaterEqual(analysis["summary"]["consistencyRepairCount"], 2)
-        self.assertEqual(link["stageId"], ref_by_id[link["fromRefId"]]["stageId"])
-        self.assertEqual(link["stageId"], ref_by_id[link["toRefId"]]["stageId"])
+        self.assertEqual(link["stageUid"], ref_by_uid[link["fromRefUid"]]["stageUid"])
+        self.assertEqual(link["stageUid"], ref_by_uid[link["toRefUid"]]["stageUid"])
         self.assertEqual(merged["relations"], [])
 
     def test_combine_merges_panorama_axes_by_name_and_remaps_stage_references(self):
@@ -731,12 +754,90 @@ class MergeEngineTests(unittest.TestCase):
 
         analysis = analyze_merge("combine", left, right)
         merged = analysis["merged_document"]
+        merged_column_uid = _deterministic_ui_uid("panorama-column", "Business Handling")
+        merged_lane_uid = _deterministic_ui_uid("panorama-lane", "Platform")
 
-        self.assertEqual([(column["id"], column["name"]) for column in merged["panorama"]["columns"]], [("C1", "Business Handling")])
-        self.assertEqual([(lane["id"], lane["name"]) for lane in merged["panorama"]["lanes"]], [("L1", "Platform")])
-        self.assertEqual({stage["panoramaColumnId"] for stage in merged["stages"]}, {"C1"})
-        self.assertEqual({stage["panoramaLaneId"] for stage in merged["stages"]}, {"L1"})
+        self.assertEqual([(column["uid"], column["name"]) for column in merged["panorama"]["columns"]], [(merged_column_uid, "Business Handling")])
+        self.assertEqual([(lane["uid"], lane["name"]) for lane in merged["panorama"]["lanes"]], [(merged_lane_uid, "Platform")])
+        self.assertEqual({stage["panoramaColumnUid"] for stage in merged["stages"]}, {merged_column_uid})
+        self.assertEqual({stage["panoramaLaneUid"] for stage in merged["stages"]}, {merged_lane_uid})
         self.assertEqual(len(merged["panorama"]["cells"]), 1)
+
+    def test_combine_remaps_uid_panorama_stage_and_cell_references(self):
+        left = create_empty_document("Left")
+        right = create_empty_document("Right")
+        for document in (left, right):
+            document["roles"] = []
+            document["stageLinks"] = []
+            document["stageFlowRefs"] = []
+            document["stageFlowLinks"] = []
+            document["processes"] = []
+            document["entities"] = []
+            document["relations"] = []
+            document["rules"] = []
+
+        left["panorama"] = {
+            "columns": [{"uid": "left-col", "name": "业务办理"}],
+            "lanes": [{"uid": "left-lane", "name": "会员客户"}],
+            "cells": [{"uid": "left-cell", "columnUid": "left-col", "laneUid": "left-lane", "status": "左侧"}],
+        }
+        right["panorama"] = {
+            "columns": [{"uid": "right-col", "name": "业务办理"}],
+            "lanes": [{"uid": "right-lane", "name": "会员客户"}],
+            "cells": [{"uid": "right-cell", "columnUid": "right-col", "laneUid": "right-lane", "text": "右侧"}],
+        }
+        left["stages"] = [
+            {"uid": "left-stage", "name": "仓单申请", "panoramaColumnUid": "left-col", "panoramaLaneUid": "left-lane", "processLinks": []}
+        ]
+        right["stages"] = [
+            {"uid": "right-stage", "name": "国债申请", "panoramaColumnUid": "right-col", "panoramaLaneUid": "right-lane", "processLinks": []}
+        ]
+
+        analysis = analyze_merge("combine", left, right)
+        merged = analysis["merged_document"]
+
+        self.assertEqual(analysis["validation_issues"], [])
+        self.assertEqual(len(merged["panorama"]["columns"]), 1)
+        self.assertEqual(len(merged["panorama"]["lanes"]), 1)
+        merged_column_uid = merged["panorama"]["columns"][0]["uid"]
+        merged_lane_uid = merged["panorama"]["lanes"][0]["uid"]
+        self.assertEqual({stage["panoramaColumnUid"] for stage in merged["stages"]}, {merged_column_uid})
+        self.assertEqual({stage["panoramaLaneUid"] for stage in merged["stages"]}, {merged_lane_uid})
+        self.assertEqual({cell["columnUid"] for cell in merged["panorama"]["cells"]}, {merged_column_uid})
+        self.assertEqual({cell["laneUid"] for cell in merged["panorama"]["cells"]}, {merged_lane_uid})
+
+    def test_combine_remaps_panorama_references_with_alias_from_another_source(self):
+        left = create_empty_document("Left")
+        right = create_empty_document("Right")
+        for document in (left, right):
+            document["roles"] = []
+            document["stages"] = []
+            document["stageLinks"] = []
+            document["stageFlowRefs"] = []
+            document["stageFlowLinks"] = []
+            document["processes"] = []
+            document["entities"] = []
+            document["relations"] = []
+            document["rules"] = []
+
+        left["panorama"] = {
+            "columns": [{"uid": "business-handling-v2", "name": "业务办理"}],
+            "lanes": [{"uid": "smart-platform-v2", "name": "交割智慧监管平台"}],
+            "cells": [{"uid": "cell-left", "columnUid": "business-handling-v2", "laneUid": "smart-platform-v2"}],
+        }
+        right["panorama"] = {
+            "columns": [{"uid": "business-handling", "name": "业务办理"}],
+            "lanes": [{"uid": "smart-platform", "name": "交割智慧监管平台"}],
+            "cells": [{"uid": "cell-right", "columnUid": "business-handling", "laneUid": "smart-platform"}],
+        }
+
+        analysis = analyze_merge("combine", left, right)
+        merged = analysis["merged_document"]
+
+        self.assertEqual(analysis["validation_issues"], [])
+        self.assertEqual(len(merged["panorama"]["cells"]), 1)
+        self.assertEqual(merged["panorama"]["cells"][0]["columnUid"], merged["panorama"]["columns"][0]["uid"])
+        self.assertEqual(merged["panorama"]["cells"][0]["laneUid"], merged["panorama"]["lanes"][0]["uid"])
 
     def test_apply_merge_resolves_same_field_conflict(self):
         base = create_empty_document("Billing")
@@ -841,25 +942,28 @@ class MergeEngineTests(unittest.TestCase):
         analysis = analyze_merge("3way", left, right, left)
 
         merged_process = analysis["merged_document"]["processes"][0]
-        self.assertEqual(merged_process["id"], "P-RKYY")
-        self.assertEqual([node["id"] for node in merged_process["nodes"]], ["T-SUBMIT", "T-CHECK"])
-        self.assertEqual(merged_process["flow"]["nodes"][0]["id"], "B-QUALIFY")
-        self.assertEqual(merged_process["flow"]["edges"][1]["id"], "L-CHECK")
+        self.assertNotIn("id", merged_process)
+        self.assertEqual([node["uid"] for node in merged_process["nodes"]], ["node-a", "node-b"])
+        self.assertNotIn("id", merged_process["flow"]["nodes"][0])
+        self.assertNotIn("id", merged_process["flow"]["edges"][1])
+        self.assertEqual(
+            [(edge["from"], edge["to"]) for edge in merged_process["flow"]["edges"]],
+            [("START", "node-a"), ("node-a", "branch-a"), ("branch-a", "node-b"), ("node-b", "END")],
+        )
         self.assertEqual(analysis["validation_issues"], [])
 
-    def test_validate_document_reports_duplicate_business_ids(self):
+    def test_validate_document_reports_duplicate_uids(self):
         document = create_empty_document("重复ID")
         document["processes"].append(deepcopy(document["processes"][0]))
-        document["processes"][1]["uid"] = "another-process"
         document["processes"][0]["nodes"] = [
-            {"uid": "node-left", "id": "T-SAME", "name": "节点A", "role_ids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
-            {"uid": "node-right", "id": "T-SAME", "name": "节点B", "role_ids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
+            {"uid": "node-same", "name": "节点A", "role_uids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
+            {"uid": "node-same", "name": "节点B", "role_uids": [], "roles": [], "userSteps": [], "entity_ops": [], "orchestrationTasks": [], "businessRules": [], "forms": []},
         ]
 
         issues = validate_document(document)
 
-        self.assertTrue(any("业务ID重复" in issue["message"] and "P1" in issue["message"] for issue in issues))
-        self.assertTrue(any("业务ID重复" in issue["message"] and "T-SAME" in issue["message"] for issue in issues))
+        self.assertTrue(any(issue["path"] == f"processes.{document['processes'][0]['uid']}.uid" for issue in issues))
+        self.assertTrue(any(issue["path"].endswith(".nodes.node-same.uid") for issue in issues))
 
     def test_validate_document_accepts_rules_applied_to_business_model_elements(self):
         document = create_empty_document("Rule applies to model elements")
@@ -920,7 +1024,7 @@ class MergeEngineTests(unittest.TestCase):
 
         issues = validate_document(document)
 
-        self.assertTrue(any("不属于该阶段" in issue["message"] for issue in issues))
+        self.assertTrue(any(issue["path"].endswith(".toRefUid") for issue in issues))
 
 
 if __name__ == "__main__":

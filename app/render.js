@@ -449,9 +449,9 @@ function getBusinessDomainItems(doc = S.doc) {
   const normalizeExplicitDomain = (domain) => {
     const id = String(domain?.id || domain?.name || '').trim();
     const name = String(domain?.name || id).trim();
-    const laneId = String(domain?.laneId || domain?.panoramaLaneId || '').trim();
+    const laneId = String(domain?.laneUid || domain?.panoramaLaneUid || '').trim();
     const aliases = new Set();
-    [id, name, laneId, domain?.businessDomainId, domain?.businessDomain].forEach((value) => addAlias(aliases, value));
+    [id, name, laneId, domain?.businessDomainUid, domain?.businessDomain].forEach((value) => addAlias(aliases, value));
     return id || name ? {
       id: id || name,
       name: name || id,
@@ -465,10 +465,10 @@ function getBusinessDomainItems(doc = S.doc) {
   const lanes = Array.isArray(doc?.panorama?.lanes) ? doc.panorama.lanes : [];
   if (lanes.length) {
     return lanes.map((lane, index) => {
-      const id = String(lane?.id || lane?.name || `lane-${index + 1}`).trim();
+      const id = String(lane?.uid || lane?.id || lane?.name || `lane-${index + 1}`).trim();
       const name = String(lane?.name || id).trim();
       const aliases = new Set();
-      [id, name, lane?.laneId, lane?.domainId, lane?.businessDomainId, lane?.businessDomain].forEach((value) => addAlias(aliases, value));
+      [id, name, lane?.laneUid, lane?.domainUid, lane?.businessDomainUid, lane?.businessDomain].forEach((value) => addAlias(aliases, value));
 
       const matchedExplicit = explicitDomains.filter((domain) => (
         domain.laneId === id
@@ -495,14 +495,14 @@ function getBusinessDomainItems(doc = S.doc) {
   explicitDomains.forEach((domain) => byId.set(domain.id, domain));
 
   const addDerived = (item) => {
-    const id = String(item?.businessDomainId || item?.businessDomain || item?.panoramaLaneId || '').trim();
+    const id = String(item?.businessDomainUid || item?.businessDomain || item?.panoramaLaneUid || '').trim();
     if (!id || byId.has(id)) return;
     byId.set(id, {
       id,
-      name: String(item.businessDomain || item.businessDomainId || item.panoramaLaneId || id),
-      laneId: item.panoramaLaneId || '',
+      name: String(item.businessDomain || item.businessDomainUid || item.panoramaLaneUid || id),
+      laneId: item.panoramaLaneUid || '',
       note: '',
-      aliases: [id, item.businessDomain, item.businessDomainId, item.panoramaLaneId].filter(Boolean).map(String),
+      aliases: [id, item.businessDomain, item.businessDomainUid, item.panoramaLaneUid].filter(Boolean).map(String),
     });
   };
 
@@ -533,10 +533,10 @@ function _domainAliases(domain) {
 
 function _itemBusinessDomainValues(item) {
   return [
-    item?.businessDomainId,
+    item?.businessDomainUid,
     item?.businessDomain,
-    item?.panoramaLaneId,
-    item?.laneId,
+    item?.panoramaLaneUid,
+    item?.laneUid,
     item?.domainId,
   ].filter(Boolean).map(String);
 }
@@ -569,19 +569,19 @@ function getValueStreamItems(doc = S.doc) {
     byId.set(id, { id, name: stream.name || id, scope: stream.scope || '' });
   });
   (doc?.panorama?.columns || []).forEach((column) => {
-    const id = String(column.id || column.name || '').trim();
+    const id = String(column.uid || column.id || column.name || '').trim();
     if (!id || byId.has(id)) return;
     byId.set(id, { id, name: column.name || id, scope: column.note || '' });
   });
   getStageItems(doc).filter((stage) => !stage.virtual).forEach((stage) => {
-    const id = String(stage.valueStreamId || stage.panoramaColumnId || stage.valueStream || '未归类价值流');
+    const id = String(stage.valueStreamUid || stage.panoramaColumnUid || stage.valueStream || '未归类价值流');
     if (!byId.has(id)) byId.set(id, { id, name: stage.valueStream || id, scope: '' });
   });
   return [...byId.values()];
 }
 
 function getStageValueStreamId(stageItem) {
-  return String(stageItem?.valueStreamId || stageItem?.panoramaColumnId || stageItem?.valueStream || '未归类价值流');
+  return String(stageItem?.valueStreamUid || stageItem?.panoramaColumnUid || stageItem?.valueStream || '未归类价值流');
 }
 
 function getCapabilityItems(doc = S.doc) {

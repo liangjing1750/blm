@@ -74,6 +74,47 @@ def _deterministic_uid(prefix: str, *parts: object) -> str:
     return f"{prefix}-{digest}"
 
 
+def _deterministic_ui_uid(prefix: str, *parts: object) -> str:
+    payload = "|".join(str(part or "").strip() for part in parts)
+    value = 2166136261
+    for char in payload:
+        value ^= ord(char)
+        value = (value * 16777619) & 0xFFFFFFFF
+    return f"{prefix}-{value:08x}"
+
+
+PANORAMA_COLUMN_UID_BY_NAME = {
+    "会员客户": "participants",
+    "品种参数": "parameters",
+    "业务办理": "businessHandling",
+    "风险监管": "riskSupervision",
+}
+PANORAMA_LANE_UID_BY_NAME = {
+    "示例业务域1": "smart-platform-phase2",
+    "示例业务域2": "receipt-system",
+}
+
+
+def _normalize_name_key(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip())
+
+
+def _semantic_panorama_uid(prefix: str, name: object, index: int, used: set[str], known: dict[str, str]) -> str:
+    name_key = _normalize_name_key(name)
+    base = known.get(name_key) or (
+        _deterministic_ui_uid(prefix, name_key)
+        if name_key
+        else f"{prefix}-unnamed-{index}"
+    )
+    uid = base
+    suffix = 2
+    while uid in used:
+        uid = f"{base}-{suffix}"
+        suffix += 1
+    used.add(uid)
+    return uid
+
+
 def _ensure_uid(item: dict) -> str:
     uid = str(item.get("uid", "")).strip()
     if not uid:
@@ -86,6 +127,31 @@ def _ensure_uid(item: dict) -> str:
 def canonicalize_model_references(document: dict | None) -> dict:
     doc = deepcopy(document or {})
 
+    def normalize_panorama_axis(
+        panorama: dict,
+        axis: str,
+        prefix: str,
+        known: dict[str, str],
+        fallback_label: str,
+    ) -> dict[str, str]:
+        items = panorama.get(axis, []) if isinstance(panorama.get(axis), list) else []
+        used: set[str] = set()
+        mapping: dict[str, str] = {}
+        for index, item in enumerate(items, start=1):
+            if not isinstance(item, dict):
+                continue
+            has_name = "name" in item
+            name = str(item.get("name", "")).strip() if has_name else f"{fallback_label}{index}"
+            next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
+            for source_field in ("uid", "id", "key"):
+                source_ref = str(item.get(source_field, "")).strip()
+                if source_ref:
+                    mapping[source_ref] = next_uid
+            mapping[next_uid] = next_uid
+            item["uid"] = next_uid
+            item["name"] = name
+        return mapping
+
     def uid_map(items: list[dict] | None) -> dict[str, str]:
         result: dict[str, str] = {}
         for item in items or []:
@@ -94,6 +160,9 @@ def canonicalize_model_references(document: dict | None) -> dict:
             uid = str(item.get("uid", "")).strip()
             if uid:
                 result[uid] = uid
+                legacy_id = str(item.get("id", "")).strip()
+                if legacy_id:
+                    result[legacy_id] = uid
         return result
 
     def mapped(value: object, mapping: dict[str, str]) -> str:
@@ -114,12 +183,25 @@ def canonicalize_model_references(document: dict | None) -> dict:
 
     panorama = doc.get("panorama") if isinstance(doc.get("panorama"), dict) else {}
     if isinstance(panorama, dict):
-        for axis in ("columns", "lanes", "cells"):
-            for item in panorama.get(axis, []) if isinstance(panorama.get(axis), list) else []:
-                if isinstance(item, dict):
-                    _ensure_uid(item)
-    column_map = uid_map(panorama.get("columns", []) if isinstance(panorama, dict) else [])
-    lane_map = uid_map(panorama.get("lanes", []) if isinstance(panorama, dict) else [])
+        column_map = normalize_panorama_axis(
+            panorama,
+            "columns",
+            "panorama-column",
+            PANORAMA_COLUMN_UID_BY_NAME,
+            "价值流",
+        )
+        lane_map = normalize_panorama_axis(
+            panorama,
+            "lanes",
+            "panorama-lane",
+            PANORAMA_LANE_UID_BY_NAME,
+            "业务域",
+        )
+    else:
+        column_map = {}
+        lane_map = {}
+    column_map.update(uid_map(panorama.get("columns", []) if isinstance(panorama, dict) else []))
+    lane_map.update(uid_map(panorama.get("lanes", []) if isinstance(panorama, dict) else []))
     role_map = uid_map(doc.get("roles", []))
     stage_map = uid_map(doc.get("stages", []))
     process_map = uid_map(doc.get("processes", []))
@@ -133,14 +215,19 @@ def canonicalize_model_references(document: dict | None) -> dict:
         for cell in panorama.get("cells", []) if isinstance(panorama.get("cells"), list) else []:
             if not isinstance(cell, dict):
                 continue
-            cell["columnId"] = mapped(cell.get("columnUid") or cell.get("columnId"), column_map)
-            cell["laneId"] = mapped(cell.get("laneUid") or cell.get("laneId"), lane_map)
+            cell["columnUid"] = mapped(cell.get("columnUid") or cell.get("columnId"), column_map)
+            cell["laneUid"] = mapped(cell.get("laneUid") or cell.get("laneId"), lane_map)
+            cell["uid"] = _deterministic_uid("panorama-cell", cell["laneUid"], cell["columnUid"])
+            cell.pop("columnId", None)
+            cell.pop("laneId", None)
 
     for stage in doc.get("stages", []):
         if not isinstance(stage, dict):
             continue
-        stage["panoramaColumnId"] = mapped(stage.get("panoramaColumnUid") or stage.get("panoramaColumnId"), column_map)
-        stage["panoramaLaneId"] = mapped(stage.get("panoramaLaneUid") or stage.get("panoramaLaneId"), lane_map)
+        stage["panoramaColumnUid"] = mapped(stage.get("panoramaColumnUid") or stage.get("panoramaColumnId"), column_map)
+        stage["panoramaLaneUid"] = mapped(stage.get("panoramaLaneUid") or stage.get("panoramaLaneId"), lane_map)
+        stage.pop("panoramaColumnId", None)
+        stage.pop("panoramaLaneId", None)
         for link in stage.get("processLinks", []) if isinstance(stage.get("processLinks"), list) else []:
             if not isinstance(link, dict):
                 continue
@@ -316,8 +403,22 @@ def rename_reference_fields_to_uid(value):
     return result
 
 
+def strip_legacy_element_ids(value):
+    if isinstance(value, list):
+        return [strip_legacy_element_ids(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    has_uid = bool(str(value.get("uid", "")).strip())
+    for key, child in value.items():
+        if has_uid and key == "id":
+            continue
+        result[key] = strip_legacy_element_ids(child)
+    return result
+
+
 def canonical_document(document: dict | None) -> dict:
-    return rename_reference_fields_to_uid(canonicalize_model_references(migrate_document(document)))
+    return strip_legacy_element_ids(rename_reference_fields_to_uid(canonicalize_model_references(migrate_document(document))))
 
 
 def _normalize_text_list(values: list[str] | None) -> list[str]:
@@ -413,6 +514,7 @@ def _normalize_stage_flow_refs(stage_flow_refs: list[dict]) -> list[dict]:
         normalized_refs.append(
             {
                 "uid": ref_uid,
+                **({"id": str(ref.get("id", "")).strip()} if str(ref.get("id", "")).strip() else {}),
                 "stageId": stage_id,
                 "processId": process_id,
                 "order": _normalize_positive_int(ref.get("order"), ref_index),
@@ -1227,6 +1329,16 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
         if not isinstance(raw_flow, dict):
             raw_flow = {}
         task_uids = {str(node.get("uid", "")).strip() for node in process["nodes"] if str(node.get("uid", "")).strip()}
+        flow_ref_map = {
+            str(node.get("uid", "")).strip(): str(node.get("uid", "")).strip()
+            for node in process["nodes"]
+            if str(node.get("uid", "")).strip()
+        }
+        for node in process["nodes"]:
+            node_uid = str(node.get("uid", "")).strip()
+            legacy_node_id = str(node.get("id", "")).strip()
+            if node_uid and legacy_node_id:
+                flow_ref_map[legacy_node_id] = node_uid
         flow_nodes = []
         flow_node_uids = set()
         for flow_node_index, flow_node in enumerate(raw_flow.get("nodes", []), start=1):
@@ -1250,6 +1362,9 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
             normalized_flow_node["role_uid"] = str(
                 flow_node.get("role_uid") or flow_node.get("role_id") or flow_node.get("roleId") or ""
             ).strip()
+            legacy_flow_node_id = str(flow_node.get("id", "")).strip()
+            if legacy_flow_node_id:
+                flow_ref_map[legacy_flow_node_id] = node_uid
             flow_nodes.append(normalized_flow_node)
 
         valid_flow_node_uids = task_uids | flow_node_uids
@@ -1260,7 +1375,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                 return "START"
             if side == "to" and endpoint == "END":
                 return "END"
-            return endpoint
+            return flow_ref_map.get(endpoint, endpoint)
 
         flow_edges = []
         seen_flow_edges = set()

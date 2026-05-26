@@ -265,33 +265,35 @@ function createDeterministicUiUid(prefix = 'uid', ...parts) {
 const UNASSIGNED_STAGE_ID = '__unassigned__';
 const UNASSIGNED_STAGE_NAME = '未设置业务阶段';
 const DEFAULT_PANORAMA_COLUMNS = [
-  { id: 'participants', name: '会员客户', scope: '账号/服务机构/参与方', badge: '' },
-  { id: 'parameters', name: '品种参数', scope: '品种/合约/商品/示例参数', badge: '' },
-  { id: 'businessHandling', name: '业务办理', scope: '仓单同步/入库/在库/出库', badge: '' },
-  { id: 'riskSupervision', name: '风险监管', scope: '监管/查询/预警/追溯', badge: '' },
+  { uid: 'participants', name: '会员客户', scope: '账号/服务机构/参与方', badge: '' },
+  { uid: 'parameters', name: '品种参数', scope: '品种/合约/商品/示例参数', badge: '' },
+  { uid: 'businessHandling', name: '业务办理', scope: '仓单同步/入库/在库/出库', badge: '' },
+  { uid: 'riskSupervision', name: '风险监管', scope: '监管/查询/预警/追溯', badge: '' },
 ];
 const DEFAULT_PANORAMA_LANES = [
   {
-    id: 'smart-platform-phase2',
+    uid: 'smart-platform-phase2',
     name: '示例业务域1',
     badge: '业务域1',
     note: '示例业务分析主对象，承接账号机构、参数同步、业务办理和监管协同。',
   },
   {
-    id: 'receipt-system',
+    uid: 'receipt-system',
     name: '示例业务域2',
     badge: '业务域2',
     note: '作为关键环节职责参照，帮助识别跨业务域协作边界。',
   },
 ];
 const DEFAULT_PANORAMA_CELLS = [
-  { columnId: 'participants', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '账号管理、仓库管理、质检机构管理等作为大阶段；维护、审核、变更等细节进入阶段内流程' },
-  { columnId: 'parameters', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '品种参数管理作为大阶段；品种、合约、商品和示例参数同步维护进入阶段内流程' },
-  { columnId: 'businessHandling', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '仓单注册、仓单注销、仓单流转等作为大阶段；示例预报、仓库/厂库仓单注册等进入阶段内流程' },
-  { columnId: 'riskSupervision', laneId: 'smart-platform-phase2', status: '业务域1主责', text: '风险监管作为大阶段；库存监管、风险预警、异常核验、查询追溯和统计分析进入阶段内流程' },
-  { columnId: 'parameters', laneId: 'receipt-system', status: '业务域2职责', text: '维护品种信息、维护合约信息，作为示例业务域1同步来源' },
-  { columnId: 'businessHandling', laneId: 'receipt-system', status: '业务域2职责', text: '仓单注册、仓单注销、仓单流转等仓单核心动作可由示例业务域2承载' },
+  { columnUid: 'participants', laneUid: 'smart-platform-phase2', status: '业务域1主责', text: '账号管理、仓库管理、质检机构管理等作为大阶段；维护、审核、变更等细节进入阶段内流程' },
+  { columnUid: 'parameters', laneUid: 'smart-platform-phase2', status: '业务域1主责', text: '品种参数管理作为大阶段；品种、合约、商品和示例参数同步维护进入阶段内流程' },
+  { columnUid: 'businessHandling', laneUid: 'smart-platform-phase2', status: '业务域1主责', text: '仓单注册、仓单注销、仓单流转等作为大阶段；示例预报、仓库/厂库仓单注册等进入阶段内流程' },
+  { columnUid: 'riskSupervision', laneUid: 'smart-platform-phase2', status: '业务域1主责', text: '风险监管作为大阶段；库存监管、风险预警、异常核验、查询追溯和统计分析进入阶段内流程' },
+  { columnUid: 'parameters', laneUid: 'receipt-system', status: '业务域2职责', text: '维护品种信息、维护合约信息，作为示例业务域1同步来源' },
+  { columnUid: 'businessHandling', laneUid: 'receipt-system', status: '业务域2职责', text: '仓单注册、仓单注销、仓单流转等仓单核心动作可由示例业务域2承载' },
 ];
+const PANORAMA_COLUMN_UID_BY_NAME = new Map(DEFAULT_PANORAMA_COLUMNS.map((column) => [column.name, column.uid]));
+const PANORAMA_LANE_UID_BY_NAME = new Map(DEFAULT_PANORAMA_LANES.map((lane) => [lane.name, lane.uid]));
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -583,11 +585,13 @@ function normalizeGridSlot(value) {
   return { row, col };
 }
 function createDefaultPanoramaModel() {
-  return {
+  const model = {
     columns: DEFAULT_PANORAMA_COLUMNS.map((column) => ({ ...column })),
     lanes: DEFAULT_PANORAMA_LANES.map((lane) => ({ ...lane })),
     cells: DEFAULT_PANORAMA_CELLS.map((cell) => ({ ...cell })),
   };
+  defineModelUidAliasDeep(model);
+  return model;
 }
 function isLegacyDefaultPanoramaModel(panorama) {
   if (!panorama || typeof panorama !== 'object') return false;
@@ -605,9 +609,15 @@ function isLegacyDefaultPanoramaModel(panorama) {
     && laneIds[0] === 'receipt-system'
     && laneIds[1] === 'smart-platform-phase2';
 }
-function normalizePanoramaId(value, prefix, index, usedIds) {
-  const rawId = String(value || '').trim();
-  const baseId = rawId || `${prefix}${index}`;
+function normalizePanoramaNameKey(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+function semanticPanoramaUid(prefix, name, index, usedIds, knownNameUids = new Map()) {
+  const nameKey = normalizePanoramaNameKey(name);
+  const knownUid = knownNameUids.get(nameKey);
+  const baseId = knownUid || (nameKey
+    ? createDeterministicUiUid(prefix, nameKey)
+    : `${prefix}-unnamed-${index}`);
   let id = baseId;
   let suffix = 2;
   while (usedIds.has(id)) {
@@ -621,38 +631,45 @@ function normalizePanoramaColumnEntry(column, index = 1, usedIds = new Set()) {
   const normalized = column && typeof column === 'object' ? column : {};
   const fallback = DEFAULT_PANORAMA_COLUMNS[index - 1] || {};
   const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
-  const uid = String(normalized.uid || '').trim();
-  return {
-    ...(uid ? { uid } : {}),
-    id: normalizePanoramaId(normalized.id || normalized.key, 'C', index, usedIds),
-    name: hasName ? String(normalized.name || '').trim() : (fallback.name || `价值流${index}`),
+  const name = hasName ? String(normalized.name || '').trim() : (fallback.name || `价值流${index}`);
+  const uid = semanticPanoramaUid('panorama-column', name, index, usedIds, PANORAMA_COLUMN_UID_BY_NAME);
+  const entry = {
+    uid,
+    name,
     scope: String(normalized.scope || '').trim(),
     badge: String(normalized.badge || '').trim(),
   };
+  defineUiAlias(entry, 'id', 'uid');
+  return entry;
 }
 function normalizePanoramaLaneEntry(lane, index = 1, usedIds = new Set()) {
   const normalized = lane && typeof lane === 'object' ? lane : {};
   const fallback = DEFAULT_PANORAMA_LANES[index - 1] || {};
   const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
-  const uid = String(normalized.uid || '').trim();
-  return {
-    ...(uid ? { uid } : {}),
-    id: normalizePanoramaId(normalized.id || normalized.key, 'L', index, usedIds),
-    name: hasName ? String(normalized.name || '').trim() : (fallback.name || `业务域${index}`),
+  const name = hasName ? String(normalized.name || '').trim() : (fallback.name || `业务域${index}`);
+  const uid = semanticPanoramaUid('panorama-lane', name, index, usedIds, PANORAMA_LANE_UID_BY_NAME);
+  const entry = {
+    uid,
+    name,
     badge: String(normalized.badge || '').trim(),
     note: String(normalized.note || '').trim(),
   };
+  defineUiAlias(entry, 'id', 'uid');
+  return entry;
 }
 function normalizePanoramaCellEntry(cell) {
   const normalized = cell && typeof cell === 'object' ? cell : {};
   const uid = String(normalized.uid || '').trim();
-  return {
+  const entry = {
     ...(uid ? { uid } : {}),
-    columnId: String(normalized.columnId || normalized.streamId || normalized.valueStreamId || '').trim(),
-    laneId: String(normalized.laneId || '').trim(),
+    columnUid: String(normalized.columnUid || '').trim(),
+    laneUid: String(normalized.laneUid || '').trim(),
     status: String(normalized.status || '').trim(),
     text: String(normalized.text || normalized.note || '').trim(),
   };
+  defineUiAlias(entry, 'columnId', 'columnUid');
+  defineUiAlias(entry, 'laneId', 'laneUid');
+  return entry;
 }
 function getPanoramaModel(doc = S.doc) {
   if (!doc || typeof doc !== 'object') return createDefaultPanoramaModel();
@@ -671,23 +688,41 @@ function getPanoramaModel(doc = S.doc) {
   const laneIds = new Set();
   const columns = columnSource.map((column, index) => normalizePanoramaColumnEntry(column, index + 1, columnIds));
   const lanes = laneSource.map((lane, index) => normalizePanoramaLaneEntry(lane, index + 1, laneIds));
-  const validColumnIds = new Set(columns.map((column) => column.id));
-  const validLaneIds = new Set(lanes.map((lane) => lane.id));
-  const defaultCells = new Map(DEFAULT_PANORAMA_CELLS.map((cell) => [`${cell.laneId}::${cell.columnId}`, cell]));
+  const columnRefMap = new Map();
+  const laneRefMap = new Map();
+  columnSource.forEach((source, index) => {
+    const column = columns[index];
+    [source?.uid, source?.id, source?.key, column?.uid].forEach((ref) => {
+      const text = String(ref || '').trim();
+      if (text && column?.uid) columnRefMap.set(text, column.uid);
+    });
+  });
+  laneSource.forEach((source, index) => {
+    const lane = lanes[index];
+    [source?.uid, source?.id, source?.key, lane?.uid].forEach((ref) => {
+      const text = String(ref || '').trim();
+      if (text && lane?.uid) laneRefMap.set(text, lane.uid);
+    });
+  });
+  const validColumnIds = new Set(columns.map((column) => column.uid));
+  const validLaneIds = new Set(lanes.map((lane) => lane.uid));
+  const defaultCells = new Map(DEFAULT_PANORAMA_CELLS.map((cell) => [`${cell.laneUid}::${cell.columnUid}`, cell]));
   const cells = new Map();
   (Array.isArray(doc.panorama.cells) ? doc.panorama.cells : []).forEach((cell) => {
     const normalized = normalizePanoramaCellEntry(cell);
-    if (!validColumnIds.has(normalized.columnId) || !validLaneIds.has(normalized.laneId)) return;
-    cells.set(`${normalized.laneId}::${normalized.columnId}`, normalized);
+    normalized.columnUid = columnRefMap.get(normalized.columnUid) || normalized.columnUid;
+    normalized.laneUid = laneRefMap.get(normalized.laneUid) || normalized.laneUid;
+    if (!validColumnIds.has(normalized.columnUid) || !validLaneIds.has(normalized.laneUid)) return;
+    cells.set(`${normalized.laneUid}::${normalized.columnUid}`, normalized);
   });
   lanes.forEach((lane) => {
     columns.forEach((column) => {
-      const cellKey = `${lane.id}::${column.id}`;
+      const cellKey = `${lane.uid}::${column.uid}`;
       if (cells.has(cellKey)) return;
       const defaultCell = defaultCells.get(cellKey);
       cells.set(cellKey, defaultCell
         ? { ...defaultCell }
-        : { columnId: column.id, laneId: lane.id, status: '', text: '' });
+        : { columnUid: column.uid, laneUid: lane.uid, status: '', text: '' });
     });
   });
   doc.panorama = {
@@ -695,13 +730,25 @@ function getPanoramaModel(doc = S.doc) {
     lanes,
     cells: Array.from(cells.values()),
   };
+  getStages(doc).forEach((stage) => {
+    const columnRef = String(stage.panoramaColumnUid || stage.panoramaColumnId || '').trim();
+    const laneRef = String(stage.panoramaLaneUid || stage.panoramaLaneId || '').trim();
+    stage.panoramaColumnUid = columnRefMap.get(columnRef) || columnRef;
+    stage.panoramaLaneUid = laneRefMap.get(laneRef) || laneRef;
+    delete stage.panoramaColumnId;
+    delete stage.panoramaLaneId;
+  });
+  defineModelUidAliasDeep(doc.panorama);
   return doc.panorama;
 }
 function getPanoramaCell(model, laneId, columnId) {
   const normalizedLaneId = String(laneId || '').trim();
   const normalizedColumnId = String(columnId || '').trim();
-  return (model?.cells || []).find((cell) => cell.laneId === normalizedLaneId && cell.columnId === normalizedColumnId)
-    || { laneId: normalizedLaneId, columnId: normalizedColumnId, status: '', text: '' };
+  const cell = (model?.cells || []).find((item) => item.laneUid === normalizedLaneId && item.columnUid === normalizedColumnId)
+    || { laneUid: normalizedLaneId, columnUid: normalizedColumnId, status: '', text: '' };
+  defineUiAlias(cell, 'columnId', 'columnUid');
+  defineUiAlias(cell, 'laneId', 'laneUid');
+  return cell;
 }
 function normalizeStageProcessLinkEntry(link) {
   const normalized = link && typeof link === 'object' ? link : {};
@@ -761,8 +808,8 @@ function normalizeStageEntry(stage, index = 1, processes = [], stageFlowRefs = [
     id: String(normalized.id || '').trim() || `S${index}`,
     name: String(normalized.name || '').trim() || `业务阶段${index}`,
     subDomain,
-    panoramaColumnId: String(normalized.panoramaColumnId || normalized.valueStreamId || normalized.valueStreamKey || '').trim(),
-    panoramaLaneId: String(normalized.panoramaLaneId || normalized.valueStreamLaneId || '').trim(),
+    panoramaColumnUid: String(normalized.panoramaColumnUid || '').trim(),
+    panoramaLaneUid: String(normalized.panoramaLaneUid || '').trim(),
     panoramaSlot: normalizeGridSlot(normalized.panoramaSlot),
     panoramaPos: normalized.panoramaPos && typeof normalized.panoramaPos === 'object'
       ? normalizeGraphOffset(normalized.panoramaPos)

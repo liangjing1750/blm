@@ -3335,7 +3335,7 @@ async function removePanoramaColumn(columnId) {
   const nextColumns = model.columns.filter((column) => column.id !== columnId);
   if (nextColumns.length === model.columns.length) return;
   const column = model.columns.find((item) => item.id === columnId);
-  const affectedStages = getStages(S.doc).filter((stage) => stage.panoramaColumnId === columnId);
+  const affectedStages = getStages(S.doc).filter((stage) => stage.panoramaColumnUid === columnId);
   const message = affectedStages.length
     ? `确认删除价值流「${column?.name || columnId}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他单元格。`
     : `确认删除价值流「${column?.name || columnId}」吗？`;
@@ -3344,9 +3344,9 @@ async function removePanoramaColumn(columnId) {
     confirmLabel: '删除',
   })) return;
   model.columns = nextColumns;
-  model.cells = model.cells.filter((cell) => cell.columnId !== columnId);
+  model.cells = model.cells.filter((cell) => cell.columnUid !== columnId);
   getStages(S.doc).forEach((stage) => {
-    if (stage.panoramaColumnId === columnId) stage.panoramaColumnId = '';
+    if (stage.panoramaColumnUid === columnId) stage.panoramaColumnUid = '';
   });
   getPanoramaModel(S.doc);
   markModified();
@@ -3388,7 +3388,7 @@ async function removePanoramaLane(laneId) {
   const nextLanes = model.lanes.filter((lane) => lane.id !== laneId);
   if (nextLanes.length === model.lanes.length) return;
   const lane = model.lanes.find((item) => item.id === laneId);
-  const affectedStages = getStages(S.doc).filter((stage) => stage.panoramaLaneId === laneId);
+  const affectedStages = getStages(S.doc).filter((stage) => stage.panoramaLaneUid === laneId);
   const message = affectedStages.length
     ? `确认删除业务域「${lane?.name || laneId}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他单元格。`
     : `确认删除业务域「${lane?.name || laneId}」吗？`;
@@ -3397,9 +3397,9 @@ async function removePanoramaLane(laneId) {
     confirmLabel: '删除',
   })) return;
   model.lanes = nextLanes;
-  model.cells = model.cells.filter((cell) => cell.laneId !== laneId);
+  model.cells = model.cells.filter((cell) => cell.laneUid !== laneId);
   getStages(S.doc).forEach((stage) => {
-    if (stage.panoramaLaneId === laneId) stage.panoramaLaneId = '';
+    if (stage.panoramaLaneUid === laneId) stage.panoramaLaneUid = '';
   });
   getPanoramaModel(S.doc);
   markModified();
@@ -3408,7 +3408,7 @@ async function removePanoramaLane(laneId) {
 
 function setPanoramaCell(laneId, columnId, key, value) {
   const model = getPanoramaModel(S.doc);
-  const cell = model.cells.find((item) => item.laneId === laneId && item.columnId === columnId);
+  const cell = model.cells.find((item) => item.laneUid === laneId && item.columnUid === columnId);
   if (!cell || !['status', 'text'].includes(key)) return;
   cell[key] = String(value || '');
   markModified();
@@ -3429,8 +3429,8 @@ async function addStageFromMatrixCell(laneId, columnId) {
     id,
     name: stageName,
     subDomain: '',
-    panoramaColumnId: columnId,
-    panoramaLaneId: laneId,
+    panoramaColumnUid: columnId,
+    panoramaLaneUid: laneId,
     panoramaPos: null,
     pos: { x: 0, y: 0 },
     processLinks: [],
@@ -3648,22 +3648,31 @@ function moveStageProcessLink(stageId, linkUid, dir) {
 function rerenderStageWorkbench(options = {}) {
   const mainShell = document.querySelector('.stage-main-shell');
   const drawerBody = document.querySelector('.stage-drawer .drawer-body');
+  const valueStreamScroll = document.querySelector('.value-stream-scroll');
   const pageRoot = document.scrollingElement || document.documentElement;
   const mainScrollTop = mainShell?.scrollTop || 0;
   const mainScrollLeft = mainShell?.scrollLeft || 0;
   const drawerScrollTop = drawerBody?.scrollTop || 0;
+  const valueStreamScrollTop = valueStreamScroll?.scrollTop || 0;
+  const valueStreamScrollLeft = valueStreamScroll?.scrollLeft || 0;
   const pageTop = pageRoot?.scrollTop || 0;
   const pageLeft = pageRoot?.scrollLeft || 0;
   renderProcessTab();
   requestAnimationFrame(() => {
     const nextMainShell = document.querySelector('.stage-main-shell');
     const nextDrawerBody = document.querySelector('.stage-drawer .drawer-body');
+    const nextValueStreamScroll = document.querySelector('.value-stream-scroll');
     const nextPageRoot = document.scrollingElement || document.documentElement;
     if (nextMainShell) {
       nextMainShell.scrollTop = options.mainScrollTop ?? mainScrollTop;
       nextMainShell.scrollLeft = options.mainScrollLeft ?? mainScrollLeft;
     }
     if (nextDrawerBody) nextDrawerBody.scrollTop = options.drawerScrollTop ?? drawerScrollTop;
+    if (nextValueStreamScroll) {
+      nextValueStreamScroll.scrollTop = options.valueStreamScrollTop ?? valueStreamScrollTop;
+      nextValueStreamScroll.scrollLeft = options.valueStreamScrollLeft ?? valueStreamScrollLeft;
+      syncValueStreamHScrollFromContent(nextValueStreamScroll);
+    }
     if (options.revealStageLinks && nextDrawerBody) revealStageLinkEditor(nextDrawerBody);
     if (nextPageRoot) {
       nextPageRoot.scrollTop = pageTop;
@@ -3750,6 +3759,48 @@ function startStageNodeDrag(kind, nodeId, event) {
   document.addEventListener('mouseup', endStageNodeDrag);
 }
 
+function clearStageDragTargetCell() {
+  document.querySelectorAll('.value-stream-cell.is-drag-target').forEach((cell) => {
+    cell.classList.remove('is-drag-target');
+  });
+}
+
+function syncValueStreamHScrollFromContent(content) {
+  const scroller = content?.closest?.('.value-stream-scroll-wrap')?.querySelector?.('.value-stream-hscroll');
+  if (!content || !scroller || scroller.dataset.syncing === 'true') return;
+  content.dataset.syncing = 'true';
+  scroller.scrollLeft = content.scrollLeft || 0;
+  content.dataset.syncing = '';
+}
+
+function syncValueStreamContentFromHScroll(scroller) {
+  const content = scroller?.closest?.('.value-stream-scroll-wrap')?.querySelector?.('.value-stream-scroll');
+  if (!content || !scroller || content.dataset.syncing === 'true') return;
+  scroller.dataset.syncing = 'true';
+  content.scrollLeft = scroller.scrollLeft || 0;
+  scroller.dataset.syncing = '';
+}
+
+function getStageDragTargetCell(event) {
+  if (!event || !stageDragState || stageDragState.kind !== 'stage' || !isStagePanoramaEditing()) return null;
+  const draggedNode = document.querySelector(`.stage-graph-node[data-node-id="${CSS.escape(stageDragState.nodeId)}"]`);
+  const elements = document.elementsFromPoint(event.clientX, event.clientY) || [];
+  for (const element of elements) {
+    const cell = element?.closest?.('.value-stream-cell');
+    if (!cell) continue;
+    if (draggedNode && cell.contains(draggedNode)) continue;
+    return cell;
+  }
+  return null;
+}
+
+function updateStageDragTargetCell(event) {
+  clearStageDragTargetCell();
+  const cell = getStageDragTargetCell(event);
+  if (cell) cell.classList.add('is-drag-target');
+  return cell;
+}
+
 function onStageNodeDrag(event) {
   if (!stageDragState) return;
   const dx = event.clientX - stageDragState.startX;
@@ -3765,6 +3816,9 @@ function onStageNodeDrag(event) {
   if (stageDragState.kind === 'stage-ref') {
     updateStageFlowDragLinks(stageDragState.nodeId, graphDx, graphDy);
   }
+  if (stageDragState.kind === 'stage') {
+    updateStageDragTargetCell(event);
+  }
 }
 
 function endStageNodeDrag(event) {
@@ -3774,8 +3828,9 @@ function endStageNodeDrag(event) {
   const dy = event.clientY - startY;
   document.removeEventListener('mousemove', onStageNodeDrag);
   document.removeEventListener('mouseup', endStageNodeDrag);
-  stageDragState = null;
   if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+    clearStageDragTargetCell();
+    stageDragState = null;
     if (kind === 'stage') {
       if (S.ui.stageEditorCollapsed === false && event.detail >= 2) {
         startStageNameEdit(nodeId, event);
@@ -3796,16 +3851,15 @@ function endStageNodeDrag(event) {
     return;
   }
   if (kind === 'stage' && isStagePanoramaEditing()) {
-    const target = document.elementFromPoint(event.clientX, event.clientY);
-    const cell = target?.closest?.('.value-stream-cell');
+    const cell = updateStageDragTargetCell(event);
     const stage = findStage(nodeId, S.doc);
     if (cell && stage) {
       const laneId = String(cell.dataset.laneId || '').trim();
       const columnId = String(cell.dataset.columnId || '').trim();
       const board = cell.querySelector('.value-stream-stage-board');
       const boardRect = board?.getBoundingClientRect();
-      stage.panoramaLaneId = laneId;
-      stage.panoramaColumnId = columnId;
+      stage.panoramaLaneUid = laneId;
+      stage.panoramaColumnUid = columnId;
       if (boardRect) {
         stage.panoramaSlot = {
           row: Math.max(0, Math.round((event.clientY - boardRect.top - MATRIX_STAGE_CARD_H / 2 - MATRIX_STAGE_BOARD_PAD) / MATRIX_STAGE_SLOT_H)),
@@ -3814,10 +3868,17 @@ function endStageNodeDrag(event) {
         stage.panoramaPos = null;
       }
       markModified();
-      rerenderStageWorkbench();
+      clearStageDragTargetCell();
+      stageDragState = null;
+      rerenderStageWorkbench({
+        valueStreamScrollTop: cell.closest('.value-stream-scroll')?.scrollTop || 0,
+        valueStreamScrollLeft: cell.closest('.value-stream-scroll')?.scrollLeft || 0,
+      });
       return;
     }
   }
+  clearStageDragTargetCell();
+  stageDragState = null;
   const zoom = getStageGraphZoom() || 1;
   setStageNodeOffset(kind, nodeId, {
     x: startOffset.x + Math.round(dx / zoom),
@@ -4366,8 +4427,8 @@ function coarsenPanoramaStageNodes(stageNodes) {
 
 function resolveStagePanoramaPlacement(node, index, model) {
   const stage = node?.stage || node || {};
-  const stageColumnId = String(stage.panoramaColumnId || '').trim();
-  const stageLaneId = String(stage.panoramaLaneId || '').trim();
+  const stageColumnId = String(stage.panoramaColumnUid || '').trim();
+  const stageLaneId = String(stage.panoramaLaneUid || '').trim();
   return {
     columnId: hasPanoramaColumn(model, stageColumnId) ? stageColumnId : inferDeliveryValueStream(node, index, model),
     laneId: hasPanoramaLane(model, stageLaneId) ? stageLaneId : inferDeliveryLane(node, model),
@@ -4613,19 +4674,30 @@ function renderValueStreamCell(lane, column, cell, stageNodes, editing = false) 
   </div>`;
 }
 
-function getValueStreamGridStyle(model, editing = false) {
+function getValueStreamColumnMinWidths(model, groupedStages, editing = false) {
   const count = Math.max(1, (model?.columns || []).length);
-  const axisMin = editing ? 220 : 154;
   const columnMin = editing ? 220 : 210;
-  if (editing) return `grid-template-columns:minmax(${axisMin}px,.8fr) repeat(${count},minmax(${columnMin}px,1fr))`;
-  return `grid-template-columns:minmax(${axisMin}px,.9fr) repeat(${count},minmax(${columnMin}px,1fr))`;
+  return (model?.columns || []).map((column) => {
+    const required = (model?.lanes || []).reduce((maxWidth, lane) => {
+      const stages = groupedStages?.get?.(`${lane.id}::${column.id}`) || [];
+      return Math.max(maxWidth, getMatrixStageBoardWidth(stages, editing) + 16);
+    }, columnMin);
+    return Math.ceil(Math.max(columnMin, required));
+  }).slice(0, count);
 }
 
-function getValueStreamMatrixBaseWidth(model, editing = false) {
-  const count = Math.max(1, (model?.columns || []).length);
+function getValueStreamGridStyle(model, editing = false, groupedStages = null) {
   const axisMin = editing ? 220 : 154;
-  const columnMin = editing ? 220 : 210;
-  return axisMin + count * columnMin;
+  const columnWidths = getValueStreamColumnMinWidths(model, groupedStages, editing);
+  const columnTracks = columnWidths.map((width) => `minmax(${width}px,1fr)`).join(' ');
+  if (editing) return `grid-template-columns:minmax(${axisMin}px,.8fr) ${columnTracks}`;
+  return `grid-template-columns:minmax(${axisMin}px,.9fr) ${columnTracks}`;
+}
+
+function getValueStreamMatrixBaseWidth(model, editing = false, groupedStages = null) {
+  const axisMin = editing ? 220 : 154;
+  const columnWidths = getValueStreamColumnMinWidths(model, groupedStages, editing);
+  return axisMin + columnWidths.reduce((sum, width) => sum + width, 0);
 }
 
 function renderStagePanoramaMatrixMarkup({ nodes, links, emptyText = '暂无内容', testId = 'stage-graph' }) {
@@ -4642,24 +4714,30 @@ function renderStagePanoramaMatrixMarkup({ nodes, links, emptyText = '暂无内�
   }));
   const editing = isStagePanoramaEditing();
   const groupedStages = groupStagesByPanoramaCell(indexedNodes, model, false);
-  const gridStyle = getValueStreamGridStyle(model, editing);
+  const gridStyle = getValueStreamGridStyle(model, editing, groupedStages);
   const zoom = getStageGraphZoom();
-  const matrixBaseWidth = getValueStreamMatrixBaseWidth(model, editing);
+  const matrixBaseWidth = getValueStreamMatrixBaseWidth(model, editing, groupedStages);
   const matrixStyle = `width:max(100%, ${matrixBaseWidth}px);min-width:${matrixBaseWidth}px;zoom:${editing ? zoom : 1}`;
+  const hScrollWidth = Math.ceil(matrixBaseWidth * (editing ? zoom : 1));
   return `<div class="stage-graph value-stream-graph" data-testid="${testId}">
-    <div class="value-stream-scroll" data-testid="value-stream-scroll">
-    <div class="value-stream-matrix${editing ? ' is-editing' : ''}" data-testid="value-stream-matrix" data-editing="${editing ? 'true' : 'false'}" style="${matrixStyle}">
-      <div class="value-stream-header-row" style="${gridStyle}">
-        <div class="value-stream-axis">业务域 / 价值流</div>
-        ${model.columns.map((column, index) => renderMatrixHeaderCell(column, index, model.columns.length, editing)).join('')}
+    <div class="value-stream-scroll-wrap" data-testid="value-stream-scroll-wrap">
+      <div class="value-stream-scroll" data-testid="value-stream-scroll" onscroll="syncValueStreamHScrollFromContent(this)">
+      <div class="value-stream-matrix${editing ? ' is-editing' : ''}" data-testid="value-stream-matrix" data-editing="${editing ? 'true' : 'false'}" style="${matrixStyle}">
+        <div class="value-stream-header-row" style="${gridStyle}">
+          <div class="value-stream-axis">业务域 / 价值流</div>
+          ${model.columns.map((column, index) => renderMatrixHeaderCell(column, index, model.columns.length, editing)).join('')}
+        </div>
+        <div class="value-stream-body">
+          ${model.lanes.map((lane, index) => `<div class="value-stream-row" data-testid="value-stream-row" data-lane-id="${esc(lane.id)}" style="${gridStyle}">
+            ${renderMatrixLaneCell(lane, index, model.lanes.length, editing)}
+            ${model.columns.map((column) => renderValueStreamCell(lane, column, getPanoramaCell(model, lane.id, column.id), groupedStages.get(`${lane.id}::${column.id}`) || [], editing)).join('')}
+          </div>`).join('')}
+        </div>
       </div>
-      <div class="value-stream-body">
-        ${model.lanes.map((lane, index) => `<div class="value-stream-row" data-testid="value-stream-row" data-lane-id="${esc(lane.id)}" style="${gridStyle}">
-          ${renderMatrixLaneCell(lane, index, model.lanes.length, editing)}
-          ${model.columns.map((column) => renderValueStreamCell(lane, column, getPanoramaCell(model, lane.id, column.id), groupedStages.get(`${lane.id}::${column.id}`) || [], editing)).join('')}
-        </div>`).join('')}
       </div>
-    </div>
+      <div class="value-stream-hscroll" data-testid="value-stream-hscroll" onscroll="syncValueStreamContentFromHScroll(this)">
+        <div style="width:${hScrollWidth}px;height:1px"></div>
+      </div>
     </div>
   </div>`;
 }
@@ -5076,11 +5154,11 @@ function renderStagePanoramaEditor(stageItems) {
           aria-label="业务组件"
           oninput="setStage('${esc(stage.id)}','subDomain',this.value);renderSidebar();rerenderStageWorkbench({focusSelector:'[data-testid=&quot;stage-overview-row&quot;] input[aria-label=&quot;业务组件&quot;]'})">
         <select data-testid="stage-panorama-column-select" aria-label="价值流归属"
-          onchange="setStage('${esc(stage.id)}','panoramaColumnId',this.value);rerenderStageWorkbench({focusSelector:'[data-stage-id=&quot;${esc(stage.id)}&quot;] [data-testid=&quot;stage-panorama-column-select&quot;]'})">
+          onchange="setStage('${esc(stage.id)}','panoramaColumnUid',this.value);rerenderStageWorkbench({focusSelector:'[data-stage-id=&quot;${esc(stage.id)}&quot;] [data-testid=&quot;stage-panorama-column-select&quot;]'})">
           ${model.columns.map((column) => `<option value="${esc(column.id)}" ${column.id === placement.columnId ? 'selected' : ''}>${esc(column.name || column.id)}</option>`).join('')}
         </select>
         <select data-testid="stage-panorama-lane-select" aria-label="业务域归属"
-          onchange="setStage('${esc(stage.id)}','panoramaLaneId',this.value);rerenderStageWorkbench({focusSelector:'[data-stage-id=&quot;${esc(stage.id)}&quot;] [data-testid=&quot;stage-panorama-lane-select&quot;]'})">
+          onchange="setStage('${esc(stage.id)}','panoramaLaneUid',this.value);rerenderStageWorkbench({focusSelector:'[data-stage-id=&quot;${esc(stage.id)}&quot;] [data-testid=&quot;stage-panorama-lane-select&quot;]'})">
           ${model.lanes.map((lane) => `<option value="${esc(lane.id)}" ${lane.id === placement.laneId ? 'selected' : ''}>${esc(lane.name || lane.id)}</option>`).join('')}
         </select>
         <div class="stage-overview-row-actions">

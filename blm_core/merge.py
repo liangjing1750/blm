@@ -80,7 +80,7 @@ def _should_trust_identity(raw_document: dict | None) -> bool:
 
 def _prepare_input(document: dict | None) -> tuple[dict, bool]:
     raw = deepcopy(document or {})
-    return migrate_document(raw), _should_trust_identity(raw)
+    return canonical_document(raw), _should_trust_identity(raw)
 
 
 def _collect_model_uids(value: Any) -> set[str]:
@@ -314,14 +314,30 @@ class MergeEngine:
                         ordered.append(by_key[key])
                     else:
                         _merge_panorama_item(by_key[key], item)
-                    source_id = str(item.get("id", "")).strip()
-                    target_id = str(by_key[key].get("id", "")).strip()
-                    if source_id and target_id:
-                        maps[source_name][axis][source_id] = target_id
+                    target_uid = str(by_key[key].get("uid") or by_key[key].get("id") or "").strip()
+                    if target_uid:
+                        for source_field in ("uid", "id"):
+                            source_ref = str(item.get(source_field, "")).strip()
+                            if source_ref:
+                                maps[source_name][axis][source_ref] = target_uid
             return ordered
 
         columns = merge_axis("columns")
         lanes = merge_axis("lanes")
+        for axis in ("columns", "lanes"):
+            global_map: dict[str, str] = {}
+            ambiguous_refs: set[str] = set()
+            for source_maps in maps.values():
+                for source_ref, target_ref in source_maps[axis].items():
+                    if source_ref in global_map and global_map[source_ref] != target_ref:
+                        ambiguous_refs.add(source_ref)
+                    else:
+                        global_map[source_ref] = target_ref
+            for ambiguous_ref in ambiguous_refs:
+                global_map.pop(ambiguous_ref, None)
+            for source_maps in maps.values():
+                for source_ref, target_ref in global_map.items():
+                    source_maps[axis].setdefault(source_ref, target_ref)
 
         merged_cells: list[dict] = []
         cell_by_key: dict[tuple[str, str], dict] = {}
@@ -333,14 +349,18 @@ class MergeEngine:
             for cell in panorama.get("cells", []):
                 if not isinstance(cell, dict):
                     continue
-                column_id = column_map.get(str(cell.get("columnId", "")).strip(), str(cell.get("columnId", "")).strip())
-                lane_id = lane_map.get(str(cell.get("laneId", "")).strip(), str(cell.get("laneId", "")).strip())
+                column_ref = str(cell.get("columnUid") or cell.get("columnId") or "").strip()
+                lane_ref = str(cell.get("laneUid") or cell.get("laneId") or "").strip()
+                column_id = column_map.get(column_ref, column_ref)
+                lane_id = lane_map.get(lane_ref, lane_ref)
                 if not column_id or not lane_id:
                     continue
                 key = (lane_id, column_id)
                 normalized_cell = _copy(cell)
-                normalized_cell["columnId"] = column_id
-                normalized_cell["laneId"] = lane_id
+                normalized_cell["columnUid"] = column_id
+                normalized_cell["laneUid"] = lane_id
+                normalized_cell.pop("columnId", None)
+                normalized_cell.pop("laneId", None)
                 if key not in cell_by_key:
                     cell_by_key[key] = normalized_cell
                     merged_cells.append(normalized_cell)
@@ -359,34 +379,46 @@ class MergeEngine:
         for stage in result.get("stages", []):
             if not isinstance(stage, dict):
                 continue
-            column_id = str(stage.get("panoramaColumnId", "")).strip()
-            lane_id = str(stage.get("panoramaLaneId", "")).strip()
+            column_id = str(stage.get("panoramaColumnUid") or stage.get("panoramaColumnId") or "").strip()
+            lane_id = str(stage.get("panoramaLaneUid") or stage.get("panoramaLaneId") or "").strip()
             if column_id in column_map:
-                stage["panoramaColumnId"] = column_map[column_id]
+                stage["panoramaColumnUid"] = column_map[column_id]
+                stage.pop("panoramaColumnId", None)
             if lane_id in lane_map:
-                stage["panoramaLaneId"] = lane_map[lane_id]
+                stage["panoramaLaneUid"] = lane_map[lane_id]
+                stage.pop("panoramaLaneId", None)
 
         for role in result.get("roles", []):
             if not isinstance(role, dict):
                 continue
-            lane_id = str(role.get("panoramaLaneId", "") or role.get("businessDomainId", "")).strip()
+            lane_id = str(
+                role.get("panoramaLaneUid")
+                or role.get("panoramaLaneId")
+                or role.get("businessDomainUid")
+                or role.get("businessDomainId")
+                or ""
+            ).strip()
             if lane_id in lane_map:
-                if "panoramaLaneId" in role:
-                    role["panoramaLaneId"] = lane_map[lane_id]
-                if "businessDomainId" in role:
-                    role["businessDomainId"] = lane_map[lane_id]
+                if "panoramaLaneUid" in role or "panoramaLaneId" in role:
+                    role["panoramaLaneUid"] = lane_map[lane_id]
+                    role.pop("panoramaLaneId", None)
+                if "businessDomainUid" in role or "businessDomainId" in role:
+                    role["businessDomainUid"] = lane_map[lane_id]
+                    role.pop("businessDomainId", None)
 
         panorama = result.get("panorama")
         if isinstance(panorama, dict):
             for cell in panorama.get("cells", []):
                 if not isinstance(cell, dict):
                     continue
-                column_id = str(cell.get("columnId", "")).strip()
-                lane_id = str(cell.get("laneId", "")).strip()
+                column_id = str(cell.get("columnUid") or cell.get("columnId") or "").strip()
+                lane_id = str(cell.get("laneUid") or cell.get("laneId") or "").strip()
                 if column_id in column_map:
-                    cell["columnId"] = column_map[column_id]
+                    cell["columnUid"] = column_map[column_id]
+                    cell.pop("columnId", None)
                 if lane_id in lane_map:
-                    cell["laneId"] = lane_map[lane_id]
+                    cell["laneUid"] = lane_map[lane_id]
+                    cell.pop("laneId", None)
         return result
 
     def _merge_object(

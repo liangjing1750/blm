@@ -2035,13 +2035,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .value-stream-graph {
   padding: 10px 12px 12px;
 }
+.value-stream-scroll-wrap {
+  position: relative;
+  min-width: 0;
+}
 .value-stream-scroll {
   width: 100%;
   max-height: calc(100vh - 196px);
   min-height: 260px;
-  overflow: auto;
+  overflow-x: scroll;
+  overflow-y: auto;
   border: 1px solid #d7e2ef;
   border-radius: 8px;
+  background: #fff;
+}
+.value-stream-hscroll {
+  display: none;
+  width: 100%;
+  height: 16px;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  border: 1px solid #d7e2ef;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
   background: #fff;
 }
 .value-stream-matrix {
@@ -2164,6 +2180,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .value-stream-cell.is-editing {
   background: #fff;
   overflow: visible;
+}
+.value-stream-cell.is-drag-target {
+  background: #eaf7ff;
+  box-shadow: inset 0 0 0 2px #38bdf8;
 }
 .value-stream-cell.retain-target {
   background: #f8fbff;
