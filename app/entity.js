@@ -1225,6 +1225,12 @@ function setStateTransitionWaypoints(entityId, transitionIndex, waypoints) {
   return true;
 }
 
+function resetStateTransitionRoute(entityId, transitionIndex) {
+  if (!setStateTransitionWaypoints(entityId, transitionIndex, [])) return;
+  markModified();
+  rerenderStateWorkbenchView();
+}
+
 function startStateTransitionRouteDrag(entityId, fieldName, transitionIndex, segmentIndex, event) {
   if (event.button !== 0) return;
   const hitTarget = event.currentTarget;
@@ -2558,6 +2564,7 @@ function renderStateTransitionList(entity, stateField, stateValues, stateTransit
         <button class="transition-action" type="button" data-testid="entity-transition-add-after-${index}" title="在下方插入流转" onclick="addStateTransition('${esc(entity.id)}',${index})">+</button>
         <button class="transition-action" type="button" data-testid="entity-transition-move-up-${index}" title="上移" ${localIndex === 0 ? 'disabled' : ''} onclick="moveStateTransition('${esc(entity.id)}',${index},-1,'${esc(stateField.name)}')">↑</button>
         <button class="transition-action" type="button" data-testid="entity-transition-move-down-${index}" title="下移" ${localIndex === stateTransitionRows.length - 1 ? 'disabled' : ''} onclick="moveStateTransition('${esc(entity.id)}',${index},1,'${esc(stateField.name)}')">↓</button>
+        ${normalizeStateTransitionWaypoints(transition.waypoints).length ? `<button class="transition-action" type="button" data-testid="entity-transition-route-reset-${index}" title="重置连线" onclick="resetStateTransitionRoute('${esc(entity.id)}',${index})">↺</button>` : ''}
         <button class="transition-action transition-action-delete" type="button" data-testid="entity-transition-delete-${index}" title="删除" onclick="removeStateTransition('${esc(entity.id)}',${index})">✕</button>
       </div>
     </div>`).join('')}

@@ -261,6 +261,9 @@ function cloneBusinessModelDialog(dialog = {}) {
     constructId: String(dialog?.constructId || ''),
     taskDefinitionId: String(dialog?.taskDefinitionId || ''),
     returnMode: String(dialog?.returnMode || ''),
+    procId: String(dialog?.procId || ''),
+    taskId: String(dialog?.taskId || ''),
+    afterIdx: Number.isInteger(dialog?.afterIdx) ? dialog.afterIdx : null,
   };
 }
 
@@ -327,7 +330,7 @@ function areUiNavigationSnapshotsEqual(left, right) {
     if (key === 'businessModelDialog') {
       const leftDialog = cloneBusinessModelDialog(a[key]);
       const rightDialog = cloneBusinessModelDialog(b[key]);
-      return ['mode', 'capabilityId', 'constructId', 'taskDefinitionId', 'returnMode']
+      return ['mode', 'capabilityId', 'constructId', 'taskDefinitionId', 'returnMode', 'procId', 'taskId', 'afterIdx']
         .every((dialogKey) => leftDialog[dialogKey] === rightDialog[dialogKey]);
     }
     return String(a[key] ?? '') === String(b[key] ?? '');
@@ -3114,7 +3117,7 @@ function createDocUiState(doc) {
     entityRelationEditorCollapsed: true,
     stateDiagramZoom: 1,
     stateEditorCollapsed: true,
-    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' },
+    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null },
   };
 }
 

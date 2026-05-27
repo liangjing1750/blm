@@ -886,4 +886,10 @@ test('state transition route can be dragged into manual waypoints', async ({ pag
   ), routeBefore.transitionIndex);
   expect(stored.length).toBeGreaterThan(0);
   await expect(page.locator('[data-testid="entity-state-graph-link"]').nth(routeBefore.transitionIndex)).toHaveAttribute('data-link-kind', /manual/);
+  await openStateEditor(page);
+  await page.getByTestId(`entity-transition-route-reset-${routeBefore.transitionIndex}`).click();
+  await expect.poll(() => page.evaluate((index) => (
+    S.doc.entities[0].state_transitions[index]?.waypoints || []
+  ), routeBefore.transitionIndex)).toEqual([]);
+  await expect(page.locator('[data-testid="entity-state-graph-link"]').nth(routeBefore.transitionIndex)).not.toHaveAttribute('data-link-kind', /manual/);
 });

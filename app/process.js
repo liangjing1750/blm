@@ -2290,6 +2290,21 @@ function applyConstructToNodeTask(item, constructId) {
   item.businessComponent = construct?.businessComponent || '';
 }
 
+function applyCapabilityToNodeTask(item, capabilityId) {
+  if (!item) return;
+  const capability = capabilityId ? ensureBusinessComponentRef(capabilityId) : null;
+  item.businessComponentId = capability?.id || '';
+  item.businessComponent = capability?.name || '';
+  const construct = item.constructId || item.businessConstructId
+    ? findBusinessConstructRef(item.constructId || item.businessConstructId)
+    : null;
+  if (construct && capability && String(construct.businessComponentId || '') !== String(capability.id || '')) {
+    item.constructId = '';
+    item.businessConstructId = '';
+    item.constructName = '';
+  }
+}
+
 function ensureTaskDefinitionForNodeTask(item) {
   if (!item) return null;
   if (item.taskDefinitionId) {
@@ -2347,6 +2362,28 @@ function renderTaskConstructOptions(selectedConstructId = '') {
   return `<option value="">未归属构件</option>${constructs.map((construct) => {
     const id = String(construct.id || construct.name || '');
     return `<option value="${esc(id)}" ${id === selectedConstructId ? 'selected' : ''}>${esc(construct.name || id)}</option>`;
+  }).join('')}`;
+}
+
+function renderTaskCapabilityOptions(selectedCapabilityId = '') {
+  const capabilities = typeof getCapabilityItems === 'function' ? getCapabilityItems(S.doc) : [];
+  return `<option value="">未归属组件</option>${capabilities.map((capability) => {
+    const id = String(capability.id || capability.name || '');
+    return `<option value="${esc(id)}" ${id === selectedCapabilityId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
+  }).join('')}`;
+}
+
+function renderTaskConstructOptionsForCapability(selectedConstructId = '', capabilityId = '') {
+  const selectedCapabilityId = String(capabilityId || '').trim();
+  const constructs = getBusinessConstructItems(S.doc)
+    .filter((construct) => !selectedCapabilityId || String(construct.businessComponentId || '') === selectedCapabilityId);
+  return `<option value="">未归属构件</option>${constructs.map((construct) => {
+    const id = String(construct.id || construct.name || '');
+    const capabilityName = String(construct.businessComponent || '').trim();
+    const label = selectedCapabilityId || !capabilityName
+      ? (construct.name || id)
+      : `${construct.name || id} / ${capabilityName}`;
+    return `<option value="${esc(id)}" ${id === selectedConstructId ? 'selected' : ''}>${esc(label)}</option>`;
   }).join('')}`;
 }
 
@@ -3006,10 +3043,12 @@ function isEmptyGeneratedTaskDefinition(taskDefinition) {
 
 function cleanupUnusedGeneratedTaskDefinitions() {
   if (!Array.isArray(S.doc?.taskDefinitions)) return;
+  const activeTaskDefinitionId = String(S.ui?.businessModelDialog?.taskDefinitionId || '').trim();
   const refs = getReferencedTaskDefinitionIds(S.doc);
   const removedIds = new Set();
   S.doc.taskDefinitions = S.doc.taskDefinitions.filter((taskDefinition) => {
     const id = String(taskDefinition?.id || '').trim();
+    if (id && id === activeTaskDefinitionId) return true;
     if (!id || refs.has(id) || !isEmptyGeneratedTaskDefinition(taskDefinition)) return true;
     removedIds.add(id);
     return false;
@@ -3142,6 +3181,7 @@ function addOrchestrationTask(procId, taskId, afterIdx) {
     target: '',
     note: '',
   };
+  ensureTaskDefinitionForNodeTask(item);
   orchestrationTasks.splice(insertIndex, 0, item);
   markModified();
   renderSidebar();
@@ -3149,6 +3189,61 @@ function addOrchestrationTask(procId, taskId, afterIdx) {
     focusSelector: `.orch-card[data-orch-index="${insertIndex}"] .orch-name`,
   });
 }
+
+function defineTaskDefinitionForNode(procId, taskId, afterIdx = null) {
+  const reuseFilter = getOrchestrationReuseFilter(procId, taskId);
+  const allReusableTasks = getReusableOrchestrationTaskItems(procId, taskId);
+  const capabilityId = String(reuseFilter.capabilityId || '').trim();
+  const capabilityFilteredTasks = capabilityId
+    ? allReusableTasks.filter((item) => item.capabilityId === capabilityId)
+    : allReusableTasks;
+  const constructOptions = Array.from(new Map(capabilityFilteredTasks.map((item) => [item.constructId, item.constructName])).entries());
+  const constructId = constructOptions.some(([id]) => id === reuseFilter.constructId) ? reuseFilter.constructId : '';
+  const taskDefinition = addTaskDefinition('', capabilityId, constructId, { skipRender: true });
+  if (!taskDefinition) return;
+  openTaskDefinitionEditor(
+    taskDefinition.id,
+    taskDefinition.businessComponentId || capabilityId,
+    taskDefinition.constructId || constructId,
+    'processNode',
+    procId,
+    taskId,
+    Number.isInteger(afterIdx) ? afterIdx : null,
+  );
+}
+
+function validateTaskDefinitionForNode(taskDefinition) {
+  if (!String(taskDefinition?.name || '').trim()) {
+    alert('请先填写任务名称。');
+    return false;
+  }
+  if (!String(taskDefinition?.businessComponentId || taskDefinition?.businessComponent || '').trim()) {
+    alert('请先选择所属业务组件。');
+    return false;
+  }
+  if (!String(taskDefinition?.constructId || taskDefinition?.businessConstructId || '').trim()) {
+    alert('请先选择所属业务构件。');
+    return false;
+  }
+  return true;
+}
+
+function saveTaskDefinitionFromNode(taskDefinitionId, joinNode = false) {
+  const taskDefinition = findTaskDefinitionRef(taskDefinitionId);
+  if (!taskDefinition || !validateTaskDefinitionForNode(taskDefinition)) return;
+  const dialog = S.ui.businessModelDialog || {};
+  if (joinNode) {
+    reuseOrchestrationTask(
+      dialog.procId,
+      dialog.taskId,
+      encodeReuseTaskDefinitionKey(taskDefinition.id),
+      Number.isInteger(dialog.afterIdx) ? dialog.afterIdx : undefined,
+    );
+  }
+  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null };
+  rerenderProcessEditor();
+}
+
 function reuseOrchestrationTask(procId, taskId, key, afterIdx) {
   const node = getProcNodes(S.doc.processes.find(p => p.id === procId)).find(t => t.id === taskId);
   const source = findReusableOrchestrationTask(key);
@@ -3178,12 +3273,23 @@ function setOrchestrationTask(procId, taskId, idx, key, val) {
   if (!item) return;
   const normalizedKey = key === 'businessConstructId' ? 'constructId' : key;
   const definition = item.taskDefinitionId ? findTaskDefinitionRef(item.taskDefinitionId) : null;
-  if (definition && ['name', 'type', 'querySourceKind', 'target', 'note', 'constructId'].includes(normalizedKey)) {
+  if (definition && ['name', 'type', 'querySourceKind', 'target', 'note', 'constructId', 'businessComponentId'].includes(normalizedKey)) {
     const updated = setTaskDefinition(definition.id, normalizedKey, val);
     if (!updated) return;
     applyTaskDefinitionToNodeTask(item, findTaskDefinitionRef(definition.id));
+    if (normalizedKey === 'businessComponentId') {
+      const construct = item.constructId || item.businessConstructId
+        ? findBusinessConstructRef(item.constructId || item.businessConstructId)
+        : null;
+      if (construct && String(construct.businessComponentId || '') !== String(val || '')) {
+        setTaskDefinition(definition.id, 'constructId', '');
+        applyTaskDefinitionToNodeTask(item, findTaskDefinitionRef(definition.id));
+      }
+    }
   } else if (normalizedKey === 'constructId') {
     applyConstructToNodeTask(item, val);
+  } else if (normalizedKey === 'businessComponentId') {
+    applyCapabilityToNodeTask(item, val);
   } else {
     item[key] = val;
   }
@@ -5748,34 +5854,44 @@ function renderOrchestrationSection(proc, task) {
     <div class="section-toolbar">
       <h4>节点任务 <span class="section-count">${orchestrationTasks.length} 项</span></h4>
       <div class="orch-toolbar-actions">
-        <button class="btn btn-outline btn-sm" type="button" onclick="addOrchestrationTask('${esc(proc.id)}','${esc(task.id)}')">＋添加任务</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-task-manager-button"
+          onclick="openTaskDefinitionManager()">管理任务定义</button>
       </div>
     </div>
-    <div class="orch-reuse-panel" data-testid="orchestration-reuse-panel">
-      <select data-testid="orchestration-reuse-capability-select" aria-label="选择业务组件"
-        onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','capabilityId',this.value)" ${allReusableTasks.length ? '' : 'disabled'}>
-        <option value="">全部业务组件</option>
-        ${capabilityOptions.map(([id, name]) => `<option value="${esc(id)}" ${reuseFilter.capabilityId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
-      </select>
-      <select data-testid="orchestration-reuse-construct-select" aria-label="选择业务构件"
-        onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','constructId',this.value)" ${capabilityFilteredTasks.length ? '' : 'disabled'}>
-        <option value="">全部业务构件</option>
-        ${constructOptions.map(([id, name]) => `<option value="${esc(id)}" ${activeConstructId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
-      </select>
-      <input type="search" data-testid="orchestration-reuse-search" aria-label="搜索任务定义"
-        value="${esc(reuseFilter.query)}" placeholder="搜索任务名称 / 服务 / 备注"
-        oninput="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','query',this.value)" ${allReusableTasks.length ? '' : 'disabled'}>
-      <select id="${esc(reuseSelectId)}" data-testid="orchestration-reuse-select" aria-label="选择任务定义" ${reuseDisabled ? 'disabled' : ''}>
-        <option value="">选择任务...</option>
-        ${visibleReusableTasks.map((item) => `<option value="${esc(item.key)}">${esc(item.label)}</option>`).join('')}
-      </select>
-      <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-reuse-button" ${reuseDisabled ? 'disabled' : ''}
-        onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">复用</button>
-      <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-task-manager-button"
-        onclick="openTaskDefinitionManager()">管理</button>
-      ${reusableTasks.length > visibleReusableTasks.length ? `<span class="orch-reuse-more">还有 ${reusableTasks.length - visibleReusableTasks.length} 项，继续搜索缩小范围</span>` : ''}
+    <div class="orch-reuse-block" data-testid="orchestration-reuse-block">
+      <div class="orch-block-head">
+        <strong>复用已有任务</strong>
+        <span>从业务组件 / 业务构件中选择已有任务，加入当前节点编排。</span>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-define-new-task"
+          onclick="defineTaskDefinitionForNode('${esc(proc.id)}','${esc(task.id)}')">去定义新任务</button>
+      </div>
+      <div class="orch-reuse-panel" data-testid="orchestration-reuse-panel">
+        <select data-testid="orchestration-reuse-capability-select" aria-label="选择业务组件"
+          onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','capabilityId',this.value)" ${allReusableTasks.length ? '' : 'disabled'}>
+          <option value="">全部业务组件</option>
+          ${capabilityOptions.map(([id, name]) => `<option value="${esc(id)}" ${reuseFilter.capabilityId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+        </select>
+        <select data-testid="orchestration-reuse-construct-select" aria-label="选择业务构件"
+          onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','constructId',this.value)" ${capabilityFilteredTasks.length ? '' : 'disabled'}>
+          <option value="">全部业务构件</option>
+          ${constructOptions.map(([id, name]) => `<option value="${esc(id)}" ${activeConstructId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+        </select>
+        <input type="search" data-testid="orchestration-reuse-search" aria-label="搜索任务定义"
+          value="${esc(reuseFilter.query)}" placeholder="搜索任务名称 / 服务 / 备注"
+          oninput="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','query',this.value)" ${allReusableTasks.length ? '' : 'disabled'}>
+        <select id="${esc(reuseSelectId)}" data-testid="orchestration-reuse-select" aria-label="选择任务定义" ${reuseDisabled ? 'disabled' : ''}>
+          <option value="">选择任务...</option>
+          ${visibleReusableTasks.map((item) => `<option value="${esc(item.key)}">${esc(item.label)}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-reuse-button" ${reuseDisabled ? 'disabled' : ''}
+          onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">加入节点</button>
+        ${reusableTasks.length > visibleReusableTasks.length ? `<span class="orch-reuse-more">还有 ${reusableTasks.length - visibleReusableTasks.length} 项，继续搜索缩小范围</span>` : ''}
+      </div>
     </div>
-    <p class="section-hint">普通节点任务只影响当前节点；复用已有任务定义的任务，修改名称和构件会同步到所有引用。</p>
+    <div class="orch-compose-head" data-testid="orchestration-compose-head">
+      <strong>当前节点任务编排</strong>
+      <span>行尾按钮用于插入、上移、下移或移出当前节点。</span>
+    </div>
     ${buildOrchestrationFlowHtml(task)}
     ${orchestrationTasks.length ? `<div class="orch-list">${orchestrationTasks.map((item, index) => `
       <div class="orch-card" data-orch-index="${index}">
@@ -5786,12 +5902,16 @@ function renderOrchestrationSection(proc, task) {
           <select onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'type',this.value);rerenderProcessEditor()">
             ${ORCHESTRATION_TYPES.map((option) => `<option value="${option.value}" ${item.type === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
           </select>
+          <select data-testid="orchestration-task-capability-select"
+            onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'businessComponentId',this.value);rerenderProcessEditor({ focusSelector: '.orch-card[data-orch-index=&quot;${index}&quot;] [data-testid=&quot;orchestration-task-capability-select&quot;]', selectText: false })">
+            ${renderTaskCapabilityOptions(item.businessComponentId || '')}
+          </select>
           <select data-testid="orchestration-task-construct-select"
             onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'constructId',this.value);rerenderProcessEditor({ focusSelector: '.orch-card[data-orch-index=&quot;${index}&quot;] [data-testid=&quot;orchestration-task-construct-select&quot;]', selectText: false })">
-            ${renderTaskConstructOptions(item.constructId || item.businessConstructId || '')}
+            ${renderTaskConstructOptionsForCapability(item.constructId || item.businessConstructId || '', item.businessComponentId || '')}
           </select>
           <div class="step-actions orch-actions">
-            <button class="step-action" type="button" title="在下方插入任务" onclick="addOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index})">+</button>
+            <button class="step-action" type="button" title="在下方定义并加入任务" onclick="defineTaskDefinitionForNode('${esc(proc.id)}','${esc(task.id)}',${index})">+</button>
             <button class="step-action" type="button" title="上移" ${index === 0 ? 'disabled' : ''} onclick="moveOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},-1)">↑</button>
             <button class="step-action" type="button" title="下移" ${index === orchestrationTasks.length - 1 ? 'disabled' : ''} onclick="moveOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},1)">↓</button>
             <button class="step-del" type="button" onclick="removeOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index})">✕</button>
@@ -6799,6 +6919,9 @@ function renderProcessTab() {
   h+=`</div>`; /* end proc-drawer */
 
   const tabContent = document.getElementById('tab-content');
+  if (typeof renderBusinessModelDialog === 'function') {
+    h += renderBusinessModelDialog();
+  }
   tabContent.innerHTML = h;
   syncTaskReturnableToggle(tabContent);
   if (typeof initAutoResize === 'function') initAutoResize();

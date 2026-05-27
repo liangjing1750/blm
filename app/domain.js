@@ -19,6 +19,14 @@ function rerenderDomainTabPreserveScroll() {
   renderDomainTab({ scrollTop: scroller ? scroller.scrollTop : 0 });
 }
 
+function rerenderBusinessModelDialogContext() {
+  if (S.ui.tab === 'process' && typeof rerenderProcessEditor === 'function') {
+    rerenderProcessEditor();
+    return;
+  }
+  rerenderDomainTabPreserveScroll();
+}
+
 function getSelectedRoleGroupInputValue() {
   const select = document.getElementById('role-create-group-select');
   const customInput = document.getElementById('role-create-group-custom');
@@ -499,7 +507,7 @@ function syncProcessTaskDefinitionConstruct(taskDefinition) {
   syncProcessTaskDefinitionFields(taskDefinition);
 }
 
-function addTaskDefinition(afterId = '', capabilityId = '', constructId = '') {
+function addTaskDefinition(afterId = '', capabilityId = '', constructId = '', options = {}) {
   const tasks = ensureDocumentArray('taskDefinitions');
   const construct = constructId ? findBusinessConstructRef(constructId) : null;
   const capability = capabilityId
@@ -528,7 +536,7 @@ function addTaskDefinition(afterId = '', capabilityId = '', constructId = '') {
   }
   markModified();
   renderSidebar();
-  rerenderDomainTabPreserveScroll();
+  if (!options.skipRender) rerenderBusinessModelDialogContext();
   return task;
 }
 
@@ -561,9 +569,16 @@ function setTaskDefinition(taskDefinitionId, key, value) {
       const capability = ensureBusinessComponentRef(value);
       syncTaskDefinitionCapability(task, capability);
       capability.taskDefinitionIds = [...new Set([...(capability.taskDefinitionIds || []), task.id])];
+      const construct = task.constructId ? findBusinessConstructRef(task.constructId) : null;
+      if (construct && String(construct.businessComponentId || '') !== String(capability.id || '')) {
+        task.constructId = '';
+        task.constructName = '';
+      }
     } else {
       task.businessComponentId = '';
       task.businessComponent = '';
+      task.constructId = '';
+      task.constructName = '';
     }
   } else if (key === 'constructId') {
     ensureDocumentArray('businessConstructs').forEach((construct) => {
@@ -663,19 +678,25 @@ function openBusinessModelDialog(mode, capabilityId = '', constructId = '') {
     constructId: String(constructId || '').trim(),
     taskDefinitionId: '',
     returnMode: '',
+    procId: '',
+    taskId: '',
+    afterIdx: null,
   };
-  rerenderDomainTabPreserveScroll();
+  rerenderBusinessModelDialogContext();
 }
 
-function openTaskDefinitionEditor(taskDefinitionId, capabilityId = '', constructId = '', returnMode = '') {
+function openTaskDefinitionEditor(taskDefinitionId, capabilityId = '', constructId = '', returnMode = '', procId = '', taskId = '', afterIdx = null) {
   S.ui.businessModelDialog = {
     mode: 'task',
     capabilityId: String(capabilityId || '').trim(),
     constructId: String(constructId || '').trim(),
     taskDefinitionId: String(taskDefinitionId || '').trim(),
     returnMode: String(returnMode || '').trim(),
+    procId: String(procId || '').trim(),
+    taskId: String(taskId || '').trim(),
+    afterIdx: Number.isInteger(afterIdx) ? afterIdx : null,
   };
-  rerenderDomainTabPreserveScroll();
+  rerenderBusinessModelDialogContext();
 }
 
 function openTaskDefinitionManager() {
@@ -685,8 +706,11 @@ function openTaskDefinitionManager() {
     constructId: '',
     taskDefinitionId: '',
     returnMode: '',
+    procId: '',
+    taskId: '',
+    afterIdx: null,
   };
-  rerenderDomainTabPreserveScroll();
+  rerenderBusinessModelDialogContext();
 }
 
 function openEntityDefinitionEditor(entityId) {
@@ -698,11 +722,11 @@ function openEntityDefinitionEditor(entityId) {
       next.dataView = 'relation';
       next.entityId = id;
       next.entityRelationEditorCollapsed = false;
-      next.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' };
+      next.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null };
       return next;
     });
   }
-  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' };
+  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null };
   S.ui.tab = 'data';
   S.ui.dataView = 'relation';
   S.ui.entityId = id;
@@ -711,8 +735,8 @@ function openEntityDefinitionEditor(entityId) {
 }
 
 function closeBusinessModelDialog() {
-  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' };
-  rerenderDomainTabPreserveScroll();
+  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null };
+  rerenderBusinessModelDialogContext();
 }
 
 async function removeTaskDefinition(taskDefinitionId) {
@@ -1241,12 +1265,37 @@ function renderTaskDefinitionDialog(task) {
       ? `openBusinessModelDialog('capability','${esc(jsString(parentCapabilityId))}')`
       : 'closeBusinessModelDialog()');
   const typeValue = task.type || 'Service';
-  const constructOptions = `<option value="">未归属构件</option>${constructs.map((construct) => {
+  const capabilities = getCapabilityItems(S.doc);
+  const activeCapabilityId = String(parentCapabilityId || task.businessComponentId || '').trim();
+  const activeCapability = capabilities.find((capability) => String(capability.id || capability.name || '') === activeCapabilityId);
+  const activeCapabilityName = String(activeCapability?.name || '').trim();
+  const capabilityOptions = `<option value="">请选择业务组件</option>${capabilities.map((capability) => {
+    const id = String(capability.id || capability.name || '');
+    return `<option value="${esc(id)}" ${id === activeCapabilityId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
+  }).join('')}`;
+  const constructOptions = `<option value="">请选择业务构件</option>${constructs.filter((construct) => {
+    const constructCapabilityId = String(construct.businessComponentId || construct.capabilityUnitId || '').trim();
+    const constructCapabilityName = String(construct.businessComponent || construct.capabilityUnit || '').trim();
+    return !activeCapabilityId
+      || constructCapabilityId === activeCapabilityId
+      || (activeCapabilityName && constructCapabilityName === activeCapabilityName)
+      || constructCapabilityName === activeCapabilityId;
+  }).map((construct) => {
     const id = String(construct.id || construct.name || '');
-    const capability = getCapabilityItems(S.doc).find((item) => item.id === construct.businessComponentId || item.name === construct.businessComponent);
+    const constructCapabilityId = String(construct.businessComponentId || construct.capabilityUnitId || '').trim();
+    const constructCapabilityName = String(construct.businessComponent || construct.capabilityUnit || '').trim();
+    const capability = capabilities.find((item) => item.id === constructCapabilityId || item.name === constructCapabilityName);
     const prefix = capability ? `${capability.name} / ` : '';
     return `<option value="${esc(id)}" ${id === task.constructId ? 'selected' : ''}>${esc(prefix + (construct.name || id))}</option>`;
   }).join('')}`;
+  const processNodeActions = dialog.returnMode === 'processNode'
+    ? `<div class="task-definition-node-actions">
+        <button class="btn btn-primary btn-sm" type="button" data-testid="task-definition-save-join-node"
+          onclick="saveTaskDefinitionFromNode('${esc(jsString(taskId))}',true)">保存并加入当前节点</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-save-only"
+          onclick="saveTaskDefinitionFromNode('${esc(jsString(taskId))}',false)">仅保存任务定义</button>
+      </div>`
+    : '';
   return `<div class="business-model-dialog-panel task-definition-dialog" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
       <h3>任务定义</h3>
@@ -1265,16 +1314,23 @@ function renderTaskDefinitionDialog(task) {
             oninput="setTaskDefinition('${esc(jsString(taskId))}','name',this.value)">
         </div>
         <div class="field-group">
-          <label>所属业务构件</label>
+          <label>&#25152;&#23646;&#19994;&#21153;&#32452;&#20214;</label>
+          <select data-testid="task-definition-capability-select"
+            onchange="setTaskDefinition('${esc(jsString(taskId))}','businessComponentId',this.value);rerenderBusinessModelDialogContext()">
+            ${capabilityOptions}
+          </select>
+        </div>
+        <div class="field-group">
+          <label>&#25152;&#23646;&#19994;&#21153;&#26500;&#20214;</label>
           <select data-testid="task-definition-construct-select"
-            onchange="setTaskDefinition('${esc(jsString(taskId))}','constructId',this.value);rerenderDomainTabPreserveScroll()">
+            onchange="setTaskDefinition('${esc(jsString(taskId))}','constructId',this.value);rerenderBusinessModelDialogContext()">
             ${constructOptions}
           </select>
         </div>
         <div class="field-group">
           <label>任务类型</label>
           <select data-testid="task-definition-type-select"
-            onchange="setTaskDefinition('${esc(jsString(taskId))}','type',this.value);rerenderDomainTabPreserveScroll()">
+            onchange="setTaskDefinition('${esc(jsString(taskId))}','type',this.value);rerenderBusinessModelDialogContext()">
             ${ORCHESTRATION_TYPES.map((option) => `<option value="${option.value}" ${typeValue === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
           </select>
         </div>
@@ -1295,6 +1351,7 @@ function renderTaskDefinitionDialog(task) {
           <textarea class="auto-resize" data-testid="task-definition-note-input" rows="3" placeholder="任务说明、约束或技术备注"
             oninput="setTaskDefinition('${esc(jsString(taskId))}','note',this.value);autoResize(this)">${esc(task.note || '')}</textarea>
         </div>
+      ${processNodeActions}
       </div>
     </div>
   </div>`;

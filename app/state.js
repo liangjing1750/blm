@@ -120,7 +120,7 @@ const S = {
     entityRelationEditorCollapsed: true,
     stateDiagramZoom: 1,
     stateEditorCollapsed: true,
-    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' },
+    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null },
   }
 };
 

@@ -103,6 +103,9 @@ test('节点在当前编辑区内展示节点任务与任务级流程图', async
   await page.getByTestId('node-perspective-engineering').click();
   await expect(page.locator('.node-perspective-btn.active')).toContainText('节点任务');
   await expect(page.getByTestId('orchestration-section')).toBeVisible();
+  await expect(page.getByTestId('orchestration-define-new-task')).toBeVisible();
+  await expect(page.getByTestId('orchestration-reuse-block')).toBeVisible();
+  await expect(page.getByTestId('orchestration-compose-head')).toBeVisible();
   await expect(page.getByTestId('user-steps-section')).toHaveCount(0);
   await expect(page.getByTestId('orchestration-flow')).toBeVisible();
   await expect(page.locator('.orch-flow-node-label')).toContainText('登录校验');
@@ -139,26 +142,57 @@ test('节点任务修改会同步任务定义但不改流程节点', async ({ pa
   await expect(page.locator('.proc-drawer .drawer-crumb').first()).not.toContainText('T1');
 });
 
-test('添加节点任务只增加节点下任务，不自动沉淀任务定义', async ({ page, request }) => {
+test('定义新任务后可以保存并加入当前节点', async ({ page, request }) => {
   const documentName = `process-add-node-task-${Date.now()}`;
   await createDocument(request, documentName, buildProcessEditorDoc(documentName));
 
   await openTaskEditor(page, documentName);
   await page.getByTestId('node-perspective-engineering').click();
-  await page.locator('[data-testid="orchestration-section"] .btn', { hasText: '添加任务' }).click();
+  await page.getByTestId('orchestration-define-new-task').click();
 
+  const dialog = page.getByTestId('business-model-dialog');
+  await expect(dialog).toBeVisible();
+  await page.getByTestId('task-definition-name-input').fill('新增可复用任务');
+  const capabilityValue = await page.getByTestId('task-definition-capability-select').locator('option').evaluateAll((options) => (
+    options.map((option) => option.value).find(Boolean) || ''
+  ));
+  expect(capabilityValue).toBeTruthy();
+  await page.getByTestId('task-definition-capability-select').selectOption(capabilityValue);
+  const constructValue = await page.getByTestId('task-definition-construct-select').locator('option').evaluateAll((options) => (
+    options.map((option) => option.value).find(Boolean) || ''
+  ));
+  expect(constructValue).toBeTruthy();
+  await page.getByTestId('task-definition-construct-select').selectOption(constructValue);
+  await page.getByTestId('task-definition-save-join-node').click();
+
+  await expect(page.getByTestId('business-model-dialog')).toHaveCount(0);
   await expect(page.locator('.orch-card')).toHaveCount(3);
-  await expect.poll(() => page.evaluate(() => ({
-    nodeCount: S.doc.processes[0].nodes.length,
-    nodeTaskCount: S.doc.processes[0].nodes[0].orchestrationTasks.length,
-    createdDefinitionId: S.doc.processes[0].nodes[0].orchestrationTasks.at(-1)?.taskDefinitionId || '',
-    definitionCount: S.doc.taskDefinitions.length,
-  }))).toEqual({
+  await expect.poll(() => page.evaluate(() => {
+    const node = S.doc.processes[0].nodes[0];
+    const nodeTask = node.orchestrationTasks.at(-1);
+    const taskDefinition = S.doc.taskDefinitions.find((item) => item.id === nodeTask.taskDefinitionId);
+    return {
+      nodeCount: S.doc.processes[0].nodes.length,
+      nodeTaskCount: node.orchestrationTasks.length,
+      nodeTaskName: nodeTask.name,
+      hasDefinitionId: Boolean(nodeTask.taskDefinitionId),
+      definitionCount: S.doc.taskDefinitions.length,
+      taskDefinitionName: taskDefinition?.name,
+      constructId: nodeTask.constructId || nodeTask.businessConstructId || '',
+    };
+  })).toEqual({
     nodeCount: 2,
     nodeTaskCount: 3,
-    createdDefinitionId: '',
-    definitionCount: 3,
+    nodeTaskName: '新增可复用任务',
+    hasDefinitionId: true,
+    definitionCount: 4,
+    taskDefinitionName: '新增可复用任务',
+    constructId: constructValue,
   });
+  const createdDefinitionId = await page.evaluate(() => (
+    S.doc.processes[0].nodes[0].orchestrationTasks.at(-1)?.taskDefinitionId || ''
+  ));
+  await expect(page.getByTestId('orchestration-reuse-select').locator(`option[value="td|${encodeURIComponent(createdDefinitionId)}"]`)).toHaveCount(1);
 });
 
 test('未绑定任务定义的节点任务编辑不会制造复用任务', async ({ page, request }) => {
