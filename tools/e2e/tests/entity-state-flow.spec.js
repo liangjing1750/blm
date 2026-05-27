@@ -882,14 +882,45 @@ test('state transition route can be dragged into manual waypoints', async ({ pag
   await page.mouse.up();
 
   const stored = await page.evaluate((transitionIndex) => (
-    S.doc.entities[0].state_transitions[transitionIndex]?.waypoints || []
+    S.doc.entities[0].state_transitions[transitionIndex]?.route
+      || (S.doc.entities[0].state_transitions[transitionIndex]?.waypoints?.length
+        ? { mode: 'manual', waypoints: S.doc.entities[0].state_transitions[transitionIndex].waypoints }
+        : null)
   ), routeBefore.transitionIndex);
-  expect(stored.length).toBeGreaterThan(0);
-  await expect(page.locator('[data-testid="entity-state-graph-link"]').nth(routeBefore.transitionIndex)).toHaveAttribute('data-link-kind', /manual/);
+  expect(stored?.mode).toBe('manual');
+  expect(stored?.waypoints?.length || 0).toBeGreaterThan(0);
+  await expect(page.locator(`[data-testid="entity-state-graph-link"][data-transition-index="${routeBefore.transitionIndex}"][data-link-kind*="manual"]`)).toHaveCount(1);
+  const endpointHandle = page.getByTestId('entity-state-link-endpoint-handle').first();
+  await expect(endpointHandle).toBeVisible();
+  const endpointBefore = await endpointHandle.evaluate((node) => {
+    const [x, y, w, h, cx] = String(node.dataset.nodeRect || '').split(',').map(Number);
+    const box = node.getBoundingClientRect();
+    return {
+      targetX: cx,
+      targetY: y,
+      currentX: box.left + box.width / 2,
+      currentY: box.top + box.height / 2,
+      pointX: Number.parseFloat(node.style.left || '0') + 6,
+      pointY: Number.parseFloat(node.style.top || '0') + 6,
+    };
+  });
+  await page.mouse.move(endpointBefore.currentX, endpointBefore.currentY);
+  await page.mouse.down();
+  await page.mouse.move(
+    endpointBefore.currentX + endpointBefore.targetX - endpointBefore.pointX,
+    endpointBefore.currentY + endpointBefore.targetY - endpointBefore.pointY,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate((transitionIndex) => (
+    S.doc.entities[0].state_transitions[transitionIndex]?.route?.fromAnchor || 'auto'
+  ), routeBefore.transitionIndex)).toBe('top');
+
   await openStateEditor(page);
-  await page.getByTestId(`entity-transition-route-reset-${routeBefore.transitionIndex}`).click();
+  await expect(page.getByTestId(`entity-transition-route-reset-${routeBefore.transitionIndex}`)).toBeVisible();
+  await page.getByTestId('entity-transition-route-reset-all').click();
   await expect.poll(() => page.evaluate((index) => (
-    S.doc.entities[0].state_transitions[index]?.waypoints || []
-  ), routeBefore.transitionIndex)).toEqual([]);
-  await expect(page.locator('[data-testid="entity-state-graph-link"]').nth(routeBefore.transitionIndex)).not.toHaveAttribute('data-link-kind', /manual/);
+    S.doc.entities[0].state_transitions[index]?.route || null
+  ), routeBefore.transitionIndex)).toBeNull();
+  await expect(page.locator(`[data-testid="entity-state-graph-link"][data-transition-index="${routeBefore.transitionIndex}"][data-link-kind*="manual"]`)).toHaveCount(0);
 });

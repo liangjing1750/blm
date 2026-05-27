@@ -793,6 +793,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .entity-state-link-label-hitbox.dragging {
   cursor: grabbing;
 }
+.entity-state-link.selected {
+  stroke: #2563eb;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 2px 4px rgba(37, 99, 235, .22));
+}
 .entity-state-link-route-hitbox {
   position: absolute;
   z-index: 3;
@@ -807,15 +812,37 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   cursor: grabbing;
   background: rgba(37, 99, 235, 0.14);
 }
+.entity-state-link-endpoint-handle {
+  position: absolute;
+  z-index: 6;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #2563eb;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, .24);
+  cursor: grab;
+  pointer-events: auto;
+}
+.entity-state-link-endpoint-handle:hover,
+.entity-state-link-endpoint-handle.dragging {
+  background: #dbeafe;
+  transform: scale(1.08);
+}
+.entity-state-link-endpoint-handle.dragging {
+  cursor: grabbing;
+}
 .entity-state-graph.readonly .entity-state-link-label-group,
 .entity-state-graph.readonly .entity-state-link-label-hitbox,
 .entity-state-graph.readonly .entity-state-link-route-hitbox,
+.entity-state-graph.readonly .entity-state-link-endpoint-handle,
 .entity-state-graph.readonly .entity-state-node,
 .entity-state-graph.readonly .entity-state-marker {
   cursor: default;
 }
 .entity-state-graph.readonly .entity-state-link-label-hitbox,
-.entity-state-graph.readonly .entity-state-link-route-hitbox {
+.entity-state-graph.readonly .entity-state-link-route-hitbox,
+.entity-state-graph.readonly .entity-state-link-endpoint-handle {
   pointer-events: none;
 }
 .entity-state-link-label-box {
@@ -919,6 +946,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+}
+.entity-state-editor-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .transition-action {
   width: 24px;

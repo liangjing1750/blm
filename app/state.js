@@ -1329,6 +1329,18 @@ function ensureEntityStateShape(entity) {
     note: String(transition?.note || ''),
     field_name: String(transition?.field_name || ''),
     ...(normalizeOptionalGraphOffset(transition?.labelPos) ? { labelPos: normalizeOptionalGraphOffset(transition.labelPos) } : {}),
+    ...(transition?.route && typeof transition.route === 'object'
+      ? {
+        route: {
+          mode: transition.route.mode === 'manual' ? 'manual' : 'auto',
+          fromAnchor: ['auto', 'top', 'right', 'bottom', 'left'].includes(transition.route.fromAnchor) ? transition.route.fromAnchor : 'auto',
+          toAnchor: ['auto', 'top', 'right', 'bottom', 'left'].includes(transition.route.toAnchor) ? transition.route.toAnchor : 'auto',
+          waypoints: Array.isArray(transition.route.waypoints)
+            ? transition.route.waypoints.map((point) => normalizeOptionalGraphOffset(point)).filter(Boolean)
+            : [],
+        },
+      }
+      : {}),
     ...(Array.isArray(transition?.waypoints)
       ? { waypoints: transition.waypoints.map((point) => normalizeOptionalGraphOffset(point)).filter(Boolean) }
       : {}),

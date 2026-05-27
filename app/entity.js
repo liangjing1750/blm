@@ -277,6 +277,9 @@ let stateTransitionLabelDragState = null;
 let stateTransitionLabelDragMoved = false;
 let stateTransitionRouteDragState = null;
 let stateTransitionRouteDragMoved = false;
+let stateTransitionEndpointDragState = null;
+let stateTransitionEndpointDragMoved = false;
+let selectedStateTransitionIndex = null;
 
 function isEntityRelationShortcutEditableTarget(target) {
   if (!target) return false;
@@ -1213,25 +1216,98 @@ function normalizeStateTransitionWaypoints(waypoints) {
     : [];
 }
 
+function normalizeStateTransitionAnchor(anchor) {
+  return ['auto', 'top', 'right', 'bottom', 'left'].includes(anchor) ? anchor : 'auto';
+}
+
+function getStateTransitionRoute(transition) {
+  const route = transition && typeof transition.route === 'object' ? transition.route : {};
+  return {
+    mode: route.mode === 'manual' || normalizeStateTransitionWaypoints(route.waypoints).length || normalizeStateTransitionWaypoints(transition?.waypoints).length
+      ? 'manual'
+      : 'auto',
+    fromAnchor: normalizeStateTransitionAnchor(route.fromAnchor),
+    toAnchor: normalizeStateTransitionAnchor(route.toAnchor),
+    waypoints: normalizeStateTransitionWaypoints(route.waypoints || transition?.waypoints),
+  };
+}
+
+function hasManualStateTransitionRoute(transition) {
+  const route = getStateTransitionRoute(transition);
+  return route.mode === 'manual'
+    && Boolean(route.waypoints.length || route.fromAnchor !== 'auto' || route.toAnchor !== 'auto');
+}
+
+function applyStateTransitionRoute(target, route = {}) {
+  const nextWaypoints = normalizeStateTransitionWaypoints(route.waypoints);
+  const fromAnchor = normalizeStateTransitionAnchor(route.fromAnchor);
+  const toAnchor = normalizeStateTransitionAnchor(route.toAnchor);
+  const manual = nextWaypoints.length || fromAnchor !== 'auto' || toAnchor !== 'auto';
+  delete target.waypoints;
+  if (!manual) {
+    delete target.route;
+    return;
+  }
+  target.route = {
+    mode: 'manual',
+    fromAnchor,
+    toAnchor,
+    waypoints: nextWaypoints,
+  };
+}
+
 function setStateTransitionWaypoints(entityId, transitionIndex, waypoints) {
   const entity = S.doc?.entities?.find((item) => item.id === entityId);
   if (!entity) return false;
   ensureEntityStateShape(entity);
   const target = entity.state_transitions[transitionIndex];
   if (!target) return false;
-  const nextWaypoints = normalizeStateTransitionWaypoints(waypoints);
-  if (nextWaypoints.length) target.waypoints = nextWaypoints;
-  else delete target.waypoints;
+  const current = getStateTransitionRoute(target);
+  applyStateTransitionRoute(target, {
+    ...current,
+    mode: 'manual',
+    waypoints,
+  });
   return true;
 }
 
 function resetStateTransitionRoute(entityId, transitionIndex) {
-  if (!setStateTransitionWaypoints(entityId, transitionIndex, [])) return;
+  const entity = S.doc?.entities?.find((item) => item.id === entityId);
+  if (!entity) return;
+  ensureEntityStateShape(entity);
+  const target = entity.state_transitions[transitionIndex];
+  if (!target) return;
+  applyStateTransitionRoute(target, {});
   markModified();
   rerenderStateWorkbenchView();
 }
 
+function resetAllStateTransitionRoutes(entityId, fieldName = '') {
+  const entity = S.doc?.entities?.find((item) => item.id === entityId);
+  if (!entity) return;
+  ensureEntityStateShape(entity);
+  let changed = false;
+  getEntityStateTransitions(entity, fieldName).forEach(({ transition }) => {
+    if (!transition?.route && !transition?.waypoints) return;
+    applyStateTransitionRoute(transition, {});
+    changed = true;
+  });
+  if (!changed) return;
+  markModified();
+  rerenderStateWorkbenchView();
+}
+
+function selectStateTransition(transitionIndex, event = null) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  selectedStateTransitionIndex = Number.isInteger(Number(transitionIndex)) ? Number(transitionIndex) : null;
+  rerenderStateWorkbenchView();
+}
+
 function startStateTransitionRouteDrag(entityId, fieldName, transitionIndex, segmentIndex, event) {
+  if (stateTransitionRouteDragState) return;
   if (event.button !== 0) return;
   const hitTarget = event.currentTarget;
   if (!hitTarget) return;
@@ -1246,6 +1322,7 @@ function startStateTransitionRouteDrag(entityId, fieldName, transitionIndex, seg
   if (rawPoints.length < 2 || !Number.isInteger(safeSegmentIndex)) return;
   event.preventDefault();
   event.stopPropagation();
+  selectedStateTransitionIndex = Number(transitionIndex);
   stateTransitionRouteDragMoved = false;
   stateTransitionRouteDragState = {
     entityId,
@@ -1260,6 +1337,8 @@ function startStateTransitionRouteDrag(entityId, fieldName, transitionIndex, seg
   hitTarget.classList.add('dragging');
   document.addEventListener('mousemove', onStateTransitionRouteDrag);
   document.addEventListener('mouseup', endStateTransitionRouteDrag);
+  document.addEventListener('pointermove', onStateTransitionRouteDrag);
+  document.addEventListener('pointerup', endStateTransitionRouteDrag);
 }
 
 function onStateTransitionRouteDrag(event) {
@@ -1280,10 +1359,15 @@ function endStateTransitionRouteDrag(event) {
   const dy = Math.round((event.clientY - dragState.startY) / zoom);
   document.removeEventListener('mousemove', onStateTransitionRouteDrag);
   document.removeEventListener('mouseup', endStateTransitionRouteDrag);
+  document.removeEventListener('pointermove', onStateTransitionRouteDrag);
+  document.removeEventListener('pointerup', endStateTransitionRouteDrag);
   stateTransitionRouteDragState = null;
   dragState.hitTarget.classList.remove('dragging');
   dragState.hitTarget.style.transform = '';
-  if (!stateTransitionRouteDragMoved && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+  if (!stateTransitionRouteDragMoved && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) {
+    rerenderStateWorkbenchView();
+    return;
+  }
   const nextPoints = dragState.points.map((point) => ({ ...point }));
   const start = nextPoints[dragState.segmentIndex];
   const end = nextPoints[dragState.segmentIndex + 1];
@@ -1316,6 +1400,83 @@ function endStateTransitionRouteDrag(event) {
     }
   }
   if (!setStateTransitionWaypoints(dragState.entityId, dragState.transitionIndex, waypoints)) return;
+  markModified();
+  rerenderStateWorkbenchView();
+}
+
+function parseStateNodeRect(text) {
+  const [x, y, w, h, cx, cy] = String(text || '').split(',').map(Number);
+  if (![x, y, w, h, cx, cy].every(Number.isFinite)) return null;
+  return { x, y, w, h, cx, cy };
+}
+
+function startStateTransitionEndpointDrag(entityId, fieldName, transitionIndex, endpointKind, event) {
+  if (stateTransitionEndpointDragState) return;
+  if (event.button !== 0) return;
+  const target = event.currentTarget;
+  if (!target) return;
+  event.preventDefault();
+  event.stopPropagation();
+  selectedStateTransitionIndex = Number(transitionIndex);
+  const rect = parseStateNodeRect(target.dataset.nodeRect || '');
+  if (!rect) return;
+  stateTransitionEndpointDragMoved = false;
+  stateTransitionEndpointDragState = {
+    entityId,
+    fieldName,
+    transitionIndex: Number(transitionIndex),
+    endpointKind: endpointKind === 'to' ? 'to' : 'from',
+    target,
+    rect,
+    startX: event.clientX,
+    startY: event.clientY,
+  };
+  target.classList.add('dragging');
+  document.addEventListener('mousemove', onStateTransitionEndpointDrag);
+  document.addEventListener('mouseup', endStateTransitionEndpointDrag);
+  document.addEventListener('pointermove', onStateTransitionEndpointDrag);
+  document.addEventListener('pointerup', endStateTransitionEndpointDrag);
+}
+
+function onStateTransitionEndpointDrag(event) {
+  if (!stateTransitionEndpointDragState) return;
+  const zoom = getStateDiagramZoom() || 1;
+  const dx = (event.clientX - stateTransitionEndpointDragState.startX) / zoom;
+  const dy = (event.clientY - stateTransitionEndpointDragState.startY) / zoom;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) stateTransitionEndpointDragMoved = true;
+  if (!stateTransitionEndpointDragMoved) return;
+  stateTransitionEndpointDragState.target.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`;
+}
+
+function endStateTransitionEndpointDrag(event) {
+  if (!stateTransitionEndpointDragState) return;
+  const dragState = stateTransitionEndpointDragState;
+  const zoom = getStateDiagramZoom() || 1;
+  const dx = Math.round((event.clientX - dragState.startX) / zoom);
+  const dy = Math.round((event.clientY - dragState.startY) / zoom);
+  document.removeEventListener('mousemove', onStateTransitionEndpointDrag);
+  document.removeEventListener('mouseup', endStateTransitionEndpointDrag);
+  document.removeEventListener('pointermove', onStateTransitionEndpointDrag);
+  document.removeEventListener('pointerup', endStateTransitionEndpointDrag);
+  stateTransitionEndpointDragState = null;
+  dragState.target.classList.remove('dragging');
+  dragState.target.style.transform = '';
+  if (!stateTransitionEndpointDragMoved && Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+  const entity = S.doc?.entities?.find((item) => item.id === dragState.entityId);
+  if (!entity) return;
+  ensureEntityStateShape(entity);
+  const transition = entity.state_transitions[dragState.transitionIndex];
+  if (!transition) return;
+  const handleLeft = Number.parseFloat(dragState.target.style.left || '0') + 6;
+  const handleTop = Number.parseFloat(dragState.target.style.top || '0') + 6;
+  const pointer = { x: handleLeft + dx, y: handleTop + dy };
+  const anchor = getNearestStateAnchor(dragState.rect, pointer);
+  const route = getStateTransitionRoute(transition);
+  applyStateTransitionRoute(transition, {
+    ...route,
+    mode: 'manual',
+    [dragState.endpointKind === 'to' ? 'toAnchor' : 'fromAnchor']: anchor,
+  });
   markModified();
   rerenderStateWorkbenchView();
 }
@@ -1495,6 +1656,48 @@ function statePathPointsToD(points) {
   return points.map((point, index) => `${index ? 'L' : 'M'} ${Math.round(point.x)} ${Math.round(point.y)}`).join(' ');
 }
 
+function getStateAnchorPoint(pos, anchor, fallback = null) {
+  if (!pos) return fallback || { x: 0, y: 0 };
+  const normalized = normalizeStateTransitionAnchor(anchor);
+  if (normalized === 'top') return { x: pos.cx, y: pos.y };
+  if (normalized === 'right') return { x: pos.x + pos.w, y: pos.cy };
+  if (normalized === 'bottom') return { x: pos.cx, y: pos.y + pos.h };
+  if (normalized === 'left') return { x: pos.x, y: pos.cy };
+  return fallback || { x: pos.cx, y: pos.cy };
+}
+
+function getNearestStateAnchor(pos, point) {
+  if (!pos || !point) return 'auto';
+  const candidates = ['top', 'right', 'bottom', 'left'].map((anchor) => ({
+    anchor,
+    point: getStateAnchorPoint(pos, anchor),
+  }));
+  return candidates
+    .map((item) => ({
+      ...item,
+      distance: Math.hypot((point.x || 0) - item.point.x, (point.y || 0) - item.point.y),
+    }))
+    .sort((left, right) => left.distance - right.distance)[0]?.anchor || 'auto';
+}
+
+function renderStateEndpointHandles(entityId, fieldName, transitionIndex, points, readonly, fromPos = null, toPos = null) {
+  if (readonly || !Array.isArray(points) || points.length < 2 || selectedStateTransitionIndex !== transitionIndex) return '';
+  const serializeRect = (pos) => [pos?.x, pos?.y, pos?.w, pos?.h, pos?.cx, pos?.cy]
+    .map((value) => Math.round(Number(value) || 0))
+    .join(',');
+  const endpoints = [
+    { kind: 'from', point: points[0], title: '调整起点锚点', rect: serializeRect(fromPos) },
+    { kind: 'to', point: points[points.length - 1], title: '调整终点锚点', rect: serializeRect(toPos) },
+  ];
+  return endpoints.map(({ kind, point, title, rect }) => `
+    <button class="entity-state-link-endpoint-handle entity-state-link-endpoint-${kind}" type="button"
+      data-testid="entity-state-link-endpoint-handle" data-transition-index="${transitionIndex}" data-endpoint-kind="${kind}" data-node-rect="${esc(rect)}"
+      title="${title}" onpointerdown="startStateTransitionEndpointDrag('${esc(entityId)}','${esc(fieldName)}',${transitionIndex},'${kind}',event)"
+      onmousedown="startStateTransitionEndpointDrag('${esc(entityId)}','${esc(fieldName)}',${transitionIndex},'${kind}',event)"
+      style="left:${Math.round(point.x - 6)}px;top:${Math.round(point.y - 6)}px"></button>
+  `).join('');
+}
+
 function renderStateRouteHitboxes(entityId, fieldName, transitionIndex, points, readonly) {
   if (readonly || !Array.isArray(points) || points.length < 2) return '';
   return points.slice(0, -1).map((point, index) => {
@@ -1507,6 +1710,7 @@ function renderStateRouteHitboxes(entityId, fieldName, transitionIndex, points, 
     const serializedPoints = points.map((item) => `${Math.round(item.x)},${Math.round(item.y)}`).join(' ');
     return `<div class="entity-state-link-route-hitbox" data-testid="entity-state-link-route-hitbox"
       data-transition-index="${transitionIndex}" data-segment-index="${index}" data-points="${esc(serializedPoints)}"
+      onpointerdown="startStateTransitionRouteDrag('${esc(entityId)}','${esc(fieldName)}',${transitionIndex},${index},event)"
       onmousedown="startStateTransitionRouteDrag('${esc(entityId)}','${esc(fieldName)}',${transitionIndex},${index},event)"
       style="left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;height:${Math.round(height)}px"></div>`;
   }).join('');
@@ -1748,6 +1952,7 @@ function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
     </marker>`;
   const labelHitBoxes = [];
   const routeHitBoxes = [];
+  const endpointHandles = [];
   const linesMarkup = transitions.map((transition, index) => {
     const originalIndex = transitionOriginalIndices[index] ?? index;
     const fromPos = posMap[transition.from];
@@ -1832,9 +2037,13 @@ function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
       pathD = `M ${sourceX} ${fromPos.cy} L ${routeX} ${fromPos.cy} L ${routeX} ${toPos.cy} L ${targetX} ${toPos.cy}`;
       linkKind = 'backward';
     }
-    const manualWaypoints = normalizeStateTransitionWaypoints(transition.waypoints);
-    if (manualWaypoints.length) {
-      pathPoints = [pathPoints[0], ...manualWaypoints, pathPoints[pathPoints.length - 1]].filter(Boolean);
+    const route = getStateTransitionRoute(transition);
+    if (route.fromAnchor !== 'auto') pathPoints[0] = getStateAnchorPoint(fromPos, route.fromAnchor, pathPoints[0]);
+    if (route.toAnchor !== 'auto') pathPoints[pathPoints.length - 1] = getStateAnchorPoint(toPos, route.toAnchor, pathPoints[pathPoints.length - 1]);
+    if (route.waypoints.length) {
+      pathPoints = [pathPoints[0], ...route.waypoints, pathPoints[pathPoints.length - 1]].filter(Boolean);
+    }
+    if (hasManualStateTransitionRoute(transition)) {
       pathD = statePathPointsToD(pathPoints);
       linkKind = `${linkKind} manual`;
     }
@@ -1843,6 +2052,7 @@ function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
       boardH = Math.max(boardH, point.y + padY);
     });
     routeHitBoxes.push(renderStateRouteHitboxes(entity.id, fieldName, originalIndex, pathPoints, readonly));
+    endpointHandles.push(renderStateEndpointHandles(entity.id, fieldName, originalIndex, pathPoints, readonly, fromPos, toPos));
     const transitionLabel = String(transition.note || transition.action || '流转').trim() || '流转';
     const labelMetrics = getStateLinkLabelMetrics(transitionLabel);
     const manualLabelPos = normalizeOptionalGraphOffset(transition.labelPos);
@@ -1877,10 +2087,11 @@ function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
     boardW = Math.max(boardW, labelBoxX + labelMetrics.width + padX);
     boardH = Math.max(boardH, labelBoxY + labelMetrics.height + padY);
 
+    const selectedClass = selectedStateTransitionIndex === originalIndex ? ' selected' : '';
     return `
-      <path class="entity-state-link entity-state-link-${linkKind}" data-testid="entity-state-graph-link" data-transition-index="${originalIndex}" data-link-kind="${linkKind}" data-link-side="${esc(detourRoute?.side || '')}" data-link-action="${esc(transition.action || '')}" data-link-note="${esc(transition.note || '')}"
+      <path class="entity-state-link entity-state-link-${linkKind}${selectedClass}" data-testid="entity-state-graph-link" data-transition-index="${originalIndex}" data-link-kind="${linkKind}" data-link-side="${esc(detourRoute?.side || '')}" data-link-action="${esc(transition.action || '')}" data-link-note="${esc(transition.note || '')}"
         d="${pathD}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
-        marker-end="url(#entity-state-arrow)"></path>
+        marker-end="url(#entity-state-arrow)" onclick="selectStateTransition(${originalIndex},event)"></path>
       <g class="entity-state-link-label-group" data-testid="entity-state-link-label-group" data-transition-index="${originalIndex}" data-link-action="${esc(transition.action || '')}" data-link-note="${esc(transition.note || '')}" data-label-axis="${labelPlacement.axis}" data-label-x="${labelTextX}" data-label-y="${labelTextY}" data-label-line-x="${labelPlacement.lineX}" data-label-line-y="${labelPlacement.lineY}" data-label-angle="${labelPlacement.angle || 0}" transform="rotate(${labelPlacement.angle || 0} ${labelTextX} ${labelTextY})"${labelDragAttr}>
         <rect class="entity-state-link-label-box" x="${labelBoxX}" y="${labelBoxY}" width="${labelMetrics.width}" height="${labelMetrics.height}" rx="10" ry="10"></rect>
         <text x="${labelTextX}" y="${labelTextY}" text-anchor="middle" dominant-baseline="middle" class="entity-state-link-label">${esc(labelMetrics.text)}</text>
@@ -1946,6 +2157,7 @@ function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
           </svg>
           <div class="entity-state-board" style="width:${boardW}px;height:${boardH}px">
             ${routeHitBoxes.join('')}
+            ${endpointHandles.join('')}
             ${labelHitBoxes.join('')}
             ${markerBoardMarkup}
             ${stateNodes.map((item, index) => {
@@ -2564,7 +2776,7 @@ function renderStateTransitionList(entity, stateField, stateValues, stateTransit
         <button class="transition-action" type="button" data-testid="entity-transition-add-after-${index}" title="在下方插入流转" onclick="addStateTransition('${esc(entity.id)}',${index})">+</button>
         <button class="transition-action" type="button" data-testid="entity-transition-move-up-${index}" title="上移" ${localIndex === 0 ? 'disabled' : ''} onclick="moveStateTransition('${esc(entity.id)}',${index},-1,'${esc(stateField.name)}')">↑</button>
         <button class="transition-action" type="button" data-testid="entity-transition-move-down-${index}" title="下移" ${localIndex === stateTransitionRows.length - 1 ? 'disabled' : ''} onclick="moveStateTransition('${esc(entity.id)}',${index},1,'${esc(stateField.name)}')">↓</button>
-        ${normalizeStateTransitionWaypoints(transition.waypoints).length ? `<button class="transition-action" type="button" data-testid="entity-transition-route-reset-${index}" title="重置连线" onclick="resetStateTransitionRoute('${esc(entity.id)}',${index})">↺</button>` : ''}
+        ${hasManualStateTransitionRoute(transition) ? `<button class="transition-action" type="button" data-testid="entity-transition-route-reset-${index}" title="重置连线" onclick="resetStateTransitionRoute('${esc(entity.id)}',${index})">↺</button>` : ''}
         <button class="transition-action transition-action-delete" type="button" data-testid="entity-transition-delete-${index}" title="删除" onclick="removeStateTransition('${esc(entity.id)}',${index})">✕</button>
       </div>
     </div>`).join('')}
@@ -2579,7 +2791,11 @@ function renderStateEditorPanel(entity, statusFields, stateField, stateValueText
         <h4>状态图编辑</h4>
         <p class="entity-state-editor-hint">左侧总览会同时展示主状态字段和所有子状态字段；右侧只编辑当前选中的状态字段，点击总览块可快速切换。</p>
       </div>
-      <button class="btn btn-outline btn-sm" data-testid="entity-transition-add-button" onclick="addStateTransition('${esc(entity.id)}')" ${stateField ? '' : 'disabled'}>＋ 添加流转</button>
+      <div class="entity-state-editor-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="entity-transition-route-reset-all"
+          onclick="resetAllStateTransitionRoutes('${esc(entity.id)}','${esc(stateField?.name || '')}')" ${stateField ? '' : 'disabled'}>重置所有连线</button>
+        <button class="btn btn-outline btn-sm" data-testid="entity-transition-add-button" onclick="addStateTransition('${esc(entity.id)}')" ${stateField ? '' : 'disabled'}>＋ 添加流转</button>
+      </div>
     </div>
     <div class="entity-state-config-row">
       ${renderStateFieldSelector(entity, statusFields, stateField)}
