@@ -796,3 +796,83 @@ test('左侧实体列表切换时保留列表滚动位置', async ({ page, reque
   expect(beforeScrollTop).toBeGreaterThan(0);
   expect(Math.abs(afterScrollTop - beforeScrollTop)).toBeLessThanOrEqual(4);
 });
+
+test('state transition route can be dragged into manual waypoints', async ({ page, request }) => {
+  const documentName = `entity-state-route-drag-${Date.now()}`;
+
+  await createDocument(request, documentName, {
+    meta: { title: documentName, domain: documentName, author: '', date: '2026-05-26' },
+    roles: [],
+    language: [],
+    processes: [],
+    entities: [
+      {
+        id: 'E1',
+        name: 'Order',
+        group: '',
+        note: '',
+        fields: [
+          {
+            name: 'status',
+            type: 'enum',
+            is_status: true,
+            status_role: 'primary',
+            note: 'Draft/Review/Done',
+            state_nodes: [
+              { name: 'Draft', kind: 'initial' },
+              { name: 'Review', kind: 'intermediate' },
+              { name: 'Done', kind: 'terminal' },
+            ],
+          },
+        ],
+        state_transitions: [
+          { from: 'Draft', to: 'Review', action: 'submit', field_name: 'status' },
+          { from: 'Review', to: 'Done', action: 'approve', field_name: 'status' },
+        ],
+      },
+    ],
+    relations: [],
+    rules: [],
+  });
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-data').click();
+  await page.getByTestId('data-switch-state').click();
+  await page.getByTestId('state-editor-hide').click();
+
+  const hitboxIndex = await page.getByTestId('entity-state-link-route-hitbox').evaluateAll((nodes) => (
+    nodes.findIndex((node) => {
+      const box = node.getBoundingClientRect();
+      const target = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return target?.getAttribute?.('data-testid') === 'entity-state-link-route-hitbox';
+    })
+  ));
+  expect(hitboxIndex).toBeGreaterThanOrEqual(0);
+  const hitbox = page.getByTestId('entity-state-link-route-hitbox').nth(hitboxIndex);
+  await expect(hitbox).toBeVisible();
+  const routeBefore = await hitbox.evaluate((node) => {
+    const points = String(node.dataset.points || '').split(' ').map((pair) => pair.split(',').map(Number));
+    const [start, end] = [points[0], points[1]];
+    return {
+      transitionIndex: Number(node.dataset.transitionIndex || 0),
+      horizontal: Math.abs((start?.[1] || 0) - (end?.[1] || 0)) <= Math.abs((start?.[0] || 0) - (end?.[0] || 0)),
+    };
+  });
+  const box = await hitbox.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    box.x + box.width / 2 + (routeBefore.horizontal ? 0 : 46),
+    box.y + box.height / 2 + (routeBefore.horizontal ? 46 : 0),
+    { steps: 10 },
+  );
+  await page.mouse.up();
+
+  const stored = await page.evaluate((transitionIndex) => (
+    S.doc.entities[0].state_transitions[transitionIndex]?.waypoints || []
+  ), routeBefore.transitionIndex);
+  expect(stored.length).toBeGreaterThan(0);
+  await expect(page.locator('[data-testid="entity-state-graph-link"]').nth(routeBefore.transitionIndex)).toHaveAttribute('data-link-kind', /manual/);
+});

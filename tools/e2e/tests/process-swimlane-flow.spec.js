@@ -6,48 +6,51 @@ function buildBranchDoc(name) {
   return {
     meta: { title: name, domain: name, author: '', date: '2026-05' },
     roles: [
-      { id: 'R1', name: '申请人', desc: '' },
-      { id: 'R2', name: '审核员', desc: '' },
-      { id: 'R3', name: '系统', desc: '' },
+      { id: 'R1', uid: 'R1', name: '申请人', desc: '' },
+      { id: 'R2', uid: 'R2', name: '审核员', desc: '' },
+      { id: 'R3', uid: 'R3', name: '系统', desc: '' },
     ],
     processes: [{
       id: 'P1',
+      uid: 'P1',
       name: '入库预约',
       subDomain: '仓储',
       trigger: '提交预约',
       outcome: '预约完成',
       nodes: [
-        { id: 'T1', name: '提交预约', role_id: 'R1', role: '申请人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [{ entity_id: 'E1', ops: ['C', 'R'] }] },
-        { id: 'T2', name: '审核通过', role_id: 'R2', role: '审核员', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
-        { id: 'T3', name: '补充材料', role_id: 'R1', role: '申请人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T1', uid: 'T1', name: '提交预约', role_id: 'R1', role_uid: 'R1', role: '申请人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [{ entity_id: 'E1', entity_uid: 'E1', ops: ['C', 'R'] }] },
+        { id: 'T2', uid: 'T2', name: '审核通过', role_id: 'R2', role_uid: 'R2', role: '审核员', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T3', uid: 'T3', name: '补充材料', role_id: 'R1', role_uid: 'R1', role: '申请人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
       ],
       flow: {
         version: 2,
         orientation: 'horizontal',
-        nodes: [{ id: 'G1', kind: 'gateway', title: '材料是否完整', gatewayType: 'exclusive', role_id: 'R3' }],
+        nodes: [{ id: 'G1', uid: 'G1', kind: 'gateway', title: '材料是否完整', gatewayType: 'exclusive', role_id: 'R3', role_uid: 'R3' }],
         edges: [
-          { id: 'E1', from: 'START', to: 'T1', label: '开始' },
-          { id: 'E2', from: 'T1', to: 'G1', label: '提交后' },
-          { id: 'E3', from: 'G1', to: 'T2', label: '完整' },
-          { id: 'E4', from: 'G1', to: 'T3', label: '不完整' },
-          { id: 'E5', from: 'T2', to: 'END', label: '完成' },
-          { id: 'E6', from: 'T3', to: 'END', label: '补正' },
+          { id: 'E1', uid: 'E1', from: 'START', to: 'T1', label: '开始' },
+          { id: 'E2', uid: 'E2', from: 'T1', to: 'G1', label: '提交后' },
+          { id: 'E3', uid: 'E3', from: 'G1', to: 'T2', label: '完整' },
+          { id: 'E4', uid: 'E4', from: 'G1', to: 'T3', label: '不完整' },
+          { id: 'E5', uid: 'E5', from: 'T2', to: 'END', label: '完成' },
+          { id: 'E6', uid: 'E6', from: 'T3', to: 'END', label: '补正' },
         ],
       },
     }],
     language: [],
-    entities: [{ id: 'E1', name: '预约单', fields: [] }],
+    entities: [{ id: 'E1', uid: 'E1', name: '预约单', fields: [] }],
     relations: [],
     rules: [],
   };
 }
 
 function buildTallSwimlaneDoc(name) {
-  const roles = Array.from({ length: 7 }, (_, index) => ({ id: 'R' + (index + 1), name: 'Lane ' + (index + 1), desc: '' }));
+  const roles = Array.from({ length: 7 }, (_, index) => ({ id: 'R' + (index + 1), uid: 'R' + (index + 1), name: 'Lane ' + (index + 1), desc: '' }));
   const nodes = roles.map((role, index) => ({
     id: 'T' + (index + 1),
+    uid: 'T' + (index + 1),
     name: 'Task ' + (index + 1),
     role_id: role.id,
+    role_uid: role.uid,
     role: role.name,
     userSteps: [],
     orchestrationTasks: [],
@@ -59,12 +62,13 @@ function buildTallSwimlaneDoc(name) {
     roles,
     processes: [{
       id: 'P1',
+      uid: 'P1',
       name: 'Tall swimlane',
       nodes,
       flow: {
         version: 2,
         nodes: [],
-        edges: nodes.slice(0, -1).map((node, index) => ({ id: 'E' + (index + 1), from: node.id, to: nodes[index + 1].id, label: 'L' + (index + 1) })),
+        edges: nodes.slice(0, -1).map((node, index) => ({ id: 'E' + (index + 1), uid: 'E' + (index + 1), from: node.id, to: nodes[index + 1].id, label: 'L' + (index + 1) })),
       },
     }],
     language: [],
@@ -108,6 +112,7 @@ test('process flow renders swimlane branches and linear view omits branch diamon
 
   await page.getByTestId('process-flow-mode-swimlane').click();
   await page.getByTestId('tab-preview').click();
+  await page.locator('.preview-outline-link', { hasText: '入库预约' }).click();
   await expect(page.locator('#preview-rendered [data-testid="process-swimlane-view"]').first()).toBeVisible();
   await expect(page.locator('#preview-rendered .ps-link').first()).toHaveAttribute('points', /,/);
 });
@@ -174,7 +179,7 @@ test('process editor exposes only nodes branches and edges as new structure entr
   await expect(page.getByTestId('process-flow-gateway-row')).toHaveCount(1);
   await page.getByTestId('process-flow-gateway-title-input').fill('是否需要复核');
   await expect(page.locator('.ps-gateway')).not.toContainText('是否需要复核');
-  const gatewayId = await page.getByTestId('process-flow-gateway-id-input').inputValue();
+  const gatewayId = await page.evaluate(() => S.doc.processes[0].flow.nodes.find((node) => node.kind === 'gateway')?.id);
 
   await page.getByTestId('process-flow-add-edge').click();
   const lastEdge = page.getByTestId('process-flow-edge-row').last();
@@ -186,7 +191,7 @@ test('process editor exposes only nodes branches and edges as new structure entr
   expect(toOptions).not.toContain('START');
   await lastEdge.locator('select').nth(0).selectOption('START');
   await lastEdge.locator('select').nth(1).selectOption(gatewayId);
-  await lastEdge.locator('input').nth(1).fill('进入分支');
+  await lastEdge.locator('input').first().fill('进入分支');
   const explicitEdge = await page.evaluate(() => S.doc.processes[0].flow.edges.at(-1));
   expect(explicitEdge).toMatchObject({ from: 'START', to: gatewayId, label: '进入分支' });
   await expect(page.getByTestId('process-flow-validation')).toBeVisible();
@@ -236,22 +241,23 @@ test('summary view is edge-driven and does not invent branch labels', async ({ p
     roles: [{ id: 'R1', name: 'Role' }],
     processes: [{
       id: 'P1',
+      uid: 'P1',
       name: 'Summary flow',
       nodes: [
-        { id: 'T1', name: 'First in model', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
-        { id: 'T2', name: 'Actual start', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
-        { id: 'T3', name: 'Branch target', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T1', uid: 'T1', name: 'First in model', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T2', uid: 'T2', name: 'Actual start', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T3', uid: 'T3', name: 'Branch target', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
       ],
       flow: {
         version: 2,
-        nodes: [{ id: 'G1', kind: 'gateway', title: '' }],
+        nodes: [{ id: 'G1', uid: 'G1', kind: 'gateway', title: '' }],
         edges: [
-          { id: 'E1', from: 'START', to: 'T2', label: '' },
-          { id: 'E2', from: 'T2', to: 'G1', label: '' },
-          { id: 'E3', from: 'G1', to: 'T1', label: '' },
-          { id: 'E4', from: 'G1', to: 'T3', label: '' },
-          { id: 'E5', from: 'T1', to: 'END', label: '' },
-          { id: 'E6', from: 'T3', to: 'END', label: '' },
+          { id: 'E1', uid: 'E1', from: 'START', to: 'T2', label: '' },
+          { id: 'E2', uid: 'E2', from: 'T2', to: 'G1', label: '' },
+          { id: 'E3', uid: 'E3', from: 'G1', to: 'T1', label: '' },
+          { id: 'E4', uid: 'E4', from: 'G1', to: 'T3', label: '' },
+          { id: 'E5', uid: 'E5', from: 'T1', to: 'END', label: '' },
+          { id: 'E6', uid: 'E6', from: 'T3', to: 'END', label: '' },
         ],
       },
     }],
@@ -297,6 +303,78 @@ test('summary view is edge-driven and does not invent branch labels', async ({ p
   const lineShapes = await page.locator('.pf-link').evaluateAll((links) => links.map((link) => link.getAttribute('points') || ''));
   expect(lineShapes.some((points) => points.split(' ').length === 2)).toBeTruthy();
   expect(lineShapes.some((points) => points.split(' ').length > 2)).toBeTruthy();
+});
+
+test('summary view routes collapsed gateway bypass edges around intermediate nodes', async ({ page, request }) => {
+  const documentName = 'process-summary-bypass-' + Date.now();
+  await createDocument(request, documentName, {
+    meta: { title: documentName, domain: documentName },
+    roles: [{ id: 'R1', name: '会员操作员1' }, { id: 'R2', name: '会员操作员2' }, { id: 'R3', name: '结算部管理员1' }],
+    processes: [{
+      id: 'P1',
+      uid: 'P1',
+      name: '会员银行账户注册',
+      nodes: [
+        { id: 'T1', uid: 'T1', name: '银行账户注册申请', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T2', uid: 'T2', name: '银行账户注册复核', role_id: 'R2', role_ids: ['R2'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T3', uid: 'T3', name: '银行账户注册审批', role_id: 'R3', role_ids: ['R3'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+      ],
+      flow: {
+        version: 2,
+        nodes: [{ id: 'G1', uid: 'G1', kind: 'gateway', title: '是否需要复核' }],
+        edges: [
+          { id: 'E1', uid: 'E1', from: 'START', to: 'T1', label: '' },
+          { id: 'E2', uid: 'E2', from: 'T1', to: 'G1', label: '' },
+          { id: 'E3', uid: 'E3', from: 'G1', to: 'T2', label: '是' },
+          { id: 'E4', uid: 'E4', from: 'T2', to: 'T3', label: '' },
+          { id: 'E5', uid: 'E5', from: 'G1', to: 'T3', label: '否' },
+          { id: 'E6', uid: 'E6', from: 'T3', to: 'END', label: '' },
+        ],
+      },
+    }],
+    language: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('process-switch-card').click();
+  await page.getByTestId('process-flow-mode-linear').click();
+
+  await expect(page.locator('.pf-edge-label', { hasText: '是' })).toBeVisible();
+  await expect(page.locator('.pf-edge-label', { hasText: '否' })).toBeVisible();
+  const noEdgePoints = await page.locator('.pf-link[data-edge-id="E5"]').getAttribute('points');
+  expect(noEdgePoints.split(' ').length).toBeGreaterThan(4);
+  const geometry = await page.evaluate(() => {
+    const bypass = document.querySelector('.pf-link[data-edge-id="E5"]');
+    const review = document.querySelector('.pf-col[data-id="T2"]');
+    const label = [...document.querySelectorAll('.pf-edge-label')].find((item) => item.textContent.trim() === '否');
+    const parsePoints = (points) => points.split(' ').map((pair) => {
+      const [x, y] = pair.split(',').map(Number);
+      return { x, y };
+    });
+    const reviewRect = review.getBoundingClientRect();
+    const wrapRect = document.querySelector('.pf-wrap').getBoundingClientRect();
+    return {
+      bypassPoints: parsePoints(bypass.getAttribute('points') || ''),
+      review: {
+        left: reviewRect.left - wrapRect.left,
+        right: reviewRect.right - wrapRect.left,
+        top: reviewRect.top - wrapRect.top,
+        bottom: reviewRect.bottom - wrapRect.top,
+      },
+      labelTop: label.getBoundingClientRect().top - wrapRect.top,
+    };
+  });
+  const horizontalLane = geometry.bypassPoints
+    .slice(1)
+    .map((point, index) => [geometry.bypassPoints[index], point])
+    .find(([a, b]) => a.y === b.y && Math.min(a.x, b.x) < geometry.review.left && Math.max(a.x, b.x) > geometry.review.right);
+  expect(horizontalLane[0].y).toBeGreaterThan(geometry.review.bottom);
+  expect(geometry.labelTop).toBeGreaterThan(geometry.review.bottom - 4);
 });
 
 test('swimlane drag stores node label and lane layout adjustments', async ({ page, request }) => {
@@ -346,23 +424,24 @@ test('swimlane node click edits while long press drags and self loops render as 
   const documentName = 'process-swimlane-click-loop-' + Date.now();
   await createDocument(request, documentName, {
     meta: { title: documentName, domain: documentName },
-    roles: [{ id: 'R1', name: '客户' }, { id: 'R2', name: '系统' }],
+    roles: [{ id: 'R1', uid: 'R1', name: '客户' }, { id: 'R2', uid: 'R2', name: '系统' }],
     processes: [{
       id: 'P1',
+      uid: 'P1',
       name: 'Loop flow',
       nodes: [
-        { id: 'T1', name: '提交', role_id: 'R1', role_ids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
-        { id: 'T2', name: '校验', role_id: 'R2', role_ids: ['R2'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T1', uid: 'T1', name: '提交', role_id: 'R1', role_uid: 'R1', role_ids: ['R1'], role_uids: ['R1'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T2', uid: 'T2', name: '校验', role_id: 'R2', role_uid: 'R2', role_ids: ['R2'], role_uids: ['R2'], userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
       ],
       flow: {
         version: 2,
         nodes: [],
         edges: [
-          { id: 'E1', from: 'START', to: 'T1', label: '' },
-          { id: 'E2', from: 'T1', to: 'T1', label: '补正' },
-          { id: 'E3', from: 'T1', to: 'T2', label: '' },
-          { id: 'E4', from: 'T2', to: 'T1', label: '退回' },
-          { id: 'E5', from: 'T2', to: 'END', label: '' },
+          { id: 'E1', uid: 'E1', from: 'START', to: 'T1', label: '' },
+          { id: 'E2', uid: 'E2', from: 'T1', to: 'T1', label: '补正' },
+          { id: 'E3', uid: 'E3', from: 'T1', to: 'T2', label: '' },
+          { id: 'E4', uid: 'E4', from: 'T2', to: 'T1', label: '退回' },
+          { id: 'E5', uid: 'E5', from: 'T2', to: 'END', label: '' },
         ],
       },
     }],
@@ -397,25 +476,26 @@ test('swimlane view expands multi-role process nodes without changing the model'
   await createDocument(request, documentName, {
     meta: { title: documentName, domain: documentName },
     roles: [
-      { id: 'R1', name: '客户' },
-      { id: 'R2', name: '经办人' },
-      { id: 'R3', name: '系统' },
+      { id: 'R1', uid: 'R1', name: '客户' },
+      { id: 'R2', uid: 'R2', name: '经办人' },
+      { id: 'R3', uid: 'R3', name: '系统' },
     ],
     processes: [{
       id: 'P1',
+      uid: 'P1',
       name: '多角色流程',
       nodes: [
-        { id: 'T1', name: '共同提交', role_ids: ['R1', 'R2'], roles: ['客户', '经办人'], role_id: 'R1', role: '客户、经办人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
-        { id: 'T2', name: '系统校验', role_id: 'R3', role: '系统', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
-        { id: 'T3', name: '人工复核', role_id: 'R2', role: '经办人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T1', uid: 'T1', name: '共同提交', role_ids: ['R1', 'R2'], role_uids: ['R1', 'R2'], roles: ['客户', '经办人'], role_id: 'R1', role_uid: 'R1', role: '客户、经办人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T2', uid: 'T2', name: '系统校验', role_id: 'R3', role_uid: 'R3', role: '系统', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
+        { id: 'T3', uid: 'T3', name: '人工复核', role_id: 'R2', role_uid: 'R2', role: '经办人', userSteps: [], orchestrationTasks: [], forms: [], entity_ops: [] },
       ],
       flow: {
         version: 2,
-        nodes: [{ id: 'G1', kind: 'gateway', title: '' }],
+        nodes: [{ id: 'G1', uid: 'G1', kind: 'gateway', title: '' }],
         edges: [
-          { id: 'E1', from: 'T1', to: 'G1', label: '提交' },
-          { id: 'E2', from: 'G1', to: 'T2', label: '自动' },
-          { id: 'E3', from: 'G1', to: 'T3', label: '人工' },
+          { id: 'E1', uid: 'E1', from: 'T1', to: 'G1', label: '提交' },
+          { id: 'E2', uid: 'E2', from: 'G1', to: 'T2', label: '自动' },
+          { id: 'E3', uid: 'E3', from: 'G1', to: 'T3', label: '人工' },
         ],
       },
     }],

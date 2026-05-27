@@ -539,7 +539,7 @@ function addTaskDefinitionAndOpen(capabilityId = '', constructId = '') {
 
 function setTaskDefinition(taskDefinitionId, key, value) {
   const task = findTaskDefinitionRef(taskDefinitionId);
-  if (!task || !['name', 'type', 'querySourceKind', 'target', 'note', 'businessComponentId', 'constructId'].includes(key)) return;
+  if (!task || !['name', 'type', 'querySourceKind', 'target', 'note', 'businessComponentId', 'constructId'].includes(key)) return false;
   if (key === 'name') {
     const nextName = String(value || '').trim();
     if (nextName && ensureDocumentArray('taskDefinitions').some((item) => item.id !== task.id && String(item.name || '').trim() === nextName)) {
@@ -552,7 +552,7 @@ function setTaskDefinition(taskDefinitionId, key, value) {
       } else {
         rerenderDomainTabPreserveScroll();
       }
-      return;
+      return false;
     }
     task.name = nextName;
     syncProcessTaskDefinitionName(task);
@@ -592,6 +592,7 @@ function setTaskDefinition(taskDefinitionId, key, value) {
   syncProcessTaskDefinitionFields(task);
   markModified();
   renderSidebar();
+  return true;
 }
 
 function addEntityToConstruct(constructId, entityId) {

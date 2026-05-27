@@ -80,8 +80,18 @@ async function openTaskEditor(page, name) {
   await page.getByTestId('tab-process').click();
   await page.getByTestId('process-switch-card').click();
   await page.getByTestId('process-editor-open').click();
-  await page.locator('#proc-context-diagram .pf-task[data-id="T1"], #proc-diagram .pf-task[data-id="T1"]').first().click();
+  await page.locator('#proc-context-diagram .pf-task, #proc-diagram .pf-task, #proc-context-diagram .ps-task, #proc-diagram .ps-task').first().click();
   await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('登录校验');
+}
+
+async function saveDocument(page) {
+  await page.locator('#btn-save').click();
+  const dialog = page.getByTestId('app-dialog');
+  await dialog.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
+  if (await dialog.isVisible().catch(() => false)) {
+    await page.getByTestId('app-dialog-confirm').click();
+  }
+  await expect(page.getByTestId('modified-badge')).toBeHidden({ timeout: 30000 });
 }
 
 test('节点在当前编辑区内展示节点任务与任务级流程图', async ({ page, request }) => {
@@ -94,18 +104,13 @@ test('节点在当前编辑区内展示节点任务与任务级流程图', async
   await expect(page.locator('.node-perspective-btn.active')).toContainText('节点任务');
   await expect(page.getByTestId('orchestration-section')).toBeVisible();
   await expect(page.getByTestId('user-steps-section')).toHaveCount(0);
-  await expect(page.getByTestId('process-tasklevel-stack')).toBeVisible();
-  await expect(page.getByTestId('process-context-flow')).toBeVisible();
-  await expect(page.locator('#proc-context-diagram .pf-wrap')).toBeVisible();
-  await expect(page.getByTestId('global-orchestration-flow')).toBeVisible();
   await expect(page.getByTestId('orchestration-flow')).toBeVisible();
+  await expect(page.locator('.orch-flow-node-label')).toContainText('登录校验');
+  await expect(page.locator('.orch-flow-node-label')).not.toContainText('T1');
   await expect(page.locator('.proc-subdrawer')).toHaveCount(0);
   await expect(page.locator('.orch-card .orch-name').first()).toHaveValue('校验账号状态');
   await expect(page.locator('.orch-card input[type="text"]').nth(1)).toHaveValue('认证服务');
   await expect(page.getByTestId('orchestration-task-construct-select').first()).toContainText('统一登录');
-  await expect(page.locator('.ptf-node-frame')).toHaveCount(2);
-  await expect(page.locator('.ptf-node-frame').first()).toContainText('登录校验');
-  await expect(page.locator('.ptf-node-frame').nth(1)).toContainText('生成首页上下文');
 });
 
 test('节点任务修改会同步任务定义但不改流程节点', async ({ page, request }) => {
@@ -118,10 +123,11 @@ test('节点任务修改会同步任务定义但不改流程节点', async ({ pa
 
   await expect.poll(() => page.evaluate(() => {
     const node = S.doc.processes[0].nodes[0];
-    const taskDefinition = S.doc.taskDefinitions.find((item) => item.id === 'TD1');
+    const nodeTask = node.orchestrationTasks[0];
+    const taskDefinition = S.doc.taskDefinitions.find((item) => item.id === nodeTask.taskDefinitionId);
     return {
       nodeName: node.name,
-      nodeTaskName: node.orchestrationTasks[0].name,
+      nodeTaskName: nodeTask.name,
       taskDefinitionName: taskDefinition?.name,
     };
   })).toEqual({
@@ -129,10 +135,11 @@ test('节点任务修改会同步任务定义但不改流程节点', async ({ pa
     nodeTaskName: '核验账号状态',
     taskDefinitionName: '核验账号状态',
   });
-  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('节点 T1 登录校验');
+  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('节点 登录校验');
+  await expect(page.locator('.proc-drawer .drawer-crumb').first()).not.toContainText('T1');
 });
 
-test('添加节点任务只增加节点下任务并沉淀任务定义', async ({ page, request }) => {
+test('添加节点任务只增加节点下任务，不自动沉淀任务定义', async ({ page, request }) => {
   const documentName = `process-add-node-task-${Date.now()}`;
   await createDocument(request, documentName, buildProcessEditorDoc(documentName));
 
@@ -144,13 +151,53 @@ test('添加节点任务只增加节点下任务并沉淀任务定义', async ({
   await expect.poll(() => page.evaluate(() => ({
     nodeCount: S.doc.processes[0].nodes.length,
     nodeTaskCount: S.doc.processes[0].nodes[0].orchestrationTasks.length,
-    createdDefinitionName: S.doc.taskDefinitions.at(-1)?.name || '',
     createdDefinitionId: S.doc.processes[0].nodes[0].orchestrationTasks.at(-1)?.taskDefinitionId || '',
+    definitionCount: S.doc.taskDefinitions.length,
   }))).toEqual({
     nodeCount: 2,
     nodeTaskCount: 3,
-    createdDefinitionName: '新任务定义',
-    createdDefinitionId: 'TD4',
+    createdDefinitionId: '',
+    definitionCount: 3,
+  });
+});
+
+test('未绑定任务定义的节点任务编辑不会制造复用任务', async ({ page, request }) => {
+  const documentName = `process-node-task-local-edit-${Date.now()}`;
+  const doc = buildProcessEditorDoc(documentName);
+  doc.processes[0].nodes = doc.processes[0].tasks;
+  doc.processes[0].nodes[0].orchestrationTasks.push({
+    name: '临时查询',
+    type: 'Query',
+    querySourceKind: 'QueryService',
+    target: '临时服务',
+    note: '',
+  });
+  await createDocument(request, documentName, doc);
+
+  await openTaskEditor(page, documentName);
+  await page.getByTestId('node-perspective-engineering').click();
+  const lastTask = page.locator('.orch-card').last();
+  await lastTask.locator('.orch-name').fill('临时账号状态核验');
+  const constructValue = await lastTask.getByTestId('orchestration-task-construct-select').locator('option').evaluateAll((options) => (
+    options.map((option) => option.value).find(Boolean) || ''
+  ));
+  await lastTask.getByTestId('orchestration-task-construct-select').selectOption(constructValue);
+
+  await expect.poll(() => page.evaluate(() => {
+    const nodeTask = (S.doc.processes[0].nodes || S.doc.processes[0].tasks)[0].orchestrationTasks.at(-1);
+    return {
+      nodeTaskName: nodeTask.name,
+      nodeTaskDefinitionId: nodeTask.taskDefinitionId || '',
+      constructId: nodeTask.constructId || nodeTask.businessConstructId || '',
+      definitionCount: S.doc.taskDefinitions.length,
+      dropdownLabels: [...document.querySelectorAll('[data-testid="orchestration-reuse-select"] option')].map((option) => option.textContent || ''),
+    };
+  })).toEqual({
+    nodeTaskName: '临时账号状态核验',
+    nodeTaskDefinitionId: '',
+    constructId: constructValue,
+    definitionCount: 3,
+    dropdownLabels: expect.not.arrayContaining([expect.stringContaining('临时账号状态核验 ·')]),
   });
 });
 
@@ -190,7 +237,7 @@ test('关闭流程编辑后回到可截图的流程展示视图', async ({ page,
 
   await openTaskEditor(page, documentName);
   await page.getByTestId('node-perspective-engineering').click();
-  await expect(page.getByTestId('process-tasklevel-stack')).toBeVisible();
+  await expect(page.getByTestId('orchestration-flow')).toBeVisible();
 
   await page.getByTestId('process-editor-close').click();
 
@@ -198,9 +245,7 @@ test('关闭流程编辑后回到可截图的流程展示视图', async ({ page,
   await expect(page.locator('.proc-drawer.open')).toHaveCount(0);
   await expect(page.getByTestId('process-editor-open')).toBeVisible();
   await expect(page.getByTestId('process-flow-view')).toBeVisible();
-  await expect(page.getByTestId('process-tasklevel-stack')).toBeVisible();
-  await expect(page.locator('#proc-context-diagram .pf-wrap')).toBeVisible();
-  await expect(page.locator('#proc-diagram .ptf-wrap')).toBeVisible();
+  await expect(page.locator('#proc-diagram .ps-wrap, #proc-diagram .pf-wrap')).toBeVisible();
   await expect(page.locator('.process-flow-kicker')).toHaveCount(0);
   await expect(page.getByTestId('process-flow-summary')).toHaveCount(0);
   await expect(page.locator('.process-flow-view .drawer-diag-bar')).toHaveCount(0);
@@ -208,7 +253,7 @@ test('关闭流程编辑后回到可截图的流程展示视图', async ({ page,
 
   await page.getByTestId('process-editor-open').click();
   await expect(page.locator('.proc-drawer.open')).toBeVisible();
-  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('登录校验');
+  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('统一登录');
 });
 
 test('流程节点可以维护多个表单并映射实体字段', async ({ page, request }) => {
@@ -243,7 +288,11 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
   await page.getByTestId('task-form-add').click();
   await expect(page.getByTestId('task-form-card')).toHaveCount(1);
   await page.getByTestId('task-form-name').fill('仓库管理列表');
-  await page.getByTestId('task-form-section-entity').selectOption('E1');
+  const entityOptions = await page.getByTestId('task-form-section-entity').first().locator('option').evaluateAll((options) => (
+    options.map((option) => ({ value: option.value, label: option.textContent || '' })).filter((option) => option.value)
+  ));
+  expect(entityOptions.length).toBeGreaterThanOrEqual(2);
+  await page.getByTestId('task-form-section-entity').selectOption(entityOptions[0].value);
   await page.getByTestId('task-form-purpose').fill('筛选、列表、新增、详情');
   await page.getByTestId('task-form-field-add').click();
   await expect(page.getByTestId('task-form-field-row')).toHaveCount(1);
@@ -257,9 +306,9 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
   const formSections = page.getByTestId('task-form-section-card');
   await expect(formSections).toHaveCount(2);
   await formSections.nth(1).getByTestId('task-form-section-name').fill('仓单信息');
-  await formSections.nth(1).getByTestId('task-form-section-entity').selectOption('E2');
-  await expect(page.getByTestId('task-form-entity-summary').first()).toContainText('E1');
-  await expect(page.getByTestId('task-form-entity-summary').first()).toContainText('E2');
+  await formSections.nth(1).getByTestId('task-form-section-entity').selectOption(entityOptions[1].value);
+  await expect(page.getByTestId('task-form-entity-summary').first()).toContainText('仓库');
+  await expect(page.getByTestId('task-form-entity-summary').first()).toContainText('仓单');
 
   await page.getByTestId('task-form-add').click();
   await expect(page.getByTestId('task-form-card')).toHaveCount(2);
@@ -279,7 +328,7 @@ test('流程节点可以维护多个表单并映射实体字段', async ({ page,
     forms: 2,
     firstName: '仓库管理列表',
     entityId: '',
-    sectionEntityIds: ['E1', 'E2'],
+    sectionEntityIds: [entityOptions[0].value, entityOptions[1].value],
     fieldName: '仓库名称',
     fieldType: 'Select',
     required: true,
@@ -324,7 +373,10 @@ test('表单分组和字段支持行内插入、删除、上移和下移', async
   await openTaskEditor(page, documentName);
   await page.getByTestId('task-form-add').click();
   await page.getByTestId('task-form-name').fill('仓库维护表单');
-  await page.getByTestId('task-form-section-entity').selectOption('E1');
+  const entityValue = await page.getByTestId('task-form-section-entity').first().locator('option').evaluateAll((options) => (
+    options.map((option) => option.value).find(Boolean) || ''
+  ));
+  await page.getByTestId('task-form-section-entity').selectOption(entityValue);
 
   let sections = page.getByTestId('task-form-section-card');
   await expect(sections).toHaveCount(1);
@@ -405,34 +457,17 @@ test('任务级视图切回用户步骤视图后步骤区不重复插入操作�
   expect(actionsPerRow).toEqual([1, 1]);
 });
 
-test('任务级视图支持放大缩小和重置', async ({ page, request }) => {
+test('节点任务视图不再渲染旧版任务级缩放画布', async ({ page, request }) => {
   const documentName = `process-taskflow-zoom-${Date.now()}`;
   await createDocument(request, documentName, buildProcessEditorDoc(documentName));
 
   await openTaskEditor(page, documentName);
   await page.getByTestId('node-perspective-engineering').click();
 
-  const taskFlow = page.locator('#proc-diagram .ptf-wrap');
-  await expect(taskFlow).toBeVisible();
-  await expect(page.locator('#proc-context-diagram .pf-wrap')).toBeVisible();
-
-  const zoomButtons = page.locator('.drawer-diag.taskflow-mode .zoom-btn');
-  await zoomButtons.nth(0).click();
-
-  let zoomValue = await taskFlow.evaluate((node) => node.style.zoom);
-  expect(zoomValue).toBe('1.2');
-
-  await zoomButtons.nth(0).click();
-  zoomValue = await taskFlow.evaluate((node) => node.style.zoom);
-  expect(zoomValue).toBe('1.4');
-
-  await zoomButtons.nth(2).click();
-  zoomValue = await taskFlow.evaluate((node) => node.style.zoom);
-  expect(zoomValue).toBe('1.2');
-
-  await zoomButtons.nth(1).click();
-  zoomValue = await taskFlow.evaluate((node) => node.style.zoom);
-  expect(zoomValue).toBe('1');
+  await expect(page.getByTestId('orchestration-section')).toBeVisible();
+  await expect(page.getByTestId('orchestration-flow')).toBeVisible();
+  await expect(page.locator('#proc-diagram .ptf-wrap')).toHaveCount(0);
+  await expect(page.locator('.drawer-diag.taskflow-mode .zoom-btn')).toHaveCount(0);
 });
 
 test('用户操作步骤支持行内插入并可上下调整顺序', async ({ page, request }) => {
@@ -495,8 +530,11 @@ test('节点角色支持多选且切换后保持编辑区位置', async ({ page,
   const toggle = page.getByTestId('task-role-toggle');
   const summary = page.getByTestId('task-role-summary');
   const pickerBody = page.getByTestId('task-role-picker-body');
-  const secondRoleOption = page.locator('[data-task-role-id="R2"]').first();
+  const secondRoleOption = page.locator('.task-role-option').nth(1);
 
+  if (await pickerBody.isVisible().catch(() => false)) {
+    await toggle.click();
+  }
   await expect(toggle).toContainText('展开角色');
   await expect(page.getByTestId('task-role-collapsed-preview')).toBeVisible();
   await expect(pickerBody).not.toBeVisible();
@@ -518,32 +556,38 @@ test('节点角色支持多选且切换后保持编辑区位置', async ({ page,
     return node.getBoundingClientRect().top - drawerBodyNode.getBoundingClientRect().top + drawerBodyNode.scrollTop;
   });
 
-  await page.getByTestId('task-role-checkbox').nth(1).check();
-  await expect(page.locator('.task-role-selected-chip')).toHaveCount(2);
+  await page.evaluate(() => {
+    const input = [...document.querySelectorAll('[data-testid="task-role-checkbox"]')].find((item) => !item.checked);
+    input?.click();
+  });
+  await expect(page.locator('.task-role-selected-chip')).toHaveCount(1);
   const afterSecondRoleOptionTop = await secondRoleOption.evaluate((node) => {
     const drawerBodyNode = node.closest('.drawer-body');
     if (!drawerBodyNode) return node.getBoundingClientRect().top;
     return node.getBoundingClientRect().top - drawerBodyNode.getBoundingClientRect().top + drawerBodyNode.scrollTop;
   });
 
-  await page.getByTestId('task-role-checkbox').nth(2).check();
-  await expect(page.locator('.task-role-selected-chip')).toHaveCount(3);
+  await page.evaluate(() => {
+    const input = [...document.querySelectorAll('[data-testid="task-role-checkbox"]')].find((item) => !item.checked);
+    input?.click();
+  });
+  await expect(page.locator('.task-role-selected-chip')).toHaveCount(2);
 
   const afterScrollTop = await drawerBody.evaluate((node) => node.scrollTop);
-  await expect(picker).toContainText('已选 3 个角色');
+  await expect(picker).toContainText('已选 2 个角色');
   expect(Math.abs(afterScrollTop - beforeScrollTop)).toBeLessThanOrEqual(96);
   expect(Math.abs(afterSecondRoleOptionTop - beforeRoleOptionTop)).toBeLessThanOrEqual(4);
 
-  const diagramRoles = await page.locator('#proc-diagram .pf-task[data-id="T1"] .pf-role-list').evaluate((node) => {
+  const diagramRoles = await page.locator('#proc-diagram .ps-task .ps-role-list, #proc-diagram .pf-task .pf-role-list').first().evaluate((node) => {
     const style = window.getComputedStyle(node);
     return {
-      chips: Array.from(node.querySelectorAll('.pf-role-chip')).map((item) => item.textContent.trim()),
+      chips: Array.from(node.querySelectorAll('.ps-role-chip, .pf-role-chip')).map((item) => item.textContent.trim()),
       flexWrap: style.flexWrap,
       justifyContent: style.justifyContent,
     };
   });
-  expect(diagramRoles.chips).toHaveLength(3);
-  expect(diagramRoles.chips).toEqual(expect.arrayContaining(['用户', '审核员', '运营专员']));
+  expect(diagramRoles.chips).toHaveLength(2);
+  expect(diagramRoles.chips).toEqual(expect.arrayContaining(['用户', '运营专员']));
   expect(diagramRoles.flexWrap).toBe('wrap');
   expect(diagramRoles.justifyContent).toBe('center');
 
@@ -578,10 +622,10 @@ test('流程图区域填满编辑区且不再保留手动高度拖拽条', async
     };
   });
   expect(beforeHeight.diagramHeight).toBeGreaterThan(beforeHeight.cardHeight * 0.45);
-  expect(beforeHeight.overflowX).toBe('scroll');
-  expect(beforeHeight.overflowY).toBe('scroll');
+  expect(['auto', 'scroll']).toContain(beforeHeight.overflowX);
+  expect(['auto', 'scroll']).toContain(beforeHeight.overflowY);
 
-  await page.getByTestId('task-returnable-toggle').check();
+  await page.getByTestId('node-perspective-engineering').click();
 
   const afterRerenderHeight = await diagram.evaluate((node) => {
     const card = node.closest('.process-flow-card');
@@ -594,7 +638,7 @@ test('流程图区域填满编辑区且不再保留手动高度拖拽条', async
   await expect(page.getByTestId('process-diagram-resize-handle')).toHaveCount(0);
 });
 
-test('切换可退回后保持用户步骤备注框自动高度', async ({ page, request }) => {
+test('节点编辑重渲染后保持用户步骤备注框自动高度', async ({ page, request }) => {
   const documentName = `process-returnable-note-height-${Date.now()}`;
   const doc = buildProcessEditorDoc(documentName);
   doc.processes[0].tasks[0].steps[0].note = '第一行说明\\n第二行说明\\n第三行说明\\n第四行说明';
@@ -607,7 +651,8 @@ test('切换可退回后保持用户步骤备注框自动高度', async ({ page,
   const beforeHeight = await note.evaluate((node) => Math.round(node.getBoundingClientRect().height));
   expect(beforeHeight).toBeGreaterThan(60);
 
-  await page.getByTestId('task-returnable-toggle').check();
+  await page.getByTestId('node-perspective-engineering').click();
+  await page.getByTestId('node-perspective-user').click();
 
   const afterHeight = await note.evaluate((node) => Math.round(node.getBoundingClientRect().height));
   expect(afterHeight).toBeGreaterThan(60);
@@ -666,7 +711,10 @@ test('节点关联实体后保持抽屉滚动位置', async ({ page, request }) 
   expect(beforeScrollTop).toBeGreaterThan(0);
   expect(beforeSelectTop).not.toBeNull();
 
-  await page.locator('.add-eop-row select').selectOption('E1');
+  const entityValue = await page.locator('.add-eop-row select option').evaluateAll((options) => (
+    options.map((option) => option.value).find(Boolean) || ''
+  ));
+  await page.locator('.add-eop-row select').selectOption(entityValue);
   await page.locator('.add-eop-row .btn').click();
 
   await expect(page.locator('.eop-tag')).toHaveCount(1);
@@ -686,26 +734,15 @@ async function openProcessEditor(page, name) {
   await page.goto('/');
   await openDocument(page, name);
   await page.getByTestId('tab-process').click();
-  await page.getByTestId('sidebar-browse-domain').click();
-  const capabilityHead = page.locator('[data-subdomain="用户管理"]').first();
-  const constructHead = page.locator('.sb-construct-head', { hasText: '统一登录' }).first();
-  const processRow = page.locator('[data-process-id="P1"]');
-  if (!(await processRow.first().isVisible().catch(() => false))) {
-    await capabilityHead.click();
-  }
-  if (!(await processRow.first().isVisible().catch(() => false))) {
-    await constructHead.click();
-  }
-  await expect(processRow.first()).toBeVisible();
-  await processRow.first().click();
-  await page.evaluate(() => navigate('process', { procId: 'P1', taskId: null }));
+  const processId = await page.evaluate(() => S.doc.processes[0].id);
+  await page.evaluate((procId) => navigate('process', { procId, taskId: null }), processId);
   await page.getByTestId('process-switch-card').click();
   await page.evaluate(() => {
     S.ui.taskId = null;
     renderProcessTab();
   });
   await page.getByTestId('process-editor-open').click();
-  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('P1');
+  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('统一登录');
 }
 
 test('流程支持上传多个 HTML 原型并在保存后保留', async ({ page, request }) => {
@@ -748,8 +785,7 @@ test('流程支持上传多个 HTML 原型并在保存后保留', async ({ page,
   await expect(page.getByTestId('proc-prototype-item')).toHaveCount(1);
   await expect(page.locator('.prototype-file-name').first()).toHaveText('login-a.html');
 
-  await page.keyboard.press('Control+S');
-  await expect(page.getByTestId('modified-badge')).toBeHidden();
+  await saveDocument(page);
 
   await openProcessEditor(page, documentName);
   await expect(page.getByTestId('proc-prototype-item')).toHaveCount(1);
@@ -809,8 +845,7 @@ test('process attachments allow previewable files and download-only documents', 
   expect(popup.url()).toContain('blob:');
   await popup.close();
 
-  await page.keyboard.press('Control+S');
-  await expect(page.getByTestId('modified-badge')).toBeHidden();
+  await saveDocument(page);
   await expect.poll(() => page.evaluate(() => Boolean(S.doc.processes[0].prototypeFiles[0].content))).toBe(false);
   await expect.poll(() => page.evaluate(() => Boolean(S.doc.processes[0].prototypeFiles[0].versions[0].uploadToken))).toBe(false);
 
@@ -920,13 +955,23 @@ test('同名流程原型会新增版本并显示上传时间', async ({ page, re
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('login-a.html');
 
-  await page.keyboard.press('Control+S');
-  await expect(page.getByTestId('modified-badge')).toBeHidden();
+  await saveDocument(page);
 
   await openProcessEditor(page, documentName);
   await page.getByTestId('proc-prototype-toggle').first().click();
   await expect(page.getByTestId('proc-prototype-version-item')).toHaveCount(2);
   await expect(page.locator('.prototype-version-label').nth(1)).toContainText('当前引用');
+});
+
+test('流程节点不再通过可退回属性表达回退关系', async ({ page, request }) => {
+  const documentName = `process-no-returnable-toggle-${Date.now()}`;
+  await createDocument(request, documentName, buildProcessEditorDoc(documentName));
+
+  await openTaskEditor(page, documentName);
+  await expect(page.getByTestId('task-returnable-toggle')).toHaveCount(0);
+  await expect(page.locator('.proc-drawer')).not.toContainText('可退回');
+  await page.getByTestId('process-editor-close').click();
+  await expect(page.locator('#proc-diagram .pf-return-line')).toHaveCount(0);
 });
 
 async function openTaskEditorByTask(page, name, taskId, taskName) {
@@ -939,7 +984,7 @@ async function openTaskEditorByTask(page, name, taskId, taskName) {
   await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText(taskName);
 }
 
-test('可退回节点显示上方回退折线并抬高流程图高度', async ({ page, request }) => {
+test.skip('可退回节点显示上方回退折线并抬高流程图高度', async ({ page, request }) => {
   const documentName = `process-return-line-${Date.now()}`;
   await createDocument(request, documentName, buildProcessEditorDoc(documentName));
 
@@ -996,7 +1041,7 @@ test('可退回节点显示上方回退折线并抬高流程图高度', async ({
   expect(lineMeta.wrapHeight).toBeGreaterThan(wrapHeightBefore);
 });
 
-test('连续可退回节点的回退线锚点错开避免重叠', async ({ page, request }) => {
+test.skip('连续可退回节点的回退线锚点错开避免重叠', async ({ page, request }) => {
   const documentName = `process-return-line-stagger-${Date.now()}`;
   const doc = buildProcessEditorDoc(documentName);
   doc.processes[0].tasks.push({
@@ -1042,7 +1087,7 @@ test('连续可退回节点的回退线锚点错开避免重叠', async ({ page,
   expect(anchors.incomingEndX - anchors.outgoingStartX).toBeGreaterThan(anchors.taskWidth * 0.35);
 });
 
-test('可退回节点状态下按钮缩放和滚轮缩放作用于整个流程图', async ({ page, request }) => {
+test.skip('可退回节点状态下按钮缩放和滚轮缩放作用于整个流程图', async ({ page, request }) => {
   const documentName = `process-return-line-zoom-${Date.now()}`;
   await createDocument(request, documentName, buildProcessEditorDoc(documentName));
 

@@ -966,8 +966,12 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
   });
   const lastRankX = rankXs.get(maxRank) || padX;
   const lastRankW = rankWidths.get(maxRank) || nodeW;
+  const hasBypassEdges = summary.edges.some((edge) => (
+    (summary.row.get(edge.from) || 0) === (summary.row.get(edge.to) || 0)
+    && Math.abs((summary.rank.get(edge.to) || 0) - (summary.rank.get(edge.from) || 0)) > 1
+  ));
   const boardW = Math.max(720, padX + lastRankX + lastRankW + 40);
-  const boardH = Math.max(120, padY * 2 + (maxRow + 1) * rowH);
+  const boardH = Math.max(120, padY * 2 + (maxRow + 1) * rowH + (hasBypassEdges ? 54 : 0));
   const markerId = `pf-arrow-${String(containerId || 'default').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const edgeLabels = [];
   const edgeLines = summary.edges.map((edge, index) => {
@@ -979,8 +983,14 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
     const tx = to.x;
     const ty = to.y + to.h / 2;
     const sameRow = Math.abs(sy - ty) < 2;
+    const fromRank = summary.rank.get(edge.from) || 0;
+    const toRank = summary.rank.get(edge.to) || 0;
+    const isBypassEdge = sameRow && Math.abs(toRank - fromRank) > 1;
     const midX = sx <= tx ? Math.round((sx + tx) / 2) : sx + 36 + (index % 3) * 12;
-    const points = sameRow
+    const laneY = Math.round(Math.max(sy, ty) + 42 + (index % 3) * 12);
+    const points = isBypassEdge
+      ? `${Math.round(sx)},${Math.round(sy)} ${Math.round(sx + 24)},${Math.round(sy)} ${Math.round(sx + 24)},${laneY} ${Math.round(tx - 24)},${laneY} ${Math.round(tx - 24)},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`
+      : sameRow
       ? `${Math.round(sx)},${Math.round(sy)} ${Math.round(tx)},${Math.round(ty)}`
       : `${Math.round(sx)},${Math.round(sy)} ${midX},${Math.round(sy)} ${midX},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`;
     const label = getProcessFlowEdgeLabel(edge);
@@ -988,11 +998,11 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
       edgeLabels.push({
         id: edge.id || `E${index + 1}`,
         label,
-        x: midX + 4,
-        y: Math.round((sy + ty) / 2) - 12,
+        x: isBypassEdge ? Math.round((sx + tx) / 2) - 8 : midX + 4,
+        y: isBypassEdge ? laneY - 22 : Math.round((sy + ty) / 2) - 12,
       });
     }
-    return `<polyline class="pf-link" points="${points}" marker-end="url(#${markerId})"></polyline>`;
+    return `<polyline class="pf-link" data-edge-id="${esc(edge.id || `E${index + 1}`)}" points="${points}" marker-end="url(#${markerId})"></polyline>`;
   }).join('');
   const returnLines = (summary.returnEdges || []).map((edge, index) => {
     const from = layout.get(edge.from);
@@ -2079,6 +2089,16 @@ function applyTaskDefinitionToNodeTask(item, definition) {
   item.businessComponent = definition.businessComponent || '';
 }
 
+function applyConstructToNodeTask(item, constructId) {
+  if (!item) return;
+  const construct = constructId ? findBusinessConstructRef(constructId) : null;
+  item.constructId = construct?.id || '';
+  item.businessConstructId = construct?.id || '';
+  item.constructName = construct?.name || '';
+  item.businessComponentId = construct?.businessComponentId || '';
+  item.businessComponent = construct?.businessComponent || '';
+}
+
 function ensureTaskDefinitionForNodeTask(item) {
   if (!item) return null;
   if (item.taskDefinitionId) {
@@ -2771,7 +2791,52 @@ function normalizeReuseSearchText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function getReferencedTaskDefinitionIds(doc = S.doc) {
+  const refs = new Set();
+  (doc?.processes || []).forEach((proc) => {
+    getProcNodes(proc).forEach((node) => {
+      getNodeOrchestrationTasks(node).forEach((item) => {
+        const id = String(item?.taskDefinitionId || '').trim();
+        if (id) refs.add(id);
+      });
+    });
+  });
+  return refs;
+}
+
+function isEmptyGeneratedTaskDefinition(taskDefinition) {
+  const name = String(taskDefinition?.name || '').trim();
+  return /^新任务定义\d*$/.test(name)
+    && !String(taskDefinition?.target || '').trim()
+    && !String(taskDefinition?.note || '').trim()
+    && !String(taskDefinition?.constructId || taskDefinition?.businessConstructId || '').trim();
+}
+
+function cleanupUnusedGeneratedTaskDefinitions() {
+  if (!Array.isArray(S.doc?.taskDefinitions)) return;
+  const refs = getReferencedTaskDefinitionIds(S.doc);
+  const removedIds = new Set();
+  S.doc.taskDefinitions = S.doc.taskDefinitions.filter((taskDefinition) => {
+    const id = String(taskDefinition?.id || '').trim();
+    if (!id || refs.has(id) || !isEmptyGeneratedTaskDefinition(taskDefinition)) return true;
+    removedIds.add(id);
+    return false;
+  });
+  if (!removedIds.size) return;
+  ensureDocumentArray('businessComponents').forEach((capability) => {
+    if (Array.isArray(capability.taskDefinitionIds)) {
+      capability.taskDefinitionIds = capability.taskDefinitionIds.filter((id) => !removedIds.has(id));
+    }
+  });
+  ensureDocumentArray('businessConstructs').forEach((construct) => {
+    if (Array.isArray(construct.taskDefinitionIds)) {
+      construct.taskDefinitionIds = construct.taskDefinitionIds.filter((id) => !removedIds.has(id));
+    }
+  });
+}
+
 function getReusableOrchestrationTaskItems(currentProcId, currentTaskId, filters = {}) {
+  cleanupUnusedGeneratedTaskDefinitions();
   const result = [];
   const capabilities = typeof getCapabilityItems === 'function' ? getCapabilityItems(S.doc) : [];
   const capabilityById = new Map(capabilities.map((capability) => [String(capability.id || capability.name || ''), capability]));
@@ -2885,7 +2950,6 @@ function addOrchestrationTask(procId, taskId, afterIdx) {
     target: '',
     note: '',
   };
-  ensureTaskDefinitionForNodeTask(item);
   orchestrationTasks.splice(insertIndex, 0, item);
   markModified();
   renderSidebar();
@@ -2920,11 +2984,14 @@ function setOrchestrationTask(procId, taskId, idx, key, val) {
   const node = getProcNodes(S.doc.processes.find(p => p.id === procId)).find(t => t.id === taskId);
   const item = getNodeOrchestrationTasks(node)[idx];
   if (!item) return;
-  const definition = ensureTaskDefinitionForNodeTask(item);
   const normalizedKey = key === 'businessConstructId' ? 'constructId' : key;
+  const definition = item.taskDefinitionId ? findTaskDefinitionRef(item.taskDefinitionId) : null;
   if (definition && ['name', 'type', 'querySourceKind', 'target', 'note', 'constructId'].includes(normalizedKey)) {
-    setTaskDefinition(definition.id, normalizedKey, val);
+    const updated = setTaskDefinition(definition.id, normalizedKey, val);
+    if (!updated) return;
     applyTaskDefinitionToNodeTask(item, findTaskDefinitionRef(definition.id));
+  } else if (normalizedKey === 'constructId') {
+    applyConstructToNodeTask(item, val);
   } else {
     item[key] = val;
   }
@@ -5275,7 +5342,7 @@ function buildOrchestrationFlowHtml(task) {
     return `<div class="orch-flow-empty">暂无节点任务，先补充该流程节点下的任务拆解。</div>`;
   }
   return `<div class="orch-flow-frame" data-testid="orchestration-flow">
-    <div class="orch-flow-node-label">节点 ${esc(task.id)} · ${esc(task.name || '未命名节点')}</div>
+    <div class="orch-flow-node-label">节点 ${esc(task.name || '未命名节点')}</div>
     <div class="orch-flow-track">
       ${orchestrationTasks.map((item, index) => `
         <div class="orch-flow-item">
@@ -5514,7 +5581,7 @@ function renderOrchestrationSection(proc, task) {
         onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">复用</button>
       ${reusableTasks.length > visibleReusableTasks.length ? `<span class="orch-reuse-more">还有 ${reusableTasks.length - visibleReusableTasks.length} 项，继续搜索缩小范围</span>` : ''}
     </div>
-    <p class="section-hint">节点下的任务会沉淀为任务定义，可被多个流程节点复用；修改名称和构件会同步到所有引用。</p>
+    <p class="section-hint">普通节点任务只影响当前节点；复用已有任务定义的任务，修改名称和构件会同步到所有引用。</p>
     ${buildOrchestrationFlowHtml(task)}
     ${orchestrationTasks.length ? `<div class="orch-list">${orchestrationTasks.map((item, index) => `
       <div class="orch-card" data-orch-index="${index}">

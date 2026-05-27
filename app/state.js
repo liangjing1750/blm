@@ -1329,6 +1329,9 @@ function ensureEntityStateShape(entity) {
     note: String(transition?.note || ''),
     field_name: String(transition?.field_name || ''),
     ...(normalizeOptionalGraphOffset(transition?.labelPos) ? { labelPos: normalizeOptionalGraphOffset(transition.labelPos) } : {}),
+    ...(Array.isArray(transition?.waypoints)
+      ? { waypoints: transition.waypoints.map((point) => normalizeOptionalGraphOffset(point)).filter(Boolean) }
+      : {}),
   }));
   return entity;
 }

@@ -731,10 +731,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   left: 0;
   top: 0;
   overflow: visible;
+  pointer-events: none;
 }
 .entity-state-board {
   position: relative;
-  pointer-events: none;
+  pointer-events: auto;
 }
 .entity-state-node {
   position: absolute;
@@ -792,13 +793,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .entity-state-link-label-hitbox.dragging {
   cursor: grabbing;
 }
+.entity-state-link-route-hitbox {
+  position: absolute;
+  z-index: 3;
+  background: transparent;
+  cursor: move;
+  pointer-events: auto;
+}
+.entity-state-link-route-hitbox:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+.entity-state-link-route-hitbox.dragging {
+  cursor: grabbing;
+  background: rgba(37, 99, 235, 0.14);
+}
 .entity-state-graph.readonly .entity-state-link-label-group,
 .entity-state-graph.readonly .entity-state-link-label-hitbox,
+.entity-state-graph.readonly .entity-state-link-route-hitbox,
 .entity-state-graph.readonly .entity-state-node,
 .entity-state-graph.readonly .entity-state-marker {
   cursor: default;
 }
-.entity-state-graph.readonly .entity-state-link-label-hitbox {
+.entity-state-graph.readonly .entity-state-link-label-hitbox,
+.entity-state-graph.readonly .entity-state-link-route-hitbox {
   pointer-events: none;
 }
 .entity-state-link-label-box {
