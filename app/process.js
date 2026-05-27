@@ -800,25 +800,44 @@ function buildProcessSummaryGraph(proc) {
   const selfLoops = graph.edges.filter((edge) => edge.from && edge.from === edge.to);
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const gatewayOut = new Map();
+  const gatewayIn = new Map();
   graph.edges.filter((edge) => edge.from !== edge.to).forEach((edge) => {
     if (nodeById.get(edge.from)?.kind === 'gateway') {
       if (!gatewayOut.has(edge.from)) gatewayOut.set(edge.from, []);
       gatewayOut.get(edge.from).push(edge);
     }
+    if (nodeById.get(edge.to)?.kind === 'gateway') {
+      if (!gatewayIn.has(edge.to)) gatewayIn.set(edge.to, []);
+      gatewayIn.get(edge.to).push(edge);
+    }
   });
   const edges = [];
+  const branchGroups = [];
   graph.edges.filter((edge) => edge.from !== edge.to).forEach((edge) => {
     const fromKind = nodeById.get(edge.from)?.kind;
     const toKind = nodeById.get(edge.to)?.kind;
     if (fromKind === 'gateway') return;
     if (toKind === 'gateway') {
-      (gatewayOut.get(edge.to) || []).forEach((outEdge) => {
+      const outs = gatewayOut.get(edge.to) || [];
+      const groupId = `${edge.from}->${edge.to}`;
+      const targets = outs.map((outEdge) => outEdge.to).filter(Boolean);
+      if (targets.length > 1) {
+        branchGroups.push({
+          id: groupId,
+          source: edge.from,
+          gateway: edge.to,
+          targets,
+        });
+      }
+      outs.forEach((outEdge, index) => {
         edges.push({
           id: outEdge.id || edge.id,
           from: edge.from,
           to: outEdge.to,
           label: getProcessFlowEdgeLabel(outEdge) || getProcessFlowEdgeLabel(edge),
           condition: outEdge.condition || edge.condition || '',
+          branchGroupId: groupId,
+          branchIndex: index,
         });
       });
       return;
@@ -832,11 +851,45 @@ function buildProcessSummaryGraph(proc) {
   });
   getProcNodes(proc).forEach((task) => nodeIds.add(String(task.id || '')));
   const nodes = graph.nodes.filter((node) => node.kind !== 'gateway' && nodeIds.has(node.id));
-  return { nodes, edges, selfLoops };
+  const visibleEdges = edges.map((edge) => ({ ...edge }));
+  const outgoing = new Map();
+  const incoming = new Map();
+  visibleEdges.forEach((edge) => {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    if (!incoming.has(edge.to)) incoming.set(edge.to, []);
+    outgoing.get(edge.from).push(edge);
+    incoming.get(edge.to).push(edge);
+  });
+  const skipEdgeKeys = new Set();
+  const extraEdges = [];
+  branchGroups.forEach((group) => {
+    const targetSet = new Set(group.targets);
+    visibleEdges
+      .filter((edge) => targetSet.has(edge.from) && targetSet.has(edge.to))
+      .forEach((innerEdge) => {
+        skipEdgeKeys.add(innerEdge.id || `${innerEdge.from}->${innerEdge.to}`);
+        (outgoing.get(innerEdge.to) || [])
+          .filter((downstreamEdge) => !targetSet.has(downstreamEdge.to))
+          .forEach((downstreamEdge) => {
+          extraEdges.push({
+            ...downstreamEdge,
+            id: `${innerEdge.id || innerEdge.from}-${downstreamEdge.id || downstreamEdge.to}`,
+            from: innerEdge.from,
+            to: downstreamEdge.to,
+            label: getProcessFlowEdgeLabel(innerEdge) || getProcessFlowEdgeLabel(downstreamEdge),
+            syntheticBranchJoin: true,
+          });
+        });
+      });
+  });
+  const normalizedEdges = visibleEdges
+    .filter((edge) => !skipEdgeKeys.has(edge.id || `${edge.from}->${edge.to}`))
+    .concat(extraEdges);
+  return { nodes, edges: normalizedEdges, selfLoops, branchGroups };
 }
 
 function buildProcessSummaryLayout(proc) {
-  const { nodes, edges, selfLoops } = buildProcessSummaryGraph(proc);
+  const { nodes, edges, selfLoops, branchGroups = [] } = buildProcessSummaryGraph(proc);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const outgoing = new Map();
   const incoming = new Map();
@@ -876,6 +929,7 @@ function buildProcessSummaryLayout(proc) {
 
   const row = new Map();
   starts.forEach((id, index) => row.set(id, index));
+  const branchNodeRows = new Set();
   let nextFreeRow = Math.max(1, starts.length);
   const orderedByRank = [...nodes].sort((a, b) => (rank.get(a.id) || 0) - (rank.get(b.id) || 0));
   orderedByRank.forEach((node) => {
@@ -885,10 +939,20 @@ function buildProcessSummaryLayout(proc) {
     }
     const outs = outgoing.get(node.id) || [];
     if (outs.length > 1) {
+      const sourceRow = row.get(node.id) || 0;
+      const directMergeEdge = outs.find((edge) => (
+        (incoming.get(edge.to) || []).length > 1
+        && edge.to !== 'END'
+      ));
+      let branchIndex = 1;
       outs.forEach((edge, index) => {
-        if (!row.has(edge.to)) row.set(edge.to, (row.get(node.id) || 0) + index);
+        const laneRow = directMergeEdge && edge === directMergeEdge
+          ? sourceRow
+          : sourceRow + (directMergeEdge ? branchIndex++ : index);
+        row.set(edge.to, laneRow);
+        if (laneRow !== sourceRow && edge.to !== 'END') branchNodeRows.add(edge.to);
       });
-      nextFreeRow = Math.max(nextFreeRow, (row.get(node.id) || 0) + outs.length);
+      nextFreeRow = Math.max(nextFreeRow, sourceRow + outs.length);
     } else if (outs.length === 1 && !row.has(outs[0].to)) {
       row.set(outs[0].to, row.get(node.id) || 0);
     }
@@ -899,10 +963,63 @@ function buildProcessSummaryLayout(proc) {
     incomingByTarget.get(edge.to).push(edge);
   });
   incomingByTarget.forEach((list, targetId) => {
-    if (list.length > 1) {
-      const rows = list.map((edge) => row.get(edge.from)).filter((value) => value !== undefined);
-      if (rows.length) row.set(targetId, Math.min(...rows));
-    }
+    if (list.length <= 1) return;
+    const rows = list.map((edge) => row.get(edge.from)).filter((value) => value !== undefined);
+    if (rows.length) row.set(targetId, Math.min(...rows));
+  });
+  orderedByRank.forEach((node) => {
+    const outs = outgoing.get(node.id) || [];
+    if (outs.length !== 1) return;
+    const [edge] = outs;
+    if (branchNodeRows.has(node.id)) return;
+    if ((incoming.get(edge.to) || []).length === 1) row.set(edge.to, row.get(node.id) || 0);
+  });
+  const alignSingleUpstream = (nodeId, targetRow, visited = new Set()) => {
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    (incoming.get(nodeId) || []).forEach((edge) => {
+      const prevOuts = outgoing.get(edge.from) || [];
+      const nextIns = incoming.get(edge.to) || [];
+      if (prevOuts.length === 1 && nextIns.length === 1) {
+        row.set(edge.from, targetRow);
+        alignSingleUpstream(edge.from, targetRow, visited);
+      }
+    });
+  };
+  branchGroups.forEach((group) => {
+    const targets = group.targets.filter((targetId) => nodeById.has(targetId));
+    if (targets.length <= 1 || !nodeById.has(group.source)) return;
+    const baseRow = Math.floor(row.get(group.source) || 0);
+    const centerRow = baseRow + (targets.length - 1) / 2;
+    const targetSet = new Set(targets);
+    row.set(group.source, centerRow);
+    alignSingleUpstream(group.source, centerRow);
+    targets.forEach((targetId, index) => {
+      row.set(targetId, baseRow + index);
+      branchNodeRows.add(targetId);
+    });
+    const downstreamCounts = new Map();
+    targets.forEach((targetId) => {
+      (outgoing.get(targetId) || [])
+        .filter((edge) => !targetSet.has(edge.to))
+        .forEach((edge) => downstreamCounts.set(edge.to, (downstreamCounts.get(edge.to) || 0) + 1));
+    });
+    downstreamCounts.forEach((count, targetId) => {
+      if (count === targets.length) row.set(targetId, centerRow);
+    });
+  });
+  const branchEdgeRows = [];
+  outgoing.forEach((outs, sourceId) => {
+    if (outs.length <= 1) return;
+    const sourceRow = row.get(sourceId) || 0;
+    outs.forEach((edge, index) => {
+      const targetRow = row.get(edge.to) || 0;
+      if (targetRow !== sourceRow) return;
+      if ((incoming.get(edge.to) || []).length <= 1 && index === 0) return;
+      const laneRow = sourceRow + index;
+      edge.branchRow = laneRow;
+      branchEdgeRows.push(laneRow);
+    });
   });
   const returnEdges = [];
   const mainEdges = [];
@@ -912,7 +1029,7 @@ function buildProcessSummaryLayout(proc) {
     if (edge.to !== 'END' && toRank <= fromRank) returnEdges.push(edge);
     else mainEdges.push(edge);
   });
-  return { nodes, edges: mainEdges, returnEdges, selfLoops, rank, row };
+  return { nodes, edges: mainEdges, returnEdges, selfLoops, rank, row, branchEdgeRows, branchGroups };
 }
 
 function renderProcGraphFlow(containerId, proc, onClickMap) {
@@ -927,7 +1044,7 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
   const nodeH = 62;
   const boundaryW = 64;
   const boundaryH = 34;
-  const colGap = 46;
+  const colGap = 68;
   const rowH = showEntities ? 118 : 86;
   const padX = 24;
   const hasAuxiliaryEdges = (summary.selfLoops || []).length || (summary.returnEdges || []).length;
@@ -964,6 +1081,9 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
       h,
     });
   });
+  (summary.branchEdgeRows || []).forEach((yRow) => {
+    maxRow = Math.max(maxRow, yRow);
+  });
   const lastRankX = rankXs.get(maxRank) || padX;
   const lastRankW = rankWidths.get(maxRank) || nodeW;
   const hasBypassEdges = summary.edges.some((edge) => (
@@ -973,8 +1093,69 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
   const boardW = Math.max(720, padX + lastRankX + lastRankW + 40);
   const boardH = Math.max(120, padY * 2 + (maxRow + 1) * rowH + (hasBypassEdges ? 54 : 0));
   const markerId = `pf-arrow-${String(containerId || 'default').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const summaryOutgoing = new Map();
+  summary.edges.forEach((edge) => {
+    if (!summaryOutgoing.has(edge.from)) summaryOutgoing.set(edge.from, []);
+    summaryOutgoing.get(edge.from).push(edge);
+  });
   const edgeLabels = [];
+  const edgeKey = (edge) => `${edge.from}->${edge.to}`;
+  const branchEdgeSkip = new Set();
+  const branchLines = (summary.branchGroups || []).map((group, groupIndex) => {
+    const source = layout.get(group.source);
+    const targets = (group.targets || [])
+      .map((targetId) => ({ id: targetId, pos: layout.get(targetId) }))
+      .filter((item) => item.pos)
+      .sort((left, right) => left.pos.y - right.pos.y);
+    if (!source || targets.length <= 1) return '';
+    const targetSet = new Set(targets.map((item) => item.id));
+    const branchEdges = (summary.edges || []).filter((edge) => edge.from === group.source && targetSet.has(edge.to));
+    branchEdges.forEach((edge) => branchEdgeSkip.add(edgeKey(edge)));
+    const targetDownstream = targets.map((target) => (summary.edges || [])
+      .filter((edge) => edge.from === target.id && !targetSet.has(edge.to)));
+    const joinId = targetDownstream.length
+      ? (targetDownstream[0].find((edge) => targetDownstream.every((list) => list.some((item) => item.to === edge.to)))?.to || '')
+      : '';
+    const join = joinId ? layout.get(joinId) : null;
+    if (joinId) {
+      targets.forEach((target) => branchEdgeSkip.add(`${target.id}->${joinId}`));
+    }
+    const sx = Math.round(source.x + source.w);
+    const sourceY = Math.round(source.y + source.h / 2);
+    const splitX = Math.round(Math.min(...targets.map((target) => target.pos.x)) - 26);
+    const targetRight = Math.max(...targets.map((target) => target.pos.x + target.pos.w));
+    const joinX = join ? Math.round(Math.min(join.x - 26, targetRight + 26)) : Math.round(targetRight + 26);
+    const joinY = join ? Math.round(join.y + join.h / 2) : Math.round((targets[0].pos.y + targets[targets.length - 1].pos.y + targets[targets.length - 1].pos.h) / 2);
+    const minTargetY = Math.min(...targets.map((target) => Math.round(target.pos.y + target.pos.h / 2)));
+    const maxTargetY = Math.max(...targets.map((target) => Math.round(target.pos.y + target.pos.h / 2)));
+    const pieces = [];
+    pieces.push(`<polyline class="pf-link pf-branch-link" points="${sx},${sourceY} ${splitX},${sourceY}"></polyline>`);
+    pieces.push(`<polyline class="pf-link pf-branch-link" points="${splitX},${minTargetY} ${splitX},${maxTargetY}"></polyline>`);
+    targets.forEach((target, index) => {
+      const targetY = Math.round(target.pos.y + target.pos.h / 2);
+      pieces.push(`<polyline class="pf-link pf-branch-link" data-edge-id="${esc(`${group.id || groupIndex}-${target.id}`)}" points="${splitX},${targetY} ${Math.round(target.pos.x)},${targetY}" marker-end="url(#${markerId})"></polyline>`);
+      const edge = branchEdges.find((item) => item.to === target.id);
+      const label = getProcessFlowEdgeLabel(edge);
+      if (label) {
+        edgeLabels.push({
+          id: edge?.id || `${group.id || groupIndex}-${target.id}`,
+          label,
+          x: Math.round((splitX + target.pos.x) / 2) - 14,
+          y: targetY - 28,
+        });
+      }
+      if (join) {
+        pieces.push(`<polyline class="pf-link pf-branch-link" points="${Math.round(target.pos.x + target.pos.w)},${targetY} ${joinX},${targetY}"></polyline>`);
+      }
+    });
+    if (join) {
+      pieces.push(`<polyline class="pf-link pf-branch-link" points="${joinX},${minTargetY} ${joinX},${maxTargetY}"></polyline>`);
+      pieces.push(`<polyline class="pf-link pf-branch-link" points="${joinX},${joinY} ${Math.round(join.x)},${joinY}" marker-end="url(#${markerId})"></polyline>`);
+    }
+    return pieces.join('');
+  }).join('');
   const edgeLines = summary.edges.map((edge, index) => {
+    if (branchEdgeSkip.has(edgeKey(edge))) return '';
     const from = layout.get(edge.from);
     const to = layout.get(edge.to);
     if (!from || !to) return '';
@@ -985,11 +1166,21 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
     const sameRow = Math.abs(sy - ty) < 2;
     const fromRank = summary.rank.get(edge.from) || 0;
     const toRank = summary.rank.get(edge.to) || 0;
+    const branchRow = Number.isFinite(edge.branchRow) ? edge.branchRow : null;
+    const isBranchLaneEdge = branchRow !== null && branchRow !== (summary.row.get(edge.from) || 0);
     const isBypassEdge = sameRow && Math.abs(toRank - fromRank) > 1;
     const midX = sx <= tx ? Math.round((sx + tx) / 2) : sx + 36 + (index % 3) * 12;
-    const laneY = Math.round(Math.max(sy, ty) + 42 + (index % 3) * 12);
-    const points = isBypassEdge
+    const laneY = isBranchLaneEdge
+      ? Math.round(padY + branchRow * rowH + nodeH / 2)
+      : Math.round(Math.max(sy, ty) + 42 + (index % 3) * 12);
+    const isSplitEdge = (summaryOutgoing.get(edge.from) || []).length > 1 && !sameRow;
+    const splitLaneX = Math.round(sx + 26 + (index % 2) * 10);
+    const points = isBranchLaneEdge
       ? `${Math.round(sx)},${Math.round(sy)} ${Math.round(sx + 24)},${Math.round(sy)} ${Math.round(sx + 24)},${laneY} ${Math.round(tx - 24)},${laneY} ${Math.round(tx - 24)},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`
+      : isBypassEdge
+      ? `${Math.round(sx)},${Math.round(sy)} ${Math.round(sx + 24)},${Math.round(sy)} ${Math.round(sx + 24)},${laneY} ${Math.round(tx - 24)},${laneY} ${Math.round(tx - 24)},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`
+      : isSplitEdge
+      ? `${Math.round(sx)},${Math.round(sy)} ${splitLaneX},${Math.round(sy)} ${splitLaneX},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`
       : sameRow
       ? `${Math.round(sx)},${Math.round(sy)} ${Math.round(tx)},${Math.round(ty)}`
       : `${Math.round(sx)},${Math.round(sy)} ${midX},${Math.round(sy)} ${midX},${Math.round(ty)} ${Math.round(tx)},${Math.round(ty)}`;
@@ -999,7 +1190,7 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
         id: edge.id || `E${index + 1}`,
         label,
         x: isBypassEdge ? Math.round((sx + tx) / 2) - 8 : midX + 4,
-        y: isBypassEdge ? laneY - 22 : Math.round((sy + ty) / 2) - 12,
+        y: (isBypassEdge || isBranchLaneEdge) ? laneY - 22 : Math.round((sy + ty) / 2) - 12,
       });
     }
     return `<polyline class="pf-link" data-edge-id="${esc(edge.id || `E${index + 1}`)}" points="${points}" marker-end="url(#${markerId})"></polyline>`;
@@ -1049,7 +1240,7 @@ function renderProcGraphFlow(containerId, proc, onClickMap) {
         <path d="M0,0 L8,4 L0,8 Z" fill="#64748b"></path>
       </marker>
     </defs>
-    ${edgeLines}${returnLines}${selfLoopLines}
+    ${branchLines}${edgeLines}${returnLines}${selfLoopLines}
   </svg>`;
   summary.nodes.forEach((node) => {
     const pos = layout.get(node.id);
@@ -2521,10 +2712,11 @@ function getTaskFormEntityIds(form) {
 function getTaskFormEntitySummary(form) {
   const ids = getTaskFormEntityIds(form);
   if (!ids.length) return '未关联实体';
-  return ids.map((entityId) => {
+  const names = ids.map((entityId) => {
     const entity = (S.doc?.entities || []).find((item) => item.id === entityId);
-    return entity ? `${entity.id} ${entity.name || ''}`.trim() : entityId;
-  }).join('、');
+    return String(entity?.name || '').trim();
+  }).filter(Boolean);
+  return names.length ? names.join('、') : '未关联实体';
 }
 
 function nextTaskFormId(task) {
@@ -5579,6 +5771,8 @@ function renderOrchestrationSection(proc, task) {
       </select>
       <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-reuse-button" ${reuseDisabled ? 'disabled' : ''}
         onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">复用</button>
+      <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-task-manager-button"
+        onclick="openTaskDefinitionManager()">管理</button>
       ${reusableTasks.length > visibleReusableTasks.length ? `<span class="orch-reuse-more">还有 ${reusableTasks.length - visibleReusableTasks.length} 项，继续搜索缩小范围</span>` : ''}
     </div>
     <p class="section-hint">普通节点任务只影响当前节点；复用已有任务定义的任务，修改名称和构件会同步到所有引用。</p>
@@ -6194,6 +6388,9 @@ function renderProcessSummaryHelpPanel() {
         `)}
         ${card('分支后归并', '多排路径在公共节点处收束。', `
           ${node(24, 40, 'A', 'msh-blue')}${line('98,57 132,57 132,30 156,30')}${node(156, 13, 'B', 'msh-green')}${line('98,57 132,57 132,84 156,84')}${node(156, 67, 'C', 'msh-yellow')}${line('230,30 260,30 260,57 282,57')}${line('230,84 260,84 260,57 282,57')}${node(282, 40, 'D', 'msh-green')}
+        `)}
+        ${card('可跳过归并', '一条路径经过办理节点，另一条路径直接收束到公共节点。', `
+          ${node(24, 40, 'A', 'msh-blue')}${line('98,57 132,57 132,30 156,30')}${label(112, 10, '是')}${node(156, 13, 'B', 'msh-green')}${line('230,30 258,30 258,57 286,57')}${line('98,57 132,57 132,84 258,84 258,57 286,57')}${label(112, 88, '否')}${node(286, 40, 'D', 'msh-yellow')}
         `)}
         ${card('分支直接结束', '某条路径没有办理节点，直接办结。', `
           ${node(32, 40, 'A', 'msh-blue')}${line('106,57 144,57 144,30 174,30')}${label(120, 10, '通过')}${node(174, 13, 'B', 'msh-green')}${line('106,57 144,57 144,84 278,84')}${label(120, 90, '不通过')}${end(278, 69, '结束')}

@@ -277,9 +277,10 @@ test('summary view is edge-driven and does not invent branch labels', async ({ p
   await expect(page.getByTestId('process-summary-help')).toBeVisible();
   await page.getByTestId('process-summary-help').hover();
   await expect(page.getByTestId('process-summary-help-panel')).toBeVisible();
-  await expect(page.getByTestId('process-summary-help-card')).toHaveCount(7);
+  await expect(page.getByTestId('process-summary-help-card')).toHaveCount(8);
   await expect(page.getByTestId('process-summary-help-panel')).toContainText('纯顺序');
   await expect(page.getByTestId('process-summary-help-panel')).toContainText('分支后归并');
+  await expect(page.getByTestId('process-summary-help-panel')).toContainText('可跳过归并');
   await expect(page.getByTestId('process-summary-help-panel')).toContainText('回退/撤回');
   const helpBox = await page.getByTestId('process-summary-help-panel').boundingBox();
   expect(helpBox.width).toBeGreaterThan(500);
@@ -293,19 +294,28 @@ test('summary view is edge-driven and does not invent branch labels', async ({ p
   await expect(page.getByTestId('process-summary-help-panel')).toBeVisible();
   await page.getByTestId('process-summary-help').click();
   await expect(page.getByTestId('process-summary-help-panel')).not.toBeVisible();
-  await expect(page.locator('.pf-edge-label')).toHaveCount(0);
-  const positions = await page.evaluate(() => {
-    const read = (id) => document.querySelector(`.pf-col[data-id="${id}"]`)?.getBoundingClientRect().left || 0;
-    return { t1: read('T1'), t2: read('T2'), t3: read('T3') };
+  const layout = await page.evaluate(() => {
+    const summary = buildProcessSummaryLayout(S.doc.processes[0]);
+    return {
+      t1Rank: summary.rank.get('T1'),
+      t2Rank: summary.rank.get('T2'),
+      t3Rank: summary.rank.get('T3'),
+      t1Row: summary.row.get('T1'),
+      t3Row: summary.row.get('T3'),
+      edgeLabels: summary.edges.map((edge) => edge.label).filter(Boolean),
+      hasStraightEdge: summary.edges.some((edge) => summary.row.get(edge.from) === summary.row.get(edge.to)),
+      hasBentEdge: summary.edges.some((edge) => summary.row.get(edge.from) !== summary.row.get(edge.to)),
+    };
   });
-  expect(positions.t2).toBeLessThan(positions.t1);
-  expect(Math.abs(positions.t1 - positions.t3)).toBeLessThan(8);
-  const lineShapes = await page.locator('.pf-link').evaluateAll((links) => links.map((link) => link.getAttribute('points') || ''));
-  expect(lineShapes.some((points) => points.split(' ').length === 2)).toBeTruthy();
-  expect(lineShapes.some((points) => points.split(' ').length > 2)).toBeTruthy();
+  expect(layout.edgeLabels).toHaveLength(0);
+  expect(layout.t2Rank).toBeLessThan(layout.t1Rank);
+  expect(layout.t2Rank).toBeLessThan(layout.t3Rank);
+  expect(layout.t1Row).not.toBe(layout.t3Row);
+  expect(layout.hasStraightEdge).toBeTruthy();
+  expect(layout.hasBentEdge).toBeTruthy();
 });
 
-test('summary view routes collapsed gateway bypass edges around intermediate nodes', async ({ page, request }) => {
+test('summary view expands optional branch before it merges into the next node', async ({ page, request }) => {
   const documentName = 'process-summary-bypass-' + Date.now();
   await createDocument(request, documentName, {
     meta: { title: documentName, domain: documentName },
@@ -342,39 +352,108 @@ test('summary view routes collapsed gateway bypass edges around intermediate nod
   await openDocument(page, documentName);
   await page.getByTestId('tab-process').click();
   await page.getByTestId('process-switch-card').click();
-  await page.getByTestId('process-flow-mode-linear').click();
-
-  await expect(page.locator('.pf-edge-label', { hasText: '是' })).toBeVisible();
-  await expect(page.locator('.pf-edge-label', { hasText: '否' })).toBeVisible();
-  const noEdgePoints = await page.locator('.pf-link[data-edge-id="E5"]').getAttribute('points');
-  expect(noEdgePoints.split(' ').length).toBeGreaterThan(4);
-  const geometry = await page.evaluate(() => {
-    const bypass = document.querySelector('.pf-link[data-edge-id="E5"]');
-    const review = document.querySelector('.pf-col[data-id="T2"]');
-    const label = [...document.querySelectorAll('.pf-edge-label')].find((item) => item.textContent.trim() === '否');
-    const parsePoints = (points) => points.split(' ').map((pair) => {
-      const [x, y] = pair.split(',').map(Number);
-      return { x, y };
-    });
-    const reviewRect = review.getBoundingClientRect();
-    const wrapRect = document.querySelector('.pf-wrap').getBoundingClientRect();
+  const layout = await page.evaluate(() => {
+    const summary = buildProcessSummaryLayout(S.doc.processes[0]);
     return {
-      bypassPoints: parsePoints(bypass.getAttribute('points') || ''),
-      review: {
-        left: reviewRect.left - wrapRect.left,
-        right: reviewRect.right - wrapRect.left,
-        top: reviewRect.top - wrapRect.top,
-        bottom: reviewRect.bottom - wrapRect.top,
-      },
-      labelTop: label.getBoundingClientRect().top - wrapRect.top,
+      requestRow: summary.row.get('T1'),
+      reviewRow: summary.row.get('T2'),
+      approveRow: summary.row.get('T3'),
+      reviewRank: summary.rank.get('T2'),
+      approveRank: summary.rank.get('T3'),
+      directMergeEdge: summary.edges.some((edge) => edge.from === 'T1' && edge.to === 'T3'),
+      reviewToApproveEdge: summary.edges.some((edge) => edge.from === 'T2' && edge.to === 'T3'),
+      reviewToEndEdge: summary.edges.some((edge) => edge.from === 'T2' && edge.to === 'END'),
+      branchEdgeRows: summary.branchEdgeRows || [],
+      directMergeBranchRow: summary.edges.find((edge) => edge.from === 'T1' && edge.to === 'T3')?.branchRow ?? null,
     };
   });
-  const horizontalLane = geometry.bypassPoints
-    .slice(1)
-    .map((point, index) => [geometry.bypassPoints[index], point])
-    .find(([a, b]) => a.y === b.y && Math.min(a.x, b.x) < geometry.review.left && Math.max(a.x, b.x) > geometry.review.right);
-  expect(horizontalLane[0].y).toBeGreaterThan(geometry.review.bottom);
-  expect(geometry.labelTop).toBeGreaterThan(geometry.review.bottom - 4);
+  expect(layout.approveRank).toBe(layout.reviewRank);
+  expect(layout.approveRow).not.toBe(layout.reviewRow);
+  expect(layout.directMergeEdge).toBeTruthy();
+  expect(layout.reviewToApproveEdge).toBeFalsy();
+  expect(layout.reviewToEndEdge).toBeTruthy();
+  expect(layout.branchEdgeRows).toHaveLength(0);
+  expect(layout.directMergeBranchRow).toBe(null);
+});
+
+test('summary layout follows the summary help patterns', async ({ page, request }) => {
+  const documentName = 'process-summary-patterns-' + Date.now();
+  const proc = (id, name, nodeIds, edges) => ({
+    id,
+    uid: id,
+    name,
+    nodes: nodeIds.map((nodeId) => ({
+      id: nodeId,
+      uid: nodeId,
+      name: nodeId,
+      role_id: 'R1',
+      role_ids: ['R1'],
+      userSteps: [],
+      orchestrationTasks: [],
+      forms: [],
+      entity_ops: [],
+    })),
+    flow: {
+      version: 2,
+      nodes: [],
+      edges: edges.map((edge, index) => ({ id: `${id}E${index + 1}`, uid: `${id}E${index + 1}`, ...edge })),
+    },
+  });
+  await createDocument(request, documentName, {
+    meta: { title: documentName, domain: documentName },
+    roles: [{ id: 'R1', uid: 'R1', name: 'Role' }],
+    processes: [
+      proc('P_SEQ', '纯顺序', ['A', 'B'], [
+        { from: 'START', to: 'A' }, { from: 'A', to: 'B' }, { from: 'B', to: 'END' },
+      ]),
+      proc('P_SPLIT', '一个分支', ['A', 'B', 'C'], [
+        { from: 'START', to: 'A' }, { from: 'A', to: 'B' }, { from: 'A', to: 'C' },
+      ]),
+      proc('P_MERGE', '分支后归并', ['A', 'B', 'C', 'D'], [
+        { from: 'START', to: 'A' }, { from: 'A', to: 'B' }, { from: 'A', to: 'C' }, { from: 'B', to: 'D' }, { from: 'C', to: 'D' },
+      ]),
+      proc('P_TO_END', '分支直接结束', ['A', 'B'], [
+        { from: 'START', to: 'A' }, { from: 'A', to: 'B' }, { from: 'A', to: 'END' },
+      ]),
+      proc('P_MULTI_START', '多起点', ['A', 'B', 'C'], [
+        { from: 'START', to: 'A' }, { from: 'START', to: 'B' }, { from: 'A', to: 'C' }, { from: 'B', to: 'C' },
+      ]),
+      proc('P_MULTI_END', '多个结束连线', ['B', 'C'], [
+        { from: 'B', to: 'END' }, { from: 'C', to: 'END' },
+      ]),
+      proc('P_RETURN', '回退撤回', ['A', 'B'], [
+        { from: 'START', to: 'A' }, { from: 'A', to: 'B' }, { from: 'B', to: 'A', label: '撤回' }, { from: 'B', to: 'END' },
+      ]),
+    ],
+    language: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  const summary = await page.evaluate(() => Object.fromEntries(S.doc.processes.map((procItem) => {
+    const layout = buildProcessSummaryLayout(procItem);
+    return [procItem.id, {
+      rows: Object.fromEntries([...layout.row.entries()]),
+      ranks: Object.fromEntries([...layout.rank.entries()]),
+      mainEdges: layout.edges.map((edge) => `${edge.from}->${edge.to}`),
+      returnEdges: layout.returnEdges.map((edge) => `${edge.from}->${edge.to}`),
+      selfLoops: layout.selfLoops.map((edge) => `${edge.from}->${edge.to}`),
+      branchEdgeRows: layout.branchEdgeRows || [],
+    }];
+  })));
+
+  expect(summary.P_SEQ.rows.A).toBe(summary.P_SEQ.rows.B);
+  expect(summary.P_SPLIT.rows.B).not.toBe(summary.P_SPLIT.rows.C);
+  expect(summary.P_MERGE.rows.D).toBe(Math.min(summary.P_MERGE.rows.B, summary.P_MERGE.rows.C));
+  expect(summary.P_TO_END.mainEdges).toContain('A->END');
+  expect(summary.P_TO_END.rows.END).not.toBe(summary.P_TO_END.rows.B);
+  expect(summary.P_MULTI_START.rows.A).not.toBe(summary.P_MULTI_START.rows.B);
+  expect(summary.P_MULTI_START.rows.C).toBe(Math.min(summary.P_MULTI_START.rows.A, summary.P_MULTI_START.rows.B));
+  expect(summary.P_MULTI_END.mainEdges).toEqual(expect.arrayContaining(['B->END', 'C->END']));
+  expect(summary.P_RETURN.returnEdges).toContain('B->A');
 });
 
 test('swimlane drag stores node label and lane layout adjustments', async ({ page, request }) => {

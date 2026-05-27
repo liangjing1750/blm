@@ -662,16 +662,29 @@ function openBusinessModelDialog(mode, capabilityId = '', constructId = '') {
     capabilityId: String(capabilityId || '').trim(),
     constructId: String(constructId || '').trim(),
     taskDefinitionId: '',
+    returnMode: '',
   };
   rerenderDomainTabPreserveScroll();
 }
 
-function openTaskDefinitionEditor(taskDefinitionId, capabilityId = '', constructId = '') {
+function openTaskDefinitionEditor(taskDefinitionId, capabilityId = '', constructId = '', returnMode = '') {
   S.ui.businessModelDialog = {
     mode: 'task',
     capabilityId: String(capabilityId || '').trim(),
     constructId: String(constructId || '').trim(),
     taskDefinitionId: String(taskDefinitionId || '').trim(),
+    returnMode: String(returnMode || '').trim(),
+  };
+  rerenderDomainTabPreserveScroll();
+}
+
+function openTaskDefinitionManager() {
+  S.ui.businessModelDialog = {
+    mode: 'tasks',
+    capabilityId: '',
+    constructId: '',
+    taskDefinitionId: '',
+    returnMode: '',
   };
   rerenderDomainTabPreserveScroll();
 }
@@ -685,11 +698,11 @@ function openEntityDefinitionEditor(entityId) {
       next.dataView = 'relation';
       next.entityId = id;
       next.entityRelationEditorCollapsed = false;
-      next.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '' };
+      next.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' };
       return next;
     });
   }
-  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '' };
+  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' };
   S.ui.tab = 'data';
   S.ui.dataView = 'relation';
   S.ui.entityId = id;
@@ -698,7 +711,7 @@ function openEntityDefinitionEditor(entityId) {
 }
 
 function closeBusinessModelDialog() {
-  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '' };
+  S.ui.businessModelDialog = { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' };
   rerenderDomainTabPreserveScroll();
 }
 
@@ -736,6 +749,61 @@ async function removeTaskDefinition(taskDefinitionId) {
   renderSidebar();
   rerenderDomainTabPreserveScroll();
   return true;
+}
+
+function getTaskDefinitionUsageCount(task) {
+  if (!task) return 0;
+  if (typeof getTaskDefinitionSources === 'function') {
+    return getTaskDefinitionSources(task, S.doc).length;
+  }
+  let count = 0;
+  ensureDocumentArray('processes').forEach((proc) => {
+    getProcNodes(proc).forEach((node) => {
+      getNodeOrchestrationTasks(node).forEach((item) => {
+        if (item.taskDefinitionId === task.id) count += 1;
+      });
+    });
+  });
+  return count;
+}
+
+function isBlankTaskDefinition(task) {
+  return !String(task?.target || '').trim()
+    && !String(task?.note || '').trim()
+    && !String(task?.constructId || task?.businessConstructId || '').trim()
+    && !String(task?.businessComponentId || task?.businessComponent || '').trim();
+}
+
+async function cleanupUnreferencedTaskDefinitions(blankOnly = false) {
+  const candidates = getTaskDefinitionItems(S.doc).filter((task) => (
+    getTaskDefinitionUsageCount(task) === 0
+    && (!blankOnly || isBlankTaskDefinition(task))
+  ));
+  if (!candidates.length) {
+    alert(blankOnly ? '没有可清理的空白未引用任务定义。' : '没有未引用任务定义。');
+    return 0;
+  }
+  const label = blankOnly ? '空白未引用任务定义' : '未引用任务定义';
+  if (!await showAppConfirm(`确认删除 ${candidates.length} 个${label}？`, {
+    title: `清理${label}`,
+    confirmLabel: '删除',
+  })) return 0;
+  const ids = new Set(candidates.map((task) => task.id));
+  S.doc.taskDefinitions = ensureDocumentArray('taskDefinitions').filter((task) => !ids.has(task.id || task.name));
+  ensureDocumentArray('businessComponents').forEach((capability) => {
+    if (Array.isArray(capability.taskDefinitionIds)) {
+      capability.taskDefinitionIds = capability.taskDefinitionIds.filter((id) => !ids.has(id));
+    }
+  });
+  ensureDocumentArray('businessConstructs').forEach((construct) => {
+    if (Array.isArray(construct.taskDefinitionIds)) {
+      construct.taskDefinitionIds = construct.taskDefinitionIds.filter((id) => !ids.has(id));
+    }
+  });
+  markModified();
+  renderSidebar();
+  rerenderDomainTabPreserveScroll();
+  return candidates.length;
 }
 
 function getSelectedDomainInfoContext() {
@@ -1152,17 +1220,22 @@ function renderTaskDefinitionDialog(task) {
   const taskId = String(task.id || task.name || '');
   const dialog = S.ui.businessModelDialog || {};
   const constructs = getBusinessConstructItems(S.doc);
-  const parentConstructId = String(task.constructId || dialog.constructId || '').trim();
+  const returnToManager = dialog.returnMode === 'tasks';
+  const parentConstructId = returnToManager ? '' : String(task.constructId || dialog.constructId || '').trim();
   const parentConstruct = parentConstructId ? findBusinessConstructRef(parentConstructId) : null;
   const parentCapabilityId = String(
     parentConstruct?.businessComponentId || task.businessComponentId || dialog.capabilityId || ''
   ).trim();
-  const backButton = parentConstructId
+  const backButton = returnToManager
+    ? `<button class="btn btn-outline btn-sm business-model-back-btn" type="button" data-testid="business-model-dialog-back" onclick="openTaskDefinitionManager()">返回</button>`
+    : parentConstructId
     ? `<button class="btn btn-outline btn-sm business-model-back-btn" type="button" data-testid="business-model-dialog-back" onclick="openBusinessModelDialog('construct','${esc(jsString(parentCapabilityId))}','${esc(jsString(parentConstructId))}')">返回</button>`
     : (parentCapabilityId
       ? `<button class="btn btn-outline btn-sm business-model-back-btn" type="button" data-testid="business-model-dialog-back" onclick="openBusinessModelDialog('capability','${esc(jsString(parentCapabilityId))}')">返回</button>`
       : '');
-  const afterDelete = parentConstructId
+  const afterDelete = returnToManager
+    ? 'openTaskDefinitionManager()'
+    : parentConstructId
     ? `openBusinessModelDialog('construct','${esc(jsString(parentCapabilityId))}','${esc(jsString(parentConstructId))}')`
     : (parentCapabilityId
       ? `openBusinessModelDialog('capability','${esc(jsString(parentCapabilityId))}')`
@@ -1227,17 +1300,123 @@ function renderTaskDefinitionDialog(task) {
   </div>`;
 }
 
+function renderTaskDefinitionManagerDialog() {
+  const tasks = getTaskDefinitionItems(S.doc);
+  const constructs = getBusinessConstructItems(S.doc);
+  const capabilities = getCapabilityItems(S.doc);
+  const refValue = (item, ...keys) => {
+    for (const key of keys) {
+      const value = String(item?.[key] || '').trim();
+      if (value) return value;
+    }
+    return '';
+  };
+  const constructById = new Map();
+  constructs.forEach((construct) => {
+    [construct.id, construct.uid].forEach((value) => {
+      const key = String(value || '').trim();
+      if (key) constructById.set(key, construct);
+    });
+  });
+  const capabilityById = new Map();
+  capabilities.forEach((capability) => {
+    [capability.id, capability.uid].forEach((value) => {
+      const key = String(value || '').trim();
+      if (key) capabilityById.set(key, capability);
+    });
+  });
+  const capabilityByName = new Map(capabilities.map((capability) => [String(capability.name || ''), capability]));
+  const findTaskConstruct = (task) => constructById.get(refValue(task, 'constructUid', 'constructId', 'businessConstructUid', 'businessConstructId'))
+    || constructs.find((construct) => String(construct.name || '') === String(task.constructName || task.businessConstruct || ''))
+    || null;
+  const findTaskCapability = (task, construct = null) => {
+    const id = refValue(construct, 'businessComponentUid', 'businessComponentId')
+      || refValue(task, 'businessComponentUid', 'businessComponentId', 'capabilityUnitId', 'capabilityId');
+    const name = String(construct?.businessComponent || task.businessComponent || task.capabilityUnit || task.capabilityName || '').trim();
+    return capabilityById.get(id) || capabilityByName.get(name) || null;
+  };
+  const groups = new Map();
+  const unreferencedCount = tasks.filter((task) => getTaskDefinitionUsageCount(task) === 0).length;
+  const blankUnreferencedCount = tasks.filter((task) => getTaskDefinitionUsageCount(task) === 0 && isBlankTaskDefinition(task)).length;
+  const getGroup = (key, title, subtitle) => {
+    if (!groups.has(key)) groups.set(key, { key, title, subtitle, tasks: [] });
+    return groups.get(key);
+  };
+  tasks.forEach((task) => {
+    const construct = findTaskConstruct(task);
+    const capability = findTaskCapability(task, construct);
+    const key = construct ? `construct:${construct.id}` : (capability ? `capability:${capability.id}` : '__ungrouped__');
+    const title = construct ? construct.name : (capability ? capability.name : '未归属任务定义');
+    const subtitle = construct
+      ? `${capability?.name || '未归属组件'} / ${construct.name}`
+      : (capability ? `${capability.name} / 未归属构件` : '尚未归属业务构件');
+    getGroup(key, title || '未命名分组', subtitle).tasks.push(task);
+  });
+  const sortedGroups = Array.from(groups.values()).sort((left, right) => {
+    if (left.key === '__ungrouped__') return 1;
+    if (right.key === '__ungrouped__') return -1;
+    return left.title.localeCompare(right.title, 'zh-CN');
+  });
+  const renderTaskRow = (task) => {
+    const usageCount = getTaskDefinitionUsageCount(task);
+    const taskId = String(task.id || task.name || '');
+    const construct = findTaskConstruct(task);
+    const capability = findTaskCapability(task, construct);
+    return `<div class="business-model-move-row task-definition-manager-row" data-testid="task-definition-manager-row">
+      <span class="task-definition-manager-main">
+        <strong>${esc(task.name || task.id || '未命名任务定义')}</strong>
+        <small>${usageCount ? `引用 ${usageCount}` : '未引用'}</small>
+      </span>
+      <span class="business-model-move-actions">
+        <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="task-definition-manager-edit"
+          onclick="openTaskDefinitionEditor('${esc(jsString(taskId))}','${esc(jsString(capability?.id || capability?.uid || task.businessComponentUid || task.businessComponentId || task.capabilityUnitId || ''))}','${esc(jsString(construct?.id || construct?.uid || task.constructUid || task.constructId || task.businessConstructUid || task.businessConstructId || ''))}','tasks')">编辑</button>
+        <button class="stage-quick-btn stage-quick-btn-text danger" type="button" data-testid="task-definition-manager-delete"
+          onclick="removeTaskDefinition('${esc(jsString(taskId))}').then((deleted)=>{if(deleted)openTaskDefinitionManager()})">删除</button>
+      </span>
+    </div>`;
+  };
+  return `<div class="business-model-dialog-panel task-definition-manager-dialog" data-testid="business-model-dialog">
+    <div class="business-model-dialog-head">
+      <h3>任务定义管理</h3>
+      <div class="business-model-dialog-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-clean-blank"
+          onclick="cleanupUnreferencedTaskDefinitions(true)">清理空白未引用 ${blankUnreferencedCount}</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-clean-unused"
+          onclick="cleanupUnreferencedTaskDefinitions(false)">清理未引用 ${unreferencedCount}</button>
+        <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">×</button>
+      </div>
+    </div>
+    <div class="business-model-dialog-body">
+      <p class="business-model-manager-hint">节点里的普通任务在节点内删除；这里管理可复用的任务定义。删除任务定义会解除流程节点引用，但保留节点任务内容。</p>
+      ${sortedGroups.length ? sortedGroups.map((group) => `
+        <div class="business-model-dialog-section task-definition-manager-group" data-testid="task-definition-manager-group">
+          <div class="business-model-section-head">
+            <h4>${esc(group.title)}</h4>
+            <span>${esc(group.subtitle)} · ${group.tasks.length} 项</span>
+          </div>
+          <div class="business-model-move-list">
+            ${group.tasks
+              .sort((left, right) => String(left.name || left.id || '').localeCompare(String(right.name || right.id || ''), 'zh-CN'))
+              .map(renderTaskRow).join('')}
+          </div>
+        </div>`).join('') : '<p class="no-refs">暂无任务定义。</p>'}
+    </div>
+  </div>`;
+}
+
 function renderBusinessModelDialog() {
   const dialog = S.ui.businessModelDialog || {};
   if (!dialog.mode) return '';
   const capability = findExplicitBusinessComponent(dialog.capabilityId);
   const construct = findBusinessConstructRef(dialog.constructId);
   const task = findTaskDefinitionRef(dialog.taskDefinitionId);
-  const panel = dialog.mode === 'task' && task
+  const panel = dialog.mode === 'tasks'
+    ? renderTaskDefinitionManagerDialog()
+    : (dialog.mode === 'task' && task
     ? renderTaskDefinitionDialog(task)
     : (dialog.mode === 'construct' && construct
       ? renderConstructDialog(construct)
-      : (capability ? renderCapabilityDialog(capability) : ''));
+      : (capability ? renderCapabilityDialog(capability) : '')));
   if (!panel) return '';
   return `<div class="business-model-dialog-backdrop" data-testid="business-model-dialog-backdrop">
     ${panel}

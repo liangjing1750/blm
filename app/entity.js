@@ -912,6 +912,7 @@ function setDataView(view, navOptions = {}) {
   }, navOptions);
   S.ui.dataView = view;
   if (view === 'state') {
+    S.ui.stateEditorCollapsed = true;
     const entities = S.doc?.entities || [];
     if (!entities.length) {
       S.ui.entityId = null;

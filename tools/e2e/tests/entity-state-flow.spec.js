@@ -2,6 +2,11 @@ const { test, expect } = require('@playwright/test');
 
 const { createDocument, createNewDocument, openDocument } = require('./support/app-helpers');
 
+async function openStateEditor(page) {
+  await page.getByTestId('state-editor-open').click();
+  await expect(page.getByTestId('state-editor-drawer')).toBeVisible();
+}
+
 test('数据页支持编辑实体状态字段并实时渲染状态图', async ({ page }) => {
   const documentName = `entity-state-${Date.now()}`;
 
@@ -17,6 +22,9 @@ test('数据页支持编辑实体状态字段并实时渲染状态图', async ({
   await page.locator('.field-td-note textarea').first().fill('草稿/待审核/审核通过/已作废');
 
   await page.getByTestId('data-switch-state').click();
+  await expect(page.getByTestId('state-editor-drawer')).toHaveCount(0);
+  await expect(page.getByTestId('state-editor-open')).toBeVisible();
+  await page.getByTestId('state-editor-open').click();
   await expect(page.getByTestId('state-editor-drawer')).toBeVisible();
   await expect(page.locator('.data-toolbar.state-mode .data-state-select-inline')).toBeHidden();
   await expect(page.locator('.data-toolbar.state-mode [data-testid="data-add-entity"]')).toBeHidden();
@@ -192,6 +200,7 @@ test('状态流转支持行内快捷增删和上下移动', async ({ page }) => 
   await page.locator('.field-td-note textarea').first().fill('草稿/待审核/已完成');
 
   await page.getByTestId('data-switch-state').click();
+  await openStateEditor(page);
   await page.getByTestId('entity-transition-add-button').click();
   await page.getByTestId('entity-transition-note-0').fill('提交审核');
 
@@ -256,6 +265,7 @@ test('数据页允许一个主状态加多个子状态且不增加列', async ({
   expect(headerCount).toBe(6);
 
   await page.getByTestId('data-switch-state').click();
+  await openStateEditor(page);
   await page.getByTestId('entity-state-kind-0').selectOption('initial');
   await page.getByTestId('entity-state-kind-1').selectOption('intermediate');
   await page.getByTestId('entity-state-kind-2').selectOption('terminal');
@@ -345,6 +355,7 @@ test('多状态字段切换到下方卡片时会自动滚入可视区', async ({
   await openDocument(page, documentName);
   await page.getByTestId('tab-data').click();
   await page.getByTestId('data-switch-state').click();
+  await openStateEditor(page);
 
   await page.locator('.entity-state-main-shell').evaluate((node) => {
     node.scrollTop = 0;
@@ -513,6 +524,7 @@ test('旧文档中写在字段规则里的状态串会自动进入状态编辑',
   await openDocument(page, documentName);
   await page.getByTestId('tab-data').click();
   await page.getByTestId('data-switch-state').click();
+  await openStateEditor(page);
 
   await expect(page.getByTestId('entity-state-values-text')).toContainText('草稿/待审核/已通过/已撤销');
   await expect(page.getByTestId('entity-state-diagram')).toContainText('草稿');
@@ -839,7 +851,6 @@ test('state transition route can be dragged into manual waypoints', async ({ pag
   await openDocument(page, documentName);
   await page.getByTestId('tab-data').click();
   await page.getByTestId('data-switch-state').click();
-  await page.getByTestId('state-editor-hide').click();
 
   const hitboxIndex = await page.getByTestId('entity-state-link-route-hitbox').evaluateAll((nodes) => (
     nodes.findIndex((node) => {

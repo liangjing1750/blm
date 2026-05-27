@@ -201,7 +201,58 @@ test('未绑定任务定义的节点任务编辑不会制造复用任务', async
   });
 });
 
-test('节点任务支持按业务组件和业务构件复用已有任务', async ({ page, request }) => {
+test('task definition manager deletes unreferenced dirty definitions', async ({ page, request }) => {
+  const documentName = `process-task-definition-manager-${Date.now()}`;
+  const doc = buildProcessEditorDoc(documentName);
+  doc.businessComponents = [
+    { id: 'COMP1', name: 'Account component', kind: 'core', constructIds: [], taskDefinitionIds: ['TD_COMPONENT'] },
+  ];
+  doc.taskDefinitions.push({
+    id: 'TD_UNUSED',
+    name: 'Unused dirty task',
+    type: 'Service',
+    target: '',
+    note: '',
+    constructId: '',
+    businessComponentId: '',
+  }, {
+    id: 'TD_COMPONENT',
+    name: 'Component scoped task',
+    type: 'Service',
+    target: '',
+    note: '',
+    constructId: '',
+    businessComponentId: 'COMP1',
+  });
+  await createDocument(request, documentName, doc);
+
+  await openTaskEditor(page, documentName);
+  await page.getByTestId('node-perspective-engineering').click();
+  await page.getByTestId('orchestration-task-manager-button').click();
+  const dialog = page.getByTestId('business-model-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('任务定义管理');
+  await expect(dialog.getByTestId('task-definition-manager-row')).toHaveCount(5);
+  await expect(dialog.getByTestId('task-definition-manager-group').filter({ hasText: 'Account component' })).toContainText('Component scoped task');
+  await dialog.getByTestId('task-definition-manager-row').filter({ hasText: 'Component scoped task' })
+    .getByTestId('task-definition-manager-edit').click();
+  await expect(dialog).toContainText('任务定义');
+  await page.getByTestId('business-model-dialog-back').click();
+  await expect(dialog).toContainText('任务定义管理');
+  await expect(dialog.getByText('Unused dirty task')).toBeVisible();
+  await expect(dialog.getByText('引用 1').first()).toBeVisible();
+  await dialog.getByTestId('task-definition-manager-row').filter({ hasText: 'Unused dirty task' })
+    .getByTestId('task-definition-manager-delete').click();
+  await acceptAppDialog(page);
+
+  await expect(dialog.getByText('Unused dirty task')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => ({
+    hasUnused: S.doc.taskDefinitions.some((item) => item.id === 'TD_UNUSED'),
+    definitionCount: S.doc.taskDefinitions.length,
+  }))).toEqual({ hasUnused: false, definitionCount: 4 });
+});
+
+test('鑺傜偣浠诲姟鏀寔鎸変笟鍔＄粍浠跺拰涓氬姟鏋勪欢澶嶇敤宸叉湁浠诲姟', async ({ page, request }) => {
   const documentName = `process-reuse-orchestration-${Date.now()}`;
   await createDocument(request, documentName, buildProcessEditorDoc(documentName));
 

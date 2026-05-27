@@ -4,6 +4,19 @@ const { test, expect } = require('@playwright/test');
 
 const { workspaceDir } = require('./support/test-env');
 
+async function saveDocumentFromToolbar(page) {
+  await page.locator('#btn-save').click();
+  await confirmOptionalAppDialog(page);
+}
+
+async function confirmOptionalAppDialog(page) {
+  const dialog = page.getByTestId('app-dialog');
+  await dialog.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
+  if (await dialog.isVisible().catch(() => false)) {
+    await page.getByTestId('app-dialog-confirm').click();
+  }
+}
+
 test('用户可以修改文档并点击保存落盘', async ({ page }) => {
   const documentName = '端到端保存文档';
   const documentPath = path.join(workspaceDir, documentName, 'manifest.json');
@@ -18,7 +31,7 @@ test('用户可以修改文档并点击保存落盘', async ({ page }) => {
   await expect(page.getByTestId('modified-badge')).toBeVisible();
   await expect(page.getByTestId('save-alert')).toBeVisible();
 
-  await page.keyboard.press('Control+S');
+  await saveDocumentFromToolbar(page);
   await expect(page.getByTestId('modified-badge')).toBeHidden();
   await expect(page.getByTestId('save-alert')).toBeHidden();
 
@@ -59,15 +72,18 @@ test('保存后保留当前数据状态图工作位', async ({ page }) => {
   await page.locator('.field-td-note textarea').first().fill('草稿/待审核/已完成');
 
   await page.getByTestId('data-switch-state').click();
+  await expect(page.getByTestId('state-editor-drawer')).toHaveCount(0);
+  await page.getByTestId('state-editor-open').click();
   await expect(page.getByTestId('state-editor-drawer')).toBeVisible();
-  await expect(page.getByTestId('data-state-entity-select')).toHaveValue('E1');
+  const selectedEntityName = await page.getByTestId('data-state-entity-select').locator('option:checked').textContent();
+  expect(selectedEntityName).toContain('用户账号');
 
-  await page.keyboard.press('Control+S');
+  await saveDocumentFromToolbar(page);
 
   await expect(page.getByTestId('modified-badge')).toBeHidden();
   await expect(page.getByTestId('tab-data')).toHaveClass(/active/);
   await expect(page.getByTestId('state-editor-drawer')).toBeVisible();
-  await expect(page.getByTestId('data-state-entity-select')).toHaveValue('E1');
+  await expect(page.getByTestId('data-state-entity-select').locator('option:checked')).toContainText('用户账号');
   await expect(page.getByTestId('entity-state-field-select')).toHaveValue('状态');
 });
 
@@ -86,6 +102,7 @@ test('用户可以通过另存生成新的业务域文档副本', async ({ page 
   await page.getByTestId('toolbar-save-as-button').click();
   await page.getByTestId('save-as-name-input').fill(copiedName);
   await page.getByTestId('save-as-confirm-button').click();
+  await confirmOptionalAppDialog(page);
 
   await expect(page.getByTestId('current-file-name')).toHaveText(copiedName);
   await expect(page.getByTestId('save-as-modal')).toHaveClass(/hidden/);

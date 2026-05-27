@@ -119,8 +119,8 @@ const S = {
     entityDrawerW: 620,
     entityRelationEditorCollapsed: true,
     stateDiagramZoom: 1,
-    stateEditorCollapsed: false,
-    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '' },
+    stateEditorCollapsed: true,
+    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '' },
   }
 };
 

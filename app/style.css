@@ -2846,7 +2846,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 .orch-reuse-panel {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(150px, 1.2fr) minmax(170px, 1.4fr) auto;
+  grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(150px, 1.2fr) minmax(170px, 1.4fr) auto auto;
   gap: 6px;
   align-items: center;
   margin: 6px 0 8px;
@@ -6372,6 +6372,9 @@ body.is-saving * {
 .business-model-dialog-panel.task-definition-dialog {
   width: min(720px, calc(100vw - 48px));
 }
+.business-model-dialog-panel.task-definition-manager-dialog {
+  width: min(900px, calc(100vw - 48px));
+}
 .business-model-dialog-head {
   display: flex;
   align-items: center;
@@ -6456,6 +6459,36 @@ body.is-saving * {
   display: inline-flex;
   gap: 6px;
   flex-shrink: 0;
+}
+.business-model-manager-hint {
+  margin: 0;
+  color: var(--text-m);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.task-definition-manager-group {
+  gap: 8px;
+}
+.task-definition-manager-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.task-definition-manager-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-definition-manager-main small {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
 }
 .task-definition-tech-group input {
   max-width: 100%;
