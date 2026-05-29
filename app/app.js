@@ -626,34 +626,66 @@ function showAppToast(message, timeout = 3600) {
 function renderWorkspaceFileList(files) {
   const fileList = document.getElementById('file-list');
   if (!fileList) return;
+  const summaries = Array.isArray(S.recovery.workspaceSummaries) ? S.recovery.workspaceSummaries : [];
+  const summaryByName = new Map(summaries.map((item) => [String(item.name || ''), item]));
+  const groups = new Map();
+  files.forEach((fileName) => {
+    const summary = summaryByName.get(fileName) || { name: fileName, title: fileName, space: '默认空间', tags: [] };
+    const space = String(summary.space || '默认空间').trim() || '默认空间';
+    if (!groups.has(space)) groups.set(space, []);
+    groups.get(space).push({ ...summary, name: fileName });
+  });
   fileList.innerHTML = files.length
-    ? files.map((fileName) => `
+    ? Array.from(groups.entries()).map(([space, items]) => `
+      <div class="file-space-group">
+        <div class="file-space-head"><span>${esc(space)}</span><small>${items.length} 份文档</small></div>
+        ${items.map((summary) => {
+          const fileName = summary.name;
+          const tags = Array.isArray(summary.tags) ? summary.tags : [];
+          return `
         <div class="file-list-item" onclick='App.openFile(${JSON.stringify(fileName)})'>
           <button class="file-list-item-main" type="button">
-            <span class="file-list-item-name">${esc(fileName)}</span>
+            <span class="file-list-item-name">${esc(summary.title || fileName)}</span>
+            <span class="file-list-item-meta">${esc(fileName)}${summary.author ? ` · ${esc(summary.author)}` : ''}${summary.date ? ` · ${esc(summary.date)}` : ''}</span>
+            ${tags.length ? `<span class="file-list-tags">${tags.slice(0, 4).map((tag) => `<em>${esc(tag)}</em>`).join('')}</span>` : ''}
           </button>
           <div class="file-list-item-actions">
-            <button class="btn btn-outline btn-sm" type="button"
-              onclick='event.stopPropagation();App.openHistoryModal(${JSON.stringify(fileName)})'>历史</button>
             <button class="file-list-item-del" type="button"
               onclick='event.stopPropagation();App.deleteFile(${JSON.stringify(fileName)})' title="删除">×</button>
           </div>
-        </div>`).join('')
+        </div>`;
+        }).join('')}
+      </div>`).join('')
     : '<div class="file-empty">暂无工作区文档。</div>';
 }
 
-function renderHistoryEntries(docName, entries) {
+function renderHistoryEntries(docName, entries, versions = []) {
   const subtitle = document.getElementById('history-modal-subtitle');
   if (subtitle) {
     subtitle.textContent = docName ? `当前文档：${docName}` : '';
   }
   const list = document.getElementById('history-list');
   if (!list) return;
-  if (!entries.length) {
-    list.innerHTML = '<div class="file-empty">当前文档还没有历史快照。</div>';
+  if (!entries.length && !versions.length) {
+    list.innerHTML = '<div class="file-empty">当前文档还没有版本记录。</div>';
     return;
   }
-  list.innerHTML = entries.map((entry) => `
+  const namedVersionHtml = versions.length ? `
+    <div class="history-section-title">存为版本</div>
+    ${versions.map((entry) => `
+      <div class="recovery-item">
+        <div class="recovery-item-main">
+          <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
+          <div class="recovery-item-meta">稳定只读版本，适合放到评审或 Confluence 链接中。</div>
+        </div>
+        <button class="btn btn-outline btn-sm" type="button"
+          onclick='copyVersionLocator(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>复制链接</button>
+        <button class="btn btn-primary btn-sm" type="button"
+          onclick='App.openVersion(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
+      </div>`).join('')}` : '';
+  const historyHtml = entries.length ? `
+    <div class="history-section-title">自动/手动保存历史</div>
+    ${entries.map((entry) => `
     <div class="recovery-item">
       <div class="recovery-item-main">
         <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
@@ -661,7 +693,8 @@ function renderHistoryEntries(docName, entries) {
       </div>
       <button class="btn btn-primary btn-sm" type="button"
         onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>恢复</button>
-    </div>`).join('');
+    </div>`).join('')}` : '';
+  list.innerHTML = namedVersionHtml + historyHtml;
 }
 
 function renderTrashEntries(entries) {
@@ -1948,6 +1981,16 @@ async function loadWorkspaceDocumentNames() {
   return S.files;
 }
 
+async function loadWorkspaceDocumentSummaries() {
+  const summaries = await api.fileSummaries();
+  if (summaries.error) {
+    alert(summaries.error);
+    return null;
+  }
+  S.recovery.workspaceSummaries = Array.isArray(summaries) ? summaries : [];
+  return S.recovery.workspaceSummaries;
+}
+
 async function loadWorkspaceTrashEntries() {
   const entries = await api.trash();
   if (entries.error) {
@@ -2660,11 +2703,12 @@ const App = {
 
   async cmdOpen() {
     resetRecoveryState();
-    const [files, trashEntries] = await Promise.all([
+    const [files, summaries, trashEntries] = await Promise.all([
       loadWorkspaceDocumentNames(),
+      loadWorkspaceDocumentSummaries(),
       loadWorkspaceTrashEntries(),
     ]);
-    if (!files || !trashEntries) return;
+    if (!files || !summaries || !trashEntries) return;
     renderWorkspaceFileList(files);
     renderTrashEntries(trashEntries);
     syncOpenModalTabs();
@@ -2682,17 +2726,20 @@ const App = {
 
   async openHistoryModal(name) {
     if (!name) return;
-    const entries = await api.history(name);
+    const [entries, versions] = await Promise.all([api.history(name), api.versions(name)]);
     if (entries.error) return alert(entries.error);
+    if (versions.error) return alert(versions.error);
     S.recovery.historyDocName = name;
     S.recovery.historyEntries = Array.isArray(entries) ? entries : [];
-    renderHistoryEntries(name, S.recovery.historyEntries);
+    S.recovery.versionEntries = Array.isArray(versions) ? versions : [];
+    renderHistoryEntries(name, S.recovery.historyEntries, S.recovery.versionEntries);
     openModalById('history-modal-overlay');
   },
 
   closeHistoryModal() {
     S.recovery.historyDocName = '';
     S.recovery.historyEntries = [];
+    S.recovery.versionEntries = [];
     closeModalById('history-modal-overlay');
   },
 
@@ -2818,6 +2865,11 @@ const App = {
     } else {
       alert(versionLink ? `已存为只读版本：${versionLink}` : '已存为只读版本');
     }
+  },
+
+  async cmdVersions() {
+    if (!S.currentFile) return showAppAlert('请先打开一个文档。');
+    await App.openHistoryModal(S.currentFile);
   },
 
   async openVersion(name, versionId) {
@@ -3296,6 +3348,105 @@ function initFloatingHelpTooltips() {
 }
 
 initFloatingHelpTooltips();
+
+function getLocatorBaseParams() {
+  const params = new URLSearchParams();
+  if (S.currentFile) params.set('doc', S.currentFile);
+  if (S.readOnly && S.doc?.meta?.version_id) params.set('at', `version:${S.doc.meta.version_id}`);
+  return params;
+}
+
+function buildLocatorUrl(extra = {}) {
+  const params = getLocatorBaseParams();
+  Object.entries(extra).forEach(([key, value]) => {
+    const text = String(value || '').trim();
+    if (text) params.set(key, text);
+  });
+  return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+}
+
+function getCurrentLocatorActions() {
+  if (!S.currentFile) return [];
+  const actions = [
+    { label: '复制当前视图链接', url: buildLocatorUrl({ tab: S.ui.tab || 'domain' }) },
+  ];
+  if (S.ui.tab === 'process') {
+    const view = S.ui.procDiagramMode === 'linear' ? 'summary' : 'swimlane';
+    if (S.ui.procId) {
+      actions.push({
+        label: '复制当前流程链接',
+        url: buildLocatorUrl({ tab: 'process', proc: S.ui.procId, view }),
+      });
+    }
+    if (S.ui.procId && S.ui.taskId) {
+      actions.push({
+        label: '复制当前节点链接',
+        url: buildLocatorUrl({ tab: 'process', proc: S.ui.procId, task: S.ui.taskId, view }),
+      });
+    }
+  }
+  if (S.ui.tab === 'data' && S.ui.entityId) {
+    actions.push({
+      label: '复制当前实体链接',
+      url: buildLocatorUrl({ tab: 'data', entity: S.ui.entityId }),
+    });
+  }
+  if (S.readOnly && S.doc?.meta?.version_id) {
+    actions.push({
+      label: '复制当前只读版本链接',
+      url: buildLocatorUrl({ tab: S.ui.tab || 'domain' }),
+    });
+  }
+  return actions;
+}
+
+async function copyLocatorUrl(url, label = '链接') {
+  try {
+    await navigator.clipboard.writeText(url);
+    showAppToast(`已复制${label}`);
+  } catch (error) {
+    showAppAlert(url, { title: `${label}复制失败，请手动复制` });
+  }
+}
+
+function hideLocatorMenu() {
+  const menu = document.getElementById('locator-menu');
+  if (!menu) return;
+  menu.classList.add('hidden');
+  menu.innerHTML = '';
+}
+
+function showLocatorMenu(event) {
+  const target = event.target?.closest?.('#tab-content, #sidebar-content, #file-name, #collab-status');
+  if (!target || !S.currentFile) return;
+  const actions = getCurrentLocatorActions();
+  if (!actions.length) return;
+  event.preventDefault();
+  const menu = document.getElementById('locator-menu');
+  if (!menu) return;
+  menu.innerHTML = actions.map((action) => `
+    <button type="button" onclick="copyLocatorUrl('${esc(jsString(action.url))}','${esc(jsString(action.label.replace(/^复制/, '')))}');hideLocatorMenu()">
+      ${esc(action.label)}
+    </button>
+  `).join('');
+  menu.classList.remove('hidden');
+  const rect = menu.getBoundingClientRect();
+  const x = Math.min(event.clientX, window.innerWidth - rect.width - 12);
+  const y = Math.min(event.clientY, window.innerHeight - rect.height - 12);
+  menu.style.left = `${Math.max(8, x)}px`;
+  menu.style.top = `${Math.max(8, y)}px`;
+}
+
+function copyVersionLocator(docName, versionId) {
+  const params = new URLSearchParams();
+  params.set('doc', docName);
+  params.set('at', `version:${versionId}`);
+  copyLocatorUrl(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '版本链接');
+}
+
+document.addEventListener('contextmenu', showLocatorMenu);
+document.addEventListener('click', hideLocatorMenu);
+window.addEventListener('blur', hideLocatorMenu);
 
 function getStartupLinkParams() {
   const params = new URLSearchParams(window.location.search || '');

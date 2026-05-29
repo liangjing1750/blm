@@ -665,6 +665,24 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertTrue(manifest_path(workspace, "Loans").exists())
             self.assertTrue(markdown_path(workspace, "Loans").exists())
 
+    def test_list_document_summaries_exposes_space_and_tags(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            document["meta"]["space"] = "交割业务"
+            document["meta"]["tags"] = "担保品，WPF"
+            document["meta"]["author"] = "Tester"
+
+            storage.save("Loans", document)
+
+            summaries = storage.list_document_summaries()
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0]["name"], "Loans")
+            self.assertEqual(summaries[0]["space"], "交割业务")
+            self.assertEqual(summaries[0]["tags"], ["担保品", "WPF"])
+            self.assertEqual(summaries[0]["author"], "Tester")
+
     def test_save_stores_process_prototypes_as_package_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

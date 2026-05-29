@@ -1592,6 +1592,14 @@ function renderDomainTab(options = {}) {
         <span>日期</span>
         <input type="text" data-testid="domain-date-input" value="${esc(meta.date || '')}" oninput="setMeta('date',this.value)">
       </label>
+      <label class="domain-info-inline-field domain-info-space-field">
+        <span>团队空间</span>
+        <input type="text" data-testid="domain-space-input" value="${esc(meta.space || meta.teamSpace || '')}" placeholder="如：交割业务" oninput="setMeta('space',this.value)">
+      </label>
+      <label class="domain-info-inline-field domain-info-tags-field">
+        <span>标签</span>
+        <input type="text" data-testid="domain-tags-input" value="${esc(Array.isArray(meta.tags) ? meta.tags.join('，') : (meta.tags || ''))}" placeholder="逗号分隔" oninput="setMeta('tags',this.value)">
+      </label>
     </div>
   `;
 

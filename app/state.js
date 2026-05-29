@@ -92,7 +92,9 @@ const S = {
     openTab: 'workspace',
     historyDocName: '',
     historyEntries: [],
+    versionEntries: [],
     trashEntries: [],
+    workspaceSummaries: [],
   },
   manual: {
     docs: [],
@@ -374,7 +376,9 @@ function resetRecoveryState() {
   S.recovery.openTab = 'workspace';
   S.recovery.historyDocName = '';
   S.recovery.historyEntries = [];
+  S.recovery.versionEntries = [];
   S.recovery.trashEntries = [];
+  S.recovery.workspaceSummaries = [];
 }
 function getEntityName(id) { return S.doc?.entities?.find(e=>e.id===id)?.name||id; }
 function getProcNodes(proc) {

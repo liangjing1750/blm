@@ -17,7 +17,8 @@ from blm_core.storage import WorkspaceStorage
 
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-CHANGELOG_COMPACT_THRESHOLD = 100
+CHANGELOG_COMPACT_THRESHOLD = 60
+CHANGELOG_COMPACT_BYTES = 2 * 1024 * 1024
 
 
 class WebSocketProtocolError(RuntimeError):
@@ -394,7 +395,11 @@ class CollaborationManager:
             lines = [line for line in changelog_path.read_text("utf-8").splitlines() if line.strip()]
         except OSError:
             return
-        if len(lines) <= CHANGELOG_COMPACT_THRESHOLD:
+        try:
+            size_exceeded = changelog_path.stat().st_size > CHANGELOG_COMPACT_BYTES
+        except OSError:
+            size_exceeded = False
+        if len(lines) <= CHANGELOG_COMPACT_THRESHOLD and not size_exceeded:
             return
         compact_record = dict(record)
         compact_record["compacted"] = True

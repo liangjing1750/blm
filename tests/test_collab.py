@@ -308,6 +308,30 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertTrue(compacted["compacted"])
             self.assertEqual(compacted["seq"], 104)
 
+    def test_snapshot_changelog_compacts_after_size_limit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["note"] = "x" * (2 * 1024 * 1024 + 1)
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage)
+            record = {
+                "seq": 1,
+                "doc": "CollabSmoke",
+                "user": "Tester",
+                "clientId": "client-test",
+                "ts": "2026-05-29T00:00:00+00:00",
+                "mode": "snapshot",
+                "document": document,
+            }
+
+            manager._append_changelog("CollabSmoke", record)
+
+            changelog = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "changelog.jsonl"
+            lines = changelog.read_text("utf-8").splitlines()
+            self.assertEqual(len(lines), 1)
+            self.assertTrue(json.loads(lines[0])["compacted"])
+
 
 if __name__ == "__main__":
     unittest.main()

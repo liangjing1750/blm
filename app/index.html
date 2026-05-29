@@ -23,6 +23,7 @@
     <button onclick="App.cmdOpen()" class="btn btn-ghost" data-testid="toolbar-open-button">打开</button>
     <button onclick="App.cmdSave()" class="btn btn-primary" id="btn-save" title="保存 (Ctrl+S)">保存</button>
     <button onclick="App.cmdCreateVersion()" class="btn btn-ghost" data-testid="toolbar-version-button">存为版本</button>
+    <button onclick="App.cmdVersions()" class="btn btn-ghost" data-testid="toolbar-history-button">版本记录</button>
     <button onclick="App.cmdSaveAs()" class="btn btn-ghost" data-testid="toolbar-save-as-button" id="toolbar-save-as-label">复制</button>
     <button onclick="App.cmdCompare()" class="btn btn-ghost" data-testid="toolbar-compare-button">比对</button>
     <button onclick="App.cmdMerge()" class="btn btn-ghost" data-testid="toolbar-merge-button">合并</button>
@@ -52,6 +53,8 @@
 </div>
 
 <div id="app-toast" class="app-toast hidden" data-testid="app-toast" role="status" aria-live="polite"></div>
+
+<div id="locator-menu" class="locator-menu hidden" data-testid="locator-menu"></div>
 
 <div id="save-progress" class="operation-progress hidden" data-testid="save-progress" aria-live="polite" aria-modal="true">
   <div class="operation-progress-card" role="status">
@@ -112,7 +115,7 @@
     </div>
     <div class="open-modal-body">
       <section id="open-workspace-panel" class="open-modal-panel">
-        <div class="recovery-subtitle">直接从当前工作区打开文档，历史版本可在每条文档右侧进入。</div>
+        <div class="recovery-subtitle">按团队空间分组展示文档；打开后可从右上角“版本记录”查看历史和存为版本。</div>
         <div id="file-list" class="file-list open-modal-scroll"></div>
       </section>
       <section id="open-trash-panel" class="open-modal-panel hidden">

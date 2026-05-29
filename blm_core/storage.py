@@ -107,6 +107,28 @@ class WorkspaceStorage(DocumentFileStore):
                 names.add(entry.stem)
         return sorted(names)
 
+    def list_document_summaries(self) -> list[dict]:
+        summaries: list[dict] = []
+        for name in self.list_documents():
+            try:
+                document = self.load(name)
+            except (FileNotFoundError, InvalidDocumentNameError, OSError, ValueError):
+                continue
+            meta = document.get("meta") if isinstance(document.get("meta"), dict) else {}
+            raw_tags = meta.get("tags", [])
+            tags = raw_tags if isinstance(raw_tags, list) else str(raw_tags or "").replace("，", ",").split(",")
+            summaries.append(
+                {
+                    "name": name,
+                    "title": str(meta.get("domain") or meta.get("title") or name).strip() or name,
+                    "space": str(meta.get("space") or meta.get("teamSpace") or "默认空间").strip() or "默认空间",
+                    "tags": [str(item).strip() for item in tags if str(item).strip()],
+                    "author": str(meta.get("author", "")).strip(),
+                    "date": str(meta.get("date", "")).strip(),
+                }
+            )
+        return summaries
+
     def list_history(self, name: str) -> list[dict]:
         safe_name = self._validate_name(name)
         target_dir = self.history_dir / safe_name

@@ -83,6 +83,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return collab.handle_websocket(self)
             if path == "/api/files":
                 return self._json(storage.list_documents())
+            if path == "/api/files/meta":
+                return self._json(storage.list_document_summaries())
             if path == "/api/trash":
                 return self._json(storage.list_trash())
             if path == "/api/docs":

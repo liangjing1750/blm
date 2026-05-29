@@ -58,7 +58,10 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn('id="trash-list"', html)
         self.assertIn('id="save-as-modal-title">复制文档</h3>', html)
         self.assertIn('id="save-as-confirm-label">确认复制</button>', html)
+        self.assertNotIn('id="save-alert"', html)
         self.assertIn('data-testid="toolbar-compare-button"', html)
+        self.assertIn('data-testid="toolbar-history-button"', html)
+        self.assertIn('id="locator-menu"', html)
         self.assertLess(
             html.find('data-testid="toolbar-save-as-button"'),
             html.find('data-testid="toolbar-compare-button"'),
@@ -121,6 +124,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("readOnly", state_js)
         self.assertIn("async createVersion(name, document, message = '')", api_js)
         self.assertIn("async loadVersion(name, versionId)", api_js)
+        self.assertIn("async fileSummaries()", api_js)
         self.assertIn("COLLAB_SNAPSHOT_DEBOUNCE_MS = 3000", (APP_DIR / "collab.js").read_text("utf-8"))
         collab_js = (APP_DIR / "collab.js").read_text("utf-8")
         self.assertIn("COLLAB_RECONNECT_MS = 3000", collab_js)
@@ -132,7 +136,13 @@ class FrontendStructureTests(unittest.TestCase):
         index_html = (APP_DIR / "index.html").read_text("utf-8")
         self.assertIn('id="collab-conflict-alert"', index_html)
         self.assertIn('data-testid="toolbar-version-button"', index_html)
+        self.assertIn('data-testid="toolbar-history-button"', index_html)
         self.assertIn('id="readonly-alert"', index_html)
+        self.assertIn("showLocatorMenu", app_js)
+        self.assertIn("copyVersionLocator", app_js)
+        self.assertIn("renderWorkspaceFileList(files)", app_js)
+        self.assertIn("file-space-group", style_css)
+        self.assertIn("locator-menu", style_css)
         self.assertIn("openStartupLocatorIfPresent", app_js)
         self.assertIn("applyLocatorToUi", app_js)
         self.assertIn("App.openLatestVersion()", index_html)
