@@ -606,19 +606,44 @@ function itemMatchesBusinessDomain(item, selectedDomainId, doc = S.doc) {
 
 function getValueStreamItems(doc = S.doc) {
   const byId = new Map();
-  (Array.isArray(doc?.valueStreams) ? doc.valueStreams : []).forEach((stream) => {
-    const id = String(stream.id || stream.name || '').trim();
-    if (!id) return;
-    byId.set(id, { id, name: stream.name || id, scope: stream.scope || '' });
-  });
+  const findExisting = (id, name) => {
+    const targetId = String(id || '').trim();
+    const targetName = String(name || '').trim();
+    if (targetId && byId.has(targetId)) return byId.get(targetId);
+    if (!targetName) return null;
+    return [...byId.values()].find((item) => item.name === targetName) || null;
+  };
   (doc?.panorama?.columns || []).forEach((column) => {
     const id = String(column.uid || column.id || column.name || '').trim();
-    if (!id || byId.has(id)) return;
-    byId.set(id, { id, name: column.name || id, scope: column.note || '' });
+    if (!id) return;
+    const name = String(column.name || id).trim();
+    const existing = findExisting(id, name);
+    if (existing) {
+      if (existing.id !== id) byId.delete(existing.id);
+      existing.id = id;
+      existing.name = name || existing.name;
+      existing.scope = existing.scope || column.note || '';
+      byId.set(id, existing);
+      return;
+    }
+    byId.set(id, { id, name, scope: column.note || '' });
+  });
+  (Array.isArray(doc?.valueStreams) ? doc.valueStreams : []).forEach((stream) => {
+    const id = String(stream.uid || stream.id || stream.name || '').trim();
+    if (!id) return;
+    const name = String(stream.name || id).trim();
+    const existing = findExisting(id, name);
+    if (existing) {
+      existing.name = existing.name || name;
+      existing.scope = existing.scope || stream.scope || '';
+      return;
+    }
+    byId.set(id, { id, name, scope: stream.scope || '' });
   });
   getStageItems(doc).filter((stage) => !stage.virtual).forEach((stage) => {
     const id = String(stage.valueStreamUid || stage.panoramaColumnUid || stage.valueStream || '未归类价值流');
-    if (!byId.has(id)) byId.set(id, { id, name: stage.valueStream || id, scope: '' });
+    const name = String(stage.valueStream || id).trim();
+    if (!findExisting(id, name)) byId.set(id, { id, name, scope: '' });
   });
   return [...byId.values()];
 }

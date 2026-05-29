@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BLM使用工作流建议</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #162033;
+      --muted: #5d6b82;
+      --line: #d8e0ec;
+      --panel: #f7f9fc;
+      --blue: #2563eb;
+      --green: #0f9f6e;
+      --orange: #d97706;
+      --purple: #7c3aed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      color: var(--ink);
+      background: #ffffff;
+      line-height: 1.65;
+    }
+    header {
+      padding: 44px 56px 30px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #f6f9ff 0%, #ffffff 100%);
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 30px 40px 64px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 34px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 34px 0 14px;
+      padding-top: 8px;
+      font-size: 24px;
+      border-top: 1px solid var(--line);
+    }
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 18px;
+    }
+    p { margin: 8px 0; }
+    .lead {
+      max-width: 900px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 3px 10px;
+      border: 1px solid #bed2ff;
+      border-radius: 999px;
+      color: #174ea6;
+      background: #eef5ff;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+    }
+    .card h3 { margin-top: 0; }
+    .card.product { border-top: 4px solid var(--blue); }
+    .card.flow { border-top: 4px solid var(--purple); }
+    .card.frontend { border-top: 4px solid var(--orange); }
+    .card.backend { border-top: 4px solid var(--green); }
+    ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+    li { margin: 5px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #eef3fb;
+      font-weight: 700;
+    }
+    .flowline {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 120px 1fr 250px;
+      gap: 14px;
+      align-items: stretch;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .step-num {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--panel);
+      color: #174ea6;
+      font-weight: 700;
+    }
+    .step-body { padding: 12px 0; }
+    .step-owner {
+      padding: 12px;
+      color: var(--muted);
+      background: #fbfcff;
+      border-left: 1px solid var(--line);
+    }
+    .note {
+      border-left: 4px solid var(--blue);
+      background: #f4f7ff;
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .warning {
+      border-left-color: var(--orange);
+      background: #fff8ed;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #eef2f7;
+      font-family: Consolas, monospace;
+      font-size: 0.95em;
+    }
+    @media (max-width: 900px) {
+      header { padding: 30px 24px 22px; }
+      main { padding: 22px 18px 44px; }
+      .grid, .two-col { grid-template-columns: 1fr; }
+      .step { grid-template-columns: 1fr; }
+      .step-owner { border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>BLM使用工作流建议</h1>
+    <p class="lead">这份建议用于团队内推广 BLM。核心目标不是把工具介绍完，而是让产品、流程编排、前端、后端在同一份业务模型上并行工作，减少“口头理解一致、落地各画各的”这种反复。</p>
+    <div class="meta">
+      <span class="tag">交割业务建模</span>
+      <span class="tag">产品到研发协同</span>
+      <span class="tag">流程、表单、任务、实体贯通</span>
+      <span class="tag">建议版本：v1.0</span>
+    </div>
+  </header>
+
+  <main>
+    <h2>1. BLM解决什么问题</h2>
+    <p>BLM 是一个业务语言建模工作台。它把业务全景、阶段、流程、角色、节点、步骤、表单、任务、实体和附件放在同一份文档中维护，方便团队从业务理解一路下钻到系统实现。</p>
+    <div class="two-col">
+      <div class="card">
+        <h3>面向业务理解</h3>
+        <ul>
+          <li>用全景视图说明业务域、价值流环节和阶段的位置。</li>
+          <li>用流程视图说明一个办理事项如何开始、处理、分支和结束。</li>
+          <li>用角色视图检查谁参与了哪些流程、节点和任务。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>面向研发落地</h3>
+        <ul>
+          <li>用业务组件、业务构件沉淀后端边界和任务定义。</li>
+          <li>用实体、表单和状态图连接前端界面、后端数据和流程编排。</li>
+          <li>用预览、导出、比对、合并支撑评审和多人协作。</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>2. 四类角色的分工</h2>
+    <div class="grid">
+      <section class="card product">
+        <h3>产品经理</h3>
+        <ul>
+          <li>定义业务域、价值流环节、阶段。</li>
+          <li>把阶段拆到流程，明确触发、角色、结果。</li>
+          <li>下钻到节点、用户步骤、表单需求。</li>
+          <li>主持业务走查，确认术语和边界。</li>
+        </ul>
+      </section>
+      <section class="card flow">
+        <h3>流程编排</h3>
+        <ul>
+          <li>把流程结构整理成节点、分支、连线。</li>
+          <li>在节点下编排任务，确认前后顺序。</li>
+          <li>建立表单字段与实体字段的关系。</li>
+          <li>检查泳道图、摘要图和异常路径。</li>
+        </ul>
+      </section>
+      <section class="card frontend">
+        <h3>前端开发</h3>
+        <ul>
+          <li>基于流程节点和表单设计原型。</li>
+          <li>补充页面交互、状态展示、校验提示。</li>
+          <li>把原型或说明作为流程附件沉淀。</li>
+          <li>反馈表单字段、用户步骤和接口缺口。</li>
+        </ul>
+      </section>
+      <section class="card backend">
+        <h3>后端开发</h3>
+        <ul>
+          <li>提前定义业务组件和业务构件。</li>
+          <li>围绕迭代范围定义任务、实体和状态。</li>
+          <li>把既有服务、表、接口反向沉淀为模型。</li>
+          <li>与流程编排确认任务输入、输出和状态变化。</li>
+        </ul>
+      </section>
+    </div>
+
+    <h2>3. 推荐工作流程</h2>
+    <div class="flowline">
+      <div class="step">
+        <div class="step-num">第 0 步</div>
+        <div class="step-body"><strong>确定迭代范围和建模口径。</strong><br>先选一个可落地的业务片区，例如“入库预约到仓单注册”，不要一开始追求全量精确。</div>
+        <div class="step-owner">负责人：产品经理<br>参与：全体</div>
+      </div>
+      <div class="step">
+        <div class="step-num">第 1 步</div>
+        <div class="step-body"><strong>产品自上而下搭骨架。</strong><br>先建全景视图，再建阶段和流程。阶段回答“业务走到哪一段”，流程回答“一个事项如何被发起、处理和办结”。</div>
+        <div class="step-owner">负责人：产品经理<br>产出：全景、阶段、流程清单</div>
+      </div>
+      <div class="step">
+        <div class="step-num">第 2 步</div>
+        <div class="step-body"><strong>后端并行沉淀稳定模块。</strong><br>业务组件和业务构件相对稳定，可以先从已有系统、模块、服务、表结构中整理出来。</div>
+        <div class="step-owner">负责人：后端开发<br>产出：组件、构件、初版实体、初版任务</div>
+      </div>
+      <div class="step">
+        <div class="step-num">第 3 步</div>
+        <div class="step-body"><strong>流程编排下钻到节点。</strong><br>把流程拆成节点、分支和连线。节点下再放用户步骤、任务、表单。复杂分支先保证主干清楚，再补异常路径。</div>
+        <div class="step-owner">负责人：流程编排<br>参与：产品、后端</div>
+      </div>
+      <div class="step">
+        <div class="step-num">第 4 步</div>
+        <div class="step-body"><strong>前端并行做原型和界面拆解。</strong><br>围绕节点和表单做页面原型，确认字段、按钮、状态、错误提示和跳转逻辑。</div>
+        <div class="step-owner">负责人：前端开发<br>产出：原型、页面清单、交互问题</div>
+      </div>
+      <div class="step">
+        <div class="step-num">第 5 步</div>
+        <div class="step-body"><strong>把流程、任务、表单、实体串起来。</strong><br>流程编排者把节点任务接到业务构件任务，把表单字段映射到实体字段，后端补齐任务输入输出。</div>
+        <div class="step-owner">负责人：流程编排<br>参与：前端、后端</div>
+      </div>
+      <div class="step">
+        <div class="step-num">第 6 步</div>
+        <div class="step-body"><strong>按三条线评审。</strong><br>按流程走查业务是否通，按角色走查责任是否清楚，按数据走查表单、实体、状态是否能落地。</div>
+        <div class="step-owner">负责人：产品经理<br>产出：评审问题和版本保存说明</div>
+      </div>
+    </div>
+
+    <h2>4. 交割业务示例</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>建模层级</th>
+          <th>示例</th>
+          <th>建议</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>价值流环节</td>
+          <td>主体与基础资料、入库与仓单注册、在库管理与仓单流转、仓单注销与出库。</td>
+          <td>作为全景横轴，尽量稳定，不要频繁因为一个流程新增而改变。</td>
+        </tr>
+        <tr>
+          <td>业务域</td>
+          <td>电子仓单系统、交割智慧监管平台。</td>
+          <td>作为全景纵轴，用来表达系统或业务责任边界。</td>
+        </tr>
+        <tr>
+          <td>阶段</td>
+          <td>入库预约办理、仓单注册承接、移垛与盘库、仓库仓单注销与出库。</td>
+          <td>相同前缀或后缀尽量合并。阶段内部可以通过流程列表展开细节。</td>
+        </tr>
+        <tr>
+          <td>流程</td>
+          <td>入库预约申请、查看预约结果、撤销入库预约。</td>
+          <td>如果几个单角色流程存在明显前后关系，可以考虑合并成一个流程中的节点或步骤。</td>
+        </tr>
+        <tr>
+          <td>节点与任务</td>
+          <td>填写并提交预约、校验并生成待办、审批预约、写入操作记录。</td>
+          <td>节点表达责任转移，任务表达系统动作或服务能力。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>粒度建议：</strong>阶段不要太碎，流程不要太长。阶段用于组织业务位置，流程用于描述一个能被发起、办理和办结的事项。节点用于表达角色之间、角色与系统之间的责任转移。
+    </div>
+
+    <h2>5. 并行协作节奏</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>时间点</th>
+          <th>产品经理</th>
+          <th>流程编排</th>
+          <th>前端开发</th>
+          <th>后端开发</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>第 1 天</td>
+          <td>建全景、阶段、流程草稿。</td>
+          <td>确认主流程和异常路径表达方式。</td>
+          <td>熟悉流程节点和表单范围。</td>
+          <td>整理组件、构件、已有实体和任务。</td>
+        </tr>
+        <tr>
+          <td>第 2-3 天</td>
+          <td>补节点、用户步骤、表单需求。</td>
+          <td>建泳道图、摘要图、分支和连线。</td>
+          <td>输出原型并上传到流程附件。</td>
+          <td>补实体字段、状态图、任务输入输出。</td>
+        </tr>
+        <tr>
+          <td>第 4 天</td>
+          <td>主持业务走查。</td>
+          <td>修正任务编排和表单实体映射。</td>
+          <td>确认页面状态、校验和跳转。</td>
+          <td>确认服务边界、数据状态和接口缺口。</td>
+        </tr>
+        <tr>
+          <td>第 5 天</td>
+          <td>固化版本说明。</td>
+          <td>导出预览，检查流程闭环。</td>
+          <td>基于模型进入开发。</td>
+          <td>基于模型进入开发。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>6. 建模规则建议</h2>
+    <div class="two-col">
+      <div class="card">
+        <h3>阶段和流程</h3>
+        <ul>
+          <li>阶段名优先用业务段落，例如“入库预约办理”，少用单个按钮动作。</li>
+          <li>流程名优先用可办理事项，例如“入库预约申请”。</li>
+          <li>同一阶段下流程过多时，先合并同前缀、同后缀、同责任链的流程。</li>
+          <li>单角色流程如果只是前后动作，优先下沉为节点或步骤。</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>任务和数据</h3>
+        <ul>
+          <li>任务先归属业务构件，再被节点复用。</li>
+          <li>实体先表达业务数据，不急着完全等同数据库表。</li>
+          <li>表单字段要能追溯到实体字段；没有对应实体时，要标记为界面态或临时输入。</li>
+          <li>状态图只建关键生命周期，不把所有按钮都建成状态。</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>7. 推广时的验收口径</h2>
+    <ul>
+      <li>产品能用全景视图说明本迭代覆盖哪些业务位置。</li>
+      <li>流程编排能用泳道图说明节点、分支、任务和异常路径。</li>
+      <li>前端能从节点和表单得到页面原型、字段和交互清单。</li>
+      <li>后端能从组件、构件、任务、实体和状态图得到服务边界和数据口径。</li>
+      <li>团队能用预览或导出材料完成一次业务评审，并用保存说明记录本次变更目的。</li>
+    </ul>
+
+    <div class="note warning">
+      <strong>落地提醒：</strong>第一次推广不要追求一次建完。建议先选择一个完整但不太大的流程，例如“入库预约申请”，用它跑通从全景、流程、任务、表单、实体、预览到评审的闭环，再复制方法到其它流程。
+    </div>
+  </main>
+</body>
+</html>

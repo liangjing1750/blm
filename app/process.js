@@ -5545,7 +5545,6 @@ function renderStageDrawer(stageItem) {
   const drawerW = getDrawerWidth('process');
   const stage = stageItem && !stageItem.virtual ? findStage(stageItem.id, S.doc) : null;
   const processRefs = stageItem ? getStageProcessRefs(stageItem.id, S.doc) : [];
-  const warning = processRefs.length > 7 ? '<div class="stage-warning">当前阶段流程已超过 7 个，建议拆分业务阶段。</div>' : '';
   const stageItems = getStageItems(S.doc);
   const panoramaMode = (S.ui.stageViewMode || 'panorama') === 'panorama';
   const drawerTitle = panoramaMode
@@ -5564,7 +5563,6 @@ function renderStageDrawer(stageItem) {
         ${renderStagePanoramaEditor(stageItems)}
         ${renderStageLinkEditor(stageItems)}
       ` : `
-      ${warning}
       ${stage ? `<div class="form-grid">
         <div class="field-group">
           <label>阶段名称</label>
@@ -5593,16 +5591,13 @@ function renderStageWorkbench() {
   const editorOffset = 0;
   const panoramaGraph = buildStagePanoramaGraphData();
   const detailGraph = stageItem ? buildStageDetailGraphData(stageItem.id) : { nodes: [], links: [], processes: [], processRefs: [] };
-  const stageWarning = showDetail && detailGraph.processes.length > 7
-    ? '<span class="stage-header-warning">建议拆分阶段</span>'
-    : '';
   const detailStageName = showDetail
     ? renderStageNameInlineEditor(stageItem.id, stageItem.name || stageItem.id, showEditor && !stageItem.virtual, 'stage-detail-name-text')
     : '';
   const detailHeader = showDetail ? `<div class="stage-compact-head" data-testid="stage-compact-head">
     <button class="btn btn-ghost-sm" type="button" onclick="openStagePanorama()">业务全景</button>
     <span class="stage-breadcrumb-sep">/</span>
-    <div class="stage-card-title" data-testid="stage-detail-title">${detailStageName}<span class="stage-detail-title-suffix"> · 阶段详情 ${stageWarning}</span></div>
+    <div class="stage-card-title" data-testid="stage-detail-title">${detailStageName}<span class="stage-detail-title-suffix"> · 阶段详情</span></div>
   </div>` : '';
   return `<div class="stage-workbench" data-testid="process-stage-view">
     <div class="stage-main-shell" style="margin-right:${editorOffset}px">
