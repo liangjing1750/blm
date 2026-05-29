@@ -10,6 +10,7 @@ APP_DIR = ROOT / "app"
 EXPECTED_SCRIPTS = [
     "state.js",
     "api.js",
+    "collab.js",
     "render.js",
     "domain.js",
     "process.js",
@@ -113,6 +114,28 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn("paths:", state_js)
         self.assertIn("supportsDocs", state_js)
         self.assertIn("supportsCopy", state_js)
+        self.assertIn("supportsCollab", state_js)
+        self.assertIn("queueCollabSnapshotSync", state_js)
+        self.assertIn("pendingRemoteSnapshot", state_js)
+        self.assertIn("hasConflict", state_js)
+        self.assertIn("readOnly", state_js)
+        self.assertIn("async createVersion(name, document, message = '')", api_js)
+        self.assertIn("async loadVersion(name, versionId)", api_js)
+        self.assertIn("COLLAB_SNAPSHOT_DEBOUNCE_MS = 3000", (APP_DIR / "collab.js").read_text("utf-8"))
+        collab_js = (APP_DIR / "collab.js").read_text("utf-8")
+        self.assertIn("COLLAB_RECONNECT_MS = 3000", collab_js)
+        self.assertIn("receiveRemoteCollabSnapshot", collab_js)
+        self.assertIn("applyPendingRemoteCollabSnapshot", collab_js)
+        self.assertIn("keepLocalCollabSnapshot", collab_js)
+        self.assertIn("scheduleCollabReconnect", collab_js)
+        self.assertIn("lastActivity", collab_js)
+        index_html = (APP_DIR / "index.html").read_text("utf-8")
+        self.assertIn('id="collab-conflict-alert"', index_html)
+        self.assertIn('data-testid="toolbar-version-button"', index_html)
+        self.assertIn('id="readonly-alert"', index_html)
+        self.assertIn("openStartupLocatorIfPresent", app_js)
+        self.assertIn("applyLocatorToUi", app_js)
+        self.assertIn("App.openLatestVersion()", index_html)
         self.assertIn("flowGroup", state_js)
         self.assertIn("orchestrationTasks", state_js)
         self.assertIn("getNodeForms", state_js)

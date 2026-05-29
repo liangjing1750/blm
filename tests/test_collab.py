@@ -1,0 +1,313 @@
+from __future__ import annotations
+
+import base64
+import http.server
+import json
+import os
+import socket
+import struct
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+
+from blm_core.collab import CollabClient, CollabSession, CollaborationManager
+from blm_core.document import create_empty_document
+from blm_core.server import create_handler
+from blm_core.storage import WorkspaceStorage
+
+
+def _masked_client_frame(payload: dict) -> bytes:
+    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    mask = b"\x01\x02\x03\x04"
+    header = bytearray([0x81])
+    length = len(raw)
+    if length < 126:
+        header.append(0x80 | length)
+    elif length <= 0xFFFF:
+        header.append(0x80 | 126)
+        header.extend(struct.pack("!H", length))
+    else:
+        header.append(0x80 | 127)
+        header.extend(struct.pack("!Q", length))
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(raw))
+    return bytes(header) + mask + masked
+
+
+def _recv_exact(sock: socket.socket, length: int) -> bytes:
+    chunks = bytearray()
+    while len(chunks) < length:
+        chunk = sock.recv(length - len(chunks))
+        if not chunk:
+            raise RuntimeError("socket closed")
+        chunks.extend(chunk)
+    return bytes(chunks)
+
+
+def _recv_json_frame(sock: socket.socket) -> tuple[int, dict]:
+    first, second = _recv_exact(sock, 2)
+    opcode = first & 0x0F
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", _recv_exact(sock, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", _recv_exact(sock, 8))[0]
+    payload = _recv_exact(sock, length) if length else b""
+    return opcode, json.loads(payload.decode("utf-8"))
+
+
+class CollaborationWebSocketTests(unittest.TestCase):
+    def _connect_ws(self, server_port: int) -> socket.socket:
+        sock = socket.create_connection(("127.0.0.1", server_port), timeout=5)
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        request = (
+            "GET /api/collab/ws HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{server_port}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n\r\n"
+        )
+        sock.sendall(request.encode("ascii"))
+        response = b""
+        while b"\r\n\r\n" not in response:
+            response += sock.recv(1)
+        self.assertIn(b"101 Switching Protocols", response)
+        return sock
+
+    def _start_server(self, storage: WorkspaceStorage):
+        collab = CollaborationManager(storage)
+        handler = create_handler(Path.cwd() / "app", storage, collab)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread
+
+    def test_join_change_ack_and_changelog(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            storage = WorkspaceStorage(root / "workspace")
+            storage.save("CollabSmoke", create_empty_document("CollabSmoke"))
+            server, _thread = self._start_server(storage)
+            try:
+                sock = self._connect_ws(server.server_port)
+                self.addCleanup(sock.close)
+
+                sock.sendall(_masked_client_frame({"type": "join", "doc": "CollabSmoke", "user": "Tester"}))
+                opcode, joined = _recv_json_frame(sock)
+                self.assertEqual(opcode, 1)
+                self.assertEqual(joined["type"], "joined")
+                self.assertEqual(joined["seq"], 0)
+
+                sock.sendall(
+                    _masked_client_frame(
+                        {
+                            "type": "change",
+                            "baseSeq": joined["seq"],
+                            "changes": [{"path": "meta.author", "new": "Tester"}],
+                        }
+                    )
+                )
+                message_types = []
+                for _ in range(3):
+                    _, message = _recv_json_frame(sock)
+                    message_types.append(message.get("type"))
+                    if message.get("type") == "ack":
+                        break
+                self.assertIn("presence", message_types)
+                self.assertIn("ack", message_types)
+
+                changelog = root / "workspace" / "CollabSmoke" / "collab" / "changelog.jsonl"
+                record = json.loads(changelog.read_text("utf-8").splitlines()[-1])
+                self.assertEqual(record["seq"], 1)
+                self.assertEqual(record["changes"][0]["path"], "meta.author")
+                self.assertEqual(record["changes"][0]["new"], "Tester")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_change_is_broadcast_to_other_clients(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            storage.save("CollabSmoke", create_empty_document("CollabSmoke"))
+            server, _thread = self._start_server(storage)
+            try:
+                left = self._connect_ws(server.server_port)
+                right = self._connect_ws(server.server_port)
+                self.addCleanup(left.close)
+                self.addCleanup(right.close)
+
+                left.sendall(_masked_client_frame({"type": "join", "doc": "CollabSmoke", "user": "Left"}))
+                _, left_joined = _recv_json_frame(left)
+                self.assertEqual(left_joined["type"], "joined")
+                _, left_presence = _recv_json_frame(left)
+                self.assertEqual(left_presence["type"], "presence")
+
+                right.sendall(_masked_client_frame({"type": "join", "doc": "CollabSmoke", "user": "Right"}))
+                _, right_joined = _recv_json_frame(right)
+                self.assertEqual(right_joined["type"], "joined")
+                _, right_presence = _recv_json_frame(right)
+                self.assertEqual(right_presence["type"], "presence")
+                _, left_remote_presence = _recv_json_frame(left)
+                self.assertEqual(left_remote_presence["type"], "presence")
+
+                left.sendall(
+                    _masked_client_frame(
+                        {
+                            "type": "change",
+                            "baseSeq": left_joined["seq"],
+                            "changes": [{"path": "meta.author", "new": "Left"}],
+                        }
+                    )
+                )
+                _, left_ack = _recv_json_frame(left)
+                self.assertEqual(left_ack["type"], "ack")
+                _, right_change = _recv_json_frame(right)
+                self.assertEqual(right_change["type"], "change")
+                self.assertEqual(right_change["changes"][0]["path"], "meta.author")
+                self.assertEqual(right_change["changes"][0]["new"], "Left")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_snapshot_replaces_session_document_and_is_broadcast(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            storage = WorkspaceStorage(root / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            server, _thread = self._start_server(storage)
+            try:
+                left = self._connect_ws(server.server_port)
+                right = self._connect_ws(server.server_port)
+                self.addCleanup(left.close)
+                self.addCleanup(right.close)
+
+                left.sendall(_masked_client_frame({"type": "join", "doc": "CollabSmoke", "user": "Left"}))
+                _, left_joined = _recv_json_frame(left)
+                _recv_json_frame(left)
+                right.sendall(_masked_client_frame({"type": "join", "doc": "CollabSmoke", "user": "Right"}))
+                _recv_json_frame(right)
+                _recv_json_frame(right)
+                _recv_json_frame(left)
+
+                next_document = dict(left_joined["document"])
+                next_document["meta"] = dict(next_document["meta"])
+                next_document["meta"]["author"] = "Snapshot Author"
+                next_document["processes"] = list(next_document["processes"])
+                next_document["processes"].append({"uid": "proc-new", "name": "新增流程", "nodes": []})
+                left.sendall(
+                    _masked_client_frame(
+                        {
+                            "type": "snapshot",
+                            "baseSeq": left_joined["seq"],
+                            "document": next_document,
+                        }
+                    )
+                )
+                _, left_ack = _recv_json_frame(left)
+                self.assertEqual(left_ack["type"], "ack")
+                self.assertEqual(left_ack["mode"], "snapshot")
+                _, right_snapshot = _recv_json_frame(right)
+                self.assertEqual(right_snapshot["type"], "snapshot")
+                self.assertEqual(right_snapshot["document"]["meta"]["author"], "Snapshot Author")
+                self.assertEqual(right_snapshot["document"]["processes"][-1]["name"], "新增流程")
+
+                changelog = root / "workspace" / "CollabSmoke" / "collab" / "changelog.jsonl"
+                record = json.loads(changelog.read_text("utf-8").splitlines()[-1])
+                self.assertEqual(record["mode"], "snapshot")
+                self.assertEqual(record["document"]["meta"]["author"], "Snapshot Author")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_join_replays_changelog_after_session_restarts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage)
+            snapshot = create_empty_document("CollabSmoke")
+            snapshot["meta"]["author"] = "Replayed"
+            manager._append_changelog(
+                "CollabSmoke",
+                {
+                    "seq": 1,
+                    "doc": "CollabSmoke",
+                    "user": "Tester",
+                    "clientId": "client-test",
+                    "ts": "2026-05-29T00:00:00+00:00",
+                    "mode": "snapshot",
+                    "document": snapshot,
+                },
+            )
+            loaded, seq = manager._load_document_with_changelog("CollabSmoke")
+            self.assertEqual(seq, 1)
+            self.assertEqual(loaded["meta"]["author"], "Replayed")
+
+    def test_autosave_persists_collaboration_working_copy_without_history_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            storage = WorkspaceStorage(root / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+            session = CollabSession("CollabSmoke", storage.load("CollabSmoke"))
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-test", "Tester", handler=None)
+
+            next_document = create_empty_document("CollabSmoke")
+            next_document["meta"]["author"] = "Autosaved"
+            manager._apply_snapshot(session, client, {"document": next_document})
+
+            persisted = storage.load("CollabSmoke")
+            self.assertEqual(persisted["meta"]["author"], "Autosaved")
+            self.assertEqual(list((root / "workspace" / ".history").glob("*")), [])
+
+    def test_named_version_is_readonly_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["author"] = "Versioned"
+            storage.save("CollabSmoke", document)
+
+            created = storage.create_named_version("CollabSmoke", document, message="评审通过")
+            version_id = created["version"]["id"]
+            loaded = storage.load_version("CollabSmoke", version_id)
+            versions = storage.list_versions("CollabSmoke")
+
+            self.assertEqual(loaded["meta"]["author"], "Versioned")
+            self.assertTrue(loaded["meta"]["readonly"])
+            self.assertEqual(loaded["meta"]["version_id"], version_id)
+            self.assertEqual(versions[0]["id"], version_id)
+            self.assertEqual(versions[0]["message"], "评审通过")
+
+    def test_snapshot_changelog_compacts_after_threshold(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage)
+            for seq in range(1, 105):
+                record = {
+                    "seq": seq,
+                    "doc": "CollabSmoke",
+                    "user": "Tester",
+                    "clientId": "client-test",
+                    "ts": "2026-05-29T00:00:00+00:00",
+                    "mode": "snapshot" if seq == 104 else "change",
+                    "document": document if seq == 104 else None,
+                    "changes": [{"path": "meta.author", "new": f"Tester {seq}"}],
+                }
+                manager._append_changelog("CollabSmoke", record)
+
+            changelog = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "changelog.jsonl"
+            lines = changelog.read_text("utf-8").splitlines()
+            self.assertEqual(len(lines), 1)
+            compacted = json.loads(lines[0])
+            self.assertTrue(compacted["compacted"])
+            self.assertEqual(compacted["seq"], 104)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -107,6 +107,15 @@ const api = {
   async history(name) {
     return fetch(`/api/history/${encodeURIComponent(name)}`).then((response) => response.json());
   },
+  async versions(name) {
+    return fetch(`/api/versions/${encodeURIComponent(name)}`).then((response) => response.json());
+  },
+  async createVersion(name, document, message = '') {
+    return postJson('/api/version/create', { name, document, message });
+  },
+  async loadVersion(name, versionId) {
+    return postJson('/api/version/load', { name, version_id: versionId });
+  },
   async restoreHistory(name, snapshotId) {
     return postJson('/api/history/restore', { name, snapshot_id: snapshotId });
   },

@@ -2,15 +2,27 @@
 
 function setDomain(val) {
   if (!S.doc) return;
+  const oldDomain = S.doc.meta.domain;
+  const oldTitle = S.doc.meta.title;
   S.doc.meta.domain = val;
   S.doc.meta.title = val;
+  if (typeof sendCollabChanges === 'function') {
+    sendCollabChanges([
+      { path: 'meta.domain', old: oldDomain, new: val },
+      { path: 'meta.title', old: oldTitle, new: val },
+    ]);
+  }
   markModified();
   document.getElementById('file-name').textContent = val || '未命名';
 }
 
 function setMeta(key, val) {
   if (!S.doc) return;
+  const oldValue = S.doc.meta[key];
   S.doc.meta[key] = val;
+  if (typeof sendCollabChange === 'function') {
+    sendCollabChange(`meta.${key}`, oldValue, val);
+  }
   markModified();
 }
 

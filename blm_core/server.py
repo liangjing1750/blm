@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 from blm_core.document import canonical_document, migrate_document
+from blm_core.collab import CollaborationManager
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.storage import (
     InvalidDocumentNameError,
@@ -51,7 +52,7 @@ def build_attachment_content_disposition(filename: str) -> str:
     return f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{encoded_filename}'
 
 
-def create_handler(app_dir: Path, storage: WorkspaceStorage):
+def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: CollaborationManager | None = None):
     docs_dir = (app_dir.parent / "docs").resolve()
 
     class BlmRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -75,8 +76,11 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                         "supports_merge": True,
                         "supports_docs": True,
                         "supports_copy": True,
+                        "supports_collab": bool(collab),
                     }
                 )
+            if path == "/api/collab/ws" and collab:
+                return collab.handle_websocket(self)
             if path == "/api/files":
                 return self._json(storage.list_documents())
             if path == "/api/trash":
@@ -97,6 +101,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._handle_export(path)
             if path.startswith("/api/history/"):
                 return self._handle_history(path)
+            if path.startswith("/api/versions/"):
+                return self._handle_versions(path)
             return super().do_GET()
 
         def do_POST(self):
@@ -119,6 +125,10 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 return self._handle_history_load(body)
             if path == "/api/history/restore":
                 return self._handle_history_restore(body)
+            if path == "/api/version/create":
+                return self._handle_version_create(body)
+            if path == "/api/version/load":
+                return self._handle_version_load(body)
             if path == "/api/trash/restore":
                 return self._handle_trash_restore(body)
             if path == "/api/document/normalize":
@@ -167,6 +177,13 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
             name = unquote(path[len("/api/history/"):])
             try:
                 return self._json(storage.list_history(name))
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+
+        def _handle_versions(self, path: str):
+            name = unquote(path[len("/api/versions/"):])
+            try:
+                return self._json(storage.list_versions(name))
             except InvalidDocumentNameError as exc:
                 return self._json({"error": str(exc)}, 400)
 
@@ -326,6 +343,35 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage):
                 }
             )
 
+        def _handle_version_create(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            try:
+                return self._json(storage.create_named_version(
+                    str(payload.get("name", "")).strip(),
+                    payload.get("document") if isinstance(payload.get("document"), dict) else None,
+                    message=str(payload.get("message", "")).strip(),
+                ))
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+
+        def _handle_version_load(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            try:
+                return self._json(storage.load_version(
+                    str(payload.get("name", "")).strip(),
+                    str(payload.get("version_id", "")).strip(),
+                ))
+            except (InvalidDocumentNameError, InvalidWorkspaceEntryError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+
         def _handle_history_load(self, body: bytes):
             payload = self._decode_json(body)
             if isinstance(payload, tuple):
@@ -472,8 +518,9 @@ def run_server(
     open_browser: bool = True,
 ) -> None:
     storage = WorkspaceStorage(workspace_dir)
+    collab = CollaborationManager(storage)
     migration_result = storage.migrate_workspace_layout()
-    handler = create_handler(app_dir, storage)
+    handler = create_handler(app_dir, storage, collab)
     server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
     url = f"http://0.0.0.0:{port}"
 

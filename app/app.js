@@ -578,6 +578,7 @@ function setActiveDocumentSession(doc, options = {}) {
   }
   S.doc = doc;
   S.currentFile = options.fileName || null;
+  S.readOnly = Boolean(options.readOnly || doc?.meta?.readonly);
   S.documentRevision = Math.max(0, Number(doc?.meta?.revision) || 0);
   S.baseDocument = cloneDocument(doc);
   S.modified = false;
@@ -586,6 +587,14 @@ function setActiveDocumentSession(doc, options = {}) {
     : createDocUiState(doc);
   S.ui.procAttachmentUpload = { active: false, percent: 0, message: '' };
   render();
+  if (!S.readOnly && typeof connectCollabSession === 'function' && S.currentFile) {
+    connectCollabSession(S.currentFile);
+  } else if (typeof disconnectCollabSession === 'function') {
+    disconnectCollabSession({ intentional: true });
+    if (typeof renderCollabStatus === 'function') renderCollabStatus();
+  } else if (typeof renderCollabStatus === 'function') {
+    renderCollabStatus();
+  }
   if (options.preserveUiState) {
     restoreUiViewportState(previousViewport);
   }
@@ -2185,9 +2194,11 @@ async function copyWorkspaceDocument(sourceName, targetName) {
       S.runtime.apiVersion = Number(runtime?.api_version || 0);
       S.runtime.supportsDocs = !!runtime?.supports_docs;
       S.runtime.supportsCopy = !!runtime?.supports_copy;
+      S.runtime.supportsCollab = !!runtime?.supports_collab;
     } catch (error) {
       S.runtime.checked = true;
       S.runtime.supportsCopy = false;
+      S.runtime.supportsCollab = false;
     }
   }
   if (!S.runtime.supportsCopy) {
@@ -2707,6 +2718,7 @@ const App = {
   async cmdSaveAs() {
     if (S.isSaving) return;
     if (!S.doc) return;
+    if (S.readOnly) return showAppAlert('当前查看的是只读版本，不能复制保存。请先回到最新版本。');
     const workspaceFiles = await loadWorkspaceDocumentNames();
     if (!workspaceFiles) return;
     const baseName = (S.doc.meta?.domain || S.currentFile || S.doc.meta?.title || '').trim() || '文档';
@@ -2748,6 +2760,18 @@ const App = {
   async cmdSave() {
     if (S.isSaving) return;
     if (!S.doc) return;
+    if (S.readOnly) return showAppAlert('当前查看的是只读版本，不能保存。请先回到最新版本。');
+    if (S.currentFile && S.runtime.supportsCollab && S.collab?.connected) {
+      if (typeof flushCollabSnapshotSync === 'function') {
+        if (!S.modified && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
+          showAppToast('当前内容已同步。');
+          return;
+        }
+        flushCollabSnapshotSync();
+        showAppToast('已发起立即同步。');
+        return;
+      }
+    }
     if (!S.currentFile) {
       openWorkspaceSaveAsModal((S.doc.meta?.domain || S.doc.meta?.title || '').trim(), 'save');
       return;
@@ -2763,6 +2787,57 @@ const App = {
       fileName: saveResult.name || targetName,
       preserveUiState: true,
     });
+  },
+
+  async cmdCreateVersion() {
+    if (!S.doc || !S.currentFile) return;
+    if (S.readOnly) return showAppAlert('当前已经是只读版本，不需要再次存为版本。');
+    const message = await showAppPrompt(
+      '填写版本说明，建议使用需求版本或评审结论，例如：仓单管理需求评审通过。',
+      '',
+      {
+        title: '存为版本',
+        confirmLabel: '存为版本',
+        cancelLabel: '取消',
+      },
+    );
+    if (message === null) return;
+    const result = await api.createVersion(S.currentFile, S.doc, String(message || '').trim());
+    if (result.error) return alert(result.error);
+    const versionId = String(result.version?.id || '').trim();
+    const versionLink = versionId
+      ? `${window.location.origin}${window.location.pathname}?doc=${encodeURIComponent(S.currentFile)}&at=version:${encodeURIComponent(versionId)}`
+      : '';
+    if (versionLink && navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(versionLink); } catch (_) {}
+    }
+    if (typeof showAppToast === 'function') {
+      showAppToast(versionLink ? `已存为只读版本，定位链接已复制：${versionId}` : '已存为只读版本');
+    } else if (typeof showToast === 'function') {
+      showToast('已存为只读版本');
+    } else {
+      alert(versionLink ? `已存为只读版本：${versionLink}` : '已存为只读版本');
+    }
+  },
+
+  async openVersion(name, versionId) {
+    if (!await confirmDiscardUnsavedChanges(`打开版本 ${versionId}`)) return;
+    const result = await api.loadVersion(name, versionId);
+    if (result.error) return alert(result.error);
+    setActiveDocumentSession(result, {
+      fileName: name,
+      readOnly: true,
+      preserveUiState: true,
+    });
+  },
+
+  async openLatestVersion() {
+    if (!S.currentFile) return;
+    const name = S.currentFile;
+    const doc = await api.load(name);
+    if (doc.error) return alert(doc.error);
+    if (doc.meta && !doc.meta.domain) doc.meta.domain = name;
+    setActiveDocumentSession(doc, { fileName: name, readOnly: false, preserveUiState: true });
   },
 
   async confirmSaveAs() {
@@ -3222,9 +3297,97 @@ function initFloatingHelpTooltips() {
 
 initFloatingHelpTooltips();
 
+function getStartupLinkParams() {
+  const params = new URLSearchParams(window.location.search || '');
+  const hash = String(window.location.hash || '').replace(/^#/, '');
+  if (hash && !params.has('doc')) {
+    const [docPart, queryPart] = hash.split('?');
+    if (docPart) params.set('doc', decodeURIComponent(docPart.replace(/^\/+/, '')));
+    if (queryPart) {
+      const hashParams = new URLSearchParams(queryPart);
+      hashParams.forEach((value, key) => {
+        if (!params.has(key)) params.set(key, value);
+      });
+    }
+  }
+  return params;
+}
+
+function applyLocatorToUi(params) {
+  const tab = String(params.get('tab') || '').trim();
+  const procId = String(params.get('proc') || params.get('procId') || '').trim();
+  const taskId = String(params.get('task') || params.get('taskId') || '').trim();
+  const entityId = String(params.get('entity') || params.get('entityId') || '').trim();
+  const view = String(params.get('view') || '').trim();
+  if (view === 'swimlane' || view === 'summary') {
+    S.ui.procDiagramMode = view === 'summary' ? 'linear' : 'swimlane';
+  }
+  if (tab === 'process' || procId || taskId) {
+    S.ui.tab = 'process';
+    if (procId) S.ui.procId = procId;
+    if (taskId) {
+      S.ui.taskId = taskId;
+      S.ui.procView = 'list';
+    } else if (procId) {
+      S.ui.procView = 'flow';
+    }
+    return;
+  }
+  if (tab === 'data' || entityId) {
+    S.ui.tab = 'data';
+    if (entityId) S.ui.entityId = entityId;
+    return;
+  }
+  if (tab === 'preview') {
+    S.ui.tab = 'preview';
+    return;
+  }
+  if (tab === 'domain') {
+    S.ui.tab = 'domain';
+  }
+}
+
+async function openStartupLocatorIfPresent() {
+  const params = getStartupLinkParams();
+  const docName = String(params.get('doc') || '').trim();
+  if (!docName) return false;
+  const at = String(params.get('at') || '').trim();
+  let document = null;
+  let readOnly = false;
+  if (at && at !== 'latest') {
+    const versionId = at.startsWith('version:') ? at.slice('version:'.length) : at;
+    document = await api.loadVersion(docName, versionId);
+    readOnly = true;
+  } else {
+    document = await api.load(docName);
+  }
+  if (document?.error) {
+    showAppAlert(document.error);
+    return false;
+  }
+  if (document.meta && !document.meta.domain) document.meta.domain = docName;
+  setActiveDocumentSession(document, { fileName: docName, readOnly });
+  applyLocatorToUi(params);
+  render();
+  return true;
+}
+
 bindBeforeUnloadWarning();
 document.addEventListener('DOMContentLoaded', async () => {
   refreshSaveDialogText();
+  try {
+    const runtime = await api.runtime();
+    S.runtime.checked = true;
+    S.runtime.apiVersion = Number(runtime?.api_version || 0);
+    S.runtime.supportsDocs = !!runtime?.supports_docs;
+    S.runtime.supportsCopy = !!runtime?.supports_copy;
+    S.runtime.supportsCollab = !!runtime?.supports_collab;
+  } catch (error) {
+    S.runtime.checked = true;
+    S.runtime.supportsCollab = false;
+  }
+  if (typeof renderCollabStatus === 'function') renderCollabStatus();
+  if (await openStartupLocatorIfPresent()) return;
   render();
 });
 

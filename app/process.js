@@ -5930,7 +5930,7 @@ function renderOrchestrationSection(proc, task) {
 function renderTaskFormEntityOptions(selectedEntityId) {
   const entities = S.doc?.entities || [];
   return `<option value="">不绑定实体</option>${entities.map((entity) => (
-    `<option value="${esc(entity.id)}" ${entity.id === selectedEntityId ? 'selected' : ''}>${esc(entity.name || '?????')}</option>`
+    `<option value="${esc(entity.id)}" ${entity.id === selectedEntityId ? 'selected' : ''}>${esc(entity.name || '未命名实体')}</option>`
   )).join('')}`;
 }
 
@@ -6783,7 +6783,7 @@ function renderProcessTab() {
         h+=`<div class="add-eop-row">
           <select id="eop-sel-${task.id}">
             <option value="">选择实体...</option>
-            ${avail.map(e=>`<option value="${e.id}">${esc(e.name || '?????')}</option>`).join('')}
+            ${avail.map(e=>`<option value="${e.id}">${esc(e.name || '未命名实体')}</option>`).join('')}
           </select>
           <button class="btn btn-outline btn-sm"
             onclick="addEntityOp('${esc(proc.id)}','${esc(task.id)}',document.getElementById('eop-sel-${task.id}').value)">关联</button>

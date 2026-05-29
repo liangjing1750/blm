@@ -6,6 +6,7 @@
 const S = {
   files: [],
   currentFile: null,
+  readOnly: false,
   documentRevision: 0,
   baseDocument: null,
   saveDialogMode: 'save',
@@ -19,6 +20,27 @@ const S = {
     apiVersion: 0,
     supportsDocs: false,
     supportsCopy: false,
+    supportsCollab: false,
+  },
+  collab: {
+    socket: null,
+    connected: false,
+    clientId: '',
+    seq: 0,
+    users: [],
+    userName: '',
+    docName: '',
+    pendingSnapshot: false,
+    syncing: false,
+    snapshotTimer: null,
+    snapshotRevision: 0,
+    inFlightRevision: 0,
+    lastSyncedAt: '',
+    pendingRemoteSnapshot: null,
+    hasConflict: false,
+    reconnectTimer: null,
+    shouldReconnect: false,
+    lastActivity: null,
   },
   merge: {
     workspaceFiles: [],
@@ -310,10 +332,15 @@ function initAutoResize() {
   document.querySelectorAll('textarea.auto-resize').forEach(autoResize);
 }
 function markModified() {
+  if (S.readOnly) {
+    if (typeof showToast === 'function') showToast('当前查看的是只读版本，不能编辑');
+    return;
+  }
   if (!S.modified) {
     S.modified = true;
     if (typeof renderToolbar === 'function') renderToolbar();
   }
+  if (typeof queueCollabSnapshotSync === 'function') queueCollabSnapshotSync();
 }
 function getCurrentDocumentLabel() {
   return S.doc?.meta?.domain || S.currentFile || '—';

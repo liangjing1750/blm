@@ -958,11 +958,11 @@ def validate_document(document: dict) -> list[dict]:
                 continue
             uid = str(item.get("uid", "")).strip()
             if not uid:
-                add_issue(f"{path_prefix}.missingUid", f"{collection_label(item_type)} ?? UID")
+                add_issue(f"{path_prefix}.missingUid", f"{collection_label(item_type)}缺少 UID")
                 continue
             if uid in seen:
-                suffix = f"?{scope_label}?" if scope_label else ""
-                add_issue(f"{path_prefix}.{uid}.uid", f"{collection_label(item_type)} UID ??{suffix}: {uid}")
+                suffix = f"（{scope_label}）" if scope_label else ""
+                add_issue(f"{path_prefix}.{uid}.uid", f"{collection_label(item_type)} UID 重复{suffix}: {uid}")
             seen.add(uid)
 
     role_uids = {str(role.get("uid", "")).strip() for role in doc.get("roles", []) if isinstance(role, dict)}
@@ -993,7 +993,7 @@ def validate_document(document: dict) -> list[dict]:
         process_uid = str(process.get("uid", "")).strip()
         stage_uid = str(process.get("stageUid", "")).strip()
         if stage_uid and stage_uid not in stage_uids:
-            add_issue(f"processes.{process_uid}.stageUid", f"?? {process_uid} ????????? {stage_uid}")
+            add_issue(f"processes.{process_uid}.stageUid", f"流程 {process_uid} 引用了不存在的阶段 {stage_uid}")
 
     stage_member_processes: dict[str, set[str]] = {}
     stage_flow_refs = [ref for ref in doc.get("stageFlowRefs", []) if isinstance(ref, dict)]
@@ -1003,9 +1003,9 @@ def validate_document(document: dict) -> list[dict]:
         stage_uid = str(ref.get("stageUid", "")).strip()
         process_uid = str(ref.get("processUid", "")).strip()
         if stage_uid and stage_uid not in stage_uids:
-            add_issue(f"stageFlowRefs.{ref_uid}.stageUid", f"?????? {ref_uid} ????????? {stage_uid}")
+            add_issue(f"stageFlowRefs.{ref_uid}.stageUid", f"阶段流程引用 {ref_uid} 引用了不存在的阶段 {stage_uid}")
         if process_uid and process_uid not in process_uids:
-            add_issue(f"stageFlowRefs.{ref_uid}.processUid", f"?????? {ref_uid} ????????? {process_uid}")
+            add_issue(f"stageFlowRefs.{ref_uid}.processUid", f"阶段流程引用 {ref_uid} 引用了不存在的流程 {process_uid}")
         if stage_uid and process_uid:
             stage_member_processes.setdefault(stage_uid, set()).add(process_uid)
 
@@ -1024,13 +1024,13 @@ def validate_document(document: dict) -> list[dict]:
             from_process_uid = str(link.get("fromProcessUid", "")).strip()
             to_process_uid = str(link.get("toProcessUid", "")).strip()
             if from_process_uid and from_process_uid not in process_uids:
-                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.fromProcessUid", f"?? {stage_uid} ?????????????? {from_process_uid}")
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.fromProcessUid", f"阶段 {stage_uid} 的流程连线引用了不存在的上游流程 {from_process_uid}")
             if to_process_uid and to_process_uid not in process_uids:
-                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.toProcessUid", f"?? {stage_uid} ?????????????? {to_process_uid}")
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.toProcessUid", f"阶段 {stage_uid} 的流程连线引用了不存在的下游流程 {to_process_uid}")
             if from_process_uid and members and from_process_uid not in members:
-                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.fromProcessUid", f"?? {stage_uid} ????????????????? {from_process_uid}")
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.fromProcessUid", f"阶段 {stage_uid} 的流程连线引用了不属于本阶段的上游流程 {from_process_uid}")
             if to_process_uid and members and to_process_uid not in members:
-                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.toProcessUid", f"?? {stage_uid} ????????????????? {to_process_uid}")
+                add_issue(f"stages.{stage_uid}.processLinks.{link.get('uid', '')}.toProcessUid", f"阶段 {stage_uid} 的流程连线引用了不属于本阶段的下游流程 {to_process_uid}")
 
     for stage_link in doc.get("stageLinks", []):
         if not isinstance(stage_link, dict):
@@ -1038,9 +1038,9 @@ def validate_document(document: dict) -> list[dict]:
         from_stage_uid = str(stage_link.get("fromStageUid", "")).strip()
         to_stage_uid = str(stage_link.get("toStageUid", "")).strip()
         if from_stage_uid and from_stage_uid not in stage_uids:
-            add_issue(f"stageLinks.{stage_link.get('uid', '')}.fromStageUid", f"??????????????? {from_stage_uid}")
+            add_issue(f"stageLinks.{stage_link.get('uid', '')}.fromStageUid", f"阶段连线引用了不存在的上游阶段 {from_stage_uid}")
         if to_stage_uid and to_stage_uid not in stage_uids:
-            add_issue(f"stageLinks.{stage_link.get('uid', '')}.toStageUid", f"??????????????? {to_stage_uid}")
+            add_issue(f"stageLinks.{stage_link.get('uid', '')}.toStageUid", f"阶段连线引用了不存在的下游阶段 {to_stage_uid}")
 
     for stage_flow_link in doc.get("stageFlowLinks", []):
         if not isinstance(stage_flow_link, dict):
@@ -1050,17 +1050,17 @@ def validate_document(document: dict) -> list[dict]:
         from_ref_uid = str(stage_flow_link.get("fromRefUid", "")).strip()
         to_ref_uid = str(stage_flow_link.get("toRefUid", "")).strip()
         if stage_uid and stage_uid not in stage_uids:
-            add_issue(f"stageFlowLinks.{link_uid}.stageUid", f"????????????????? {stage_uid}")
+            add_issue(f"stageFlowLinks.{link_uid}.stageUid", f"阶段内流程连线引用了不存在的阶段 {stage_uid}")
         if from_ref_uid and from_ref_uid not in stage_flow_ref_by_uid:
-            add_issue(f"stageFlowLinks.{link_uid}.fromRefUid", f"??????????????????? {from_ref_uid}")
+            add_issue(f"stageFlowLinks.{link_uid}.fromRefUid", f"阶段内流程连线引用了不存在的上游流程引用 {from_ref_uid}")
         if to_ref_uid and to_ref_uid not in stage_flow_ref_by_uid:
-            add_issue(f"stageFlowLinks.{link_uid}.toRefUid", f"??????????????????? {to_ref_uid}")
+            add_issue(f"stageFlowLinks.{link_uid}.toRefUid", f"阶段内流程连线引用了不存在的下游流程引用 {to_ref_uid}")
         from_ref = stage_flow_ref_by_uid.get(from_ref_uid)
         to_ref = stage_flow_ref_by_uid.get(to_ref_uid)
         if stage_uid and from_ref and str(from_ref.get("stageUid", "")).strip() != stage_uid:
-            add_issue(f"stageFlowLinks.{link_uid}.fromRefUid", f"?????????????????????? {from_ref_uid}")
+            add_issue(f"stageFlowLinks.{link_uid}.fromRefUid", f"阶段内流程连线的上游引用不属于当前阶段 {from_ref_uid}")
         if stage_uid and to_ref and str(to_ref.get("stageUid", "")).strip() != stage_uid:
-            add_issue(f"stageFlowLinks.{link_uid}.toRefUid", f"?????????????????????? {to_ref_uid}")
+            add_issue(f"stageFlowLinks.{link_uid}.toRefUid", f"阶段内流程连线的下游引用不属于当前阶段 {to_ref_uid}")
 
     for process in doc.get("processes", []):
         if not isinstance(process, dict):
@@ -1083,25 +1083,25 @@ def validate_document(document: dict) -> list[dict]:
                 referenced_role_uids.insert(0, role_uid)
             for index, role_uid in enumerate(referenced_role_uids):
                 if role_uid not in role_uids:
-                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.role_uids.{index}", f"?? {node_uid} ????????? {role_uid}")
+                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.role_uids.{index}", f"节点 {node_uid} 引用了不存在的角色 {role_uid}")
             for entity_op in node.get("entity_ops", []) if isinstance(node.get("entity_ops"), list) else []:
                 entity_uid = str((entity_op or {}).get("entity_uid", "")).strip() if isinstance(entity_op, dict) else ""
                 if entity_uid and entity_uid not in entity_uids:
-                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.entity_ops", f"?? {node_uid} ????????? {entity_uid}")
+                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.entity_ops", f"节点 {node_uid} 引用了不存在的实体 {entity_uid}")
             for form in node.get("forms", []) if isinstance(node.get("forms"), list) else []:
                 if not isinstance(form, dict):
                     continue
                 form_uid = str(form.get("uid", "")).strip()
                 form_entity_uid = str(form.get("entity_uid", "")).strip()
                 if form_entity_uid and form_entity_uid not in entity_uids:
-                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.entity_uid", f"?? {form_uid} ????????? {form_entity_uid}")
+                    add_issue(f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.entity_uid", f"表单 {form_uid} 引用了不存在的实体 {form_entity_uid}")
                 for section in form.get("sections", []) if isinstance(form.get("sections"), list) else []:
                     if not isinstance(section, dict):
                         continue
                     section_uid = str(section.get("uid", "")).strip()
                     section_entity_uid = str(section.get("entity_uid", "")).strip()
                     if section_entity_uid and section_entity_uid not in entity_uids:
-                        add_issue(f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.sections.{section_uid}.entity_uid", f"???? {section_uid} ????????? {section_entity_uid}")
+                        add_issue(f"processes.{process_uid}.nodes.{node_uid}.forms.{form_uid}.sections.{section_uid}.entity_uid", f"表单分组 {section_uid} 引用了不存在的实体 {section_entity_uid}")
 
     for relation in doc.get("relations", []):
         if not isinstance(relation, dict):
@@ -1109,9 +1109,9 @@ def validate_document(document: dict) -> list[dict]:
         relation_from = str(relation.get("from", "")).strip()
         relation_to = str(relation.get("to", "")).strip()
         if relation_from and relation_from not in entity_uids:
-            add_issue(f"relations.{relation.get('uid', '')}.from", f"????????????? {relation_from}")
+            add_issue(f"relations.{relation.get('uid', '')}.from", f"实体关系引用了不存在的起点实体 {relation_from}")
         if relation_to and relation_to not in entity_uids:
-            add_issue(f"relations.{relation.get('uid', '')}.to", f"????????????? {relation_to}")
+            add_issue(f"relations.{relation.get('uid', '')}.to", f"实体关系引用了不存在的终点实体 {relation_to}")
 
     valid_applies_to = set()
     for collection in RULE_APPLIES_TO_COLLECTIONS:
@@ -1127,6 +1127,6 @@ def validate_document(document: dict) -> list[dict]:
             continue
         applies_to = str(rule.get("appliesToUid", "")).strip()
         if applies_to and applies_to not in valid_applies_to:
-            add_issue(f"rules.{rule.get('uid', '')}.appliesToUid", f"?? {rule.get('name', '') or rule.get('uid', '')} ? appliesToUid ??????? {applies_to}", "warning")
+            add_issue(f"rules.{rule.get('uid', '')}.appliesToUid", f"规则 {rule.get('name', '') or rule.get('uid', '')} 的 appliesToUid 引用了不存在的对象 {applies_to}", "warning")
 
     return issues

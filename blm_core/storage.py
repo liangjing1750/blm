@@ -83,11 +83,13 @@ class WorkspaceStorage(DocumentFileStore):
         self.workspace_dir = Path(workspace_dir)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.history_dir = self.workspace_dir / ".history"
+        self.versions_dir = self.workspace_dir / ".versions"
         self.trash_dir = self.workspace_dir / ".trash"
         self.temp_dir = self.workspace_dir / ".tmp"
         self.uploads_dir = self.workspace_dir / ".uploads"
         self.attachments_dir = self.workspace_dir / ATTACHMENTS_DIR_NAME
         self.history_dir.mkdir(exist_ok=True)
+        self.versions_dir.mkdir(exist_ok=True)
         self.trash_dir.mkdir(exist_ok=True)
         self.temp_dir.mkdir(exist_ok=True)
         self.uploads_dir.mkdir(exist_ok=True)
@@ -144,6 +146,60 @@ class WorkspaceStorage(DocumentFileStore):
 
     def load_history(self, name: str, snapshot_id: str) -> dict:
         return self._load_history_snapshot(self._validate_name(name), snapshot_id)
+
+    def list_versions(self, name: str) -> list[dict]:
+        safe_name = self._validate_name(name)
+        target_dir = self.versions_dir / safe_name
+        if not target_dir.exists():
+            return []
+        entries: list[dict] = []
+        for version_dir in sorted(target_dir.iterdir(), key=lambda item: item.name, reverse=True):
+            if not version_dir.is_dir() or not self._is_package_dir(version_dir):
+                continue
+            meta = self._read_named_version_meta(version_dir)
+            version_id = str(meta.get("id", "")).strip() or version_dir.name
+            message = str(meta.get("message", "")).strip()
+            timestamp_label = str(meta.get("timestampLabel", "")).strip() or self._format_timestamp_label(version_id)
+            entries.append(
+                {
+                    "id": version_id,
+                    "label": f"{message}（{timestamp_label}）" if message else timestamp_label,
+                    "doc_name": safe_name,
+                    "message": message,
+                    "timestamp": str(meta.get("timestamp", "")).strip() or version_id,
+                    "timestamp_label": timestamp_label,
+                }
+            )
+        return entries
+
+    def create_named_version(self, name: str, document: dict | None = None, *, message: str = "") -> dict:
+        with self._write_lock:
+            safe_name = self._validate_name(name)
+            source_document = deepcopy(document) if isinstance(document, dict) else self.load(safe_name)
+            version_id = self._timestamp()
+            target_root = self.versions_dir / safe_name
+            version_dir = target_root / version_id
+            target_root.mkdir(parents=True, exist_ok=True)
+            self._write_package_dir(version_dir, safe_name, source_document, source_package_dir=self._package_dir(safe_name))
+            self._write_named_version_meta(version_dir, version_id, str(message or "").strip())
+            return {
+                "ok": True,
+                "version": self._read_named_version_meta(version_dir),
+                "document": self._load_package_dir(version_dir),
+            }
+
+    def load_version(self, name: str, version_id: str) -> dict:
+        safe_name = self._validate_name(name)
+        safe_version_id = self._sanitize_workspace_entry(version_id)
+        version_dir = self.versions_dir / safe_name / safe_version_id
+        if not self._is_package_dir(version_dir):
+            raise FileNotFoundError(version_id)
+        document = self._load_package_dir(version_dir)
+        document["meta"] = document.get("meta") if isinstance(document.get("meta"), dict) else {}
+        document["meta"]["readonly"] = True
+        document["meta"]["version_id"] = safe_version_id
+        document["meta"]["version_label"] = self._read_named_version_meta(version_dir).get("message", "")
+        return document
 
     def list_trash(self) -> list[dict]:
         if not self.trash_dir.exists():
@@ -307,6 +363,16 @@ class WorkspaceStorage(DocumentFileStore):
                 self._snapshot_document(safe_name, save_message=save_message)
             current_revision = self._current_document_revision(safe_name)
             document_to_save = self._with_document_revision(document, current_revision + 1)
+            saved_document = self._save_workspace_document(safe_name, document_to_save)
+            self._remove_legacy_workspace_files(safe_name)
+            return saved_document
+
+    def save_collaboration_working_copy(self, name: str, document: dict) -> dict:
+        """Persist the live collaboration draft without creating a history snapshot."""
+        with self._write_lock:
+            safe_name = self._validate_name(name)
+            current_revision = self._current_document_revision(safe_name)
+            document_to_save = self._with_document_revision(document, current_revision)
             saved_document = self._save_workspace_document(safe_name, document_to_save)
             self._remove_legacy_workspace_files(safe_name)
             return saved_document
@@ -1116,6 +1182,31 @@ class WorkspaceStorage(DocumentFileStore):
             "timestampLabel": self._format_timestamp_label(snapshot_id),
         }
         (snapshot_dir / SNAPSHOT_META_NAME).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            "utf-8",
+        )
+
+    def _named_version_meta_path(self, version_dir: Path) -> Path:
+        return version_dir / "version.json"
+
+    def _read_named_version_meta(self, version_dir: Path) -> dict:
+        meta_path = self._named_version_meta_path(version_dir)
+        if not meta_path.is_file():
+            return {}
+        try:
+            payload = json.loads(meta_path.read_text("utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_named_version_meta(self, version_dir: Path, version_id: str, message: str) -> None:
+        payload = {
+            "id": version_id,
+            "message": str(message or "").strip(),
+            "timestamp": version_id,
+            "timestampLabel": self._format_timestamp_label(version_id),
+        }
+        self._named_version_meta_path(version_dir).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             "utf-8",
         )
