@@ -2,13 +2,97 @@
 
 const COLLAB_SNAPSHOT_DEBOUNCE_MS = 3000;
 const COLLAB_RECONNECT_MS = 3000;
+const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
+const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
 
-function getCollabUserName() {
-  const stored = localStorage.getItem('blm.collab.userName') || '';
-  if (stored.trim()) return stored.trim();
-  const fallback = `用户${Math.random().toString(16).slice(2, 6)}`;
-  localStorage.setItem('blm.collab.userName', fallback);
-  return fallback;
+function createLocalUserId() {
+  if (crypto?.randomUUID) return `user-${crypto.randomUUID()}`;
+  return `user-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function getCollabSessionId() {
+  let sessionId = sessionStorage.getItem(COLLAB_USER_SESSION_KEY) || '';
+  if (!sessionId) {
+    sessionId = crypto?.randomUUID ? `session-${crypto.randomUUID()}` : `session-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
+    sessionStorage.setItem(COLLAB_USER_SESSION_KEY, sessionId);
+  }
+  return sessionId;
+}
+
+function loadCollabUserProfile() {
+  let profile = null;
+  try {
+    profile = JSON.parse(localStorage.getItem(COLLAB_USER_PROFILE_KEY) || 'null');
+  } catch (_) {
+    profile = null;
+  }
+  const legacyName = (localStorage.getItem('blm.collab.userName') || '').trim();
+  const name = String(profile?.name || legacyName || '').trim();
+  const id = String(profile?.id || '').trim() || createLocalUserId();
+  const nextProfile = { id, name, sessionId: getCollabSessionId() };
+  S.user = { ...nextProfile };
+  if (!profile || profile.id !== id || profile.name !== name) {
+    localStorage.setItem(COLLAB_USER_PROFILE_KEY, JSON.stringify({ id, name }));
+  }
+  return nextProfile;
+}
+
+function saveCollabUserProfile(name) {
+  const current = loadCollabUserProfile();
+  const next = {
+    id: current.id || createLocalUserId(),
+    name: String(name || '').trim(),
+  };
+  localStorage.setItem(COLLAB_USER_PROFILE_KEY, JSON.stringify(next));
+  localStorage.removeItem('blm.collab.userName');
+  S.user = { ...next, sessionId: getCollabSessionId() };
+  renderUserAccountButton();
+  if (S.currentFile && S.runtime.supportsCollab && !S.readOnly) {
+    connectCollabSession(S.currentFile);
+  }
+  return S.user;
+}
+
+function getCollabUserProfile() {
+  const profile = loadCollabUserProfile();
+  return {
+    id: profile.id,
+    name: profile.name || '未设置用户',
+    sessionId: profile.sessionId,
+  };
+}
+
+function renderUserAccountButton() {
+  const button = document.getElementById('user-account-button');
+  if (!button) return;
+  const profile = loadCollabUserProfile();
+  const hasName = Boolean(profile.name);
+  button.textContent = hasName ? profile.name : '登录';
+  button.title = hasName ? `当前用户：${profile.name}` : '设置协作显示名称';
+  button.classList.toggle('empty', !hasName);
+}
+
+function openUserAccountModal() {
+  const profile = loadCollabUserProfile();
+  const input = document.getElementById('user-display-name-input');
+  const note = document.getElementById('user-session-note');
+  if (input) input.value = profile.name || '';
+  if (note) note.textContent = `用户ID：${profile.id}；当前页面连接ID：${profile.sessionId}`;
+  openModalById('user-modal-overlay');
+  setTimeout(() => input?.focus(), 50);
+}
+
+function closeUserAccountModal() {
+  closeModalById('user-modal-overlay');
+}
+
+function saveUserAccountFromModal() {
+  const input = document.getElementById('user-display-name-input');
+  const name = String(input?.value || '').trim();
+  if (!name) return showAppAlert('请填写显示名称，用于协作时识别修改人。');
+  saveCollabUserProfile(name);
+  closeUserAccountModal();
+  showAppToast('用户账号已更新。');
 }
 
 function renderCollabStatus() {
@@ -27,14 +111,21 @@ function renderCollabStatus() {
     return;
   }
   const users = Array.isArray(state.users) ? state.users : [];
-  const names = users.map((item) => item.user).filter(Boolean);
+  const names = users.map((item) => {
+    const name = item.name || item.user;
+    const count = Number(item.connectionCount || 1);
+    return count > 1 ? `${name}（${count}个窗口）` : name;
+  }).filter(Boolean);
+  const onlineText = names.length <= 2 && names.length
+    ? names.join('、')
+    : `${names.length || 1} 人`;
   const hasQueuedSnapshot = Boolean(state.pendingSnapshot || state.snapshotTimer);
   const suffix = state.syncing ? ' · 同步中' : hasQueuedSnapshot ? ' · 待自动同步' : state.lastSyncedAt ? ' · 已同步' : '';
   const activity = state.lastActivity?.user ? ` · ${state.lastActivity.user}刚更新` : '';
   badge.classList.remove('hidden', 'connected', 'offline');
   badge.classList.add(state.connected ? 'connected' : 'offline');
   badge.textContent = state.connected
-    ? `协作 ${names.length || 1} 人在线${suffix}${activity}`
+    ? `协作 ${onlineText}在线${suffix}${activity}`
     : '协作连接中';
   badge.title = names.length ? `在线：${names.join('、')}` : '正在连接实时协作会话';
 }
@@ -48,11 +139,11 @@ function connectCollabSession(docName) {
   disconnectCollabSession({ intentional: true });
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const socket = new WebSocket(`${protocol}//${window.location.host}/api/collab/ws`);
-  const userName = getCollabUserName();
+  const userProfile = getCollabUserProfile();
   S.collab.shouldReconnect = true;
   S.collab.socket = socket;
   S.collab.connected = false;
-  S.collab.userName = userName;
+  S.collab.userName = userProfile.name;
   S.collab.docName = docName;
   S.collab.users = [];
   S.collab.pendingSnapshot = false;
@@ -62,7 +153,7 @@ function connectCollabSession(docName) {
   renderCollabStatus();
 
   socket.addEventListener('open', () => {
-    socket.send(JSON.stringify({ type: 'join', doc: docName, user: userName }));
+    socket.send(JSON.stringify({ type: 'join', doc: docName, user: userProfile }));
   });
   socket.addEventListener('message', (event) => {
     handleCollabMessage(event.data);

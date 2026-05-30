@@ -170,6 +170,33 @@ class CollaborationWebSocketTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    def test_same_user_multiple_connections_are_grouped_in_presence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            storage.save("CollabSmoke", create_empty_document("CollabSmoke"))
+            server, _thread = self._start_server(storage)
+            try:
+                first = self._connect_ws(server.server_port)
+                second = self._connect_ws(server.server_port)
+                self.addCleanup(first.close)
+                self.addCleanup(second.close)
+
+                user_profile = {"id": "u-zhangsan", "name": "张三", "sessionId": "tab-a"}
+                first.sendall(_masked_client_frame({"type": "join", "doc": "CollabSmoke", "user": user_profile}))
+                _, first_joined = _recv_json_frame(first)
+                self.assertEqual(first_joined["users"][0]["name"], "张三")
+                self.assertEqual(first_joined["users"][0]["connectionCount"], 1)
+                _recv_json_frame(first)
+
+                second.sendall(_masked_client_frame({"type": "join", "doc": "CollabSmoke", "user": {**user_profile, "sessionId": "tab-b"}}))
+                _, second_joined = _recv_json_frame(second)
+                self.assertEqual(len(second_joined["users"]), 1)
+                self.assertEqual(second_joined["users"][0]["name"], "张三")
+                self.assertEqual(second_joined["users"][0]["connectionCount"], 2)
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_snapshot_replaces_session_document_and_is_broadcast(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

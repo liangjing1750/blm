@@ -3806,6 +3806,7 @@ async function openStartupLocatorIfPresent() {
 
 bindBeforeUnloadWarning();
 document.addEventListener('DOMContentLoaded', async () => {
+  if (typeof renderUserAccountButton === 'function') renderUserAccountButton();
   refreshSaveDialogText();
   try {
     const runtime = await api.runtime();
@@ -3819,8 +3820,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     S.runtime.supportsCollab = false;
   }
   if (typeof renderCollabStatus === 'function') renderCollabStatus();
-  if (await openStartupLocatorIfPresent()) return;
+  if (await openStartupLocatorIfPresent()) {
+    if (typeof loadCollabUserProfile === 'function' && !loadCollabUserProfile().name) {
+      setTimeout(() => openUserAccountModal(), 300);
+    }
+    return;
+  }
   render();
+  if (typeof loadCollabUserProfile === 'function' && !loadCollabUserProfile().name) {
+    setTimeout(() => openUserAccountModal(), 300);
+  }
 });
 
 window.App = App;

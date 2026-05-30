@@ -30,7 +30,16 @@ class CollabClient:
     client_id: str
     user: str
     handler: Any
+    user_id: str = ""
+    user_name: str = ""
+    session_id: str = ""
     send_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def __post_init__(self) -> None:
+        if not self.user_name:
+            self.user_name = self.user
+        if not self.user_id:
+            self.user_id = self.user_name or self.client_id
 
 
 @dataclass
@@ -66,8 +75,8 @@ class CollaborationManager:
                 event_type = str(payload.get("type", "")).strip()
                 if event_type == "join":
                     doc_name = str(payload.get("doc", "")).strip()
-                    user = str(payload.get("user", "")).strip() or "匿名用户"
-                    client, session = self._join(handler, doc_name, user)
+                    user_profile = self._normalize_user_profile(payload.get("user"))
+                    client, session = self._join(handler, doc_name, user_profile)
                     self._send_json(
                         client,
                         {
@@ -93,6 +102,7 @@ class CollaborationManager:
                             "doc": session.doc_name,
                             "seq": record["seq"],
                             "user": client.user,
+                            "userId": client.user_id,
                             "clientId": client.client_id,
                             "changes": record["changes"],
                         },
@@ -111,6 +121,7 @@ class CollaborationManager:
                             "doc": session.doc_name,
                             "seq": record["seq"],
                             "user": client.user,
+                            "userId": client.user_id,
                             "clientId": client.client_id,
                             "document": session.document,
                         },
@@ -153,7 +164,26 @@ class CollaborationManager:
         )
         handler.connection.sendall(response.encode("ascii"))
 
-    def _join(self, handler, doc_name: str, user: str) -> tuple[CollabClient, CollabSession]:
+    def _normalize_user_profile(self, raw_user: Any) -> dict[str, str]:
+        if isinstance(raw_user, dict):
+            user_id = str(raw_user.get("id", "")).strip()
+            user_name = str(raw_user.get("name", "")).strip()
+            session_id = str(raw_user.get("sessionId", "")).strip()
+        else:
+            user_name = str(raw_user or "").strip()
+            user_id = user_name
+            session_id = ""
+        if not user_name:
+            user_name = "未设置用户"
+        if not user_id:
+            user_id = user_name
+        return {
+            "id": user_id[:80],
+            "name": user_name[:40],
+            "sessionId": session_id[:80],
+        }
+
+    def _join(self, handler, doc_name: str, user_profile: dict[str, str]) -> tuple[CollabClient, CollabSession]:
         if not doc_name:
             raise WebSocketProtocolError("doc is required")
         safe_name = self.storage._validate_name(doc_name)
@@ -169,7 +199,10 @@ class CollaborationManager:
                 self._sessions[safe_name] = session
             client = CollabClient(
                 client_id=f"client-{secrets.token_hex(8)}",
-                user=user,
+                user=user_profile["name"],
+                user_id=user_profile["id"],
+                user_name=user_profile["name"],
+                session_id=user_profile["sessionId"],
                 handler=handler,
             )
             session.clients[client.client_id] = client
@@ -211,6 +244,7 @@ class CollaborationManager:
                 "seq": session.seq,
                 "doc": session.doc_name,
                 "user": client.user,
+                "userId": client.user_id,
                 "clientId": client.client_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "baseSeq": payload.get("baseSeq"),
@@ -232,6 +266,7 @@ class CollaborationManager:
                 "seq": session.seq,
                 "doc": session.doc_name,
                 "user": client.user,
+                "userId": client.user_id,
                 "clientId": client.client_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "baseSeq": payload.get("baseSeq"),
@@ -273,10 +308,24 @@ class CollaborationManager:
                     session.dirty = True
 
     def _session_users(self, session: CollabSession) -> list[dict]:
-        return [
-            {"clientId": client.client_id, "user": client.user}
-            for client in session.clients.values()
-        ]
+        grouped: dict[str, dict] = {}
+        for client in session.clients.values():
+            user_id = client.user_id or client.user_name or client.client_id
+            if user_id not in grouped:
+                grouped[user_id] = {
+                    "id": user_id,
+                    "userId": user_id,
+                    "user": client.user_name,
+                    "name": client.user_name,
+                    "clientIds": [],
+                    "sessionIds": [],
+                    "connectionCount": 0,
+                }
+            grouped[user_id]["clientIds"].append(client.client_id)
+            if client.session_id:
+                grouped[user_id]["sessionIds"].append(client.session_id)
+            grouped[user_id]["connectionCount"] += 1
+        return sorted(grouped.values(), key=lambda item: str(item["name"]))
 
     def _broadcast_presence(self, session: CollabSession) -> None:
         self._broadcast_json(

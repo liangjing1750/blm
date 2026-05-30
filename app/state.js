@@ -42,6 +42,11 @@ const S = {
     shouldReconnect: false,
     lastActivity: null,
   },
+  user: {
+    id: '',
+    name: '',
+    sessionId: '',
+  },
   merge: {
     workspaceFiles: [],
     workspaceNames: {
