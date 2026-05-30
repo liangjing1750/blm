@@ -7,7 +7,7 @@
 - 新增 `blm_core/collab.py`，实现最小 WebSocket 握手、join、presence、ping、change ack、广播和 JSONL changelog。
 - `blm_core/server.py` 接入 `/api/collab/ws`，`/api/runtime` 暴露 `supports_collab`。
 - 前端新增 `app/collab.js`，文档打开后自动加入协作会话，并在左上角显示协作连接/在线人数。
-- 增加基础用户账号设置，协作状态使用用户显示名称，不再随机生成“用户xxxx”；同一浏览器多个页面按同一用户聚合并显示窗口数。
+- 增加基础用户信息配置，协作状态使用用户显示名称，不再随机生成“用户xxxx”；同一浏览器多个页面按同一用户聚合并显示窗口数，配置前不允许打开或编辑文档。
 - 文档基础信息里的 `meta.domain`、`meta.title`、`meta.author`、`meta.date` 已接入低风险字段级协作变更发送。
 - 通过 `markModified()` 增加 3 秒节流的 `snapshot` 同步，所有既有编辑操作只要进入未保存状态，就会把当前文档工作稿广播给其他协作者。
 - 新加入会话时会回放 `collab/changelog.jsonl`，即使之前的内存会话已结束，也能加载最近的协作工作稿。

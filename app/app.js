@@ -155,6 +155,14 @@ async function confirmDiscardUnsavedChanges(actionLabel = '') {
   });
 }
 
+function ensureUserConfiguredForApp() {
+  if (typeof hasConfiguredCollabUser !== 'function') return true;
+  if (hasConfiguredCollabUser()) return true;
+  openUserAccountModal();
+  showAppToast('请先配置用户信息。');
+  return false;
+}
+
 function bindBeforeUnloadWarning() {
   window.addEventListener('beforeunload', (event) => {
     if (!S.modified) return;
@@ -2850,6 +2858,7 @@ const App = {
   },
 
   async cmdNew() {
+    if (!ensureUserConfiguredForApp()) return;
     if (!await confirmDiscardUnsavedChanges('新建文档')) return;
     document.getElementById('new-doc-name').value = '';
     openModalById('modal-overlay');
@@ -2873,6 +2882,7 @@ const App = {
   },
 
   async cmdOpen() {
+    if (!ensureUserConfiguredForApp()) return;
     resetRecoveryState();
     const [files, trashEntries, summaries] = await Promise.all([
       loadWorkspaceDocumentNames(),
@@ -3783,6 +3793,7 @@ async function openStartupLocatorIfPresent() {
   const params = getStartupLinkParams();
   const docName = String(params.get('doc') || '').trim();
   if (!docName) return false;
+  if (!ensureUserConfiguredForApp()) return false;
   const at = String(params.get('at') || '').trim();
   let document = null;
   let readOnly = false;
@@ -3820,16 +3831,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     S.runtime.supportsCollab = false;
   }
   if (typeof renderCollabStatus === 'function') renderCollabStatus();
-  if (await openStartupLocatorIfPresent()) {
-    if (typeof loadCollabUserProfile === 'function' && !loadCollabUserProfile().name) {
-      setTimeout(() => openUserAccountModal(), 300);
-    }
+  if (typeof hasConfiguredCollabUser === 'function' && !hasConfiguredCollabUser()) {
+    render();
+    setTimeout(() => openUserAccountModal(), 80);
     return;
   }
+  if (await openStartupLocatorIfPresent()) return;
   render();
-  if (typeof loadCollabUserProfile === 'function' && !loadCollabUserProfile().name) {
-    setTimeout(() => openUserAccountModal(), 300);
-  }
 });
 
 window.App = App;

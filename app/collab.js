@@ -5,6 +5,14 @@ const COLLAB_RECONNECT_MS = 3000;
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
 const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
 
+function normalizeCollabDisplayName(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^用户[0-9a-f]{4}$/i.test(text)) return '';
+  if (/^[{[]/.test(text) && /(?:user|name|sessionId|clientId)/.test(text)) return '';
+  return text.slice(0, 40);
+}
+
 function createLocalUserId() {
   if (crypto?.randomUUID) return `user-${crypto.randomUUID()}`;
   return `user-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
@@ -26,8 +34,8 @@ function loadCollabUserProfile() {
   } catch (_) {
     profile = null;
   }
-  const legacyName = (localStorage.getItem('blm.collab.userName') || '').trim();
-  const name = String(profile?.name || legacyName || '').trim();
+  const legacyName = normalizeCollabDisplayName(localStorage.getItem('blm.collab.userName') || '');
+  const name = normalizeCollabDisplayName(profile?.name || legacyName || '');
   const id = String(profile?.id || '').trim() || createLocalUserId();
   const nextProfile = { id, name, sessionId: getCollabSessionId() };
   S.user = { ...nextProfile };
@@ -39,9 +47,10 @@ function loadCollabUserProfile() {
 
 function saveCollabUserProfile(name) {
   const current = loadCollabUserProfile();
+  const displayName = normalizeCollabDisplayName(name);
   const next = {
     id: current.id || createLocalUserId(),
-    name: String(name || '').trim(),
+    name: displayName,
   };
   localStorage.setItem(COLLAB_USER_PROFILE_KEY, JSON.stringify(next));
   localStorage.removeItem('blm.collab.userName');
@@ -57,9 +66,13 @@ function getCollabUserProfile() {
   const profile = loadCollabUserProfile();
   return {
     id: profile.id,
-    name: profile.name || '未设置用户',
+    name: profile.name,
     sessionId: profile.sessionId,
   };
+}
+
+function hasConfiguredCollabUser() {
+  return Boolean(loadCollabUserProfile().name);
 }
 
 function renderUserAccountButton() {
@@ -67,8 +80,8 @@ function renderUserAccountButton() {
   if (!button) return;
   const profile = loadCollabUserProfile();
   const hasName = Boolean(profile.name);
-  button.textContent = hasName ? profile.name : '登录';
-  button.title = hasName ? `当前用户：${profile.name}` : '设置协作显示名称';
+  button.textContent = hasName ? profile.name : '用户信息配置';
+  button.title = hasName ? `当前用户：${profile.name}` : '配置协作显示名称';
   button.classList.toggle('empty', !hasName);
 }
 
@@ -77,7 +90,7 @@ function openUserAccountModal() {
   const input = document.getElementById('user-display-name-input');
   const note = document.getElementById('user-session-note');
   if (input) input.value = profile.name || '';
-  if (note) note.textContent = `用户ID：${profile.id}；当前页面连接ID：${profile.sessionId}`;
+  if (note) note.textContent = `浏览器用户ID：${profile.id}；当前页面连接ID：${profile.sessionId}`;
   openModalById('user-modal-overlay');
   setTimeout(() => input?.focus(), 50);
 }
@@ -89,10 +102,23 @@ function closeUserAccountModal() {
 function saveUserAccountFromModal() {
   const input = document.getElementById('user-display-name-input');
   const name = String(input?.value || '').trim();
-  if (!name) return showAppAlert('请填写显示名称，用于协作时识别修改人。');
+  if (!normalizeCollabDisplayName(name)) return showAppAlert('请填写真实显示名称，用于协作时识别修改人。');
   saveCollabUserProfile(name);
   closeUserAccountModal();
-  showAppToast('用户账号已更新。');
+  showAppToast('用户信息已更新。');
+  if (!S.doc && typeof openStartupLocatorIfPresent === 'function') {
+    openStartupLocatorIfPresent().then((opened) => {
+      if (!opened && typeof render === 'function') render();
+    });
+  }
+}
+
+function getCollabPayloadUserName(payload) {
+  const raw = payload?.user;
+  if (typeof raw === 'object' && raw !== null) {
+    return normalizeCollabDisplayName(raw.name || raw.user) || '其他用户';
+  }
+  return normalizeCollabDisplayName(raw) || '其他用户';
 }
 
 function renderCollabStatus() {
@@ -101,6 +127,7 @@ function renderCollabStatus() {
   const state = S.collab || {};
   if (!S.currentFile || !S.runtime.supportsCollab) {
     badge.classList.add('hidden');
+    badge.removeAttribute('data-users');
     return;
   }
   if (S.readOnly) {
@@ -108,11 +135,13 @@ function renderCollabStatus() {
     badge.classList.add('offline');
     badge.textContent = '只读版本';
     badge.title = '当前查看的是命名版本快照，不连接实时协作会话';
+    badge.removeAttribute('data-users');
     return;
   }
   const users = Array.isArray(state.users) ? state.users : [];
   const names = users.map((item) => {
-    const name = item.name || item.user;
+    const rawName = typeof item === 'object' && item !== null ? (item.name || item.user) : item;
+    const name = normalizeCollabDisplayName(typeof rawName === 'object' ? rawName?.name || rawName?.user : rawName) || '未设置用户';
     const count = Number(item.connectionCount || 1);
     return count > 1 ? `${name}（${count}个窗口）` : name;
   }).filter(Boolean);
@@ -128,9 +157,20 @@ function renderCollabStatus() {
     ? `协作 ${onlineText}在线${suffix}${activity}`
     : '协作连接中';
   badge.title = names.length ? `在线：${names.join('、')}` : '正在连接实时协作会话';
+  if (state.connected && names.length) {
+    badge.dataset.users = `在线用户\n${names.join('\n')}`;
+  } else {
+    badge.removeAttribute('data-users');
+  }
 }
 
 function connectCollabSession(docName) {
+  if (!hasConfiguredCollabUser()) {
+    disconnectCollabSession({ intentional: true });
+    renderUserAccountButton();
+    openUserAccountModal();
+    return;
+  }
   if (!S.runtime.supportsCollab || !docName || S.readOnly) {
     disconnectCollabSession({ intentional: true });
     renderCollabStatus();
@@ -238,7 +278,7 @@ function handleCollabMessage(raw) {
   if (payload.type === 'change') {
     S.collab.seq = Number(payload.seq || S.collab.seq || 0);
     S.collab.lastActivity = {
-      user: String(payload.user || '其他用户'),
+      user: getCollabPayloadUserName(payload),
       mode: 'change',
       at: new Date().toISOString(),
     };
@@ -248,7 +288,7 @@ function handleCollabMessage(raw) {
   if (payload.type === 'snapshot') {
     S.collab.seq = Number(payload.seq || S.collab.seq || 0);
     S.collab.lastActivity = {
-      user: String(payload.user || '其他用户'),
+      user: getCollabPayloadUserName(payload),
       mode: 'snapshot',
       at: new Date().toISOString(),
     };

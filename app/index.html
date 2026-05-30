@@ -17,7 +17,7 @@
     <span id="file-name" class="file-name" data-testid="current-file-name">-</span>
     <span id="modified-badge" class="modified-badge hidden" data-testid="modified-badge">未保存</span>
     <span id="collab-status" class="collab-status hidden" data-testid="collab-status">协作未连接</span>
-    <button id="user-account-button" class="user-account-button" type="button" onclick="openUserAccountModal()" data-testid="user-account-button">登录</button>
+    <button id="user-account-button" class="user-account-button" type="button" onclick="openUserAccountModal()" data-testid="user-account-button">用户信息配置</button>
   </div>
   <div class="toolbar-right">
     <button onclick="App.cmdNew()" class="btn btn-ghost" data-testid="toolbar-new-button">新建</button>
@@ -174,8 +174,8 @@
 
 <div id="user-modal-overlay" class="hidden" onclick="closeUserAccountModal()" data-testid="user-modal">
   <div class="modal user-modal-shell" onclick="event.stopPropagation()">
-    <h3>用户账号</h3>
-    <div class="recovery-subtitle">用于实时协作显示“谁在修改文档”。不做权限控制，同一浏览器的多个页面会复用同一个用户。</div>
+    <h3>用户信息配置</h3>
+    <div class="recovery-subtitle">必须先配置显示名称才能查看和编辑文档。它只用于实时协作显示“谁在修改文档”，不做权限控制；同一浏览器的多个页面会复用同一个用户。</div>
     <label class="user-form-field">
       <span>显示名称</span>
       <input id="user-display-name-input" type="text" placeholder="例如：张三" onkeydown="if(event.key==='Enter') saveUserAccountFromModal()">
@@ -183,7 +183,7 @@
     <div class="user-session-note" id="user-session-note"></div>
     <div class="modal-footer">
       <button onclick="closeUserAccountModal()" class="btn btn-ghost">取消</button>
-      <button onclick="saveUserAccountFromModal()" class="btn btn-primary" data-testid="user-save-button">登录/更新</button>
+      <button onclick="saveUserAccountFromModal()" class="btn btn-primary" data-testid="user-save-button">保存配置</button>
     </div>
   </div>
 </div>
