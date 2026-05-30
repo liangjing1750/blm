@@ -1984,8 +1984,9 @@ async function loadWorkspaceDocumentNames() {
 async function loadWorkspaceDocumentSummaries() {
   const summaries = await api.fileSummaries();
   if (summaries.error) {
-    alert(summaries.error);
-    return null;
+    console.warn('文件摘要加载失败，已降级为普通文档列表：', summaries.error);
+    S.recovery.workspaceSummaries = [];
+    return S.recovery.workspaceSummaries;
   }
   S.recovery.workspaceSummaries = Array.isArray(summaries) ? summaries : [];
   return S.recovery.workspaceSummaries;
@@ -2703,16 +2704,19 @@ const App = {
 
   async cmdOpen() {
     resetRecoveryState();
-    const [files, summaries, trashEntries] = await Promise.all([
+    const [files, trashEntries] = await Promise.all([
       loadWorkspaceDocumentNames(),
-      loadWorkspaceDocumentSummaries(),
       loadWorkspaceTrashEntries(),
     ]);
-    if (!files || !summaries || !trashEntries) return;
+    if (!files || !trashEntries) return;
     renderWorkspaceFileList(files);
     renderTrashEntries(trashEntries);
     syncOpenModalTabs();
     openModalById('open-modal-overlay');
+    loadWorkspaceDocumentSummaries().then((summaries) => {
+      if (!summaries) return;
+      renderWorkspaceFileList(S.files || files);
+    });
   },
 
   closeOpenModal() {

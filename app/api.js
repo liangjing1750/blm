@@ -65,7 +65,10 @@ const api = {
     return fetch('/api/files').then((response) => response.json());
   },
   async fileSummaries() {
-    return fetch('/api/files/meta').then((response) => response.json());
+    return fetch('/api/files/meta').then((response) => {
+      if (!response.ok) return [];
+      return response.json();
+    }).catch(() => []);
   },
   async load(name) {
     return fetch(`/api/load/${encodeURIComponent(name)}`).then((response) => response.json());
