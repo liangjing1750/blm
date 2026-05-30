@@ -94,7 +94,10 @@ const S = {
     historyEntries: [],
     versionEntries: [],
     trashEntries: [],
+    selectedTrashIds: [],
     workspaceSummaries: [],
+    activeSpace: '',
+    activeTag: '',
   },
   manual: {
     docs: [],
@@ -378,7 +381,10 @@ function resetRecoveryState() {
   S.recovery.historyEntries = [];
   S.recovery.versionEntries = [];
   S.recovery.trashEntries = [];
+  S.recovery.selectedTrashIds = [];
   S.recovery.workspaceSummaries = [];
+  S.recovery.activeSpace = '';
+  S.recovery.activeTag = '';
 }
 function getEntityName(id) { return S.doc?.entities?.find(e=>e.id===id)?.name||id; }
 function getProcNodes(proc) {

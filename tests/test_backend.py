@@ -11,6 +11,7 @@ import urllib.request
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from blm_core.document import create_empty_document, migrate_document
@@ -1170,6 +1171,133 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(snapshot_meta["message"], "补充流程说明")
             self.assertEqual(history_entries[0]["label"], f"补充流程说明（{history_entries[0]['timestamp_label']}）")
 
+    def test_manual_save_unchanged_document_without_message_does_not_create_history(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+
+            storage.save("Loans", document)
+            storage.save("Loans", deepcopy(storage.load("Loans")), save_message="")
+
+            self.assertEqual(storage.list_history("Loans"), [])
+
+    def test_manual_save_unchanged_document_with_message_creates_history(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+
+            storage.save("Loans", document)
+            storage.save("Loans", deepcopy(storage.load("Loans")), save_message="评审前留档")
+
+            history_entries = storage.list_history("Loans")
+            snapshot_meta = json.loads((history_snapshot_dirs(workspace, "Loans")[0] / "snapshot.json").read_text("utf-8"))
+            self.assertEqual(len(history_entries), 1)
+            self.assertEqual(history_entries[0]["kind"], "manual")
+            self.assertEqual(history_entries[0]["reason"], "manual_message")
+            self.assertEqual(snapshot_meta["kind"], "manual")
+            self.assertEqual(snapshot_meta["reason"], "manual_message")
+            self.assertTrue(snapshot_meta["contentHash"])
+
+    def test_auto_history_skips_same_content_and_replaces_window_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+
+            first = deepcopy(storage.load("Loans"))
+            first["meta"]["author"] = "auto one"
+            result_one = storage.maybe_snapshot_auto_history("Loans", first)
+            result_same = storage.maybe_snapshot_auto_history("Loans", first)
+            second = deepcopy(first)
+            second["meta"]["author"] = "auto two"
+            result_two = storage.maybe_snapshot_auto_history("Loans", second)
+
+            history_entries = storage.list_history("Loans")
+            history_document = storage.load_history("Loans", history_entries[0]["id"])
+            self.assertFalse(result_one["skipped"])
+            self.assertTrue(result_same["skipped"])
+            self.assertFalse(result_two["skipped"])
+            self.assertEqual(len(history_entries), 1)
+            self.assertEqual(history_entries[0]["kind"], "auto")
+            self.assertEqual(history_entries[0]["reason"], "time_window")
+            self.assertEqual(history_document["meta"]["author"], "auto two")
+
+    def test_auto_history_keeps_structural_change_inside_window(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+
+            first = deepcopy(storage.load("Loans"))
+            first["meta"]["author"] = "auto one"
+            storage.maybe_snapshot_auto_history("Loans", first)
+            structural = deepcopy(first)
+            structural["processes"][0]["nodes"].append({"uid": "node-new", "name": "新增节点"})
+            result = storage.maybe_snapshot_auto_history("Loans", structural)
+
+            history_entries = storage.list_history("Loans")
+            self.assertFalse(result["skipped"])
+            self.assertEqual(len(history_entries), 2)
+            self.assertEqual(history_entries[0]["reason"], "structural_change")
+
+    def test_history_trim_keeps_manual_records_and_compacts_old_auto_records(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+            now = datetime.now()
+
+            for index in range(35):
+                snapshot_doc = deepcopy(document)
+                snapshot_doc["meta"]["title"] = f"manual-{index}"
+                snapshot_id = (now - timedelta(days=40, minutes=index)).strftime("%Y%m%d-%H%M%S-%f")
+                storage._snapshot_document(
+                    "Loans",
+                    snapshot_document=snapshot_doc,
+                    kind="manual",
+                    reason="manual_save",
+                    snapshot_id=snapshot_id,
+                )
+            for index in range(3):
+                snapshot_doc = deepcopy(document)
+                snapshot_doc["meta"]["title"] = f"auto-old-{index}"
+                snapshot_id = (now - timedelta(days=8, minutes=index)).strftime("%Y%m%d-%H%M%S-%f")
+                storage._snapshot_document(
+                    "Loans",
+                    snapshot_document=snapshot_doc,
+                    kind="auto",
+                    reason="time_window",
+                    snapshot_id=snapshot_id,
+                )
+            for index, hour in enumerate([9, 12, 18]):
+                snapshot_doc = deepcopy(document)
+                snapshot_doc["meta"]["title"] = f"auto-daily-{index}"
+                snapshot_id = (now - timedelta(days=2)).replace(hour=hour, minute=0, second=0, microsecond=index).strftime("%Y%m%d-%H%M%S-%f")
+                storage._snapshot_document(
+                    "Loans",
+                    snapshot_document=snapshot_doc,
+                    kind="auto",
+                    reason="time_window",
+                    snapshot_id=snapshot_id,
+                )
+
+            storage._trim_history(workspace / ".history" / "Loans")
+            history_entries = storage.list_history("Loans")
+            manual_entries = [entry for entry in history_entries if entry["kind"] == "manual"]
+            auto_entries = [entry for entry in history_entries if entry["kind"] == "auto"]
+
+            self.assertEqual(len(manual_entries), 30)
+            self.assertEqual(len(auto_entries), 2)
+            self.assertEqual(
+                sorted(storage.load_history("Loans", entry["id"])["meta"]["title"] for entry in auto_entries),
+                ["auto-daily-0", "auto-daily-2"],
+            )
+
     def test_revision_save_snapshots_loaded_base_document_with_stable_uids(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -1384,6 +1512,8 @@ class WorkspaceStorageTests(unittest.TestCase):
             workspace = Path(temp_dir)
             storage = WorkspaceStorage(workspace)
             storage.history_limit = 3
+            storage.manual_history_keep_count = 3
+            storage.manual_history_keep_days = 0
             document = create_empty_document("Loans")
 
             storage.save("Loans", document)
@@ -1891,6 +2021,53 @@ class RecoveryApiTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["name"], "Loans")
         self.assertEqual(result["document"]["meta"]["title"], "Loans")
+
+    def test_trash_delete_and_clear_api_permanently_removes_entries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_dir = Path(temp_dir) / "workspace"
+            workspace_dir.mkdir()
+            storage = WorkspaceStorage(workspace_dir)
+            for name in ["LoansA", "LoansB"]:
+                storage.save(name, create_empty_document(name))
+                storage.delete(name)
+            trash_entries = storage.list_trash()
+
+            app_dir = Path(__file__).resolve().parent.parent / "app"
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            delete_payload = json.dumps({"entry_ids": [trash_entries[0]["id"]]}).encode("utf-8")
+            delete_request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/api/trash/delete",
+                data=delete_payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            clear_request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/api/trash/clear",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(delete_request) as response:
+                    delete_result = json.loads(response.read().decode("utf-8"))
+                remaining_after_delete = storage.list_trash()
+                with urllib.request.urlopen(clear_request) as response:
+                    clear_result = json.loads(response.read().decode("utf-8"))
+                remaining_after_clear = storage.list_trash()
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(delete_result["deleted"], 1)
+        self.assertEqual(len(remaining_after_delete), 1)
+        self.assertEqual(clear_result["deleted"], 1)
+        self.assertEqual(remaining_after_clear, [])
 
 
 class ExportApiTests(unittest.TestCase):

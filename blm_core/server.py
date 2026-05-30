@@ -133,6 +133,10 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._handle_version_load(body)
             if path == "/api/trash/restore":
                 return self._handle_trash_restore(body)
+            if path == "/api/trash/delete":
+                return self._handle_trash_delete(body)
+            if path == "/api/trash/clear":
+                return self._handle_trash_clear(body)
             if path == "/api/document/normalize":
                 return self._handle_document_normalize(body)
             if path == "/api/document/validate":
@@ -407,6 +411,24 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     "document": restored_document,
                 }
             )
+
+        def _handle_trash_delete(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            entry_ids = payload.get("entry_ids", [])
+            if not isinstance(entry_ids, list):
+                entry_ids = [entry_ids]
+            try:
+                return self._json(storage.delete_trash([str(item).strip() for item in entry_ids]))
+            except InvalidWorkspaceEntryError as exc:
+                return self._json({"error": str(exc)}, 400)
+
+        def _handle_trash_clear(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            return self._json(storage.clear_trash())
 
         def _handle_document_normalize(self, body: bytes):
             payload = self._decode_json(body)

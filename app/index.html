@@ -21,9 +21,9 @@
   <div class="toolbar-right">
     <button onclick="App.cmdNew()" class="btn btn-ghost" data-testid="toolbar-new-button">新建</button>
     <button onclick="App.cmdOpen()" class="btn btn-ghost" data-testid="toolbar-open-button">打开</button>
-    <button onclick="App.cmdSave()" class="btn btn-primary" id="btn-save" title="保存 (Ctrl+S)">保存</button>
-    <button onclick="App.cmdCreateVersion()" class="btn btn-ghost" data-testid="toolbar-version-button">存为版本</button>
-    <button onclick="App.cmdVersions()" class="btn btn-ghost" data-testid="toolbar-history-button">版本记录</button>
+    <button onclick="App.cmdSave()" class="btn btn-ghost" id="btn-save" title="立即同步 (Ctrl+S)">立即同步</button>
+    <button onclick="App.cmdCreateVersion()" class="btn btn-primary" data-testid="toolbar-version-button">归档版本</button>
+    <button onclick="App.cmdVersions()" class="btn btn-ghost" data-testid="toolbar-history-button">历史记录</button>
     <button onclick="App.cmdSaveAs()" class="btn btn-ghost" data-testid="toolbar-save-as-button" id="toolbar-save-as-label">复制</button>
     <button onclick="App.cmdCompare()" class="btn btn-ghost" data-testid="toolbar-compare-button">比对</button>
     <button onclick="App.cmdMerge()" class="btn btn-ghost" data-testid="toolbar-merge-button">合并</button>
@@ -115,11 +115,25 @@
     </div>
     <div class="open-modal-body">
       <section id="open-workspace-panel" class="open-modal-panel">
-        <div class="recovery-subtitle">按团队空间分组展示文档；打开后可从右上角“版本记录”查看历史和存为版本。</div>
+        <div class="open-space-head">
+          <div>
+            <div class="open-space-title">团队文档空间</div>
+            <div class="recovery-subtitle">按团队空间隔离文档；标签用于筛选和备注，正式归档请使用“归档版本”。</div>
+          </div>
+          <input id="open-file-search" class="open-file-search" type="search" placeholder="搜索文档名称" oninput="renderWorkspaceFileList(S.files || [])">
+        </div>
+        <div id="open-space-tabs" class="open-space-tabs" data-testid="open-space-tabs"></div>
+        <div id="open-tag-filters" class="open-tag-filters" data-testid="open-tag-filters"></div>
         <div id="file-list" class="file-list open-modal-scroll"></div>
       </section>
       <section id="open-trash-panel" class="open-modal-panel hidden">
-        <div class="recovery-subtitle">删除的文档会先进入回收站；恢复后回到原工作区名称，覆盖前会先保留快照。</div>
+        <div class="trash-toolbar">
+          <div class="recovery-subtitle">删除的文档会先进入回收站；恢复后回到原工作区名称，覆盖前会先保留快照。</div>
+          <div class="trash-actions">
+            <button class="btn btn-outline btn-sm" type="button" onclick="App.clearSelectedTrash()">清理勾选 <span id="trash-selected-count">0</span></button>
+            <button class="btn btn-danger btn-sm" type="button" onclick="App.clearAllTrash()">全部彻底清理</button>
+          </div>
+        </div>
         <div id="trash-list" class="file-list open-modal-scroll"></div>
       </section>
     </div>
@@ -130,8 +144,8 @@
 </div>
 
 <div id="history-modal-overlay" class="hidden" onclick="App.closeHistoryModal()" data-testid="history-modal">
-  <div class="modal" onclick="event.stopPropagation()">
-    <h3>历史版本</h3>
+  <div class="modal history-modal-shell" onclick="event.stopPropagation()">
+    <h3>历史记录</h3>
     <div id="history-modal-subtitle" class="recovery-subtitle"></div>
     <div id="history-list" class="file-list"></div>
     <div class="modal-footer">

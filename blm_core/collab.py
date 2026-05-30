@@ -264,7 +264,8 @@ class CollaborationManager:
             document = deepcopy(session.document)
             session.dirty = False
         try:
-            self.storage.save_collaboration_working_copy(doc_name, document)
+            saved_document = self.storage.save_collaboration_working_copy(doc_name, document)
+            self.storage.maybe_snapshot_auto_history(doc_name, saved_document)
         except OSError:
             with self._lock:
                 session = self._sessions.get(doc_name)

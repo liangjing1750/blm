@@ -626,6 +626,115 @@ function showAppToast(message, timeout = 3600) {
 function renderWorkspaceFileList(files) {
   const fileList = document.getElementById('file-list');
   if (!fileList) return;
+  const summaries = getWorkspaceDocumentSummaries(files);
+  const spaces = Array.from(new Set(summaries.map((item) => item.space))).sort(compareWorkspaceSpaceNames);
+  if (!S.recovery.activeSpace || !spaces.includes(S.recovery.activeSpace)) {
+    S.recovery.activeSpace = spaces.includes('默认空间') ? '默认空间' : (spaces[0] || '');
+  }
+  const activeSpace = S.recovery.activeSpace;
+  const spaceSummaries = activeSpace ? summaries.filter((item) => item.space === activeSpace) : summaries;
+  const tags = Array.from(new Set(spaceSummaries.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  if (S.recovery.activeTag && !tags.includes(S.recovery.activeTag)) {
+    S.recovery.activeTag = '';
+  }
+  const activeTag = S.recovery.activeTag;
+  const query = String(document.getElementById('open-file-search')?.value || '').trim().toLowerCase();
+  const visibleItems = spaceSummaries.filter((item) => {
+    const haystack = [item.name, item.title, item.author, item.date, ...(item.tags || [])].join(' ').toLowerCase();
+    return (!activeTag || item.tags.includes(activeTag)) && (!query || haystack.includes(query));
+  });
+  renderOpenSpaceTabs(spaces, summaries);
+  renderOpenTagFilters(tags, activeTag);
+  fileList.classList.add('open-card-grid');
+  fileList.innerHTML = visibleItems.length
+    ? visibleItems.map((summary) => renderWorkspaceFileCard(summary)).join('')
+    : `<div class="file-empty open-space-empty">${activeSpace ? `“${esc(activeSpace)}”空间下暂无匹配文档。` : '暂无工作区文档。'}</div>`;
+}
+
+function compareWorkspaceSpaceNames(left, right) {
+  const leftText = String(left || '');
+  const rightText = String(right || '');
+  if (leftText === '默认空间' && rightText !== '默认空间') return -1;
+  if (rightText === '默认空间' && leftText !== '默认空间') return 1;
+  return leftText.localeCompare(rightText, 'zh-Hans-CN', { sensitivity: 'base' });
+}
+
+function getWorkspaceDocumentSummaries(files) {
+  const summaries = Array.isArray(S.recovery.workspaceSummaries) ? S.recovery.workspaceSummaries : [];
+  const summaryByName = new Map(summaries.map((item) => [String(item.name || ''), item]));
+  if (S.currentFile && S.doc) {
+    const meta = S.doc.meta && typeof S.doc.meta === 'object' ? S.doc.meta : {};
+    const rawTags = Array.isArray(meta.tags) ? meta.tags : String(meta.tags || '').replace(/，/g, ',').split(',');
+    summaryByName.set(S.currentFile, {
+      ...(summaryByName.get(S.currentFile) || {}),
+      name: S.currentFile,
+      title: String(meta.domain || meta.title || S.currentFile).trim() || S.currentFile,
+      space: String(meta.space || meta.teamSpace || '默认空间').trim() || '默认空间',
+      tags: rawTags.map((item) => String(item || '').trim()).filter(Boolean),
+      author: String(meta.author || '').trim(),
+      date: String(meta.date || '').trim(),
+    });
+  }
+  return files.map((fileName) => {
+    const summary = summaryByName.get(fileName) || {};
+    const rawTags = Array.isArray(summary.tags) ? summary.tags : String(summary.tags || '').replace(/，/g, ',').split(',');
+    return {
+      name: fileName,
+      title: String(summary.title || fileName).trim() || fileName,
+      space: String(summary.space || '默认空间').trim() || '默认空间',
+      tags: rawTags.map((tag) => String(tag || '').trim()).filter(Boolean),
+      author: String(summary.author || '').trim(),
+      date: String(summary.date || '').trim(),
+    };
+  });
+}
+
+function renderOpenSpaceTabs(spaces, summaries) {
+  const tabs = document.getElementById('open-space-tabs');
+  if (!tabs) return;
+  tabs.innerHTML = spaces.length
+    ? spaces.map((space) => {
+      const count = summaries.filter((item) => item.space === space).length;
+      return `<button type="button" class="open-space-tab ${space === S.recovery.activeSpace ? 'active' : ''}" data-space="${esc(space)}" onclick='App.selectOpenSpace(${JSON.stringify(space)})'>
+        <span>${esc(space)}</span><em>${count}</em>
+      </button>`;
+    }).join('')
+    : '';
+}
+
+function renderOpenTagFilters(tags, activeTag) {
+  const filters = document.getElementById('open-tag-filters');
+  if (!filters) return;
+  filters.innerHTML = tags.length
+    ? [`<button type="button" class="open-tag-filter ${!activeTag ? 'active' : ''}" onclick="App.selectOpenTag('')">全部标签</button>`]
+      .concat(tags.map((tag) => `<button type="button" class="open-tag-filter ${tag === activeTag ? 'active' : ''}" onclick='App.selectOpenTag(${JSON.stringify(tag)})'>${esc(tag)}</button>`))
+      .join('')
+    : '<span class="open-tag-empty">当前空间暂无标签</span>';
+}
+
+function renderWorkspaceFileCard(summary) {
+  const tags = Array.isArray(summary.tags) ? summary.tags : [];
+  const metaParts = [];
+  if (summary.author) metaParts.push(`作者 ${esc(summary.author)}`);
+  if (summary.date) metaParts.push(esc(summary.date));
+  return `
+    <article class="workspace-doc-card" data-testid="workspace-doc-card" onclick='App.openFile(${JSON.stringify(summary.name)})'>
+      <button class="workspace-doc-card-main" type="button">
+        <span class="workspace-doc-title">${esc(summary.title || summary.name)}</span>
+        <span class="workspace-doc-name">${esc(summary.name)}</span>
+        <span class="workspace-doc-meta">${metaParts.length ? metaParts.join(' · ') : '未填写作者和日期'}</span>
+        ${tags.length ? `<span class="file-list-tags">${tags.slice(0, 5).map((tag) => `<em>${esc(tag)}</em>`).join('')}</span>` : '<span class="workspace-doc-no-tags">无标签</span>'}
+      </button>
+      <div class="file-list-item-actions">
+        <button class="file-list-item-del" type="button"
+          onclick='event.stopPropagation();App.deleteFile(${JSON.stringify(summary.name)})' title="删除">×</button>
+      </div>
+    </article>`;
+}
+
+function renderWorkspaceFileListLegacy(files) {
+  const fileList = document.getElementById('file-list');
+  if (!fileList) return;
   const summaries = Array.isArray(S.recovery.workspaceSummaries) ? S.recovery.workspaceSummaries : [];
   const summaryByName = new Map(summaries.map((item) => [String(item.name || ''), item]));
   const groups = new Map();
@@ -671,41 +780,93 @@ function renderHistoryEntries(docName, entries, versions = []) {
     return;
   }
   const namedVersionHtml = versions.length ? `
-    <div class="history-section-title">存为版本</div>
+    <div class="history-section-title">归档版本</div>
     ${versions.map((entry) => `
       <div class="recovery-item">
         <div class="recovery-item-main">
           <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
-          <div class="recovery-item-meta">稳定只读版本，适合放到评审或 Confluence 链接中。</div>
+          <div class="recovery-item-meta">稳定只读快照，适合放到评审或 Confluence 链接中。</div>
         </div>
         <button class="btn btn-outline btn-sm" type="button"
           onclick='copyVersionLocator(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>复制链接</button>
         <button class="btn btn-primary btn-sm" type="button"
           onclick='App.openVersion(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
       </div>`).join('')}` : '';
+  const groupedHistory = groupHistoryEntriesByDay(entries);
   const historyHtml = entries.length ? `
-    <div class="history-section-title">自动/手动保存历史</div>
-    ${entries.map((entry) => `
-    <div class="recovery-item">
-      <div class="recovery-item-main">
-        <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
-        <div class="recovery-item-meta">恢复前会先自动保存当前版本快照。</div>
-      </div>
-      <button class="btn btn-primary btn-sm" type="button"
-        onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>恢复</button>
-    </div>`).join('')}` : '';
+    <div class="history-section-title">近期历史</div>
+    <div class="recovery-subtitle">自动同步会被压缩，只保留关键状态点；正式归档请使用“归档版本”。近期历史仅支持只读打开，避免误恢复覆盖当前工作稿。</div>
+    ${groupedHistory.map((group) => `
+      <div class="history-day-group">
+        <div class="history-day-title">${esc(group.label)}</div>
+        ${group.items.map((entry) => {
+          const kindLabel = entry.kind === 'auto' ? '自动同步' : '手动同步';
+          const reasonLabel = historyReasonLabel(entry.reason, entry.message);
+          return `
+          <div class="recovery-item">
+            <div class="recovery-item-main">
+              <div class="recovery-item-title">${esc(kindLabel)}：${esc(entry.message || reasonLabel)}</div>
+              <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')} · ${esc(reasonLabel)} · 恢复前会先自动保存当前版本快照。</div>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button"
+              onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
+          </div>`;
+        }).join('')}
+      </div>`).join('')}` : '';
   list.innerHTML = namedVersionHtml + historyHtml;
+}
+
+function historyReasonLabel(reason, message = '') {
+  if (String(message || '').trim()) return '手动说明';
+  const labels = {
+    manual_message: '手动说明',
+    manual_save: '手动同步',
+    structural_change: '结构变化',
+    time_window: '窗口快照',
+    daily_first: '每日开始',
+    daily_last: '每日收尾',
+  };
+  return labels[reason] || '历史快照';
+}
+
+function groupHistoryEntriesByDay(entries) {
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const keyOf = (entry) => String(entry.timestamp || entry.id || '').slice(0, 8);
+  const labelOf = (key) => {
+    const todayKey = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    const yesterdayKey = `${yesterday.getFullYear()}${String(yesterday.getMonth() + 1).padStart(2, '0')}${String(yesterday.getDate()).padStart(2, '0')}`;
+    if (key === todayKey) return '今天';
+    if (key === yesterdayKey) return '昨天';
+    return key.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1年$2月$3日') || '更早';
+  };
+  const groups = new Map();
+  entries.forEach((entry) => {
+    const key = keyOf(entry);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  });
+  return Array.from(groups.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, items]) => ({ label: labelOf(key), items }));
 }
 
 function renderTrashEntries(entries) {
   const list = document.getElementById('trash-list');
   if (!list) return;
+  const selected = new Set(S.recovery.selectedTrashIds || []);
+  const countNode = document.getElementById('trash-selected-count');
+  if (countNode) countNode.textContent = String(selected.size);
   if (!entries.length) {
     list.innerHTML = '<div class="file-empty">回收站当前为空。</div>';
     return;
   }
   list.innerHTML = entries.map((entry) => `
-    <div class="recovery-item">
+    <div class="recovery-item trash-item">
+      <label class="trash-check">
+        <input type="checkbox" ${selected.has(entry.id) ? 'checked' : ''}
+          onchange='App.toggleTrashSelection(${JSON.stringify(entry.id)}, this.checked)'>
+      </label>
       <div class="recovery-item-main">
         <div class="recovery-item-title">${esc(entry.doc_name || '')}</div>
         <div class="recovery-item-meta">${esc(entry.timestamp || '')}</div>
@@ -818,11 +979,20 @@ function renderCompareWorkspaceList() {
     docSelect.disabled = !!S.compare.isRunning;
     const versions = S.compare.versions?.[kind] || [];
     versionSelect.innerHTML = ['<option value="">当前版本</option>']
-      .concat(versions.map((entry) => `<option value="${esc(entry.id || '')}">${esc(entry.label || entry.id || '')}</option>`))
+      .concat(versions.map((entry) => `<option value="${esc(entry.id || '')}">${esc(formatCompareHistoryOptionLabel(entry))}</option>`))
       .join('');
     versionSelect.value = S.compare.versionIds?.[kind] || '';
     versionSelect.disabled = !!S.compare.isRunning || !S.compare.workspaceNames?.[kind];
   });
+}
+
+function formatCompareHistoryOptionLabel(entry = {}) {
+  const kindLabel = entry.kind === 'auto' ? '自动同步' : '手动同步';
+  const reasonLabel = historyReasonLabel(entry.reason, entry.message);
+  const timestamp = entry.timestamp_label || entry.id || '';
+  const message = String(entry.message || '').trim();
+  const title = message || reasonLabel || entry.label || entry.id || '历史版本';
+  return timestamp ? `${kindLabel}：${title}（${timestamp}）` : `${kindLabel}：${title}`;
 }
 
 function syncCompareWorkspaceUi() {
@@ -2704,19 +2874,16 @@ const App = {
 
   async cmdOpen() {
     resetRecoveryState();
-    const [files, trashEntries] = await Promise.all([
+    const [files, trashEntries, summaries] = await Promise.all([
       loadWorkspaceDocumentNames(),
       loadWorkspaceTrashEntries(),
+      loadWorkspaceDocumentSummaries(),
     ]);
     if (!files || !trashEntries) return;
     renderWorkspaceFileList(files);
     renderTrashEntries(trashEntries);
     syncOpenModalTabs();
     openModalById('open-modal-overlay');
-    loadWorkspaceDocumentSummaries().then((summaries) => {
-      if (!summaries) return;
-      renderWorkspaceFileList(S.files || files);
-    });
   },
 
   closeOpenModal() {
@@ -2726,6 +2893,25 @@ const App = {
   switchOpenTab(tab) {
     S.recovery.openTab = tab === 'trash' ? 'trash' : 'workspace';
     syncOpenModalTabs();
+  },
+
+  selectOpenSpace(space) {
+    S.recovery.activeSpace = String(space || '').trim();
+    S.recovery.activeTag = '';
+    renderWorkspaceFileList(S.files || []);
+  },
+
+  selectOpenTag(tag) {
+    S.recovery.activeTag = String(tag || '').trim();
+    renderWorkspaceFileList(S.files || []);
+  },
+
+  toggleTrashSelection(entryId, checked) {
+    const selected = new Set(S.recovery.selectedTrashIds || []);
+    if (checked) selected.add(entryId);
+    else selected.delete(entryId);
+    S.recovery.selectedTrashIds = Array.from(selected);
+    renderTrashEntries(S.recovery.trashEntries || []);
   },
 
   async openHistoryModal(name) {
@@ -2757,6 +2943,23 @@ const App = {
     setActiveDocumentSession(result.document, { fileName: result.name || name });
   },
 
+  async openHistorySnapshot(name, snapshotId) {
+    if (!await confirmDiscardUnsavedChanges(`打开历史快照 ${snapshotId}`)) return;
+    const result = await api.loadHistory(name, snapshotId);
+    if (result.error) return alert(result.error);
+    const document = result.document || result;
+    document.meta = document.meta && typeof document.meta === 'object' ? document.meta : {};
+    document.meta.readonly = true;
+    document.meta.version_id = `history:${snapshotId}`;
+    document.meta.version_label = document.meta.version_label || '历史快照';
+    App.closeHistoryModal();
+    setActiveDocumentSession(document, {
+      fileName: name,
+      readOnly: true,
+      preserveUiState: true,
+    });
+  },
+
   async restoreTrash(entryId) {
     if (!await confirmDiscardUnsavedChanges('恢复回收站文档')) return;
     const result = await api.restoreTrash(entryId);
@@ -2764,6 +2967,34 @@ const App = {
     resetRecoveryState();
     App.closeOpenModal();
     setActiveDocumentSession(result.document, { fileName: result.name });
+  },
+
+  async clearSelectedTrash() {
+    const selected = S.recovery.selectedTrashIds || [];
+    if (!selected.length) return showAppToast('请先勾选要清理的回收站文档。');
+    if (!await showAppConfirm(`确认彻底清理已勾选的 ${selected.length} 个回收站文档？此操作不可恢复。`, {
+      title: '清理勾选',
+      confirmLabel: '彻底清理',
+    })) return;
+    const result = await api.deleteTrash(selected);
+    if (result.error) return alert(result.error);
+    S.recovery.selectedTrashIds = [];
+    const entries = await loadWorkspaceTrashEntries();
+    renderTrashEntries(entries || []);
+  },
+
+  async clearAllTrash() {
+    const entries = S.recovery.trashEntries || [];
+    if (!entries.length) return showAppToast('回收站当前为空。');
+    if (!await showAppConfirm(`确认彻底清理回收站全部 ${entries.length} 个文档？此操作不可恢复。`, {
+      title: '全部彻底清理',
+      confirmLabel: '全部清理',
+    })) return;
+    const result = await api.clearTrash();
+    if (result.error) return alert(result.error);
+    S.recovery.selectedTrashIds = [];
+    const nextEntries = await loadWorkspaceTrashEntries();
+    renderTrashEntries(nextEntries || []);
   },
 
   async cmdSaveAs() {
@@ -2842,13 +3073,13 @@ const App = {
 
   async cmdCreateVersion() {
     if (!S.doc || !S.currentFile) return;
-    if (S.readOnly) return showAppAlert('当前已经是只读版本，不需要再次存为版本。');
+    if (S.readOnly) return showAppAlert('当前已经是只读版本，不需要再次归档。');
     const message = await showAppPrompt(
       '填写版本说明，建议使用需求版本或评审结论，例如：仓单管理需求评审通过。',
       '',
       {
-        title: '存为版本',
-        confirmLabel: '存为版本',
+        title: '归档版本',
+        confirmLabel: '归档版本',
         cancelLabel: '取消',
       },
     );
@@ -2880,6 +3111,7 @@ const App = {
     if (!await confirmDiscardUnsavedChanges(`打开版本 ${versionId}`)) return;
     const result = await api.loadVersion(name, versionId);
     if (result.error) return alert(result.error);
+    App.closeHistoryModal();
     setActiveDocumentSession(result, {
       fileName: name,
       readOnly: true,
@@ -3404,10 +3636,45 @@ function getCurrentLocatorActions() {
   return actions;
 }
 
+async function copyTextToClipboard(text) {
+  const value = String(text || '');
+  if (!value) return false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch (error) {
+      console.warn('[BLM] navigator.clipboard failed, fallback to execCommand.', error);
+    }
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch (error) {
+    console.warn('[BLM] execCommand copy failed.', error);
+  } finally {
+    textarea.remove();
+  }
+  return copied;
+}
+
 async function copyLocatorUrl(url, label = '链接') {
   try {
-    await navigator.clipboard.writeText(url);
-    showAppToast(`已复制${label}`);
+    const copied = await copyTextToClipboard(url);
+    if (copied) {
+      showAppToast(`已复制${label}`);
+      return;
+    }
+    showAppAlert(url, { title: `${label}复制失败，请手动复制` });
   } catch (error) {
     showAppAlert(url, { title: `${label}复制失败，请手动复制` });
   }
@@ -3428,11 +3695,21 @@ function showLocatorMenu(event) {
   event.preventDefault();
   const menu = document.getElementById('locator-menu');
   if (!menu) return;
-  menu.innerHTML = actions.map((action) => `
-    <button type="button" onclick="copyLocatorUrl('${esc(jsString(action.url))}','${esc(jsString(action.label.replace(/^复制/, '')))}');hideLocatorMenu()">
+  menu.innerHTML = actions.map((action, index) => `
+    <button type="button" data-locator-action="${index}">
       ${esc(action.label)}
     </button>
   `).join('');
+  menu.querySelectorAll('[data-locator-action]').forEach((button) => {
+    button.addEventListener('click', (clickEvent) => {
+      clickEvent.stopPropagation();
+      const index = Number(button.dataset.locatorAction || -1);
+      const action = actions[index];
+      if (!action) return;
+      copyLocatorUrl(action.url, action.label.replace(/^复制/, ''));
+      hideLocatorMenu();
+    });
+  });
   menu.classList.remove('hidden');
   const rect = menu.getBoundingClientRect();
   const x = Math.min(event.clientX, window.innerWidth - rect.width - 12);

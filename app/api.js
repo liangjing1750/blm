@@ -140,6 +140,12 @@ const api = {
   async restoreTrash(entryId) {
     return postJson('/api/trash/restore', { entry_id: entryId });
   },
+  async deleteTrash(entryIds) {
+    return postJson('/api/trash/delete', { entry_ids: Array.isArray(entryIds) ? entryIds : [entryIds] });
+  },
+  async clearTrash() {
+    return postJson('/api/trash/clear', {});
+  },
   async exportMd(name) {
     return fetch(`/api/export/${encodeURIComponent(name)}`).then((response) => response.text());
   },

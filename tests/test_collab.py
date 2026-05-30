@@ -245,7 +245,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(seq, 1)
             self.assertEqual(loaded["meta"]["author"], "Replayed")
 
-    def test_autosave_persists_collaboration_working_copy_without_history_snapshot(self):
+    def test_autosave_persists_collaboration_working_copy_and_compact_auto_history(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             storage = WorkspaceStorage(root / "workspace")
@@ -261,8 +261,11 @@ class CollaborationWebSocketTests(unittest.TestCase):
             manager._apply_snapshot(session, client, {"document": next_document})
 
             persisted = storage.load("CollabSmoke")
+            history_entries = storage.list_history("CollabSmoke")
             self.assertEqual(persisted["meta"]["author"], "Autosaved")
-            self.assertEqual(list((root / "workspace" / ".history").glob("*")), [])
+            self.assertEqual(len(history_entries), 1)
+            self.assertEqual(history_entries[0]["kind"], "auto")
+            self.assertEqual(history_entries[0]["reason"], "time_window")
 
     def test_named_version_is_readonly_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:

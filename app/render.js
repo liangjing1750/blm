@@ -308,20 +308,21 @@ function renderToolbar() {
   const isCollabDoc = Boolean(S.currentFile && S.runtime.supportsCollab && !S.readOnly);
   const isCollabConnected = Boolean(isCollabDoc && S.collab?.connected);
   const hasPendingCollab = Boolean(S.collab?.pendingSnapshot || S.collab?.syncing || S.collab?.snapshotTimer);
+  const hasActionableChange = isCollabConnected ? hasPendingCollab : S.modified;
   const badge = document.getElementById('modified-badge');
   if (badge) {
-    badge.classList.toggle('hidden', !S.modified && !hasPendingCollab);
+    badge.classList.toggle('hidden', !hasActionableChange);
     badge.classList.toggle('syncing', Boolean(S.collab?.syncing));
-    badge.textContent = isCollabConnected
-      ? (S.collab?.syncing ? '同步中' : '待同步')
-      : '未保存';
+    badge.textContent = hasActionableChange
+      ? (isCollabConnected ? (S.collab?.syncing ? '同步中' : '待同步') : '未保存')
+      : '';
   }
   const saveButton = document.getElementById('btn-save');
   if (saveButton) {
-    saveButton.textContent = isCollabConnected ? '立即同步' : '保存';
-    saveButton.title = isCollabConnected ? '立即同步 (Ctrl+S)' : '保存 (Ctrl+S)';
-    saveButton.classList.toggle('btn-primary', !isCollabConnected || S.modified || hasPendingCollab);
-    saveButton.classList.toggle('btn-ghost', isCollabConnected && !S.modified && !hasPendingCollab);
+    saveButton.textContent = '立即同步';
+    saveButton.title = '立即同步 (Ctrl+S)';
+    saveButton.classList.toggle('btn-primary', hasActionableChange);
+    saveButton.classList.toggle('btn-ghost', !hasActionableChange);
   }
   document.getElementById('readonly-alert')?.classList.toggle('hidden', !S.readOnly);
   if (typeof renderCollabConflictBanner === 'function') renderCollabConflictBanner();

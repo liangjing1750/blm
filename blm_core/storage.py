@@ -12,7 +12,7 @@ import threading
 import uuid
 import zipfile
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from blm_core.document import canonical_document, create_empty_document, migrate_document
@@ -27,6 +27,11 @@ SNAPSHOT_META_NAME = "snapshot.json"
 ATTACHMENTS_DIR_NAME = ".attachments"
 ATTACHMENTS_INDEX_NAME = "attachments.json"
 EXPORT_ATTACHMENTS_DIR_NAME = "attachments"
+AUTO_HISTORY_WINDOW_SECONDS = 10 * 60
+AUTO_HISTORY_RECENT_DAYS = 1
+AUTO_HISTORY_DAILY_DAYS = 7
+MANUAL_HISTORY_KEEP_COUNT = 30
+MANUAL_HISTORY_KEEP_DAYS = 30
 
 
 class InvalidDocumentNameError(ValueError):
@@ -93,7 +98,12 @@ class WorkspaceStorage(DocumentFileStore):
         self.trash_dir.mkdir(exist_ok=True)
         self.temp_dir.mkdir(exist_ok=True)
         self.uploads_dir.mkdir(exist_ok=True)
-        self.history_limit = 20
+        self.history_limit = MANUAL_HISTORY_KEEP_COUNT
+        self.auto_history_window_seconds = AUTO_HISTORY_WINDOW_SECONDS
+        self.auto_history_recent_days = AUTO_HISTORY_RECENT_DAYS
+        self.auto_history_daily_days = AUTO_HISTORY_DAILY_DAYS
+        self.manual_history_keep_count = MANUAL_HISTORY_KEEP_COUNT
+        self.manual_history_keep_days = MANUAL_HISTORY_KEEP_DAYS
         self._write_lock = threading.RLock()
 
     def list_documents(self) -> list[str]:
@@ -149,12 +159,18 @@ class WorkspaceStorage(DocumentFileStore):
             snapshot_meta = self._read_snapshot_meta(snapshot)
             message = str(snapshot_meta.get("message", "")).strip()
             timestamp_label = str(snapshot_meta.get("timestampLabel", "")).strip() or self._format_timestamp_label(snapshot_id)
+            kind = str(snapshot_meta.get("kind", "")).strip() or "manual"
+            reason = str(snapshot_meta.get("reason", "")).strip() or ("manual_message" if message else "manual_save")
             entries.append(
                 {
                     "id": snapshot_id,
                     "label": f"{message}（{timestamp_label}）" if message else timestamp_label,
                     "doc_name": safe_name,
                     "message": message,
+                    "kind": kind,
+                    "reason": reason,
+                    "content_hash": str(snapshot_meta.get("contentHash", "")).strip(),
+                    "created_at": str(snapshot_meta.get("createdAt", "")).strip(),
                     "timestamp": snapshot_id,
                     "timestamp_label": timestamp_label,
                 }
@@ -266,6 +282,29 @@ class WorkspaceStorage(DocumentFileStore):
                 entry_path.with_suffix(".md").unlink(missing_ok=True)
                 return original_name, restored_document
             raise FileNotFoundError(safe_entry_id)
+
+    def delete_trash(self, entry_ids: list[str]) -> dict:
+        with self._write_lock:
+            deleted = 0
+            for entry_id in entry_ids:
+                safe_entry_id = self._sanitize_workspace_entry(str(entry_id or "").strip())
+                if not safe_entry_id:
+                    continue
+                entry_path = self.trash_dir / safe_entry_id
+                if not entry_path.exists():
+                    continue
+                self._delete_trash_entry_path(entry_path)
+                deleted += 1
+            return {"ok": True, "deleted": deleted}
+
+    def clear_trash(self) -> dict:
+        with self._write_lock:
+            deleted = 0
+            for entry in list(self.trash_dir.iterdir()) if self.trash_dir.exists() else []:
+                if entry.is_dir() or entry.is_file():
+                    self._delete_trash_entry_path(entry)
+                    deleted += 1
+            return {"ok": True, "deleted": deleted}
 
     def load(self, name: str) -> dict:
         safe_name = self._validate_name(name)
@@ -382,7 +421,9 @@ class WorkspaceStorage(DocumentFileStore):
         with self._write_lock:
             safe_name = self._validate_name(name)
             if self._workspace_document_exists(safe_name):
-                self._snapshot_document(safe_name, save_message=save_message)
+                current_document = self.load(safe_name)
+                if self._should_snapshot_manual_history(current_document, document, save_message):
+                    self._snapshot_document(safe_name, save_message=save_message, kind="manual")
             current_revision = self._current_document_revision(safe_name)
             document_to_save = self._with_document_revision(document, current_revision + 1)
             saved_document = self._save_workspace_document(safe_name, document_to_save)
@@ -398,6 +439,54 @@ class WorkspaceStorage(DocumentFileStore):
             saved_document = self._save_workspace_document(safe_name, document_to_save)
             self._remove_legacy_workspace_files(safe_name)
             return saved_document
+
+    def maybe_snapshot_auto_history(self, name: str, document: dict) -> dict:
+        """Create or update a compact auto-sync history point when the state is worth keeping."""
+        with self._write_lock:
+            safe_name = self._validate_name(name)
+            if not self._workspace_document_exists(safe_name):
+                return {"ok": False, "skipped": True, "reason": "missing_document"}
+            source_document = deepcopy(document if isinstance(document, dict) else self.load(safe_name))
+            content_hash = self._history_content_hash(source_document)
+            target_root = self.history_dir / safe_name
+            target_root.mkdir(parents=True, exist_ok=True)
+            history_entries = self._history_snapshot_entries(target_root)
+            last_same_hash = next(
+                (
+                    entry
+                    for entry in sorted(history_entries, key=lambda item: item["timestamp"], reverse=True)
+                    if entry["meta"].get("contentHash") == content_hash
+                ),
+                None,
+            )
+            if last_same_hash:
+                return {"ok": True, "skipped": True, "reason": "same_content", "content_hash": content_hash}
+
+            reason = self._auto_history_reason(source_document, history_entries)
+            if not reason:
+                return {"ok": True, "skipped": True, "reason": "window_not_elapsed", "content_hash": content_hash}
+
+            replace_entry = self._find_replaceable_auto_history_entry(history_entries, reason)
+            snapshot_path = replace_entry["path"] if replace_entry else None
+            snapshot_id = replace_entry["id"] if replace_entry else self._timestamp()
+            if snapshot_path is not None and snapshot_path.exists():
+                if snapshot_path.is_dir():
+                    shutil.rmtree(snapshot_path, ignore_errors=True)
+                else:
+                    snapshot_path.unlink(missing_ok=True)
+                    snapshot_path.with_suffix(".md").unlink(missing_ok=True)
+
+            self._snapshot_document(
+                safe_name,
+                save_message="",
+                snapshot_document=source_document,
+                kind="auto",
+                reason=reason,
+                content_hash=content_hash,
+                snapshot_id=snapshot_id,
+            )
+            self._trim_history(target_root)
+            return {"ok": True, "skipped": False, "reason": reason, "content_hash": content_hash, "snapshot_id": snapshot_id}
 
     def save_with_revision(
         self,
@@ -449,7 +538,9 @@ class WorkspaceStorage(DocumentFileStore):
 
             if exists:
                 snapshot_source = base_document if expected_revision is not None and expected_revision == current_revision and isinstance(base_document, dict) else None
-                self._snapshot_document(safe_name, save_message=save_message, snapshot_document=snapshot_source)
+                candidate_source = snapshot_source if isinstance(snapshot_source, dict) else current_document
+                if self._should_snapshot_manual_history(candidate_source or {}, document_to_save, save_message):
+                    self._snapshot_document(safe_name, save_message=save_message, snapshot_document=snapshot_source, kind="manual")
             document_to_save = self._with_document_revision(document_to_save, current_revision + 1)
             saved_document = self._save_workspace_document(safe_name, document_to_save)
             self._remove_legacy_workspace_files(safe_name)
@@ -1146,10 +1237,126 @@ class WorkspaceStorage(DocumentFileStore):
         next_document["meta"]["revision"] = max(0, int(revision or 0))
         return next_document
 
-    def _snapshot_document(self, name: str, *, save_message: str = "", snapshot_document: dict | None = None) -> None:
+    def _history_content_hash(self, document: dict | None) -> str:
+        source = canonical_document(deepcopy(document if isinstance(document, dict) else {}))
+        meta = source.get("meta") if isinstance(source.get("meta"), dict) else {}
+        for key in ["revision", "readonly", "version_id", "version_label"]:
+            meta.pop(key, None)
+        source["meta"] = meta
+        encoded = json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _should_snapshot_manual_history(self, current_document: dict, next_document: dict, save_message: str = "") -> bool:
+        if str(save_message or "").strip():
+            return True
+        return self._history_content_hash(current_document) != self._history_content_hash(next_document)
+
+    def _history_snapshot_entries(self, target_root: Path) -> list[dict]:
+        entries: list[dict] = []
+        if not target_root.exists():
+            return entries
+        for entry in target_root.iterdir():
+            if entry.is_dir() and self._is_package_dir(entry):
+                snapshot_id = entry.name
+            elif entry.is_file() and entry.suffix == ".json":
+                snapshot_id = entry.stem
+            else:
+                continue
+            meta = self._read_snapshot_meta(entry)
+            entries.append(
+                {
+                    "id": snapshot_id,
+                    "path": entry,
+                    "meta": meta,
+                    "timestamp": self._parse_snapshot_datetime(snapshot_id) or datetime.min,
+                }
+            )
+        entries.sort(key=lambda item: item["timestamp"])
+        return entries
+
+    def _parse_snapshot_datetime(self, snapshot_id: str) -> datetime | None:
+        try:
+            return datetime.strptime(str(snapshot_id or "").strip(), "%Y%m%d-%H%M%S-%f")
+        except ValueError:
+            return None
+
+    def _auto_history_reason(self, document: dict, history_entries: list[dict]) -> str:
+        now = datetime.now()
+        auto_entries = [entry for entry in history_entries if entry["meta"].get("kind") == "auto"]
+        if not auto_entries:
+            return "time_window"
+
+        newest = max(auto_entries, key=lambda item: item["timestamp"])
+        if self._has_structural_change(document, newest["path"]):
+            return "structural_change"
+
+        elapsed = now - newest["timestamp"]
+        if newest["meta"].get("reason") == "time_window" and elapsed.total_seconds() < self.auto_history_window_seconds:
+            return "time_window"
+        if elapsed.total_seconds() >= self.auto_history_window_seconds:
+            return "time_window"
+        return ""
+
+    def _find_replaceable_auto_history_entry(self, history_entries: list[dict], reason: str) -> dict | None:
+        if reason != "time_window":
+            return None
+        now = datetime.now()
+        auto_entries = [
+            entry
+            for entry in history_entries
+            if entry["meta"].get("kind") == "auto"
+            and entry["meta"].get("reason") == "time_window"
+            and (now - entry["timestamp"]).total_seconds() < self.auto_history_window_seconds
+        ]
+        return max(auto_entries, key=lambda item: item["timestamp"], default=None)
+
+    def _has_structural_change(self, document: dict, snapshot_path: Path) -> bool:
+        try:
+            previous = self._load_history_snapshot(snapshot_path.parent.name, snapshot_path.name if snapshot_path.is_dir() else snapshot_path.stem)
+        except (FileNotFoundError, InvalidWorkspaceEntryError, OSError, ValueError):
+            return True
+        return self._structural_signature(previous) != self._structural_signature(document)
+
+    def _structural_signature(self, document: dict | None) -> dict:
+        source = document if isinstance(document, dict) else {}
+        signatures: dict[str, list] = {}
+        for key in ["valueStreams", "businessAreas", "stages", "components", "constructs", "tasks", "entities", "forms"]:
+            items = source.get(key, [])
+            signatures[key] = sorted(
+                str(item.get("uid") or item.get("name") or "")
+                for item in items
+                if isinstance(item, dict)
+            )
+        process_signatures = []
+        for process in source.get("processes", []) if isinstance(source.get("processes", []), list) else []:
+            if not isinstance(process, dict):
+                continue
+            process_signatures.append(
+                (
+                    str(process.get("uid") or process.get("name") or ""),
+                    tuple(sorted(str(item.get("uid") or item.get("name") or "") for item in process.get("nodes", []) if isinstance(item, dict))),
+                    tuple(sorted(str(item.get("uid") or item.get("name") or "") for item in process.get("gateways", []) if isinstance(item, dict))),
+                    tuple(sorted(str(item.get("uid") or item.get("name") or "") for item in process.get("flowEdges", []) if isinstance(item, dict))),
+                    tuple(sorted(str(item.get("uid") or item.get("name") or "") for item in process.get("prototypeFiles", []) if isinstance(item, dict))),
+                )
+            )
+        signatures["processes"] = sorted(process_signatures)
+        return signatures
+
+    def _snapshot_document(
+        self,
+        name: str,
+        *,
+        save_message: str = "",
+        snapshot_document: dict | None = None,
+        kind: str = "manual",
+        reason: str = "",
+        content_hash: str = "",
+        snapshot_id: str = "",
+    ) -> None:
         safe_name = self._validate_name(name)
         target_root = self.history_dir / safe_name
-        snapshot_id = self._timestamp()
+        snapshot_id = self._sanitize_workspace_entry(snapshot_id or self._timestamp())
         snapshot_dir = target_root / snapshot_id
         target_root.mkdir(parents=True, exist_ok=True)
         package_dir = self._package_dir(safe_name)
@@ -1169,7 +1376,14 @@ class WorkspaceStorage(DocumentFileStore):
             self._write_package_dir(snapshot_dir, safe_name, snapshot_document)
         else:
             return
-        self._write_snapshot_meta(snapshot_dir, snapshot_id, save_message)
+        self._write_snapshot_meta(
+            snapshot_dir,
+            snapshot_id,
+            save_message,
+            kind=kind,
+            reason=reason,
+            content_hash=content_hash or self._history_content_hash(snapshot_document),
+        )
         self._trim_history(target_root)
 
     def _load_history_snapshot(self, name: str, snapshot_id: str) -> dict:
@@ -1196,10 +1410,29 @@ class WorkspaceStorage(DocumentFileStore):
             return {}
         return payload if isinstance(payload, dict) else {}
 
-    def _write_snapshot_meta(self, snapshot_dir: Path, snapshot_id: str, message: str) -> None:
+    def _write_snapshot_meta(
+        self,
+        snapshot_dir: Path,
+        snapshot_id: str,
+        message: str,
+        *,
+        kind: str = "manual",
+        reason: str = "",
+        content_hash: str = "",
+    ) -> None:
+        normalized_kind = "auto" if str(kind or "").strip() == "auto" else "manual"
+        normalized_reason = str(reason or "").strip()
+        if not normalized_reason:
+            normalized_reason = "manual_message" if normalized_kind == "manual" and str(message or "").strip() else (
+                "manual_save" if normalized_kind == "manual" else "time_window"
+            )
         payload = {
             "id": snapshot_id,
             "message": str(message or "").strip(),
+            "kind": normalized_kind,
+            "reason": normalized_reason,
+            "contentHash": str(content_hash or "").strip(),
+            "createdAt": datetime.now().isoformat(timespec="seconds"),
             "timestamp": snapshot_id,
             "timestampLabel": self._format_timestamp_label(snapshot_id),
         }
@@ -1497,22 +1730,55 @@ class WorkspaceStorage(DocumentFileStore):
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
     def _trim_history(self, target_dir: Path) -> None:
-        snapshots: list[Path] = []
-        for entry in target_dir.iterdir():
-            if entry.is_dir() and self._is_package_dir(entry):
-                snapshots.append(entry)
-            elif entry.is_file() and entry.suffix == ".json":
-                snapshots.append(entry)
-        snapshots.sort(key=lambda item: item.name if item.is_dir() else item.stem)
-        overflow = len(snapshots) - self.history_limit
-        if overflow <= 0:
+        entries = self._history_snapshot_entries(target_dir)
+        if not entries:
             return
-        for snapshot in snapshots[:overflow]:
-            if snapshot.is_dir():
-                shutil.rmtree(snapshot, ignore_errors=True)
-            else:
-                snapshot.unlink(missing_ok=True)
-                snapshot.with_suffix(".md").unlink(missing_ok=True)
+        now = datetime.now()
+        delete_paths: set[Path] = set()
+
+        manual_entries = [entry for entry in entries if entry["meta"].get("kind", "manual") != "auto"]
+        manual_entries.sort(key=lambda item: item["timestamp"], reverse=True)
+        manual_keep_count = max(0, min(int(self.manual_history_keep_count), int(self.history_limit)))
+        manual_keep_days = max(0, int(self.manual_history_keep_days))
+        for index, entry in enumerate(manual_entries):
+            age = now - entry["timestamp"]
+            if index < manual_keep_count or age <= timedelta(days=manual_keep_days):
+                continue
+            delete_paths.add(entry["path"])
+
+        auto_entries = [entry for entry in entries if entry["meta"].get("kind") == "auto"]
+        daily_groups: dict[str, list[dict]] = {}
+        for entry in auto_entries:
+            age = now - entry["timestamp"]
+            if age > timedelta(days=self.auto_history_daily_days):
+                delete_paths.add(entry["path"])
+            elif age > timedelta(days=self.auto_history_recent_days):
+                daily_groups.setdefault(entry["timestamp"].strftime("%Y-%m-%d"), []).append(entry)
+        for group in daily_groups.values():
+            group.sort(key=lambda item: item["timestamp"])
+            keep = {group[0]["path"], group[-1]["path"]}
+            for entry in group:
+                if entry["path"] not in keep:
+                    delete_paths.add(entry["path"])
+
+        for snapshot in delete_paths:
+            self._delete_history_snapshot_path(snapshot)
+
+    def _delete_history_snapshot_path(self, snapshot: Path) -> None:
+        if snapshot.is_dir():
+            shutil.rmtree(snapshot, ignore_errors=True)
+        else:
+            snapshot.unlink(missing_ok=True)
+            snapshot.with_suffix(".md").unlink(missing_ok=True)
+            snapshot.with_suffix(".snapshot.json").unlink(missing_ok=True)
+
+    def _delete_trash_entry_path(self, entry: Path) -> None:
+        if entry.is_dir():
+            shutil.rmtree(entry, ignore_errors=True)
+        elif entry.is_file():
+            entry.unlink(missing_ok=True)
+            if entry.suffix == ".json":
+                entry.with_suffix(".md").unlink(missing_ok=True)
 
     def _parse_trash_entry_name(self, entry_name: str) -> tuple[str, str]:
         safe_entry_name = self._sanitize_workspace_entry(entry_name)

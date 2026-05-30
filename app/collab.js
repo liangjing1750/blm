@@ -28,7 +28,8 @@ function renderCollabStatus() {
   }
   const users = Array.isArray(state.users) ? state.users : [];
   const names = users.map((item) => item.user).filter(Boolean);
-  const suffix = state.syncing ? ' · 同步中' : state.pendingSnapshot ? ' · 待自动同步' : state.lastSyncedAt ? ' · 已同步' : '';
+  const hasQueuedSnapshot = Boolean(state.pendingSnapshot || state.snapshotTimer);
+  const suffix = state.syncing ? ' · 同步中' : hasQueuedSnapshot ? ' · 待自动同步' : state.lastSyncedAt ? ' · 已同步' : '';
   const activity = state.lastActivity?.user ? ` · ${state.lastActivity.user}刚更新` : '';
   badge.classList.remove('hidden', 'connected', 'offline');
   badge.classList.add(state.connected ? 'connected' : 'offline');
