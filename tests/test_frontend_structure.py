@@ -132,6 +132,8 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("async createVersion(name, document, message = '')", api_js)
         self.assertIn("async loadVersion(name, versionId)", api_js)
         self.assertIn("async fileSummaries()", api_js)
+        self.assertIn("async exportDocx(name)", api_js)
+        self.assertIn("api.exportDocx(S.currentFile)", app_js)
         self.assertIn("if (!response.ok) return []", api_js)
         self.assertIn("catch(() => [])", api_js)
         self.assertIn("COLLAB_SNAPSHOT_DEBOUNCE_MS = 3000", (APP_DIR / "collab.js").read_text("utf-8"))

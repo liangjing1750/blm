@@ -97,6 +97,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._handle_load(path)
             if path.startswith("/api/attachment/"):
                 return self._handle_attachment(path)
+            if path.startswith("/api/export-docx/"):
+                return self._handle_export_docx(path)
             if path.startswith("/api/export-bundle/"):
                 return self._handle_export_bundle(path)
             if path.startswith("/api/export/"):
@@ -174,6 +176,20 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             try:
                 filename, payload = storage.build_export_bundle(name)
                 return self._binary(payload, "application/zip", filename=filename)
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+
+        def _handle_export_docx(self, path: str):
+            name = unquote(path[len("/api/export-docx/"):])
+            try:
+                filename, payload = storage.build_export_docx(name)
+                return self._binary(
+                    payload,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    filename=filename,
+                )
             except InvalidDocumentNameError as exc:
                 return self._json({"error": str(exc)}, 400)
             except FileNotFoundError:

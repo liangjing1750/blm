@@ -2071,6 +2071,57 @@ class RecoveryApiTests(unittest.TestCase):
 
 
 class ExportApiTests(unittest.TestCase):
+    def test_export_docx_api_returns_single_docx_with_embedded_attachment(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_dir = Path(temp_dir) / "workspace"
+            workspace_dir.mkdir()
+            storage = WorkspaceStorage(workspace_dir)
+            document = create_empty_document("Loans")
+            document["processes"][0]["prototypeFiles"] = [
+                {
+                    "uid": "proto-a",
+                    "name": "borrow-form.html",
+                    "content": "<html><body>borrow</body></html>",
+                    "contentType": "text/html",
+                }
+            ]
+            storage.save("Loans", document)
+
+            app_dir = Path(__file__).resolve().parent.parent / "app"
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/api/export-docx/Loans"
+                ) as response:
+                    payload = response.read()
+                    content_type = response.headers.get("Content-Type")
+                    disposition = response.headers.get("Content-Disposition")
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(
+            content_type,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        self.assertIn('filename="Loans.docx"', disposition)
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            names = sorted(archive.namelist())
+            self.assertIn("word/document.xml", names)
+            self.assertIn("word/attachments/v1__borrow-form.html", names)
+            document_xml = archive.read("word/document.xml").decode("utf-8")
+            self.assertIn("Loans", document_xml)
+            self.assertIn("borrow-form.html", document_xml)
+            self.assertEqual(
+                archive.read("word/attachments/v1__borrow-form.html").decode("utf-8"),
+                "<html><body>borrow</body></html>",
+            )
+
     def test_export_bundle_api_returns_zip_package(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace_dir = Path(temp_dir) / "workspace"

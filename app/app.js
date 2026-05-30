@@ -3191,16 +3191,31 @@ const App = {
       }
       if (!S.currentFile || S.modified) return;
 
-      setSaveProgress(true, 72, '正在生成导出文件...', '正在打包文档、预览内容和附件。');
-      const bundleName = `${S.currentFile || S.doc.meta?.domain || getCurrentDocumentLabel() || 'blm-document'}.zip`;
-      const response = await api.exportBundle(S.currentFile);
+      const exportDocx = await showAppConfirm('请选择导出格式。DOCX 会把正文和附件嵌入到一个 Word 文件；ZIP 文档包会保留 JSON、Markdown 和附件目录。', {
+        title: '导出格式',
+        confirmLabel: '导出 DOCX',
+        cancelLabel: '导出 ZIP 文档包',
+      });
+      const baseName = S.currentFile || S.doc.meta?.domain || getCurrentDocumentLabel() || 'blm-document';
+      const fileName = `${baseName}.${exportDocx ? 'docx' : 'zip'}`;
+      setSaveProgress(
+        true,
+        72,
+        '正在生成导出文件...',
+        exportDocx ? '正在生成 Word 文档并嵌入附件。' : '正在打包文档、预览内容和附件。'
+      );
+      const response = exportDocx ? await api.exportDocx(S.currentFile) : await api.exportBundle(S.currentFile);
       if (!response.ok) {
-        alert('导出文档包失败，请稍后重试。');
+        alert(exportDocx ? '导出 DOCX 失败，请稍后重试。' : '导出文档包失败，请稍后重试。');
         return;
       }
       const bundleBlob = await response.blob();
       setSaveProgress(true, 96, '正在下载导出文件...', '导出文件已生成，正在交给浏览器下载。');
-      App._downloadBlob(bundleBlob, bundleBlob.type || 'application/zip', bundleName);
+      App._downloadBlob(
+        bundleBlob,
+        bundleBlob.type || (exportDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/zip'),
+        fileName
+      );
     } finally {
       S.isExporting = false;
       setSaveProgress(false);

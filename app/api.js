@@ -152,6 +152,9 @@ const api = {
   async exportBundle(name) {
     return fetch(`/api/export-bundle/${encodeURIComponent(name)}`);
   },
+  async exportDocx(name) {
+    return fetch(`/api/export-docx/${encodeURIComponent(name)}`);
+  },
   async exportJson(name) {
     return this.load(name);
   },

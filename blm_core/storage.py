@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from blm_core.document import canonical_document, create_empty_document, migrate_document
+from blm_core.docx import DocxAttachment, build_docx_from_markdown
 from blm_core.markdown import MarkdownExporter
 from blm_core.merge import apply_merge
 
@@ -755,6 +756,32 @@ class WorkspaceStorage(DocumentFileStore):
             for relative_path, payload in packaged_files:
                 archive.writestr(f"{safe_name}/{relative_path.as_posix()}", payload)
         return f"{safe_name}.zip", buffer.getvalue()
+
+    def build_export_docx(self, name: str) -> tuple[str, bytes]:
+        safe_name = self._validate_name(name)
+        _, bundle_payload = self.build_export_bundle(safe_name)
+        attachments: list[DocxAttachment] = []
+        markdown = self.export_markdown(safe_name)
+        with zipfile.ZipFile(io.BytesIO(bundle_payload), "r") as archive:
+            prefix = f"{safe_name}/"
+            markdown_path = f"{prefix}{safe_name}.md"
+            names = archive.namelist()
+            if markdown_path in names:
+                markdown = archive.read(markdown_path).decode("utf-8")
+            for member_name in names:
+                if not member_name.startswith(f"{prefix}{EXPORT_ATTACHMENTS_DIR_NAME}/"):
+                    continue
+                if member_name.endswith(f"/{ATTACHMENTS_INDEX_NAME}") or member_name.endswith("/"):
+                    continue
+                attachment_name = Path(member_name).name
+                attachments.append(
+                    DocxAttachment(
+                        name=attachment_name,
+                        content_type=mimetypes.guess_type(attachment_name)[0] or "application/octet-stream",
+                        payload=archive.read(member_name),
+                    )
+                )
+        return f"{safe_name}.docx", build_docx_from_markdown(markdown, title=safe_name, attachments=attachments)
 
     def migrate_workspace_layout(self) -> dict[str, int]:
         result = {"documents": 0, "history": 0, "trash": 0}
