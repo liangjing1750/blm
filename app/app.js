@@ -3198,22 +3198,60 @@ const App = {
       });
       const baseName = S.currentFile || S.doc.meta?.domain || getCurrentDocumentLabel() || 'blm-document';
       const fileName = `${baseName}.${exportDocx ? 'docx' : 'zip'}`;
+      if (exportDocx) {
+        const proceed = await showAppConfirm('导出 DOCX 会冻结当前已保存版本，并把各类图形转换为静态图片。大文档可能需要较长时间，请耐心等待；生成期间请尽量不要关闭当前标签页。', {
+          title: '确认导出 DOCX',
+          confirmLabel: '开始导出',
+          cancelLabel: '取消',
+        });
+        if (!proceed) return;
+        setSaveProgress(true, 8, '正在提交 DOCX 导出任务...', '系统会基于当前时间点的文档生成 DOCX。');
+        const job = await api.startDocxExport(S.currentFile);
+        if (!job?.id) {
+          alert(job?.error || '提交 DOCX 导出任务失败，请稍后重试。');
+          return;
+        }
+        let latestJob = job;
+        while (latestJob.status !== 'done' && latestJob.status !== 'failed') {
+          setSaveProgress(
+            true,
+            Math.max(8, Math.min(96, Number(latestJob.progress || 0))),
+            '正在生成 DOCX...',
+            latestJob.message || '正在转换图形并嵌入附件，请耐心等待。'
+          );
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          latestJob = await api.exportJob(job.id);
+        }
+        if (latestJob.status === 'failed') {
+          alert(latestJob.error || latestJob.message || '导出 DOCX 失败，请稍后重试。');
+          return;
+        }
+        setSaveProgress(true, 98, 'DOCX 已生成，正在下载...', latestJob.message || '已生成 DOCX，正在交给浏览器下载。');
+        const response = await api.downloadExportJob(job.id);
+        if (!response.ok) {
+          alert('下载 DOCX 失败，请稍后重试。');
+          return;
+        }
+        const bundleBlob = await response.blob();
+        App._downloadBlob(bundleBlob, bundleBlob.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', latestJob.filename || fileName);
+        return;
+      }
       setSaveProgress(
         true,
         72,
         '正在生成导出文件...',
-        exportDocx ? '正在生成 Word 文档并嵌入附件。' : '正在打包文档、预览内容和附件。'
+        '正在打包文档、预览内容和附件。'
       );
-      const response = exportDocx ? await api.exportDocx(S.currentFile) : await api.exportBundle(S.currentFile);
+      const response = await api.exportBundle(S.currentFile);
       if (!response.ok) {
-        alert(exportDocx ? '导出 DOCX 失败，请稍后重试。' : '导出文档包失败，请稍后重试。');
+        alert('导出文档包失败，请稍后重试。');
         return;
       }
       const bundleBlob = await response.blob();
       setSaveProgress(true, 96, '正在下载导出文件...', '导出文件已生成，正在交给浏览器下载。');
       App._downloadBlob(
         bundleBlob,
-        bundleBlob.type || (exportDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/zip'),
+        bundleBlob.type || 'application/zip',
         fileName
       );
     } finally {

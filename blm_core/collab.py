@@ -19,6 +19,7 @@ from blm_core.storage import WorkspaceStorage
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 CHANGELOG_COMPACT_THRESHOLD = 60
 CHANGELOG_COMPACT_BYTES = 2 * 1024 * 1024
+CLIENT_STALE_SECONDS = 25
 
 
 class WebSocketProtocolError(RuntimeError):
@@ -33,6 +34,7 @@ class CollabClient:
     user_id: str = ""
     user_name: str = ""
     session_id: str = ""
+    last_seen: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     send_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
@@ -73,6 +75,8 @@ class CollaborationManager:
                     break
                 payload = self._decode_json_message(message)
                 event_type = str(payload.get("type", "")).strip()
+                if client:
+                    client.last_seen = datetime.now(timezone.utc).timestamp()
                 if event_type == "join":
                     doc_name = str(payload.get("doc", "")).strip()
                     user_profile = self._normalize_user_profile(payload.get("user"))
@@ -165,15 +169,30 @@ class CollaborationManager:
         handler.connection.sendall(response.encode("ascii"))
 
     def _normalize_user_profile(self, raw_user: Any) -> dict[str, str]:
+        if isinstance(raw_user, str):
+            raw_text = raw_user.strip()
+            if raw_text.startswith("{"):
+                try:
+                    parsed_user = json.loads(raw_text)
+                except json.JSONDecodeError:
+                    parsed_user = raw_user
+                else:
+                    raw_user = parsed_user
         if isinstance(raw_user, dict):
             user_id = str(raw_user.get("id", "")).strip()
-            user_name = str(raw_user.get("name", "")).strip()
+            user_name = str(
+                raw_user.get("name")
+                or raw_user.get("user")
+                or raw_user.get("displayName")
+                or raw_user.get("username")
+                or ""
+            ).strip()
             session_id = str(raw_user.get("sessionId", "")).strip()
         else:
             user_name = str(raw_user or "").strip()
             user_id = user_name
             session_id = ""
-        if not user_name:
+        if not user_name or user_name == "未设置用户":
             user_name = "未设置用户"
         if not user_id:
             user_id = user_name
@@ -308,6 +327,7 @@ class CollaborationManager:
                     session.dirty = True
 
     def _session_users(self, session: CollabSession) -> list[dict]:
+        self._drop_stale_clients(session)
         grouped: dict[str, dict] = {}
         for client in session.clients.values():
             user_id = client.user_id or client.user_name or client.client_id
@@ -326,6 +346,16 @@ class CollaborationManager:
                 grouped[user_id]["sessionIds"].append(client.session_id)
             grouped[user_id]["connectionCount"] += 1
         return sorted(grouped.values(), key=lambda item: str(item["name"]))
+
+    def _drop_stale_clients(self, session: CollabSession) -> None:
+        now = datetime.now(timezone.utc).timestamp()
+        stale_client_ids = [
+            client.client_id
+            for client in session.clients.values()
+            if now - float(client.last_seen or now) > CLIENT_STALE_SECONDS
+        ]
+        for client_id in stale_client_ids:
+            session.clients.pop(client_id, None)
 
     def _broadcast_presence(self, session: CollabSession) -> None:
         self._broadcast_json(

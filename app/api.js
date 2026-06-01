@@ -155,6 +155,15 @@ const api = {
   async exportDocx(name) {
     return fetch(`/api/export-docx/${encodeURIComponent(name)}`);
   },
+  async startDocxExport(name) {
+    return postJson('/api/export-docx/start', { name });
+  },
+  async exportJob(jobId) {
+    return fetch(`/api/export-jobs/${encodeURIComponent(jobId)}`).then((response) => response.json());
+  },
+  async downloadExportJob(jobId) {
+    return fetch(`/api/export-jobs/${encodeURIComponent(jobId)}/download`);
+  },
   async exportJson(name) {
     return this.load(name);
   },

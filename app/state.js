@@ -33,6 +33,7 @@ const S = {
     pendingSnapshot: false,
     syncing: false,
     snapshotTimer: null,
+    pingTimer: null,
     snapshotRevision: 0,
     inFlightRevision: 0,
     lastSyncedAt: '',

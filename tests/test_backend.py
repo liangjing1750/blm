@@ -5,6 +5,7 @@ import base64
 import shutil
 import tempfile
 import threading
+import time
 import unittest
 import urllib.parse
 import urllib.request
@@ -2113,14 +2114,68 @@ class ExportApiTests(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
             names = sorted(archive.namelist())
             self.assertIn("word/document.xml", names)
-            self.assertIn("word/attachments/v1__borrow-form.html", names)
+            self.assertIn("word/attachments/borrow-form.html", names)
+            self.assertTrue(any(name.startswith("word/media/diagram-") and name.endswith(".svg") for name in names))
             document_xml = archive.read("word/document.xml").decode("utf-8")
             self.assertIn("Loans", document_xml)
             self.assertIn("borrow-form.html", document_xml)
+            self.assertNotIn("```mermaid", document_xml)
+            self.assertIn("rImage1", document_xml)
             self.assertEqual(
-                archive.read("word/attachments/v1__borrow-form.html").decode("utf-8"),
+                archive.read("word/attachments/borrow-form.html").decode("utf-8"),
                 "<html><body>borrow</body></html>",
             )
+
+    def test_export_docx_job_can_be_polled_and_downloaded(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_dir = Path(temp_dir) / "workspace"
+            workspace_dir.mkdir()
+            storage = WorkspaceStorage(workspace_dir)
+            storage.save("Loans", create_empty_document("Loans"))
+
+            app_dir = Path(__file__).resolve().parent.parent / "app"
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/export-docx/start",
+                    data=json.dumps({"name": "Loans"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request) as response:
+                    job = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(job["id"])
+                status = job
+                for _ in range(20):
+                    with urllib.request.urlopen(
+                        f"http://127.0.0.1:{server.server_port}/api/export-jobs/{job['id']}"
+                    ) as response:
+                        status = json.loads(response.read().decode("utf-8"))
+                    if status["status"] == "done":
+                        break
+                    time.sleep(0.05)
+                self.assertEqual(status["status"], "done")
+                self.assertEqual(status["progress"], 100)
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/api/export-jobs/{job['id']}/download"
+                ) as response:
+                    payload = response.read()
+                    content_type = response.headers.get("Content-Type")
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(
+            content_type,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            self.assertIn("word/document.xml", archive.namelist())
 
     def test_export_bundle_api_returns_zip_package(self):
         with tempfile.TemporaryDirectory() as temp_dir:

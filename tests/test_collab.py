@@ -9,6 +9,7 @@ import struct
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from blm_core.collab import CollabClient, CollabSession, CollaborationManager
@@ -196,6 +197,50 @@ class CollaborationWebSocketTests(unittest.TestCase):
             finally:
                 server.shutdown()
                 server.server_close()
+
+    def test_join_accepts_user_display_name_aliases(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            storage.save("CollabSmoke", create_empty_document("CollabSmoke"))
+            server, _thread = self._start_server(storage)
+            try:
+                sock = self._connect_ws(server.server_port)
+                self.addCleanup(sock.close)
+
+                sock.sendall(
+                    _masked_client_frame(
+                        {
+                            "type": "join",
+                            "doc": "CollabSmoke",
+                            "user": {"id": "u-lisi", "displayName": "李四", "sessionId": "tab-a"},
+                        }
+                    )
+                )
+                _, joined = _recv_json_frame(sock)
+                self.assertEqual(joined["type"], "joined")
+                self.assertEqual(joined["users"][0]["name"], "李四")
+                self.assertEqual(joined["users"][0]["userId"], "u-lisi")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_session_users_drops_stale_connections(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            manager = CollaborationManager(storage)
+            fresh = CollabClient("client-fresh", "张三", handler=None, user_id="u-zhangsan", user_name="张三")
+            stale = CollabClient("client-stale", "旧用户", handler=None, user_id="u-old", user_name="旧用户")
+            stale.last_seen = (datetime.now(timezone.utc) - timedelta(seconds=120)).timestamp()
+            session = CollabSession(
+                "CollabSmoke",
+                create_empty_document("CollabSmoke"),
+                clients={fresh.client_id: fresh, stale.client_id: stale},
+            )
+
+            users = manager._session_users(session)
+
+            self.assertEqual([user["name"] for user in users], ["张三"])
+            self.assertNotIn("client-stale", session.clients)
 
     def test_snapshot_replaces_session_document_and_is_broadcast(self):
         with tempfile.TemporaryDirectory() as temp_dir:

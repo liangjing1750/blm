@@ -2,6 +2,7 @@
 
 const COLLAB_SNAPSHOT_DEBOUNCE_MS = 3000;
 const COLLAB_RECONNECT_MS = 3000;
+const COLLAB_PING_MS = 10000;
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
 const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
 
@@ -9,6 +10,7 @@ function normalizeCollabDisplayName(value) {
   const text = String(value || '').trim();
   if (!text) return '';
   if (/^用户[0-9a-f]{4}$/i.test(text)) return '';
+  if (text === '未设置用户') return '';
   if (/^[{[]/.test(text) && /(?:user|name|sessionId|clientId)/.test(text)) return '';
   return text.slice(0, 40);
 }
@@ -139,12 +141,25 @@ function renderCollabStatus() {
     return;
   }
   const users = Array.isArray(state.users) ? state.users : [];
+  const currentProfile = loadCollabUserProfile();
   const names = users.map((item) => {
     const rawName = typeof item === 'object' && item !== null ? (item.name || item.user) : item;
-    const name = normalizeCollabDisplayName(typeof rawName === 'object' ? rawName?.name || rawName?.user : rawName) || '未设置用户';
+    const rawId = typeof item === 'object' && item !== null ? String(item.userId || item.id || '').trim() : '';
+    const sessionIds = Array.isArray(item?.sessionIds) ? item.sessionIds.map((sessionId) => String(sessionId || '').trim()) : [];
+    const clientIds = Array.isArray(item?.clientIds) ? item.clientIds.map((clientId) => String(clientId || '').trim()) : [];
+    const isCurrentUser = rawId === currentProfile.id
+      || sessionIds.includes(currentProfile.sessionId)
+      || clientIds.includes(state.clientId)
+      || (users.length === 1 && Boolean(currentProfile.name));
+    const name = normalizeCollabDisplayName(typeof rawName === 'object' ? rawName?.name || rawName?.user : rawName)
+      || (isCurrentUser ? currentProfile.name : '')
+      || '未设置用户';
     const count = Number(item.connectionCount || 1);
     return count > 1 ? `${name}（${count}个窗口）` : name;
-  }).filter(Boolean);
+  }).filter((name) => name && name !== '未设置用户');
+  if (state.connected && currentProfile.name && !names.some((name) => name === currentProfile.name || name.startsWith(`${currentProfile.name}（`))) {
+    names.unshift(currentProfile.name);
+  }
   const onlineText = names.length <= 2 && names.length
     ? names.join('、')
     : `${names.length || 1} 人`;
@@ -194,6 +209,12 @@ function connectCollabSession(docName) {
 
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'join', doc: docName, user: userProfile }));
+    if (S.collab.pingTimer) window.clearInterval(S.collab.pingTimer);
+    S.collab.pingTimer = window.setInterval(() => {
+      if (S.collab.socket?.readyState === WebSocket.OPEN) {
+        S.collab.socket.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, COLLAB_PING_MS);
   });
   socket.addEventListener('message', (event) => {
     handleCollabMessage(event.data);
@@ -228,6 +249,9 @@ function disconnectCollabSession(options = {}) {
   if (S.collab?.snapshotTimer) {
     clearTimeout(S.collab.snapshotTimer);
   }
+  if (S.collab?.pingTimer) {
+    clearInterval(S.collab.pingTimer);
+  }
   if (socket && socket.readyState <= WebSocket.OPEN) {
     socket.close();
   }
@@ -239,6 +263,7 @@ function disconnectCollabSession(options = {}) {
   S.collab.pendingSnapshot = false;
   S.collab.syncing = false;
   S.collab.snapshotTimer = null;
+  S.collab.pingTimer = null;
   S.collab.snapshotRevision = 0;
   S.collab.inFlightRevision = 0;
   renderCollabStatus();

@@ -4,6 +4,8 @@ import http.server
 import json
 import mimetypes
 import threading
+import time
+import uuid
 import webbrowser
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
@@ -54,6 +56,8 @@ def build_attachment_content_disposition(filename: str) -> str:
 
 def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: CollaborationManager | None = None):
     docs_dir = (app_dir.parent / "docs").resolve()
+    export_jobs: dict[str, dict] = {}
+    export_jobs_lock = threading.RLock()
 
     class BlmRequestHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -99,6 +103,10 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._handle_attachment(path)
             if path.startswith("/api/export-docx/"):
                 return self._handle_export_docx(path)
+            if path.startswith("/api/export-jobs/") and path.endswith("/download"):
+                return self._handle_export_job_download(path)
+            if path.startswith("/api/export-jobs/"):
+                return self._handle_export_job_status(path)
             if path.startswith("/api/export-bundle/"):
                 return self._handle_export_bundle(path)
             if path.startswith("/api/export/"):
@@ -147,6 +155,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._handle_merge_analyze(body)
             if path == "/api/merge/apply":
                 return self._handle_merge_apply(body)
+            if path == "/api/export-docx/start":
+                return self._handle_export_docx_start(body)
 
             return self._json({"error": "not found"}, 404)
 
@@ -194,6 +204,104 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._json({"error": str(exc)}, 400)
             except FileNotFoundError:
                 return self._json({"error": "not found"}, 404)
+
+        def _handle_export_docx_start(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            name = str(payload.get("name", "")).strip()
+            if not name:
+                return self._json({"error": "name is required"}, 400)
+            try:
+                safe_name = storage._validate_name(name)
+                frozen_document = storage.load(safe_name)
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+            job_id = uuid.uuid4().hex
+            job = {
+                "id": job_id,
+                "name": safe_name,
+                "status": "queued",
+                "progress": 5,
+                "message": "已冻结当前文档版本，等待生成 DOCX。",
+                "filename": "",
+                "document": frozen_document,
+                "payload": None,
+                "error": "",
+                "createdAt": time.time(),
+                "updatedAt": time.time(),
+            }
+            with export_jobs_lock:
+                export_jobs[job_id] = job
+            thread = threading.Thread(target=self._run_export_docx_job, args=(job_id,), daemon=True)
+            thread.start()
+            return self._json(self._public_export_job(job))
+
+        def _run_export_docx_job(self, job_id: str):
+            def update(**values):
+                with export_jobs_lock:
+                    job = export_jobs.get(job_id)
+                    if not job:
+                        return None
+                    job.update(values)
+                    job["updatedAt"] = time.time()
+                    return dict(job)
+
+            job = update(status="running", progress=12, message="正在读取冻结文档和附件。")
+            if not job:
+                return
+            try:
+                time.sleep(0.05)
+                update(progress=32, message="正在把流程图、全景图和数据图转为静态图片。")
+                filename, payload = storage.build_export_docx_from_document(str(job["name"]), job.get("document") or {})
+                update(
+                    status="done",
+                    progress=100,
+                    message="DOCX 已生成，可以下载。",
+                    filename=filename,
+                    payload=payload,
+                )
+            except Exception as exc:  # pragma: no cover - defensive for background thread
+                update(status="failed", progress=100, message="DOCX 生成失败。", error=str(exc), payload=None)
+
+        def _public_export_job(self, job: dict) -> dict:
+            return {
+                "id": job.get("id", ""),
+                "name": job.get("name", ""),
+                "status": job.get("status", ""),
+                "progress": int(job.get("progress") or 0),
+                "message": job.get("message", ""),
+                "filename": job.get("filename", ""),
+                "error": job.get("error", ""),
+            }
+
+        def _handle_export_job_status(self, path: str):
+            job_id = unquote(path[len("/api/export-jobs/"):].strip("/"))
+            if "/" in job_id:
+                job_id = job_id.split("/", 1)[0]
+            with export_jobs_lock:
+                job = export_jobs.get(job_id)
+                if not job:
+                    return self._json({"error": "not found"}, 404)
+                return self._json(self._public_export_job(job))
+
+        def _handle_export_job_download(self, path: str):
+            job_id = unquote(path[len("/api/export-jobs/"): -len("/download")].strip("/"))
+            with export_jobs_lock:
+                job = export_jobs.get(job_id)
+                if not job:
+                    return self._json({"error": "not found"}, 404)
+                if job.get("status") != "done" or not isinstance(job.get("payload"), bytes):
+                    return self._json({"error": "not ready"}, 409)
+                payload = bytes(job["payload"])
+                filename = str(job.get("filename") or "blm-document.docx")
+            return self._binary(
+                payload,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                filename=filename,
+            )
 
         def _handle_history(self, path: str):
             name = unquote(path[len("/api/history/"):])

@@ -759,28 +759,29 @@ class WorkspaceStorage(DocumentFileStore):
 
     def build_export_docx(self, name: str) -> tuple[str, bytes]:
         safe_name = self._validate_name(name)
-        _, bundle_payload = self.build_export_bundle(safe_name)
+        return self.build_export_docx_from_document(safe_name, self.load(safe_name))
+
+    def build_export_docx_from_document(self, name: str, document: dict) -> tuple[str, bytes]:
+        safe_name = self._validate_name(name)
+        frozen_document = canonical_document(document)
+        markdown = self.exporter.export(frozen_document)
         attachments: list[DocxAttachment] = []
-        markdown = self.export_markdown(safe_name)
-        with zipfile.ZipFile(io.BytesIO(bundle_payload), "r") as archive:
-            prefix = f"{safe_name}/"
-            markdown_path = f"{prefix}{safe_name}.md"
-            names = archive.namelist()
-            if markdown_path in names:
-                markdown = archive.read(markdown_path).decode("utf-8")
-            for member_name in names:
-                if not member_name.startswith(f"{prefix}{EXPORT_ATTACHMENTS_DIR_NAME}/"):
+        for process in frozen_document.get("processes", []):
+            prototype_sources = process.get("prototypeFiles", [])
+            if not isinstance(prototype_sources, list):
+                continue
+            for prototype in prototype_sources:
+                if not isinstance(prototype, dict):
                     continue
-                if member_name.endswith(f"/{ATTACHMENTS_INDEX_NAME}") or member_name.endswith("/"):
+                attachment_uid = str(prototype.get("uid", "")).strip()
+                version_uid = str(prototype.get("versionUid", "")).strip()
+                if not attachment_uid or not version_uid:
                     continue
-                attachment_name = Path(member_name).name
-                attachments.append(
-                    DocxAttachment(
-                        name=attachment_name,
-                        content_type=mimetypes.guess_type(attachment_name)[0] or "application/octet-stream",
-                        payload=archive.read(member_name),
-                    )
-                )
+                try:
+                    filename, content_type, payload = self.load_attachment_payload(safe_name, attachment_uid, version_uid)
+                except FileNotFoundError:
+                    continue
+                attachments.append(DocxAttachment(name=filename, content_type=content_type, payload=payload))
         return f"{safe_name}.docx", build_docx_from_markdown(markdown, title=safe_name, attachments=attachments)
 
     def migrate_workspace_layout(self) -> dict[str, int]:
