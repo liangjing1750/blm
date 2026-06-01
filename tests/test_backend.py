@@ -15,7 +15,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from blm_core.document import create_empty_document, migrate_document
+from blm_core.document import canonical_document, create_empty_document, migrate_document
 from blm_core.markdown import MarkdownExporter
 from blm_core.server import create_handler
 from blm_core.storage import InvalidDocumentNameError, WorkspaceStorage
@@ -96,6 +96,27 @@ class CreateEmptyDocumentTests(unittest.TestCase):
 
 
 class MigrateDocumentTests(unittest.TestCase):
+    def test_canonical_document_does_not_duplicate_stage_flow_refs_after_uid_upgrade(self):
+        document = {
+            "meta": {"title": "Stage Flow"},
+            "stages": [{"id": "S1", "uid": "stage-1", "name": "阶段一"}],
+            "processes": [{"id": "P1", "uid": "process-1", "name": "流程一", "stageId": "stage-1", "nodes": []}],
+            "stageFlowRefs": [{"id": "SFR1", "uid": "ref-legacy", "stageId": "stage-1", "processId": "P1", "order": 1}],
+            "stageFlowLinks": [],
+            "roles": [],
+            "entities": [],
+            "businessComponents": [],
+            "businessConstructs": [],
+            "taskDefinitions": [],
+        }
+
+        canonical = canonical_document(document)
+        refs = canonical["stageFlowRefs"]
+
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0]["stageUid"], "stage-1")
+        self.assertEqual(refs[0]["processUid"], "process-1")
+
     def test_migrate_document_converts_legacy_shapes_and_normalizes_values(self):
         legacy_document = {
             "meta": {"title": "Legacy", "bounded_context": "ignored"},

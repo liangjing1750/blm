@@ -117,7 +117,15 @@ class CollaborationManager:
                         self._send_raw_error(handler, "请先加入协作会话")
                         continue
                     record = self._apply_snapshot(session, client, payload)
-                    self._send_json(client, {"type": "ack", "seq": record["seq"], "mode": "snapshot"})
+                    self._send_json(
+                        client,
+                        {
+                            "type": "ack",
+                            "seq": record["seq"],
+                            "mode": "snapshot",
+                            "document": session.document,
+                        },
+                    )
                     self._broadcast_json(
                         session,
                         {
@@ -294,7 +302,7 @@ class CollaborationManager:
             }
             self._append_changelog(session.doc_name, record)
             session.dirty = True
-            self._schedule_autosave(session)
+            self._flush_autosave(session.doc_name)
             return record
 
     def _schedule_autosave(self, session: CollabSession) -> None:
@@ -320,6 +328,10 @@ class CollaborationManager:
         try:
             saved_document = self.storage.save_collaboration_working_copy(doc_name, document)
             self.storage.maybe_snapshot_auto_history(doc_name, saved_document)
+            with self._lock:
+                session = self._sessions.get(doc_name)
+                if session and not session.dirty:
+                    session.document = saved_document
         except OSError:
             with self._lock:
                 session = self._sessions.get(doc_name)

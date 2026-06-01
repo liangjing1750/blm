@@ -42,6 +42,7 @@ const S = {
     reconnectTimer: null,
     shouldReconnect: false,
     lastActivity: null,
+    recovering: false,
   },
   user: {
     id: '',
@@ -104,6 +105,8 @@ const S = {
     workspaceSummaries: [],
     activeSpace: '',
     activeTag: '',
+    isOpeningModal: false,
+    openingFileName: '',
   },
   manual: {
     docs: [],
@@ -391,6 +394,8 @@ function resetRecoveryState() {
   S.recovery.workspaceSummaries = [];
   S.recovery.activeSpace = '';
   S.recovery.activeTag = '';
+  S.recovery.isOpeningModal = false;
+  S.recovery.openingFileName = '';
 }
 function getEntityName(id) { return S.doc?.entities?.find(e=>e.id===id)?.name||id; }
 function getProcNodes(proc) {
@@ -677,7 +682,10 @@ function normalizePanoramaColumnEntry(column, index = 1, usedIds = new Set()) {
   const fallback = DEFAULT_PANORAMA_COLUMNS[index - 1] || {};
   const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
   const name = hasName ? String(normalized.name || '').trim() : (fallback.name || `价值流${index}`);
-  const uid = semanticPanoramaUid('panorama-column', name, index, usedIds, PANORAMA_COLUMN_UID_BY_NAME);
+  let uid = String(normalized.uid || '').trim();
+  if (uid && usedIds.has(uid)) uid = '';
+  if (uid) usedIds.add(uid);
+  else uid = semanticPanoramaUid('panorama-column', name, index, usedIds, PANORAMA_COLUMN_UID_BY_NAME);
   const entry = {
     uid,
     name,
@@ -692,7 +700,10 @@ function normalizePanoramaLaneEntry(lane, index = 1, usedIds = new Set()) {
   const fallback = DEFAULT_PANORAMA_LANES[index - 1] || {};
   const hasName = Object.prototype.hasOwnProperty.call(normalized, 'name');
   const name = hasName ? String(normalized.name || '').trim() : (fallback.name || `业务域${index}`);
-  const uid = semanticPanoramaUid('panorama-lane', name, index, usedIds, PANORAMA_LANE_UID_BY_NAME);
+  let uid = String(normalized.uid || '').trim();
+  if (uid && usedIds.has(uid)) uid = '';
+  if (uid) usedIds.add(uid);
+  else uid = semanticPanoramaUid('panorama-lane', name, index, usedIds, PANORAMA_LANE_UID_BY_NAME);
   const entry = {
     uid,
     name,

@@ -93,37 +93,40 @@ test('实体编辑抽屉只展示当前实体关系，并在关系图中突出�
   await expect(page.getByTestId('entity-editor-open')).toBeVisible();
   await expect(page.locator('.entity-drawer.open')).toHaveCount(0);
 
-  const beforeMove = await page.evaluate(() => ({ ...S.doc.entities.find((entity) => entity.id === 'E2').pos }));
-  const warehouseBox = await page.locator('.ef-node[data-id="E2"]').boundingBox();
+  const entityIds = await page.evaluate(() => S.doc.entities.map((entity) => entity.uid || entity.id));
+  const [orderId, warehouseId, supervisionId] = entityIds;
+
+  const beforeMove = await page.evaluate((uid) => ({ ...S.doc.entities.find((entity) => (entity.uid || entity.id) === uid).pos }), warehouseId);
+  const warehouseBox = await page.locator(`.ef-node[data-id="${warehouseId}"]`).boundingBox();
   expect(warehouseBox).not.toBeNull();
   await page.mouse.move(warehouseBox.x + warehouseBox.width / 2, warehouseBox.y + warehouseBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(warehouseBox.x + warehouseBox.width / 2 + 48, warehouseBox.y + warehouseBox.height / 2 + 24);
   await page.mouse.up();
-  await expect.poll(() => page.evaluate(() => S.doc.entities.find((entity) => entity.id === 'E2').pos.x)).toBeGreaterThan(beforeMove.x + 24);
+  await expect.poll(() => page.evaluate((uid) => S.doc.entities.find((entity) => (entity.uid || entity.id) === uid).pos.x, warehouseId)).toBeGreaterThan(beforeMove.x + 24);
   await expect(page.locator('.entity-drawer.open')).toHaveCount(0);
 
   await page.keyboard.press('Control+A');
   await expect(page.locator('.ef-node.ef-selected')).toHaveCount(3);
   const beforeGroupMove = await page.evaluate(() => Object.fromEntries(
-    S.doc.entities.map((entity) => [entity.id, { x: entity.pos.x, y: entity.pos.y }]),
+    S.doc.entities.map((entity) => [entity.uid || entity.id, { x: entity.pos.x, y: entity.pos.y }]),
   ));
-  const orderBox = await page.locator('.ef-node[data-id="E1"]').boundingBox();
+  const orderBox = await page.locator(`.ef-node[data-id="${orderId}"]`).boundingBox();
   expect(orderBox).not.toBeNull();
   await page.mouse.move(orderBox.x + orderBox.width / 2, orderBox.y + orderBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(orderBox.x + orderBox.width / 2 + 42, orderBox.y + orderBox.height / 2 + 18);
   await page.mouse.up();
-  await expect.poll(() => page.evaluate((before) => {
-    const entity = S.doc.entities.find((item) => item.id === 'E3');
-    return entity.pos.x - before.E3.x;
-  }, beforeGroupMove)).toBeGreaterThan(20);
+  await expect.poll(() => page.evaluate(({ before, uid }) => {
+    const entity = S.doc.entities.find((item) => (item.uid || item.id) === uid);
+    return entity.pos.x - before[uid].x;
+  }, { before: beforeGroupMove, uid: supervisionId })).toBeGreaterThan(20);
 
-  await page.locator('.ef-node[data-id="E1"]').click();
+  await page.locator(`.ef-node[data-id="${orderId}"]`).click();
 
   await expect(page.locator('.entity-drawer.open')).toHaveCount(0);
-  await expect(page.locator('.ef-node[data-id="E1"]')).toHaveClass(/ef-focus/);
-  await expect(page.locator('.ef-node[data-id="E3"]')).toHaveClass(/ef-muted/);
+  await expect(page.locator(`.ef-node[data-id="${orderId}"]`)).toHaveClass(/ef-focus/);
+  await expect(page.locator(`.ef-node[data-id="${supervisionId}"]`)).toHaveClass(/ef-muted/);
   await expect(page.locator('#ef-svg-entity-diagram path[data-related="false"]')).toHaveCount(1);
   await page.getByTestId('entity-editor-open').click();
   await expect(page.getByTestId('entity-relation-list').locator('.rel-row')).toHaveCount(1);
@@ -162,7 +165,8 @@ test('实体关系支持快捷新增删除上下移并保持抽屉滚动位置',
   await page.goto('/');
   await openDocument(page, documentName);
   await page.getByTestId('tab-data').click();
-  await page.locator('.ef-node[data-id="E1"]').click();
+  const [orderId] = await page.evaluate(() => S.doc.entities.map((entity) => entity.uid || entity.id));
+  await page.locator(`.ef-node[data-id="${orderId}"]`).click();
   await page.getByTestId('entity-editor-open').click();
 
   const drawerBody = page.locator('.entity-drawer .drawer-body');

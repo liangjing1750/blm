@@ -324,6 +324,13 @@ function renderToolbar() {
     saveButton.classList.toggle('btn-primary', hasActionableChange);
     saveButton.classList.toggle('btn-ghost', !hasActionableChange);
   }
+  const openButton = document.querySelector('[data-testid="toolbar-open-button"]');
+  if (openButton) {
+    const opening = Boolean(S.recovery?.isOpeningModal || S.recovery?.openingFileName);
+    openButton.disabled = opening;
+    openButton.classList.toggle('is-loading', opening);
+    openButton.textContent = opening ? '打开中...' : '打开';
+  }
   document.getElementById('readonly-alert')?.classList.toggle('hidden', !S.readOnly);
   if (typeof renderCollabConflictBanner === 'function') renderCollabConflictBanner();
   document.getElementById('toolbar-manual-button')?.classList.toggle('active', S.ui.tab === 'manual');

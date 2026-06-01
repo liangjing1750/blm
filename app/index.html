@@ -12,7 +12,7 @@
   <div class="toolbar-left">
     <span class="brand-mark">
       <span class="logo">BLM</span>
-      <span class="product-version">v2.0</span>
+      <span class="product-version">v2.2</span>
     </span>
     <span id="file-name" class="file-name" data-testid="current-file-name">-</span>
     <span id="modified-badge" class="modified-badge hidden" data-testid="modified-badge">未保存</span>
@@ -63,6 +63,15 @@
     <strong id="save-progress-message">正在保存...</strong>
     <div class="operation-progress-track"><span id="save-progress-bar"></span></div>
     <span id="save-progress-detail" class="operation-progress-detail">请稍候，正在处理文档。</span>
+  </div>
+</div>
+
+<div id="collab-reconnect-overlay" class="collab-reconnect-overlay hidden" data-testid="collab-reconnect-overlay" aria-live="assertive" aria-modal="true">
+  <div class="collab-reconnect-card" role="alertdialog" aria-labelledby="collab-reconnect-title">
+    <div class="operation-spinner" aria-hidden="true"></div>
+    <strong id="collab-reconnect-title">协作连接中断，正在重连恢复</strong>
+    <p id="collab-reconnect-detail">为避免未同步内容丢失，暂时暂停编辑。恢复成功后会自动继续同步。</p>
+    <div class="collab-reconnect-dots" aria-hidden="true"><span></span><span></span><span></span></div>
   </div>
 </div>
 

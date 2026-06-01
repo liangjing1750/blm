@@ -179,6 +179,25 @@ function renderCollabStatus() {
   }
 }
 
+function renderCollabReconnectOverlay() {
+  const overlay = document.getElementById('collab-reconnect-overlay');
+  const detail = document.getElementById('collab-reconnect-detail');
+  const active = Boolean(
+    S.currentFile
+      && S.runtime.supportsCollab
+      && !S.readOnly
+      && S.collab?.recovering
+      && !S.collab?.connected,
+  );
+  overlay?.classList.toggle('hidden', !active);
+  document.body?.classList.toggle('is-collab-reconnecting', active);
+  if (detail && active) {
+    detail.textContent = S.modified || S.collab?.pendingSnapshot
+      ? '本地修改仍保留在当前浏览器内存中，重连成功后会立即同步。请不要关闭页面。'
+      : '正在恢复实时协作连接，恢复前暂时暂停编辑。请不要关闭页面。';
+  }
+}
+
 function connectCollabSession(docName) {
   if (!hasConfiguredCollabUser()) {
     disconnectCollabSession({ intentional: true });
@@ -224,7 +243,11 @@ function connectCollabSession(docName) {
       S.collab.connected = false;
       S.collab.socket = null;
       S.collab.syncing = false;
+      if (S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
+        S.collab.recovering = true;
+      }
       renderCollabStatus();
+      renderCollabReconnectOverlay();
       scheduleCollabReconnect(docName);
     }
   });
@@ -232,7 +255,11 @@ function connectCollabSession(docName) {
     if (S.collab.socket === socket) {
       S.collab.connected = false;
       S.collab.syncing = false;
+      if (S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
+        S.collab.recovering = true;
+      }
       renderCollabStatus();
+      renderCollabReconnectOverlay();
     }
   });
 }
@@ -266,7 +293,9 @@ function disconnectCollabSession(options = {}) {
   S.collab.pingTimer = null;
   S.collab.snapshotRevision = 0;
   S.collab.inFlightRevision = 0;
+  S.collab.recovering = false;
   renderCollabStatus();
+  renderCollabReconnectOverlay();
 }
 
 function scheduleCollabReconnect(docName) {
@@ -276,6 +305,73 @@ function scheduleCollabReconnect(docName) {
     S.collab.reconnectTimer = null;
     if (S.currentFile === docName && !S.readOnly) connectCollabSession(docName);
   }, COLLAB_RECONNECT_MS);
+}
+
+function waitForCollabReady(timeoutMs = 3000) {
+  if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return Promise.resolve(false);
+  if (S.collab?.connected && S.collab?.socket?.readyState === WebSocket.OPEN) return Promise.resolve(true);
+  S.collab.recovering = true;
+  renderCollabStatus();
+  renderCollabReconnectOverlay();
+  if (!S.collab?.socket || S.collab.socket.readyState > WebSocket.OPEN || S.collab.docName !== S.currentFile) {
+    connectCollabSession(S.currentFile);
+    S.collab.recovering = true;
+    renderCollabStatus();
+    renderCollabReconnectOverlay();
+  }
+  const start = Date.now();
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (S.collab?.connected && S.collab?.socket?.readyState === WebSocket.OPEN) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(tick, 50);
+    };
+    tick();
+  });
+}
+
+async function syncCollabImmediatelyFromCommand() {
+  if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return false;
+  if (typeof flushCollabSnapshotSync !== 'function') return false;
+  const ready = await waitForCollabReady();
+  if (!ready) {
+    showAppToast('协作连接尚未就绪，请稍后再试。');
+    return true;
+  }
+  if (!S.modified && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
+    showAppToast('当前内容已同步。');
+    return true;
+  }
+  flushCollabSnapshotSync();
+  showAppToast('已发起立即同步。');
+  return true;
+}
+
+async function flushAndWaitForCollabSync(timeoutMs = 10000) {
+  if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return false;
+  await syncCollabImmediatelyFromCommand();
+  const start = Date.now();
+  return new Promise((resolve) => {
+    const tick = () => {
+      const pending = Boolean(S.modified || S.collab?.pendingSnapshot || S.collab?.snapshotTimer || S.collab?.syncing);
+      if (!pending) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(tick, 80);
+    };
+    tick();
+  });
 }
 
 function handleCollabMessage(raw) {
@@ -288,11 +384,16 @@ function handleCollabMessage(raw) {
   }
   if (payload.type === 'joined') {
     S.collab.connected = true;
+    S.collab.recovering = false;
     S.collab.clientId = String(payload.clientId || '');
     S.collab.seq = Number(payload.seq || 0);
     S.collab.users = Array.isArray(payload.users) ? payload.users : [];
     renderCollabStatus();
+    renderCollabReconnectOverlay();
     if (typeof renderToolbar === 'function') renderToolbar();
+    if (S.modified || S.collab.pendingSnapshot) {
+      flushCollabSnapshotSync();
+    }
     return;
   }
   if (payload.type === 'presence') {
@@ -324,7 +425,12 @@ function handleCollabMessage(raw) {
     S.collab.seq = Number(payload.seq || S.collab.seq || 0);
     if (payload.mode === 'snapshot') {
       S.collab.syncing = false;
-      if ((S.collab.inFlightRevision || 0) >= (S.collab.snapshotRevision || 0)) {
+      const ackIsLatestSnapshot = (S.collab.inFlightRevision || 0) >= (S.collab.snapshotRevision || 0);
+      if (ackIsLatestSnapshot) {
+        if (payload.document && typeof payload.document === 'object') {
+          S.doc = payload.document;
+          hydrateDocumentForUi(S.doc);
+        }
         S.collab.pendingSnapshot = false;
         S.modified = false;
         if (typeof renderToolbar === 'function') renderToolbar();
@@ -336,9 +442,16 @@ function handleCollabMessage(raw) {
 }
 
 function queueCollabSnapshotSync() {
-  if (S.readOnly || !S.runtime.supportsCollab || !S.collab?.connected || !S.doc) return;
+  if (S.readOnly || !S.runtime.supportsCollab || !S.doc) return;
   S.collab.snapshotRevision = Number(S.collab.snapshotRevision || 0) + 1;
   S.collab.pendingSnapshot = true;
+  if (!S.collab?.connected || S.collab?.socket?.readyState !== WebSocket.OPEN) {
+    if (S.currentFile) S.collab.recovering = true;
+    renderCollabStatus();
+    renderCollabReconnectOverlay();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    return;
+  }
   if (S.collab.snapshotTimer) clearTimeout(S.collab.snapshotTimer);
   S.collab.snapshotTimer = setTimeout(() => {
     flushCollabSnapshotSync();

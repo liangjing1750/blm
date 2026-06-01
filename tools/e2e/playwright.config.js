@@ -17,6 +17,20 @@ module.exports = {
   use: {
     baseURL: 'http://127.0.0.1:8899',
     headless: true,
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://127.0.0.1:8899',
+          localStorage: [
+            {
+              name: 'blm.user.profile',
+              value: JSON.stringify({ id: 'user-e2e', name: 'E2E测试员' }),
+            },
+          ],
+        },
+      ],
+    },
   },
   webServer: {
     command: process.platform === 'win32' ? 'py blm.py' : 'python blm.py',

@@ -280,6 +280,8 @@ class CollaborationWebSocketTests(unittest.TestCase):
                 _, left_ack = _recv_json_frame(left)
                 self.assertEqual(left_ack["type"], "ack")
                 self.assertEqual(left_ack["mode"], "snapshot")
+                self.assertEqual(left_ack["document"]["meta"]["author"], "Snapshot Author")
+                self.assertEqual(storage.load("CollabSmoke")["meta"]["author"], "Snapshot Author")
                 _, right_snapshot = _recv_json_frame(right)
                 self.assertEqual(right_snapshot["type"], "snapshot")
                 self.assertEqual(right_snapshot["document"]["meta"]["author"], "Snapshot Author")
@@ -338,6 +340,25 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(len(history_entries), 1)
             self.assertEqual(history_entries[0]["kind"], "auto")
             self.assertEqual(history_entries[0]["reason"], "time_window")
+
+    def test_snapshot_ack_means_working_copy_is_already_persisted(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=3600)
+            session = CollabSession("CollabSmoke", storage.load("CollabSmoke"))
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-test", "Tester", handler=None)
+
+            next_document = create_empty_document("CollabSmoke")
+            next_document["meta"]["author"] = "Persisted before ack"
+            record = manager._apply_snapshot(session, client, {"document": next_document})
+
+            self.assertEqual(record["mode"], "snapshot")
+            self.assertFalse(session.dirty)
+            self.assertEqual(storage.load("CollabSmoke")["meta"]["author"], "Persisted before ack")
+            self.assertEqual(session.document["meta"]["author"], "Persisted before ack")
 
     def test_named_version_is_readonly_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:

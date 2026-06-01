@@ -142,7 +142,12 @@ def canonicalize_model_references(document: dict | None) -> dict:
                 continue
             has_name = "name" in item
             name = str(item.get("name", "")).strip() if has_name else f"{fallback_label}{index}"
-            next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
+            existing_uid = str(item.get("uid", "")).strip()
+            next_uid = existing_uid or _semantic_panorama_uid(prefix, name, index, used, known)
+            if next_uid in used:
+                next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
+            else:
+                used.add(next_uid)
             for source_field in ("uid", "id", "key"):
                 source_ref = str(item.get(source_field, "")).strip()
                 if source_ref:
@@ -246,12 +251,43 @@ def canonicalize_model_references(document: dict | None) -> dict:
         ref["stageId"] = mapped(ref.get("stageUid") or ref.get("stageId"), stage_map)
         ref["processId"] = mapped(ref.get("processUid") or ref.get("processId"), process_map)
 
+    ref_rewrite: dict[str, str] = {}
+    seen_stage_process_refs: set[tuple[str, str]] = set()
+    deduped_stage_refs: list[dict] = []
+    for ref in doc.get("stageFlowRefs", []) if isinstance(doc.get("stageFlowRefs"), list) else []:
+        if not isinstance(ref, dict):
+            continue
+        stage_id = str(ref.get("stageId", "")).strip()
+        process_id = str(ref.get("processId", "")).strip()
+        ref_uid = str(ref.get("uid", "")).strip()
+        if not stage_id or not process_id or not ref_uid:
+            continue
+        pair = (stage_id, process_id)
+        if pair in seen_stage_process_refs:
+            kept_uid = next(
+                (
+                    str(item.get("uid", "")).strip()
+                    for item in deduped_stage_refs
+                    if str(item.get("stageId", "")).strip() == stage_id
+                    and str(item.get("processId", "")).strip() == process_id
+                ),
+                "",
+            )
+            if kept_uid:
+                ref_rewrite[ref_uid] = kept_uid
+            continue
+        seen_stage_process_refs.add(pair)
+        deduped_stage_refs.append(ref)
+        ref_rewrite[ref_uid] = ref_uid
+    if isinstance(doc.get("stageFlowRefs"), list):
+        doc["stageFlowRefs"] = deduped_stage_refs
+
     for link in doc.get("stageFlowLinks", []):
         if not isinstance(link, dict):
             continue
         link["stageId"] = mapped(link.get("stageUid") or link.get("stageId"), stage_map)
-        link["fromRefId"] = mapped(link.get("fromRefUid") or link.get("fromRefId"), stage_ref_map)
-        link["toRefId"] = mapped(link.get("toRefUid") or link.get("toRefId"), stage_ref_map)
+        link["fromRefId"] = ref_rewrite.get(mapped(link.get("fromRefUid") or link.get("fromRefId"), stage_ref_map), mapped(link.get("fromRefUid") or link.get("fromRefId"), stage_ref_map))
+        link["toRefId"] = ref_rewrite.get(mapped(link.get("toRefUid") or link.get("toRefId"), stage_ref_map), mapped(link.get("toRefUid") or link.get("toRefId"), stage_ref_map))
 
     for process in doc.get("processes", []):
         if not isinstance(process, dict):
@@ -600,6 +636,9 @@ def _supplement_stage_flow_refs_from_legacy(stage_flow_refs: list[dict], process
         if not stage_id or not process_uid:
             continue
         process_aliases = {process_uid}
+        legacy_process_id = str(process.get("id", "")).strip()
+        if legacy_process_id:
+            process_aliases.add(legacy_process_id)
         if any((stage_id, process_alias) in existing_pairs for process_alias in process_aliases):
             continue
         pair = (stage_id, process_uid)

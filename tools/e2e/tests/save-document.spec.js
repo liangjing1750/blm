@@ -3,6 +3,7 @@ const path = require('node:path');
 const { test, expect } = require('@playwright/test');
 
 const { workspaceDir } = require('./support/test-env');
+const { createDocument, openDocument, submitAppPrompt } = require('./support/app-helpers');
 
 async function saveDocumentFromToolbar(page) {
   await page.locator('#btn-save').click();
@@ -29,11 +30,10 @@ test('用户可以修改文档并点击保存落盘', async ({ page }) => {
   await page.getByTestId('domain-author-input').fill('Codex Tester');
   await page.getByTestId('domain-date-input').fill('2026-04');
   await expect(page.getByTestId('modified-badge')).toBeVisible();
-  await expect(page.getByTestId('save-alert')).toBeVisible();
+  await expect(page.locator('#btn-save')).toContainText('立即同步');
 
   await saveDocumentFromToolbar(page);
   await expect(page.getByTestId('modified-badge')).toBeHidden();
-  await expect(page.getByTestId('save-alert')).toBeHidden();
 
   await expect
     .poll(() => {
@@ -117,4 +117,286 @@ test('用户可以通过另存生成新的业务域文档副本', async ({ page 
   expect(copied.meta?.domain).toBe(copiedName);
   expect(copied.meta?.title).toBe(copiedName);
   expect(copied.meta?.date).toBe('2026-04-20');
+});
+
+test('autosync persists panorama edits before showing synced state', async ({ page }) => {
+  const documentName = `autosync-panorama-${Date.now()}`;
+  const stageName = '自动同步阶段';
+  const documentPath = path.join(workspaceDir, documentName, 'manifest.json');
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(documentName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('stage-editor-open').click();
+  await page.getByTestId('matrix-stage-add').first().click();
+  await submitAppPrompt(page, stageName);
+
+  await expect(page.getByTestId('stage-graph-node').filter({ hasText: stageName })).toBeVisible();
+  await expect(page.getByTestId('modified-badge')).toBeVisible();
+  await expect(page.getByTestId('modified-badge')).toBeHidden({ timeout: 10000 });
+
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(documentPath)) {
+        return [];
+      }
+      const saved = JSON.parse(fs.readFileSync(documentPath, 'utf-8'));
+      return (saved.stages || []).map((stage) => stage.name);
+    }, {
+      message: 'wait for autosync to persist the added stage before the synced badge disappears',
+      timeout: 10000,
+    })
+    .toContain(stageName);
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+  await expect(page.getByTestId('stage-graph-node').filter({ hasText: stageName })).toBeVisible();
+});
+
+test('Ctrl+S triggers immediate sync for collaboration documents', async ({ page }) => {
+  const documentName = `ctrl-s-sync-${Date.now()}`;
+  const authorName = 'CtrlS Tester';
+  const documentPath = path.join(workspaceDir, documentName, 'manifest.json');
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(documentName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  await page.getByTestId('domain-author-input').fill(authorName);
+  await expect(page.getByTestId('modified-badge')).toBeVisible();
+  await page.keyboard.press('Control+S');
+
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(documentPath)) return '';
+      const saved = JSON.parse(fs.readFileSync(documentPath, 'utf-8'));
+      return saved.meta?.author || '';
+    }, {
+      message: 'wait for Ctrl+S immediate sync to persist the author change',
+      timeout: 10000,
+    })
+    .toBe(authorName);
+
+  await expect(page.getByTestId('modified-badge')).toBeHidden({ timeout: 10000 });
+});
+
+test('Ctrl+S does not fall back to the legacy save prompt while collaboration reconnects', async ({ page }) => {
+  const documentName = `ctrl-s-reconnect-${Date.now()}`;
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(documentName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  await page.getByTestId('domain-author-input').fill('Reconnect Tester');
+  await expect(page.getByTestId('modified-badge')).toBeVisible();
+  await page.evaluate(() => {
+    S.collab.connected = false;
+    try {
+      S.collab.socket?.close();
+    } catch (_) {}
+    S.collab.socket = null;
+  });
+
+  await page.keyboard.press('Control+S');
+  await expect(page.getByTestId('collab-reconnect-overlay')).toBeVisible();
+  await page.waitForTimeout(3500);
+  await expect(page.getByTestId('app-dialog')).toHaveClass(/hidden/);
+  await expect(page.getByTestId('app-dialog-input')).toHaveClass(/hidden/);
+  await expect(page.getByTestId('collab-reconnect-overlay')).toBeHidden({ timeout: 10000 });
+});
+
+test('opening another document first syncs current collaboration edits without an unsaved prompt', async ({ page, request }) => {
+  const firstName = `open-after-sync-source-${Date.now()}`;
+  const secondName = `open-after-sync-target-${Date.now()}`;
+  const firstPath = path.join(workspaceDir, firstName, 'manifest.json');
+  await createDocument(request, secondName, {
+    meta: { title: secondName, domain: secondName },
+    roles: [],
+    language: [],
+    stages: [],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(firstName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  await page.getByTestId('domain-author-input').fill('Open After Sync Tester');
+  await expect(page.getByTestId('modified-badge')).toBeVisible();
+  await page.getByTestId('toolbar-open-button').click();
+  await page.locator('.file-list-item').filter({ hasText: secondName }).first().click();
+
+  await expect(page.getByTestId('app-dialog')).toHaveClass(/hidden/);
+  await expect(page.getByTestId('current-file-name')).toHaveText(secondName, { timeout: 15000 });
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(firstPath)) return '';
+      const saved = JSON.parse(fs.readFileSync(firstPath, 'utf-8'));
+      return saved.meta?.author || '';
+    }, {
+      message: 'wait for current document edits to sync before switching documents',
+      timeout: 10000,
+    })
+    .toBe('Open After Sync Tester');
+});
+
+test('collaboration ack keeps the focused field and cursor position', async ({ page }) => {
+  const documentName = `focus-after-sync-${Date.now()}`;
+  const authorName = 'Focus Cursor Tester';
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(documentName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  const authorInput = page.getByTestId('domain-author-input');
+  await authorInput.fill(authorName);
+  await authorInput.evaluate((input) => input.setSelectionRange(6, 6));
+  await expect(page.getByTestId('modified-badge')).toBeVisible();
+  await expect(page.getByTestId('modified-badge')).toBeHidden({ timeout: 10000 });
+
+  const focusState = await page.evaluate(() => ({
+    testId: document.activeElement?.getAttribute('data-testid') || '',
+    value: document.activeElement?.value || '',
+    selectionStart: document.activeElement?.selectionStart ?? null,
+  }));
+  expect(focusState).toEqual({
+    testId: 'domain-author-input',
+    value: authorName,
+    selectionStart: 6,
+  });
+});
+
+test('autosync keeps full panorama value stream text while typing', async ({ page }) => {
+  const documentName = `autosync-panorama-column-${Date.now()}`;
+  const columnName = '测试';
+  const documentPath = path.join(workspaceDir, documentName, 'manifest.json');
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(documentName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('stage-editor-open').click();
+  await page.getByTestId('matrix-column-name').first().fill(columnName);
+  await expect(page.getByTestId('matrix-column-name').first()).toHaveValue(columnName);
+  await expect(page.getByTestId('modified-badge')).toBeHidden({ timeout: 10000 });
+
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(documentPath)) {
+        return [];
+      }
+      const saved = JSON.parse(fs.readFileSync(documentPath, 'utf-8'));
+      return (saved.panorama?.columns || []).map((column) => column.name);
+    }, {
+      message: 'wait for autosync to persist the complete value stream name',
+      timeout: 10000,
+    })
+    .toContain(columnName);
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('stage-editor-open').click();
+  await expect(page.getByTestId('matrix-column-name').first()).toHaveValue(columnName);
+});
+
+test('stage flow created in stage view is not duplicated after reload', async ({ page }) => {
+  const documentName = `autosync-stage-flow-${Date.now()}`;
+  const stageName = '阶段流程测试';
+  const flowName = '阶段内流程';
+  const documentPath = path.join(workspaceDir, documentName, 'manifest.json');
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(documentName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('stage-editor-open').click();
+  await page.getByTestId('matrix-stage-add').first().click();
+  await submitAppPrompt(page, stageName);
+  await page.evaluate(() => {
+    const stageId = S.doc.stages[0].id;
+    addStageFlowNode(stageId);
+  });
+  await page.getByTestId('stage-flow-name-input').first().fill(flowName);
+  await expect(page.getByTestId('stage-flow-name-input').first()).toHaveValue(flowName);
+  await expect(page.getByTestId('modified-badge')).toBeHidden({ timeout: 10000 });
+
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(documentPath)) return null;
+      const saved = JSON.parse(fs.readFileSync(documentPath, 'utf-8'));
+      const process = (saved.processes || []).find((item) => item.name === flowName);
+      if (!process) return null;
+      const processUid = process.uid || process.id;
+      const refCount = (saved.stageFlowRefs || []).filter((ref) => (
+        (ref.processUid || ref.processId) === processUid
+      )).length;
+      return refCount;
+    }, {
+      message: 'wait for the stage flow reference to be persisted once',
+      timeout: 10000,
+    })
+    .toBe(1);
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+  const state = await page.evaluate((name) => {
+    const processes = (S.doc.processes || []).filter((item) => item.name === name);
+    const processIds = new Set(processes.map((item) => item.id));
+    return {
+      processCount: processes.length,
+      refCount: (S.doc.stageFlowRefs || []).filter((ref) => processIds.has(ref.processId)).length,
+    };
+  }, flowName);
+  expect(state).toEqual({ processCount: 1, refCount: 1 });
+});
+
+test('opening a document uses the centered operation progress dialog', async ({ page, request }) => {
+  const documentName = `open-progress-${Date.now()}`;
+  await createDocument(request, documentName, {
+    meta: { title: documentName, domain: documentName },
+    roles: [],
+    language: [],
+    stages: [],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.route('**/api/load/**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await route.continue();
+  });
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-open-button').click();
+  await page.locator('.file-list-item').filter({ hasText: documentName }).first().click();
+  await expect(page.getByTestId('save-progress')).toBeVisible();
+  await expect(page.locator('#save-progress-message')).toContainText('正在打开');
+  await expect(page.locator('.workspace-doc-loading')).toHaveCount(0);
+  await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
+  await expect(page.getByTestId('save-progress')).toBeHidden();
 });

@@ -143,6 +143,17 @@ window.alert = (message) => {
 };
 
 async function confirmDiscardUnsavedChanges(actionLabel = '') {
+  if (
+    S.currentFile
+    && S.runtime.supportsCollab
+    && !S.readOnly
+    && typeof flushAndWaitForCollabSync === 'function'
+    && (S.modified || S.collab?.pendingSnapshot || S.collab?.snapshotTimer || S.collab?.syncing)
+  ) {
+    const synced = await flushAndWaitForCollabSync(10000);
+    if (synced) return true;
+    if (S.collab?.recovering) return false;
+  }
   if (!S.modified) return true;
   const actionText = String(actionLabel || '').trim();
   const message = actionText
@@ -723,18 +734,19 @@ function renderOpenTagFilters(tags, activeTag) {
 function renderWorkspaceFileCard(summary) {
   const tags = Array.isArray(summary.tags) ? summary.tags : [];
   const metaParts = [];
+  const isOpening = String(S.recovery.openingFileName || '') === String(summary.name || '');
   if (summary.author) metaParts.push(`作者 ${esc(summary.author)}`);
   if (summary.date) metaParts.push(esc(summary.date));
   return `
-    <article class="workspace-doc-card" data-testid="workspace-doc-card" onclick='App.openFile(${JSON.stringify(summary.name)})'>
-      <button class="workspace-doc-card-main" type="button">
+    <article class="workspace-doc-card file-list-item${isOpening ? ' is-opening' : ''}" data-testid="workspace-doc-card" onclick='App.openFile(${JSON.stringify(summary.name)})'>
+      <button class="workspace-doc-card-main" type="button" ${S.recovery.openingFileName ? 'disabled' : ''}>
         <span class="workspace-doc-title">${esc(summary.title || summary.name)}</span>
         <span class="workspace-doc-name">${esc(summary.name)}</span>
         <span class="workspace-doc-meta">${metaParts.length ? metaParts.join(' · ') : '未填写作者和日期'}</span>
         ${tags.length ? `<span class="file-list-tags">${tags.slice(0, 5).map((tag) => `<em>${esc(tag)}</em>`).join('')}</span>` : '<span class="workspace-doc-no-tags">无标签</span>'}
       </button>
       <div class="file-list-item-actions">
-        <button class="file-list-item-del" type="button"
+        <button class="file-list-item-del" type="button" ${S.recovery.openingFileName ? 'disabled' : ''}
           onclick='event.stopPropagation();App.deleteFile(${JSON.stringify(summary.name)})' title="删除">×</button>
       </div>
     </article>`;
@@ -2883,17 +2895,28 @@ const App = {
 
   async cmdOpen() {
     if (!ensureUserConfiguredForApp()) return;
+    if (S.recovery.isOpeningModal || S.recovery.openingFileName) return;
+    S.recovery.isOpeningModal = true;
+    setSaveProgress(true, 18, '正在打开文档空间...', '文档较多时需要加载空间、标签和回收站信息。');
+    if (typeof renderToolbar === 'function') renderToolbar();
     resetRecoveryState();
-    const [files, trashEntries, summaries] = await Promise.all([
-      loadWorkspaceDocumentNames(),
-      loadWorkspaceTrashEntries(),
-      loadWorkspaceDocumentSummaries(),
-    ]);
-    if (!files || !trashEntries) return;
-    renderWorkspaceFileList(files);
-    renderTrashEntries(trashEntries);
-    syncOpenModalTabs();
-    openModalById('open-modal-overlay');
+    S.recovery.isOpeningModal = true;
+    try {
+      const [files, trashEntries, summaries] = await Promise.all([
+        loadWorkspaceDocumentNames(),
+        loadWorkspaceTrashEntries(),
+        loadWorkspaceDocumentSummaries(),
+      ]);
+      if (!files || !trashEntries) return;
+      renderWorkspaceFileList(files);
+      renderTrashEntries(trashEntries);
+      syncOpenModalTabs();
+      openModalById('open-modal-overlay');
+    } finally {
+      S.recovery.isOpeningModal = false;
+      setSaveProgress(false);
+      if (typeof renderToolbar === 'function') renderToolbar();
+    }
   },
 
   closeOpenModal() {
@@ -3024,11 +3047,23 @@ const App = {
   },
 
   async openFile(name) {
+    if (S.recovery.openingFileName) return;
     if (!await confirmDiscardUnsavedChanges(`打开“${name}”`)) return;
-    App.closeOpenModal();
-    const doc = await api.load(name);
-    if (doc.meta && !doc.meta.domain) doc.meta.domain = name;
-    setActiveDocumentSession(doc, { fileName: name });
+    S.recovery.openingFileName = String(name || '');
+    renderWorkspaceFileList(S.files || []);
+    setSaveProgress(true, 28, `正在打开“${name}”...`, '正在读取文档、附件索引和协作会话信息。');
+    if (typeof renderToolbar === 'function') renderToolbar();
+    try {
+      const doc = await api.load(name);
+      setSaveProgress(true, 72, `正在渲染“${name}”...`, '正在整理模型并恢复界面状态。');
+      if (doc.meta && !doc.meta.domain) doc.meta.domain = name;
+      App.closeOpenModal();
+      setActiveDocumentSession(doc, { fileName: name });
+    } finally {
+      S.recovery.openingFileName = '';
+      setSaveProgress(false);
+      if (typeof renderToolbar === 'function') renderToolbar();
+    }
   },
 
   async deleteFile(name) {
@@ -3053,6 +3088,10 @@ const App = {
     if (S.isSaving) return;
     if (!S.doc) return;
     if (S.readOnly) return showAppAlert('当前查看的是只读版本，不能保存。请先回到最新版本。');
+    if (S.currentFile && S.runtime.supportsCollab && typeof syncCollabImmediatelyFromCommand === 'function') {
+      const handledByCollab = await syncCollabImmediatelyFromCommand();
+      if (handledByCollab) return;
+    }
     if (S.currentFile && S.runtime.supportsCollab && S.collab?.connected) {
       if (typeof flushCollabSnapshotSync === 'function') {
         if (!S.modified && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
