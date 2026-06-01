@@ -107,6 +107,10 @@ const S = {
     activeTag: '',
     isOpeningModal: false,
     openingFileName: '',
+    workspacePage: 1,
+    trashPage: 1,
+    workspaceLoading: false,
+    trashLoading: false,
   },
   manual: {
     docs: [],
@@ -396,6 +400,10 @@ function resetRecoveryState() {
   S.recovery.activeTag = '';
   S.recovery.isOpeningModal = false;
   S.recovery.openingFileName = '';
+  S.recovery.workspacePage = 1;
+  S.recovery.trashPage = 1;
+  S.recovery.workspaceLoading = false;
+  S.recovery.trashLoading = false;
 }
 function getEntityName(id) { return S.doc?.entities?.find(e=>e.id===id)?.name||id; }
 function getProcNodes(proc) {

@@ -4834,7 +4834,7 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 }
 .file-list.open-card-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   align-content: start;
 }
@@ -4900,6 +4900,35 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 }
 .open-space-empty {
   grid-column: 1 / -1;
+}
+.open-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.open-pagination:empty {
+  display: none;
+}
+.open-pagination-info {
+  color: var(--text-m);
+  font-size: 12px;
+}
+.open-pagination-actions {
+  display: flex;
+  gap: 8px;
+}
+.trash-doc-card .workspace-doc-card-main {
+  padding-left: 40px;
+}
+.trash-doc-check {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
 }
 .trash-toolbar {
   display: flex;

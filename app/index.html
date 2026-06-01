@@ -130,11 +130,12 @@
             <div class="open-space-title">团队文档空间</div>
             <div class="recovery-subtitle">按团队空间隔离文档；标签用于筛选和备注，正式归档请使用“归档版本”。</div>
           </div>
-          <input id="open-file-search" class="open-file-search" type="search" placeholder="搜索文档名称" oninput="renderWorkspaceFileList(S.files || [])">
+          <input id="open-file-search" class="open-file-search" type="search" placeholder="搜索文档名称" oninput="App.searchOpenFiles()">
         </div>
         <div id="open-space-tabs" class="open-space-tabs" data-testid="open-space-tabs"></div>
         <div id="open-tag-filters" class="open-tag-filters" data-testid="open-tag-filters"></div>
         <div id="file-list" class="file-list open-modal-scroll"></div>
+        <div id="workspace-pagination" class="open-pagination" data-testid="workspace-pagination"></div>
       </section>
       <section id="open-trash-panel" class="open-modal-panel hidden">
         <div class="trash-toolbar">
@@ -145,6 +146,7 @@
           </div>
         </div>
         <div id="trash-list" class="file-list open-modal-scroll"></div>
+        <div id="trash-pagination" class="open-pagination" data-testid="trash-pagination"></div>
       </section>
     </div>
     <div class="modal-footer">

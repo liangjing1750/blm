@@ -4,6 +4,7 @@ const UNSAVED_CHANGES_MESSAGE = '当前有未保存修改，继续操作会丢�
 const nativeAlert = window.alert.bind(window);
 const nativeConfirm = window.confirm.bind(window);
 const nativePrompt = window.prompt.bind(window);
+const OPEN_PAGE_SIZE = 10;
 
 let activeAppDialog = null;
 let appToastTimer = null;
@@ -642,6 +643,45 @@ function showAppToast(message, timeout = 3600) {
   }
 }
 
+function clampPage(page, totalPages) {
+  const max = Math.max(1, Number(totalPages) || 1);
+  return Math.max(1, Math.min(max, Number(page) || 1));
+}
+
+function renderOpenPagination(containerId, page, totalItems, handlerName) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const totalPages = Math.max(1, Math.ceil((Number(totalItems) || 0) / OPEN_PAGE_SIZE));
+  const current = clampPage(page, totalPages);
+  if (totalItems <= OPEN_PAGE_SIZE) {
+    container.innerHTML = '';
+    return;
+  }
+  const start = (current - 1) * OPEN_PAGE_SIZE + 1;
+  const end = Math.min(totalItems, current * OPEN_PAGE_SIZE);
+  container.innerHTML = `
+    <div class="open-pagination-info">第 ${current} / ${totalPages} 页，显示 ${start}-${end}，共 ${totalItems} 个</div>
+    <div class="open-pagination-actions">
+      <button class="btn btn-outline btn-sm" type="button" onclick="${handlerName}(${current - 1})" ${current <= 1 ? 'disabled' : ''}>上一页</button>
+      <button class="btn btn-outline btn-sm" type="button" onclick="${handlerName}(${current + 1})" ${current >= totalPages ? 'disabled' : ''}>下一页</button>
+    </div>`;
+}
+
+function renderOpenLoading() {
+  const fileList = document.getElementById('file-list');
+  const trashList = document.getElementById('trash-list');
+  if (fileList) {
+    fileList.classList.add('open-card-grid');
+    fileList.innerHTML = '<div class="file-empty open-space-empty">正在加载团队文档空间...</div>';
+  }
+  if (trashList) {
+    trashList.classList.add('open-card-grid');
+    trashList.innerHTML = '<div class="file-empty open-space-empty">正在加载回收站...</div>';
+  }
+  renderOpenPagination('workspace-pagination', 1, 0, 'App.selectWorkspacePage');
+  renderOpenPagination('trash-pagination', 1, 0, 'App.selectTrashPage');
+}
+
 function renderWorkspaceFileList(files) {
   const fileList = document.getElementById('file-list');
   if (!fileList) return;
@@ -662,12 +702,17 @@ function renderWorkspaceFileList(files) {
     const haystack = [item.name, item.title, item.author, item.date, ...(item.tags || [])].join(' ').toLowerCase();
     return (!activeTag || item.tags.includes(activeTag)) && (!query || haystack.includes(query));
   });
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / OPEN_PAGE_SIZE));
+  S.recovery.workspacePage = clampPage(S.recovery.workspacePage, totalPages);
+  const pageStart = (S.recovery.workspacePage - 1) * OPEN_PAGE_SIZE;
+  const pageItems = visibleItems.slice(pageStart, pageStart + OPEN_PAGE_SIZE);
   renderOpenSpaceTabs(spaces, summaries);
   renderOpenTagFilters(tags, activeTag);
   fileList.classList.add('open-card-grid');
-  fileList.innerHTML = visibleItems.length
-    ? visibleItems.map((summary) => renderWorkspaceFileCard(summary)).join('')
+  fileList.innerHTML = pageItems.length
+    ? pageItems.map((summary) => renderWorkspaceFileCard(summary)).join('')
     : `<div class="file-empty open-space-empty">${activeSpace ? `“${esc(activeSpace)}”空间下暂无匹配文档。` : '暂无工作区文档。'}</div>`;
+  renderOpenPagination('workspace-pagination', S.recovery.workspacePage, visibleItems.length, 'App.selectWorkspacePage');
 }
 
 function compareWorkspaceSpaceNames(left, right) {
@@ -894,6 +939,42 @@ function renderTrashEntries(entries) {
       <button class="btn btn-primary btn-sm" type="button"
         onclick='App.restoreTrash(${JSON.stringify(entry.id)})'>恢复</button>
     </div>`).join('');
+}
+
+function renderTrashEntries(entries) {
+  const list = document.getElementById('trash-list');
+  if (!list) return;
+  const selected = new Set(S.recovery.selectedTrashIds || []);
+  const countNode = document.getElementById('trash-selected-count');
+  if (countNode) countNode.textContent = String(selected.size);
+  const sortedEntries = (Array.isArray(entries) ? entries : [])
+    .slice()
+    .sort((a, b) => String(b.timestamp || b.id || '').localeCompare(String(a.timestamp || a.id || '')));
+  const totalPages = Math.max(1, Math.ceil(sortedEntries.length / OPEN_PAGE_SIZE));
+  S.recovery.trashPage = clampPage(S.recovery.trashPage, totalPages);
+  const pageStart = (S.recovery.trashPage - 1) * OPEN_PAGE_SIZE;
+  const pageEntries = sortedEntries.slice(pageStart, pageStart + OPEN_PAGE_SIZE);
+  list.classList.add('open-card-grid');
+  if (!sortedEntries.length) {
+    list.innerHTML = '<div class="file-empty open-space-empty">回收站当前为空。</div>';
+    renderOpenPagination('trash-pagination', 1, 0, 'App.selectTrashPage');
+    return;
+  }
+  list.innerHTML = pageEntries.map((entry) => `
+    <article class="workspace-doc-card trash-doc-card" data-testid="trash-doc-card">
+      <label class="trash-check trash-doc-check" onclick="event.stopPropagation()">
+        <input type="checkbox" ${selected.has(entry.id) ? 'checked' : ''}
+          onchange='App.toggleTrashSelection(${JSON.stringify(entry.id)}, this.checked)'>
+      </label>
+      <button class="workspace-doc-card-main" type="button"
+        onclick='App.restoreTrash(${JSON.stringify(entry.id)})'>
+        <span class="workspace-doc-title">${esc(entry.doc_name || '')}</span>
+        <span class="workspace-doc-name">${esc(entry.id || '')}</span>
+        <span class="workspace-doc-meta">${esc(entry.timestamp || '')}</span>
+        <span class="workspace-doc-no-tags">点击卡片可恢复</span>
+      </button>
+    </article>`).join('');
+  renderOpenPagination('trash-pagination', S.recovery.trashPage, sortedEntries.length, 'App.selectTrashPage');
 }
 
 function syncOpenModalTabs() {
@@ -3906,6 +3987,68 @@ async function openStartupLocatorIfPresent() {
   render();
   return true;
 }
+
+App.cmdOpen = async function cmdOpenLazy() {
+  if (!ensureUserConfiguredForApp()) return;
+  if (S.recovery.isOpeningModal || S.recovery.openingFileName) return;
+  resetRecoveryState();
+  S.recovery.isOpeningModal = true;
+  S.recovery.workspaceLoading = true;
+  S.recovery.trashLoading = true;
+  syncOpenModalTabs();
+  openModalById('open-modal-overlay');
+  renderOpenLoading();
+  if (typeof renderToolbar === 'function') renderToolbar();
+  try {
+    const files = await loadWorkspaceDocumentNames();
+    if (!files) return;
+    renderWorkspaceFileList(files);
+    const summariesPromise = loadWorkspaceDocumentSummaries().then(() => {
+      S.recovery.workspaceLoading = false;
+      renderWorkspaceFileList(S.files || []);
+    });
+    const trashPromise = loadWorkspaceTrashEntries().then((trashEntries) => {
+      S.recovery.trashLoading = false;
+      if (trashEntries) renderTrashEntries(trashEntries);
+    });
+    await Promise.all([summariesPromise, trashPromise]);
+    renderWorkspaceFileList(S.files || []);
+    renderTrashEntries(S.recovery.trashEntries || []);
+    syncOpenModalTabs();
+  } finally {
+    S.recovery.isOpeningModal = false;
+    if (typeof renderToolbar === 'function') renderToolbar();
+  }
+};
+
+App.selectOpenSpace = function selectOpenSpacePaged(space) {
+  S.recovery.activeSpace = String(space || '').trim();
+  S.recovery.activeTag = '';
+  S.recovery.workspacePage = 1;
+  renderWorkspaceFileList(S.files || []);
+};
+
+App.selectOpenTag = function selectOpenTagPaged(tag) {
+  S.recovery.activeTag = String(tag || '').trim();
+  S.recovery.workspacePage = 1;
+  renderWorkspaceFileList(S.files || []);
+};
+
+App.searchOpenFiles = function searchOpenFiles() {
+  S.recovery.workspacePage = 1;
+  renderWorkspaceFileList(S.files || []);
+};
+
+App.selectWorkspacePage = function selectWorkspacePage(page) {
+  S.recovery.workspacePage = clampPage(page, 999999);
+  renderWorkspaceFileList(S.files || []);
+};
+
+App.selectTrashPage = function selectTrashPage(page) {
+  const totalPages = Math.max(1, Math.ceil((S.recovery.trashEntries || []).length / OPEN_PAGE_SIZE));
+  S.recovery.trashPage = clampPage(page, totalPages);
+  renderTrashEntries(S.recovery.trashEntries || []);
+};
 
 bindBeforeUnloadWarning();
 document.addEventListener('DOMContentLoaded', async () => {

@@ -400,3 +400,40 @@ test('opening a document uses the centered operation progress dialog', async ({ 
   await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
   await expect(page.getByTestId('save-progress')).toBeHidden();
 });
+
+test('open workspace paginates document cards by ten per page', async ({ page, request }) => {
+  const prefix = `open-page-${Date.now()}`;
+  const spaceName = `分页空间-${Date.now()}`;
+  for (let index = 1; index <= 12; index += 1) {
+    const name = `${prefix}-${String(index).padStart(2, '0')}`;
+    await createDocument(request, name, {
+      meta: {
+        title: name,
+        domain: name,
+        author: '分页测试',
+        date: '2026-06-01',
+        space: spaceName,
+      },
+      roles: [],
+      language: [],
+      stages: [],
+      stageLinks: [],
+      stageFlowRefs: [],
+      stageFlowLinks: [],
+      processes: [],
+      entities: [],
+      relations: [],
+      rules: [],
+    });
+  }
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-open-button').click();
+  await page.getByTestId('open-space-tabs').locator('button').filter({ hasText: spaceName }).click({ timeout: 15000 });
+  await expect(page.getByTestId('workspace-doc-card')).toHaveCount(10);
+  await expect(page.getByTestId('workspace-pagination')).toContainText('1 / 2');
+
+  await page.getByTestId('workspace-pagination').locator('button').last().click();
+  await expect(page.getByTestId('workspace-doc-card')).toHaveCount(2);
+  await expect(page.getByTestId('workspace-pagination')).toContainText('2 / 2');
+});
