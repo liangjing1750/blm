@@ -217,6 +217,8 @@ function connectCollabSession(docName) {
   S.collab.shouldReconnect = true;
   S.collab.socket = socket;
   S.collab.connected = false;
+  S.collab.recovering = false;
+  S.collab.everConnected = false;
   S.collab.userName = userProfile.name;
   S.collab.docName = docName;
   S.collab.users = [];
@@ -243,7 +245,7 @@ function connectCollabSession(docName) {
       S.collab.connected = false;
       S.collab.socket = null;
       S.collab.syncing = false;
-      if (S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
+      if (S.collab.everConnected && S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
         S.collab.recovering = true;
       }
       renderCollabStatus();
@@ -255,7 +257,7 @@ function connectCollabSession(docName) {
     if (S.collab.socket === socket) {
       S.collab.connected = false;
       S.collab.syncing = false;
-      if (S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
+      if (S.collab.everConnected && S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
         S.collab.recovering = true;
       }
       renderCollabStatus();
@@ -294,6 +296,7 @@ function disconnectCollabSession(options = {}) {
   S.collab.snapshotRevision = 0;
   S.collab.inFlightRevision = 0;
   S.collab.recovering = false;
+  S.collab.everConnected = false;
   renderCollabStatus();
   renderCollabReconnectOverlay();
 }
@@ -385,6 +388,7 @@ function handleCollabMessage(raw) {
   if (payload.type === 'joined') {
     S.collab.connected = true;
     S.collab.recovering = false;
+    S.collab.everConnected = true;
     S.collab.clientId = String(payload.clientId || '');
     S.collab.seq = Number(payload.seq || 0);
     S.collab.users = Array.isArray(payload.users) ? payload.users : [];
@@ -446,7 +450,7 @@ function queueCollabSnapshotSync() {
   S.collab.snapshotRevision = Number(S.collab.snapshotRevision || 0) + 1;
   S.collab.pendingSnapshot = true;
   if (!S.collab?.connected || S.collab?.socket?.readyState !== WebSocket.OPEN) {
-    if (S.currentFile) S.collab.recovering = true;
+    if (S.currentFile && S.collab?.everConnected) S.collab.recovering = true;
     renderCollabStatus();
     renderCollabReconnectOverlay();
     if (typeof renderToolbar === 'function') renderToolbar();

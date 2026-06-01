@@ -88,7 +88,6 @@ class CollaborationManager:
                             "doc": session.doc_name,
                             "seq": session.seq,
                             "clientId": client.client_id,
-                            "document": session.document,
                             "users": self._session_users(session),
                         },
                     )
@@ -123,7 +122,6 @@ class CollaborationManager:
                             "type": "ack",
                             "seq": record["seq"],
                             "mode": "snapshot",
-                            "document": session.document,
                         },
                     )
                     self._broadcast_json(
@@ -298,7 +296,6 @@ class CollaborationManager:
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "baseSeq": payload.get("baseSeq"),
                 "mode": "snapshot",
-                "document": deepcopy(session.document),
             }
             self._append_changelog(session.doc_name, record)
             session.dirty = True
@@ -380,10 +377,15 @@ class CollaborationManager:
         )
 
     def _broadcast_json(self, session: CollabSession, payload: dict, *, exclude_client_id: str = "") -> None:
+        recipients = [
+            client
+            for client in list(session.clients.values())
+            if not exclude_client_id or client.client_id != exclude_client_id
+        ]
+        if not recipients:
+            return
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        for client in list(session.clients.values()):
-            if exclude_client_id and client.client_id == exclude_client_id:
-                continue
+        for client in recipients:
             try:
                 self._send_frame(client.handler.connection, encoded, client.send_lock)
             except OSError:
@@ -403,29 +405,45 @@ class CollaborationManager:
         )
 
     def _read_message(self, conn: socket.socket) -> str | None:
-        header = self._recv_exact(conn, 2)
-        if not header:
-            return None
-        first, second = header
-        opcode = first & 0x0F
-        masked = bool(second & 0x80)
-        length = second & 0x7F
-        if length == 126:
-            length = struct.unpack("!H", self._recv_exact(conn, 2))[0]
-        elif length == 127:
-            length = struct.unpack("!Q", self._recv_exact(conn, 8))[0]
-        mask = self._recv_exact(conn, 4) if masked else b""
-        payload = self._recv_exact(conn, length) if length else b""
-        if masked:
-            payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
-        if opcode == 0x8:
-            return None
-        if opcode == 0x9:
-            self._send_frame(conn, payload, opcode=0xA)
-            return self._read_message(conn)
-        if opcode != 0x1:
-            raise WebSocketProtocolError(f"unsupported websocket opcode: {opcode}")
-        return payload.decode("utf-8")
+        message = bytearray()
+        started = False
+        while True:
+            header = self._recv_exact(conn, 2)
+            if not header:
+                return None
+            first, second = header
+            fin = bool(first & 0x80)
+            opcode = first & 0x0F
+            masked = bool(second & 0x80)
+            length = second & 0x7F
+            if length == 126:
+                length = struct.unpack("!H", self._recv_exact(conn, 2))[0]
+            elif length == 127:
+                length = struct.unpack("!Q", self._recv_exact(conn, 8))[0]
+            mask = self._recv_exact(conn, 4) if masked else b""
+            payload = self._recv_exact(conn, length) if length else b""
+            if masked:
+                payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+            if opcode == 0x8:
+                return None
+            if opcode == 0x9:
+                self._send_frame(conn, payload, opcode=0xA)
+                continue
+            if opcode == 0xA:
+                continue
+            if opcode == 0x1:
+                if started:
+                    raise WebSocketProtocolError("unexpected text frame while reading fragmented message")
+                started = True
+                message.extend(payload)
+            elif opcode == 0x0:
+                if not started:
+                    raise WebSocketProtocolError("unexpected websocket continuation frame")
+                message.extend(payload)
+            else:
+                raise WebSocketProtocolError(f"unsupported websocket opcode: {opcode}")
+            if fin:
+                return bytes(message).decode("utf-8")
 
     def _send_frame(
         self,
@@ -505,9 +523,6 @@ class CollaborationManager:
         last_seq = 0
         for record in self._read_changelog_records(doc_name):
             last_seq = max(last_seq, int(record.get("seq") or 0))
-            if record.get("mode") == "snapshot" and isinstance(record.get("document"), dict):
-                document = deepcopy(record["document"])
-                continue
             changes = record.get("changes")
             if isinstance(changes, list):
                 for change in changes:
@@ -523,16 +538,36 @@ class CollaborationManager:
         if not changelog_path.exists():
             return []
         records = []
+        needs_compaction = False
         try:
             for line in changelog_path.read_text("utf-8").splitlines():
                 if not line.strip():
                     continue
                 payload = json.loads(line)
                 if isinstance(payload, dict):
+                    if payload.get("mode") == "snapshot" and "document" in payload:
+                        payload = dict(payload)
+                        payload.pop("document", None)
+                        payload["compacted"] = True
+                        needs_compaction = True
                     records.append(payload)
         except (OSError, ValueError, json.JSONDecodeError):
             return records
+        if needs_compaction:
+            self._rewrite_changelog(changelog_path, records)
         return records
+
+    def _rewrite_changelog(self, changelog_path: Path, records: list[dict]) -> None:
+        try:
+            changelog_path.write_text(
+                "".join(
+                    json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+                    for record in records
+                ),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
 
     def _get_path(self, document: dict, path: str) -> Any:
         current: Any = document

@@ -4000,10 +4000,12 @@ App.cmdOpen = async function cmdOpenLazy() {
   renderOpenLoading();
   if (typeof renderToolbar === 'function') renderToolbar();
   try {
-    const files = await loadWorkspaceDocumentNames();
-    if (!files) return;
-    renderWorkspaceFileList(files);
-    const summariesPromise = loadWorkspaceDocumentSummaries().then(() => {
+    const filesPromise = loadWorkspaceDocumentNames();
+    const summariesPromise = loadWorkspaceDocumentSummaries().then((summaries) => {
+      const summaryNames = (Array.isArray(summaries) ? summaries : [])
+        .map((item) => String(item?.name || '').trim())
+        .filter(Boolean);
+      if (summaryNames.length) S.files = summaryNames;
       S.recovery.workspaceLoading = false;
       renderWorkspaceFileList(S.files || []);
     });
@@ -4011,8 +4013,10 @@ App.cmdOpen = async function cmdOpenLazy() {
       S.recovery.trashLoading = false;
       if (trashEntries) renderTrashEntries(trashEntries);
     });
-    await Promise.all([summariesPromise, trashPromise]);
-    renderWorkspaceFileList(S.files || []);
+    await summariesPromise;
+    const files = await filesPromise;
+    if (files) renderWorkspaceFileList(files);
+    await trashPromise;
     renderTrashEntries(S.recovery.trashEntries || []);
     syncOpenModalTabs();
   } finally {

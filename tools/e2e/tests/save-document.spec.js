@@ -437,3 +437,85 @@ test('open workspace paginates document cards by ten per page', async ({ page, r
   await expect(page.getByTestId('workspace-doc-card')).toHaveCount(2);
   await expect(page.getByTestId('workspace-pagination')).toContainText('2 / 2');
 });
+
+test('open workspace waits for document summaries before rendering document cards', async ({ page, request }) => {
+  const documentName = `open-summary-lazy-${Date.now()}`;
+  await createDocument(request, documentName, {
+    meta: {
+      title: documentName,
+      domain: documentName,
+      space: `摘要空间-${Date.now()}`,
+    },
+    roles: [],
+    language: [],
+    stages: [],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.route('**/api/files/meta', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await route.continue();
+  });
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-open-button').click();
+  await expect(page.getByTestId('workspace-doc-card')).toHaveCount(0);
+  await expect(page.locator('#file-list')).toContainText('正在加载');
+  await expect(page.getByTestId('workspace-doc-card').filter({ hasText: documentName })).toBeVisible({ timeout: 15000 });
+});
+
+test('slow initial collaboration join does not show the reconnect blocker while editing', async ({ page, request }) => {
+  const documentName = `large-initial-collab-${Date.now()}`;
+  const largeNote = 'x'.repeat(2_800_000);
+  await createDocument(request, documentName, {
+    meta: {
+      title: documentName,
+      domain: documentName,
+      note: largeNote,
+    },
+    roles: [],
+    language: [],
+    stages: [],
+    stageLinks: [],
+    stageFlowRefs: [],
+    stageFlowLinks: [],
+    processes: [],
+    entities: [],
+    relations: [],
+    rules: [],
+  });
+
+  await page.addInitScript(() => {
+    const NativeWebSocket = window.WebSocket;
+    window.WebSocket = class SlowJoinWebSocket extends NativeWebSocket {
+      send(data) {
+        let payload = null;
+        try {
+          payload = JSON.parse(String(data));
+        } catch (_) {}
+        if (payload?.type === 'join') {
+          setTimeout(() => super.send(data), 1200);
+          return undefined;
+        }
+        return super.send(data);
+      }
+    };
+    window.WebSocket.CONNECTING = NativeWebSocket.CONNECTING;
+    window.WebSocket.OPEN = NativeWebSocket.OPEN;
+    window.WebSocket.CLOSING = NativeWebSocket.CLOSING;
+    window.WebSocket.CLOSED = NativeWebSocket.CLOSED;
+  });
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('domain-author-input').fill('Slow Initial Join Tester');
+  await expect(page.getByTestId('collab-reconnect-overlay')).toBeHidden();
+  await expect(page.getByTestId('collab-reconnect-overlay')).toBeHidden({ timeout: 7000 });
+  await expect(page.getByTestId('collab-status')).toContainText('在线', { timeout: 10000 });
+});

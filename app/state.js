@@ -43,6 +43,7 @@ const S = {
     shouldReconnect: false,
     lastActivity: null,
     recovering: false,
+    everConnected: false,
   },
   user: {
     id: '',
