@@ -212,7 +212,7 @@ test('Ctrl+S does not fall back to the legacy save prompt while collaboration re
   await expect(page.getByTestId('collab-reconnect-overlay')).toBeHidden({ timeout: 10000 });
 });
 
-test('collaboration conflict banner only exposes immediate sync', async ({ page }) => {
+test('remote collaboration update is a lightweight pending-sync state', async ({ page }) => {
   const documentName = `collab-conflict-sync-${Date.now()}`;
 
   await page.goto('/');
@@ -226,20 +226,14 @@ test('collaboration conflict banner only exposes immediate sync', async ({ page 
     remote.meta = { ...(remote.meta || {}), author: '远端编辑者' };
     S.collab.pendingRemoteSnapshot = remote;
     S.collab.hasConflict = true;
-    renderCollabConflictBanner();
+    renderCollabStatus();
   });
 
   const banner = page.getByTestId('collab-conflict-alert');
-  await expect(banner).toBeVisible();
-  await expect(banner).toContainText('检测到其他人更新');
-  await expect(banner).toContainText('点击“立即同步”');
-  await expect(banner.getByRole('button')).toHaveCount(1);
-  await expect(banner.getByRole('button', { name: '立即同步' })).toBeVisible();
-  await expect(banner).not.toContainText('应用远程');
-  await expect(banner).not.toContainText('保留本地');
-  await expect(banner).not.toContainText('稍后处理');
+  await expect(banner).toBeHidden();
+  await expect(page.getByTestId('collab-status')).toContainText('有更新待同步');
 
-  await banner.getByRole('button', { name: '立即同步' }).click();
+  await page.locator('#btn-save').click();
   await expect
     .poll(() => page.evaluate(() => ({
       hasConflict: Boolean(S.collab.hasConflict),

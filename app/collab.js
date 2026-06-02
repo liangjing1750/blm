@@ -164,7 +164,16 @@ function renderCollabStatus() {
     ? names.join('、')
     : `${names.length || 1} 人`;
   const hasQueuedSnapshot = Boolean(state.pendingSnapshot || state.snapshotTimer);
-  const suffix = state.syncing ? ' · 同步中' : hasQueuedSnapshot ? ' · 待自动同步' : state.lastSyncedAt ? ' · 已同步' : '';
+  const hasRemoteUpdate = Boolean(state.pendingRemoteSnapshot || state.hasConflict);
+  const suffix = state.syncing
+    ? ' · 同步中'
+    : hasQueuedSnapshot
+    ? ' · 待自动同步'
+    : hasRemoteUpdate
+    ? ' · 有更新待同步'
+    : state.lastSyncedAt
+    ? ' · 已同步'
+    : '';
   const activity = state.lastActivity?.user ? ` · ${state.lastActivity.user}刚更新` : '';
   badge.classList.remove('hidden', 'connected', 'offline');
   badge.classList.add(state.connected ? 'connected' : 'offline');
@@ -544,6 +553,18 @@ function handleCollabMessage(raw) {
       S.collab.lastSyncedAt = new Date().toISOString();
       renderCollabStatus();
     }
+    return;
+  }
+  if (payload.type === 'error') {
+    S.collab.syncing = false;
+    S.collab.pendingSnapshot = true;
+    if (S.collab.snapshotTimer) {
+      clearTimeout(S.collab.snapshotTimer);
+      S.collab.snapshotTimer = null;
+    }
+    renderCollabStatus();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    showAppToast(payload.message || '同步失败，请重新打开文档后再试。');
   }
 }
 
@@ -631,7 +652,7 @@ function receiveRemoteCollabSnapshot(document) {
     S.collab.pendingRemoteSnapshot = document;
     S.collab.hasConflict = true;
     renderCollabStatus();
-    renderCollabConflictBanner();
+    if (typeof renderToolbar === 'function') renderToolbar();
     return;
   }
   applyRemoteCollabSnapshot(document);
@@ -686,7 +707,7 @@ function applyRemoteCollabChanges(changes) {
       S.collab.pendingRemoteSnapshot = draft;
       S.collab.hasConflict = true;
       renderCollabStatus();
-      renderCollabConflictBanner();
+      if (typeof renderToolbar === 'function') renderToolbar();
     }
     return;
   }

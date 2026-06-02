@@ -50,6 +50,7 @@ class CollabSession:
     document: dict
     seq: int = 0
     clients: dict[str, CollabClient] = field(default_factory=dict)
+    snapshots: dict[int, dict] = field(default_factory=dict)
     dirty: bool = False
 
 
@@ -115,13 +116,19 @@ class CollaborationManager:
                     if not client or not session:
                         self._send_raw_error(handler, "请先加入协作会话")
                         continue
-                    record = self._apply_snapshot(session, client, payload)
+                    try:
+                        record = self._apply_snapshot(session, client, payload)
+                    except WebSocketProtocolError as exc:
+                        self._send_json(client, {"type": "error", "message": str(exc), "mode": "snapshot"})
+                        continue
                     self._send_json(
                         client,
                         {
                             "type": "ack",
                             "seq": record["seq"],
                             "mode": "snapshot",
+                            "rebased": bool(record.get("rebased")),
+                            "document": session.document,
                         },
                     )
                     self._broadcast_json(
@@ -221,6 +228,7 @@ class CollaborationManager:
                     document=document,
                     seq=seq,
                 )
+                self._remember_snapshot(session)
                 self._sessions[safe_name] = session
             client = CollabClient(
                 client_id=f"client-{secrets.token_hex(8)}",
@@ -276,6 +284,7 @@ class CollaborationManager:
                 "changes": normalized_changes,
             }
             self._append_changelog(session.doc_name, record)
+            self._remember_snapshot(session)
             session.dirty = True
             self._schedule_autosave(session)
             return record
@@ -285,6 +294,17 @@ class CollaborationManager:
         if not isinstance(document, dict):
             raise WebSocketProtocolError("snapshot document must be object")
         with self._lock:
+            base_seq = self._parse_base_seq(payload.get("baseSeq"))
+            rebased = False
+            if base_seq is not None:
+                if base_seq > session.seq:
+                    raise WebSocketProtocolError("snapshot baseSeq is newer than server sequence")
+                if base_seq < session.seq:
+                    base_document = session.snapshots.get(base_seq)
+                    if not isinstance(base_document, dict):
+                        raise WebSocketProtocolError("snapshot baseSeq is too old; reload latest document before syncing")
+                    document = self._merge_local_document_changes(session.document, base_document, document)
+                    rebased = True
             session.document = deepcopy(document)
             session.seq += 1
             record = {
@@ -296,11 +316,84 @@ class CollaborationManager:
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "baseSeq": payload.get("baseSeq"),
                 "mode": "snapshot",
+                "rebased": rebased,
             }
             self._append_changelog(session.doc_name, record)
+            self._remember_snapshot(session)
             session.dirty = True
             self._flush_autosave(session.doc_name)
             return record
+
+    def _parse_base_seq(self, value: Any) -> int | None:
+        if value is None or value == "":
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return max(0, parsed)
+
+    def _remember_snapshot(self, session: CollabSession) -> None:
+        session.snapshots[int(session.seq)] = deepcopy(session.document)
+        if len(session.snapshots) <= 40:
+            return
+        for seq in sorted(session.snapshots)[:-40]:
+            session.snapshots.pop(seq, None)
+
+    def _collab_item_key(self, item: Any) -> str:
+        if not isinstance(item, dict):
+            return ""
+        return str(item.get("uid") or item.get("id") or "").strip()
+
+    def _merge_local_array_changes(self, remote_value: Any, base_value: Any, local_value: Any) -> Any:
+        if not isinstance(remote_value, list) or not isinstance(base_value, list) or not isinstance(local_value, list):
+            return deepcopy(local_value)
+        local_keys = [self._collab_item_key(item) for item in local_value]
+        base_keys = [self._collab_item_key(item) for item in base_value]
+        remote_keys = [self._collab_item_key(item) for item in remote_value]
+        if not all(local_keys) or not all(base_keys) or not all(remote_keys):
+            return deepcopy(remote_value if local_value == base_value else local_value)
+
+        next_value = deepcopy(remote_value)
+        base_map = {self._collab_item_key(item): item for item in base_value}
+        local_map = {self._collab_item_key(item): item for item in local_value}
+
+        for key in base_keys:
+            if key in local_map:
+                continue
+            next_value = [item for item in next_value if self._collab_item_key(item) != key]
+
+        remote_index = {self._collab_item_key(item): index for index, item in enumerate(next_value)}
+        for local_item in local_value:
+            key = self._collab_item_key(local_item)
+            base_item = base_map.get(key)
+            index = remote_index.get(key)
+            if base_item is None:
+                if index is None:
+                    next_value.append(deepcopy(local_item))
+                continue
+            if index is not None:
+                next_value[index] = self._merge_local_document_changes(next_value[index], base_item, local_item)
+        return next_value
+
+    def _merge_local_document_changes(self, remote_value: Any, base_value: Any, local_value: Any) -> Any:
+        if local_value == base_value:
+            return deepcopy(remote_value)
+        if isinstance(local_value, list) or isinstance(base_value, list) or isinstance(remote_value, list):
+            return self._merge_local_array_changes(remote_value, base_value, local_value)
+        if not isinstance(local_value, dict) or not isinstance(base_value, dict) or not isinstance(remote_value, dict):
+            return deepcopy(local_value)
+        next_value = deepcopy(remote_value)
+        for key in set(local_value.keys()) | set(base_value.keys()):
+            if key not in local_value:
+                next_value.pop(key, None)
+                continue
+            next_value[key] = self._merge_local_document_changes(
+                remote_value.get(key),
+                base_value.get(key),
+                local_value.get(key),
+            )
+        return next_value
 
     def _schedule_autosave(self, session: CollabSession) -> None:
         existing = self._autosave_timers.pop(session.doc_name, None)
