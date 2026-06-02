@@ -524,7 +524,7 @@ function applyRemoteCollabSnapshot(document) {
 
 function receiveRemoteCollabSnapshot(document) {
   if (!document || typeof document !== 'object') return;
-  if (hasLocalPendingCollabSnapshot()) {
+  if (hasLocalPendingCollabSnapshot() || hasActiveLocalEditingContext()) {
     S.collab.pendingRemoteSnapshot = document;
     S.collab.hasConflict = true;
     renderCollabStatus();
@@ -572,6 +572,24 @@ function deferCollabConflict() {
 
 function applyRemoteCollabChanges(changes) {
   if (!Array.isArray(changes) || !S.doc) return;
+  if (hasActiveLocalEditingContext()) {
+    const draft = S.collab?.pendingRemoteSnapshot
+      ? JSON.parse(JSON.stringify(S.collab.pendingRemoteSnapshot))
+      : JSON.parse(JSON.stringify(S.doc));
+    let remoteChanged = false;
+    changes.forEach((change) => {
+      const path = String(change?.path || '').trim();
+      if (!path) return;
+      if (setCollabPathValue(draft, path, change.new)) remoteChanged = true;
+    });
+    if (remoteChanged) {
+      S.collab.pendingRemoteSnapshot = draft;
+      S.collab.hasConflict = true;
+      renderCollabStatus();
+      renderCollabConflictBanner();
+    }
+    return;
+  }
   let changed = false;
   changes.forEach((change) => {
     const path = String(change?.path || '').trim();
@@ -583,6 +601,17 @@ function applyRemoteCollabChanges(changes) {
     render();
     renderCollabStatus();
   }
+}
+
+function hasActiveLocalEditingContext() {
+  if (!S.doc || S.readOnly) return false;
+  const dialogMode = String(S.ui?.businessModelDialog?.mode || '');
+  if (dialogMode) return true;
+  if (S.ui?.entityDraft) return true;
+  if (S.ui?.tab === 'data' && (S.ui.dataView || 'relation') === 'relation' && !S.ui.entityRelationEditorCollapsed && S.ui.entityId) return true;
+  if (S.ui?.tab === 'data' && (S.ui.dataView || 'relation') === 'state' && !S.ui.stateEditorCollapsed) return true;
+  if (S.ui?.tab === 'process' && S.ui.procView === 'list' && S.ui.taskId) return true;
+  return false;
 }
 
 function setCollabPathValue(target, path, value) {

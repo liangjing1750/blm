@@ -15,6 +15,7 @@ test('数据页支持编辑实体状态字段并实时渲染状态图', async ({
   await page.getByTestId('data-add-entity').click();
 
   await page.getByTestId('entity-name-input').fill('预约单');
+  await page.getByTestId('entity-draft-save').click();
   await page.getByTestId('entity-field-add-button').click();
   await page.getByTestId('entity-field-name-0').fill('预约状态');
   await page.getByTestId('entity-field-type-0').selectOption('enum');
@@ -193,6 +194,7 @@ test('状态流转支持行内快捷增删和上下移动', async ({ page }) => 
   await page.getByTestId('data-add-entity').click();
 
   await page.getByTestId('entity-name-input').fill('预约单');
+  await page.getByTestId('entity-draft-save').click();
   await page.getByTestId('entity-field-add-button').click();
   await page.getByTestId('entity-field-name-0').fill('预约状态');
   await page.getByTestId('entity-field-type-0').selectOption('enum');
@@ -235,6 +237,7 @@ test('数据页允许一个主状态加多个子状态且不增加列', async ({
   await page.getByTestId('data-add-entity').click();
 
   await page.getByTestId('entity-name-input').fill('出库单');
+  await page.getByTestId('entity-draft-save').click();
   await page.getByTestId('entity-field-add-button').click();
   await page.getByTestId('entity-field-name-0').fill('主状态');
   await page.getByTestId('entity-field-type-0').selectOption('enum');
@@ -456,6 +459,7 @@ test('数据页字段支持行内新增删除和上下移动', async ({ page }) 
   await page.getByTestId('data-add-entity').click();
 
   await page.getByTestId('entity-name-input').fill('预约单');
+  await page.getByTestId('entity-draft-save').click();
   await page.getByTestId('entity-field-add-button').click();
   await page.getByTestId('entity-field-name-0').fill('预约编号');
 

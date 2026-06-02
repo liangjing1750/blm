@@ -83,6 +83,324 @@ const PROC_RETURN_END_RATIO = 0.75;
 let processFlowDragState = null;
 let processFlowDragMoved = false;
 
+function renderRichTextToolbar(testIdPrefix = 'rich-text') {
+  const items = [
+    ['bold', 'B', '加粗'],
+    ['unordered', '•', '无序列表'],
+    ['ordered', '1.', '有序列表'],
+    ['outdent', '←', '减少缩进'],
+    ['indent', '→', '增加缩进'],
+  ];
+  return `<div class="rich-text-toolbar" data-testid="${esc(testIdPrefix)}-toolbar">
+    ${items.map(([cmd, label, title]) => `<button class="rich-text-btn" type="button" title="${esc(title)}" aria-label="${esc(title)}" data-testid="${esc(testIdPrefix)}-${esc(cmd)}" onmousedown="event.preventDefault()" onclick="applyRichTextCommand(this,'${esc(cmd)}')">${esc(label)}</button>`).join('')}
+  </div>`;
+}
+
+function sanitizeRichTextHtml(html) {
+  const allowedTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'OL', 'UL', 'LI', 'P', 'DIV', 'BR']);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${String(html || '')}</div>`, 'text/html');
+  const cleanNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return doc.createTextNode(node.textContent || '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return doc.createTextNode('');
+    const tag = node.tagName;
+    if (!allowedTags.has(tag)) {
+      const fragment = doc.createDocumentFragment();
+      Array.from(node.childNodes).forEach((child) => fragment.appendChild(cleanNode(child)));
+      return fragment;
+    }
+    const el = doc.createElement(tag.toLowerCase());
+    if (tag === 'LI') {
+      const value = Number.parseInt(node.getAttribute('value') || '', 10);
+      if (Number.isFinite(value) && value > 0) el.setAttribute('value', String(value));
+    }
+    Array.from(node.childNodes).forEach((child) => el.appendChild(cleanNode(child)));
+    return el;
+  };
+  const output = doc.createElement('div');
+  Array.from(doc.body.firstElementChild?.childNodes || []).forEach((child) => output.appendChild(cleanNode(child)));
+  return output.innerHTML
+    .replace(/<div><br><\/div>/g, '<br>')
+    .replace(/<p><br><\/p>/g, '<br>')
+    .trim();
+}
+
+function isRichTextHtml(value) {
+  return /<\/?(?:b|strong|i|em|u|s|ol|ul|li|p|div|br)\b/i.test(String(value || ''));
+}
+
+function richTextListMarker(line) {
+  const ordered = String(line || '').match(/^\s*(\d+)[.、]\s*(.*)$/);
+  if (ordered) return { type: 'ordered', value: Number.parseInt(ordered[1], 10), text: ordered[2] || '' };
+  const alpha = String(line || '').match(/^\s*([a-zA-Z])[.、]\s*(.*)$/);
+  if (alpha) return { type: 'alpha', value: alpha[1].toLowerCase().charCodeAt(0) - 96, text: alpha[2] || '' };
+  const bullet = String(line || '').match(/^\s*[-*•]\s*(.*)$/);
+  if (bullet) return { type: 'bullet', value: null, text: bullet[1] || '' };
+  return null;
+}
+
+function joinRichTextContinuation(current, next) {
+  const left = String(current || '').trimEnd();
+  const right = String(next || '').trim();
+  if (!left) return right;
+  if (!right) return left;
+  return /[A-Za-z0-9]$/.test(left) && /^[A-Za-z0-9]/.test(right) ? `${left} ${right}` : `${left}${right}`;
+}
+
+function looksLikeStructuredRichTextList(text) {
+  const lines = String(text || '').replace(/\r\n/g, '\n').split('\n').filter((line) => line.trim());
+  const markers = lines.map(richTextListMarker).filter(Boolean);
+  return markers.some((marker) => marker.type === 'ordered') || markers.some((marker) => marker.type === 'alpha');
+}
+
+function plainTextToStructuredRichHtml(text) {
+  const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+  if (!looksLikeStructuredRichTextList(text)) return '';
+  const topItems = [];
+  let currentTop = null;
+  let currentChild = null;
+
+  for (const rawLine of lines) {
+    if (!rawLine.trim()) {
+      currentChild = null;
+      continue;
+    }
+    const marker = richTextListMarker(rawLine);
+    if (marker?.type === 'ordered') {
+      currentTop = { value: marker.value || topItems.length + 1, text: marker.text, children: [] };
+      topItems.push(currentTop);
+      currentChild = null;
+      continue;
+    }
+    if (marker?.type === 'alpha' && currentTop) {
+      currentChild = { value: marker.value || currentTop.children.length + 1, text: marker.text };
+      currentTop.children.push(currentChild);
+      continue;
+    }
+    if (marker?.type === 'bullet' && currentTop) {
+      currentChild = { value: null, text: marker.text, bullet: true };
+      currentTop.children.push(currentChild);
+      continue;
+    }
+    if (currentChild) {
+      currentChild.text = joinRichTextContinuation(currentChild.text, rawLine);
+    } else if (currentTop) {
+      currentTop.text = joinRichTextContinuation(currentTop.text, rawLine);
+    } else {
+      currentTop = { value: topItems.length + 1, text: rawLine.trim(), children: [] };
+      topItems.push(currentTop);
+    }
+  }
+
+  const renderChildList = (children) => {
+    if (!children.length) return '';
+    const hasBullet = children.every((child) => child.bullet);
+    const tag = hasBullet ? 'ul' : 'ol';
+    return `<${tag}>${children.map((child) => {
+      const value = !hasBullet && child.value ? ` value="${child.value}"` : '';
+      return `<li${value}>${inlineRichText(child.text || '')}</li>`;
+    }).join('')}</${tag}>`;
+  };
+
+  return sanitizeRichTextHtml(`<ol>${topItems.map((item) => {
+    const value = item.value ? ` value="${item.value}"` : '';
+    return `<li${value}>${inlineRichText(item.text || '')}${renderChildList(item.children || [])}</li>`;
+  }).join('')}</ol>`);
+}
+
+function plainOrMarkdownToRichHtml(value) {
+  const text = String(value || '');
+  if (isRichTextHtml(text)) return sanitizeRichTextHtml(text);
+  const structuredHtml = plainTextToStructuredRichHtml(text);
+  if (structuredHtml) return structuredHtml;
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks = [];
+  let listType = '';
+  let listItems = [];
+  const flushList = () => {
+    if (!listType) return;
+    blocks.push(`<${listType}>${listItems.map((item) => `<li>${inlineRichText(item)}</li>`).join('')}</${listType}>`);
+    listType = '';
+    listItems = [];
+  };
+  lines.forEach((line) => {
+    const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+    const unordered = line.match(/^\s*[-*]\s+(.+)$/);
+    if (ordered || unordered) {
+      const nextType = ordered ? 'ol' : 'ul';
+      if (listType && listType !== nextType) flushList();
+      listType = nextType;
+      listItems.push((ordered || unordered)[1]);
+      return;
+    }
+    flushList();
+    blocks.push(line.trim() ? `<div>${inlineRichText(line)}</div>` : '<div><br></div>');
+  });
+  flushList();
+  return sanitizeRichTextHtml(blocks.join(''));
+}
+
+function inlineRichText(value) {
+  return esc(value).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
+function renderRichTextValue(value) {
+  return plainOrMarkdownToRichHtml(value);
+}
+
+function renderRichTextEditor({ value = '', testIdPrefix = 'rich-text', className = '', placeholder = '', oninput = '' }) {
+  const safeHtml = renderRichTextValue(value);
+  const sync = `syncRichTextEditor(this);${oninput}`;
+  return `<div class="rich-text-field">
+    ${renderRichTextToolbar(testIdPrefix)}
+    <div class="${esc(className)} rich-text-editor" data-testid="${esc(testIdPrefix)}-editor" contenteditable="true" role="textbox" aria-multiline="true"
+      data-placeholder="${esc(placeholder)}" oninput="${sync}" onpaste="handleRichTextPaste(event,this)" onkeydown="handleRichTextKeydown(event,this)">${safeHtml}</div>
+    <textarea class="rich-text-storage" data-testid="${esc(testIdPrefix)}-storage" aria-hidden="true" tabindex="-1">${esc(sanitizeRichTextHtml(safeHtml))}</textarea>
+  </div>`;
+}
+
+function syncRichTextEditor(editor) {
+  const field = editor?.closest?.('.rich-text-field');
+  const storage = field?.querySelector?.('.rich-text-storage');
+  if (!storage) return;
+  storage.value = sanitizeRichTextHtml(editor.innerHTML || '');
+}
+
+function richTextEditorValue(editor) {
+  if (!editor) return '';
+  return sanitizeRichTextHtml(editor.innerHTML || '');
+}
+
+function handleRichTextPaste(event, editor) {
+  event.preventDefault();
+  const text = event.clipboardData?.getData('text/plain') || '';
+  const html = plainTextToStructuredRichHtml(text);
+  if (html) {
+    document.execCommand('insertHTML', false, html);
+  } else {
+    document.execCommand('insertText', false, text);
+  }
+  syncRichTextEditor(editor);
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function richTextExec(editor, command) {
+  if (!editor) return;
+  editor.focus();
+  if (command === 'indent' && indentRichTextListItem(editor)) {
+    syncRichTextEditor(editor);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  const execCommand = command === 'bold'
+    ? 'bold'
+    : command === 'ordered'
+    ? 'insertOrderedList'
+    : command === 'unordered'
+    ? 'insertUnorderedList'
+    : command === 'indent'
+    ? 'indent'
+    : 'outdent';
+  document.execCommand(execCommand, false, null);
+  syncRichTextEditor(editor);
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function getRichTextActiveListItem(editor) {
+  const selection = window.getSelection?.();
+  const anchor = selection?.anchorNode?.nodeType === Node.ELEMENT_NODE
+    ? selection.anchorNode
+    : selection?.anchorNode?.parentElement;
+  const item = anchor?.closest?.('li');
+  return item && editor?.contains?.(item) ? item : null;
+}
+
+function placeCursorAtEnd(node) {
+  if (!node) return;
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  range.collapse(false);
+  const selection = window.getSelection?.();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function indentRichTextListItem(editor) {
+  const item = getRichTextActiveListItem(editor);
+  if (!item) return false;
+  const previous = item.previousElementSibling;
+  if (!previous || previous.tagName !== 'LI') return false;
+  let nested = Array.from(previous.children || []).find((child) => child.tagName === 'OL');
+  if (!nested) {
+    nested = document.createElement('ol');
+    previous.appendChild(nested);
+  }
+  nested.appendChild(item);
+  placeCursorAtEnd(item);
+  return true;
+}
+
+function applyRichTextSecondLevelOrderedList(editor) {
+  if (!editor) return;
+  editor.focus();
+  const currentItem = getRichTextActiveListItem(editor);
+  if (currentItem && indentRichTextListItem(editor)) {
+    syncRichTextEditor(editor);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  document.execCommand('insertOrderedList', false, null);
+  syncRichTextEditor(editor);
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function handleRichTextKeydown(event, editor) {
+  const key = String(event.key || '').toLowerCase();
+  if (event.ctrlKey || event.metaKey) {
+    if (key === '0') {
+      event.preventDefault();
+      richTextExec(editor, 'unordered');
+      return;
+    }
+    if (key === '1') {
+      event.preventDefault();
+      richTextExec(editor, 'ordered');
+      return;
+    }
+    if (key === '2') {
+      event.preventDefault();
+      applyRichTextSecondLevelOrderedList(editor);
+      return;
+    }
+  }
+  if (key === 'tab') {
+    event.preventDefault();
+    if (event.shiftKey) {
+      richTextExec(editor, 'outdent');
+      return;
+    }
+    const selection = window.getSelection?.();
+    const anchor = selection?.anchorNode?.nodeType === Node.ELEMENT_NODE
+      ? selection.anchorNode
+      : selection?.anchorNode?.parentElement;
+    if (anchor?.closest?.('li')) {
+      richTextExec(editor, 'indent');
+    } else {
+      richTextExec(editor, 'unordered');
+    }
+  }
+}
+
+function applyRichTextCommand(button, command) {
+  const field = button?.closest?.('.rich-text-field');
+  const editor = field?.querySelector?.('.rich-text-editor');
+  if (command === 'secondOrdered') {
+    applyRichTextSecondLevelOrderedList(editor);
+    return;
+  }
+  richTextExec(editor, command);
+}
+
 function renderProcReturnLines(wrap, tasks, overlayKey) {
   if(!wrap) return;
   const hasReturn = tasks.some((task, index) => index > 0 && task?.repeatable);
@@ -3199,12 +3517,9 @@ function defineTaskDefinitionForNode(procId, taskId, afterIdx = null) {
     : allReusableTasks;
   const constructOptions = Array.from(new Map(capabilityFilteredTasks.map((item) => [item.constructId, item.constructName])).entries());
   const constructId = constructOptions.some(([id]) => id === reuseFilter.constructId) ? reuseFilter.constructId : '';
-  const taskDefinition = addTaskDefinition('', capabilityId, constructId, { skipRender: true });
-  if (!taskDefinition) return;
-  openTaskDefinitionEditor(
-    taskDefinition.id,
-    taskDefinition.businessComponentId || capabilityId,
-    taskDefinition.constructId || constructId,
+  openTaskDefinitionDraft(
+    capabilityId,
+    constructId,
     'processNode',
     procId,
     taskId,
@@ -5740,12 +6055,16 @@ function renderStepNoteEditor(proc, task, step, index) {
   const note = String(step.note || '');
   if (isEditing) {
     return `<div class="step-note-editor" data-testid="step-note-editor">
-      <textarea class="step-note auto-resize" rows="3" placeholder="备注 / 规则 / 纯文本说明 / 链接"
-        oninput="autoResize(this)">${esc(note)}</textarea>
+      ${renderRichTextEditor({
+        value: note,
+        testIdPrefix: 'step-note-rich-text',
+        className: 'step-note',
+        placeholder: '备注 / 规则 / 说明 / 链接',
+      })}
       <div class="step-note-actions">
-        <span class="step-note-tip">按纯文本保存；可粘贴链接，暂不渲染 Markdown，也不支持图片上传</span>
+        <span class="step-note-tip">支持加粗、编号列表和项目列表；粘贴内容会自动清理为安全格式</span>
         <button class="btn btn-primary btn-sm" type="button" data-testid="step-note-save"
-          onclick="saveStepNote('${esc(proc.id)}','${esc(task.id)}',${index},this.closest('.step-note-editor').querySelector('.step-note').value)">保存</button>
+          onclick="saveStepNote('${esc(proc.id)}','${esc(task.id)}',${index},this.closest('.step-note-editor').querySelector('.rich-text-storage').value)">保存</button>
         <button class="btn btn-outline btn-sm" type="button" data-testid="step-note-cancel"
           onclick="cancelStepNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">取消</button>
       </div>
@@ -5753,7 +6072,7 @@ function renderStepNoteEditor(proc, task, step, index) {
   }
   if (note.trim()) {
     return `<div class="step-note-preview" data-testid="step-note-preview">
-      <span>${esc(note)}</span>
+      <span class="rich-text-rendered">${renderRichTextValue(note)}</span>
       <button class="btn btn-ghost-sm" type="button" data-testid="step-note-edit"
         onclick="startStepNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">修改备注</button>
     </div>`;
@@ -5801,12 +6120,16 @@ function renderOrchestrationNoteEditor(proc, task, item, index) {
   const note = String(item.note || '');
   if (isEditing) {
     return `<div class="step-note-editor orchestration-note-editor" data-testid="orchestration-note-editor">
-      <textarea class="step-note auto-resize" rows="3" placeholder="输入输出 / 前置条件 / 异常处理 / 链接"
-        oninput="autoResize(this)">${esc(note)}</textarea>
+      ${renderRichTextEditor({
+        value: note,
+        testIdPrefix: 'orchestration-note-rich-text',
+        className: 'step-note',
+        placeholder: '输入输出 / 前置条件 / 异常处理 / 链接',
+      })}
       <div class="step-note-actions">
-        <span class="step-note-tip">按纯文本保存；可粘贴链接，暂不渲染 Markdown，也不支持图片上传</span>
+        <span class="step-note-tip">支持加粗、编号列表和项目列表；粘贴内容会自动清理为安全格式</span>
         <button class="btn btn-primary btn-sm" type="button" data-testid="orchestration-note-save"
-          onclick="saveOrchestrationNote('${esc(proc.id)}','${esc(task.id)}',${index},this.closest('.orchestration-note-editor').querySelector('.step-note').value)">保存</button>
+          onclick="saveOrchestrationNote('${esc(proc.id)}','${esc(task.id)}',${index},this.closest('.orchestration-note-editor').querySelector('.rich-text-storage').value)">保存</button>
         <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-note-cancel"
           onclick="cancelOrchestrationNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">取消</button>
       </div>
@@ -5814,7 +6137,7 @@ function renderOrchestrationNoteEditor(proc, task, item, index) {
   }
   if (note.trim()) {
     return `<div class="step-note-preview orchestration-note-preview" data-testid="orchestration-note-preview">
-      <span>${esc(note)}</span>
+      <span class="rich-text-rendered">${renderRichTextValue(note)}</span>
       <button class="btn btn-ghost-sm" type="button" data-testid="orchestration-note-edit"
         onclick="startOrchestrationNoteEdit('${esc(proc.id)}','${esc(task.id)}',${index})">修改备注</button>
     </div>`;
@@ -6079,10 +6402,13 @@ function renderTaskBusinessRuleCard(proc, task, rule, index, total) {
           onclick="removeTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}')">删除</button>
       </div>
     </div>
-    <textarea class="auto-resize task-rule-content" rows="3" data-testid="task-rule-content" data-rule-id="${esc(rule.id)}"
-      placeholder="规则内容可多行记录，适合沉淀输入、输出、前置条件、后置条件、交互规则等"
-      oninput="setTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}','content',this.value)"
-      >${esc(rule.content || '')}</textarea>
+    ${renderRichTextEditor({
+      value: rule.content || '',
+      testIdPrefix: 'task-rule-rich-text',
+      className: 'task-rule-content',
+      placeholder: '规则内容可多行记录，适合沉淀输入、输出、前置条件、后置条件、交互规则等',
+      oninput: `setTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}','content',this.closest('.rich-text-field').querySelector('.rich-text-storage').value)`,
+    })}
   </div>`;
 }
 

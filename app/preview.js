@@ -109,6 +109,17 @@ function previewDisplayName(item, fallback) {
   return String(item?.name || '').trim() || fallback;
 }
 
+function previewRichTextHtml(value) {
+  if (typeof renderRichTextValue === 'function') {
+    return renderRichTextValue(value);
+  }
+  return esc(value || '').replace(/\r?\n/g, '<br>');
+}
+
+function previewRichTextCell(value) {
+  return `<div class="rich-text-rendered pv-rich-text">${previewRichTextHtml(value)}</div>`;
+}
+
 function previewSafeId(value, fallback = 'section') {
   return String(value || '')
     .trim()
@@ -512,7 +523,7 @@ function renderPreviewTaskBusinessRulesHtml(node) {
       <tbody>
         ${rules.map((rule) => `<tr>
           <td>${esc(rule.name || '未命名规则')}</td>
-          <td>${esc(rule.content || '')}</td>
+          <td>${previewRichTextCell(rule.content || '')}</td>
         </tr>`).join('')}
       </tbody>
     </table>
@@ -556,10 +567,10 @@ function renderPreviewProcessHtml(proc, entityMap, stepLabels, orchestrationLabe
               <h4>流程节点: ${esc(nodeName)}${roleName ? ` <span class="pv-role">(${esc(roleName)})</span>` : ''}</h4>
               ${node.repeatable ? '<p class="pv-note">可退回节点</p>' : ''}
               ${userSteps.length ? `<table><thead><tr><th>#</th><th>用户操作步骤</th><th>类型</th><th>条件/备注</th></tr></thead><tbody>
-                ${userSteps.map((step, index) => `<tr><td>${index + 1}</td><td>${esc(step.name||'')}</td><td>${esc(stepLabels[step.type]||step.type||'')}</td><td>${esc(step.note||'')}</td></tr>`).join('')}
+                ${userSteps.map((step, index) => `<tr><td>${index + 1}</td><td>${esc(step.name||'')}</td><td>${esc(stepLabels[step.type]||step.type||'')}</td><td>${previewRichTextCell(step.note||'')}</td></tr>`).join('')}
               </tbody></table>` : ''}
               ${orchestrationTasks.length ? `<table><thead><tr><th>#</th><th>节点任务</th><th>业务构件</th><th>类型</th><th>查询来源</th><th>目标</th><th>备注</th></tr></thead><tbody>
-                ${orchestrationTasks.map((item, index) => `<tr><td>${index + 1}</td><td>${esc(item.name||'')}</td><td>${esc(getPreviewNodeTaskConstructName(item))}</td><td>${esc(orchestrationLabels[item.type]||item.type||'')}</td><td>${esc(querySourceLabels[item.querySourceKind]||item.querySourceKind||'—')}</td><td>${esc(item.target||'')}</td><td>${esc(item.note||'')}</td></tr>`).join('')}
+                ${orchestrationTasks.map((item, index) => `<tr><td>${index + 1}</td><td>${esc(item.name||'')}</td><td>${esc(getPreviewNodeTaskConstructName(item))}</td><td>${esc(orchestrationLabels[item.type]||item.type||'')}</td><td>${esc(querySourceLabels[item.querySourceKind]||item.querySourceKind||'—')}</td><td>${esc(item.target||'')}</td><td>${previewRichTextCell(item.note||'')}</td></tr>`).join('')}
               </tbody></table>` : ''}
               ${entityOps.length ? `<p class="pv-note"><strong>涉及实体</strong>: ${entityOps.map((entityOp) => {
                 const entityName = (entityMap[entityOp.entity_id]?.name) || entityOp.entity_id;

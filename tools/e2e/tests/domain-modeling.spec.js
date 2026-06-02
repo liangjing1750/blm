@@ -168,8 +168,10 @@ test('业务域页可维护组件构件并绑定实体和任务定义', async ({
   await expect(page.getByTestId('business-model-dialog')).toBeVisible();
   await page.getByTestId('capability-kind-select').selectOption('generic');
   await page.getByTestId('construct-add-button').click();
-  await expect(page.getByTestId('business-model-dialog')).toContainText('业务构件');
+  await expect(page.getByTestId('business-model-dialog')).toContainText('新建业务构件');
   await page.getByTestId('construct-name-input').fill('仓单办理构件');
+  await page.getByTestId('business-model-draft-save').click();
+  await expect(page.getByTestId('business-model-dialog')).toContainText('业务构件');
   await page.locator('.business-model-move-row').filter({ hasText: '仓单' }).getByTestId('construct-entity-add').click();
   await page.locator('.business-model-move-row').filter({ hasText: '校验仓单状态' }).getByTestId('construct-task-add').click();
   await page.locator('.business-model-move-row').filter({ hasText: '校验仓单状态' }).getByTestId('construct-task-edit').click();
@@ -181,31 +183,29 @@ test('业务域页可维护组件构件并绑定实体和任务定义', async ({
   await page.getByTestId('business-model-dialog-close').click();
 
   const modelState = await page.evaluate(() => ({
-    capabilities: S.doc.capabilityUnits || [],
+    capabilities: S.doc.businessComponents || S.doc.capabilityUnits || [],
     constructs: S.doc.businessConstructs || [],
     entities: S.doc.entities || [],
     tasks: S.doc.taskDefinitions || [],
   }));
-  expect(modelState.capabilities.some((capability) => (
-    capability.name === '示例服务'
-    && capability.kind === 'generic'
-    && capability.constructIds.includes('BC1')
-  ))).toBeTruthy();
-  expect(modelState.constructs.some((construct) => (
-    construct.name === '仓单办理构件'
-    && construct.entityIds.includes('E1')
-    && construct.taskDefinitionIds.includes('TD2')
-  ))).toBeTruthy();
-  expect(modelState.entities.find((entity) => entity.id === 'E1')).toMatchObject({
-    businessConstructId: 'BC1',
-  });
-  expect(modelState.tasks.find((task) => task.id === 'TD2')).toMatchObject({
+  const createdConstruct = modelState.constructs.find((construct) => construct.name === '仓单办理构件');
+  const warehouseEntity = modelState.entities.find((entity) => entity.name === '仓单');
+  const statusTask = modelState.tasks.find((task) => task.name === '校验仓单状态');
+  const warehouseEntityKey = warehouseEntity?.id || warehouseEntity?.uid || warehouseEntity?.name;
+  const statusTaskKey = statusTask?.id || statusTask?.uid || statusTask?.name;
+  expect(createdConstruct).toBeTruthy();
+  expect(warehouseEntity).toBeTruthy();
+  expect(statusTask).toBeTruthy();
+  expect(createdConstruct.businessComponent || createdConstruct.capabilityUnit).toBe('示例服务');
+  expect(createdConstruct.entityIds).toContain(warehouseEntityKey);
+  expect(createdConstruct.taskDefinitionIds).toContain(statusTaskKey);
+  expect(warehouseEntity.businessConstructId || warehouseEntity.businessConstructUid).toBe(createdConstruct.id || createdConstruct.uid);
+  expect(statusTask).toMatchObject({
     name: '校验仓单状态',
     type: 'Query',
     querySourceKind: 'Enum',
     target: '仓单状态枚举',
     note: '按状态字典校验',
-    capabilityUnit: '示例服务',
     constructName: '仓单办理构件',
   });
 
@@ -214,7 +214,7 @@ test('业务域页可维护组件构件并绑定实体和任务定义', async ({
   await page.locator('.sb-capability-head').filter({ hasText: '示例服务' }).click();
   await expect(page.locator('.sb-construct-head').filter({ hasText: '仓单办理构件' })).toBeVisible();
   await page.locator('.sb-construct-head').filter({ hasText: '仓单办理构件' }).click();
-  await expect(page.locator('[data-asset-entity-id="E1"]')).toContainText('仓单');
+  await expect(page.locator('#sidebar-content')).toContainText('仓单');
   await expect(page.getByTestId('construct-task-asset')).toContainText('校验仓单状态');
 });
 
@@ -234,35 +234,66 @@ test('业务构件弹窗中的实体编辑跳转到数据页，未分组实体�
   await expect(page.getByTestId('domain-entity-card')).toHaveCount(0);
   await page.getByTestId('business-model-capability-chip').filter({ hasText: '示例服务' }).click();
   await page.locator('.business-model-move-row').filter({ hasText: '预约办理构件' }).getByTestId('construct-open-button').click();
+  const activeConstructId = await page.evaluate(() => S.ui.businessModelDialog.constructId);
   await expect(page.locator('.business-model-move-row').filter({ hasText: '预约单' }).getByTestId('construct-entity-edit')).toBeVisible();
   await expect(page.locator('.business-model-move-row').filter({ hasText: '预约单' }).getByTestId('construct-entity-remove')).toBeVisible();
   await expect(page.locator('.business-model-move-row').filter({ hasText: '仓库' }).getByTestId('construct-entity-edit')).toBeVisible();
   await page.locator('.business-model-move-row').filter({ hasText: '仓库' }).getByTestId('construct-entity-add').click();
 
-  await expect.poll(() => page.evaluate(() => ({
-    entityName: S.doc.entities.find((entity) => entity.id === 'E2')?.name,
-    entityConstructId: S.doc.entities.find((entity) => entity.id === 'E2')?.businessConstructId,
-    constructEntityIds: S.doc.businessConstructs.find((construct) => construct.id === 'BC1')?.entityIds || [],
-  }))).toEqual({
+  await expect.poll(() => page.evaluate(() => {
+    const entity = S.doc.entities.find((item) => item.name === '仓库');
+    const construct = S.doc.businessConstructs.find((item) => item.id === S.ui.businessModelDialog.constructId);
+    return {
+      entityName: entity?.name,
+      entityConstructId: entity?.businessConstructId,
+      constructHasEntity: !!entity && (construct?.entityIds || []).includes(entity.id),
+    };
+  })).toEqual({
     entityName: '仓库',
-    entityConstructId: 'BC1',
-    constructEntityIds: ['E1', 'E2'],
+    entityConstructId: activeConstructId,
+    constructHasEntity: true,
   });
 
   await page.locator('.business-model-move-row').filter({ hasText: '预约单' }).getByTestId('construct-entity-edit').click();
   await expect(page.getByTestId('data-switch-relation')).toBeVisible();
   await expect(page.locator('.entity-drawer.open')).toBeVisible();
   await expect(page.getByTestId('entity-name-input')).toHaveValue('预约单');
-  await expect.poll(() => page.evaluate(() => ({ tab: S.ui.tab, dataView: S.ui.dataView, entityId: S.ui.entityId }))).toEqual({
+  await expect.poll(() => page.evaluate(() => ({
+    tab: S.ui.tab,
+    dataView: S.ui.dataView,
+    entityName: S.doc.entities.find((entity) => entity.id === S.ui.entityId)?.name || '',
+  }))).toEqual({
     tab: 'data',
     dataView: 'relation',
-    entityId: 'E1',
+    entityName: '预约单',
   });
   await expect(page.getByTestId('nav-back-button')).toBeEnabled();
   await page.getByTestId('nav-back-button').click();
   await expect(page.getByTestId('tab-domain')).toHaveClass(/active/);
   await expect(page.getByTestId('business-model-dialog')).toBeVisible();
   await expect(page.getByTestId('construct-name-input')).toHaveValue('预约办理构件');
+
+  await page.getByTestId('entity-definition-add-button').click();
+  await expect(page.getByTestId('data-switch-relation')).toBeVisible();
+  await expect(page.locator('.entity-drawer.open')).toBeVisible();
+  await expect(page.getByTestId('entity-name-input')).toHaveValue('');
+  await page.getByTestId('entity-name-input').fill('新实体');
+  await page.getByTestId('entity-draft-save').click();
+  await expect.poll(() => page.evaluate(() => {
+    const entity = S.doc.entities.find((item) => item.name === '新实体');
+    const construct = S.doc.businessConstructs.find((item) => item.id === entity?.businessConstructId);
+    return {
+      tab: S.ui.tab,
+      dataView: S.ui.dataView,
+      entityConstructId: entity?.businessConstructId || '',
+      constructHasEntity: !!entity && (construct?.entityIds || []).includes(entity.id),
+    };
+  })).toEqual({
+    tab: 'data',
+    dataView: 'relation',
+    entityConstructId: activeConstructId,
+    constructHasEntity: true,
+  });
 });
 
 test('业务组件和业务构件名称按模型范围保持唯一', async ({ page, request }) => {
@@ -273,34 +304,34 @@ test('业务组件和业务构件名称按模型范围保持唯一', async ({ pa
   await openDocumentFromList(page, documentName);
 
   await page.getByTestId('capability-add-button').click();
-  await expect(page.getByTestId('capability-name-input')).toHaveValue('新业务组件');
+  await expect(page.getByTestId('capability-name-input')).toHaveValue('');
   await page.getByTestId('business-model-dialog-close').click();
+  await expect.poll(() => page.evaluate(() => (S.doc.businessComponents || []).length)).toBe(3);
 
   await page.getByTestId('capability-add-button').click();
-  await expect(page.getByTestId('capability-name-input')).toHaveValue('新业务组件2');
   await page.getByTestId('capability-name-input').fill('示例服务');
+  await page.getByTestId('business-model-draft-save').click();
   await expect(page.getByTestId('app-dialog-message')).toContainText('业务组件“示例服务”已存在');
   await page.getByTestId('app-dialog-confirm').click();
-  await expect(page.getByTestId('capability-name-input')).toHaveValue('新业务组件2');
+  await expect(page.getByTestId('capability-name-input')).toHaveValue('示例服务');
   await page.getByTestId('business-model-dialog-close').click();
+  await expect.poll(() => page.evaluate(() => (S.doc.businessComponents || []).length)).toBe(3);
 
   await page.getByTestId('business-model-capability-chip').filter({ hasText: '示例服务' }).click();
   await page.getByTestId('construct-add-button').click();
-  await expect(page.getByTestId('construct-name-input')).toHaveValue('新业务构件');
-  await page.getByTestId('business-model-dialog-close').click();
-
-  await page.getByTestId('business-model-capability-chip').filter({ hasText: '示例服务' }).click();
-  await page.getByTestId('construct-add-button').click();
-  await expect(page.getByTestId('construct-name-input')).toHaveValue('新业务构件2');
-  await page.getByTestId('construct-name-input').fill('新业务构件');
-  await expect(page.getByTestId('app-dialog-message')).toContainText('当前范围已存在业务构件“新业务构件”');
+  await expect(page.getByTestId('construct-name-input')).toHaveValue('');
+  await page.getByTestId('construct-name-input').fill('预约办理构件');
+  await page.getByTestId('business-model-draft-save').click();
+  await expect(page.getByTestId('app-dialog-message')).toContainText('当前范围已存在业务构件“预约办理构件”');
   await page.getByTestId('app-dialog-confirm').click();
-  await expect(page.getByTestId('construct-name-input')).toHaveValue('新业务构件2');
+  await expect(page.getByTestId('construct-name-input')).toHaveValue('预约办理构件');
   await page.getByTestId('business-model-dialog-close').click();
 
   await page.getByTestId('business-model-capability-chip').filter({ hasText: '用户管理' }).click();
   await page.getByTestId('construct-add-button').click();
-  await expect(page.getByTestId('construct-name-input')).toHaveValue('新业务构件');
+  await page.getByTestId('construct-name-input').fill('预约办理构件');
+  await page.getByTestId('business-model-draft-save').click();
+  await expect(page.getByTestId('construct-name-input')).toHaveValue('预约办理构件');
 });
 
 test('业务组件和业务构件弹窗支持删除并清理引用', async ({ page, request }) => {

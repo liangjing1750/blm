@@ -159,9 +159,10 @@ const S = {
     stageNameEditId: '',
     entityDrawerW: 620,
     entityRelationEditorCollapsed: true,
+    entityDraft: null,
     stateDiagramZoom: 1,
     stateEditorCollapsed: true,
-    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null },
+    businessModelDialog: { mode: '', capabilityId: '', constructId: '', taskDefinitionId: '', returnMode: '', procId: '', taskId: '', afterIdx: null, draft: null },
   }
 };
 

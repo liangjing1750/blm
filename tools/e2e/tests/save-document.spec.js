@@ -65,6 +65,7 @@ test('保存后保留当前数据状态图工作位', async ({ page }) => {
   await page.getByTestId('tab-data').click();
   await page.getByTestId('data-add-entity').click();
   await page.getByTestId('entity-name-input').fill('用户账号');
+  await page.getByTestId('entity-draft-save').click();
   await page.getByTestId('entity-field-add-button').click();
   await page.getByTestId('entity-field-name-0').fill('状态');
   await page.getByTestId('entity-field-type-0').selectOption('enum');

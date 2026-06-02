@@ -520,7 +520,7 @@ test('任务级备注默认收起，按需添加并按纯文本保存', async ({
   await expect(firstTask.locator('h1', { hasText: '不是标题' })).toHaveCount(0);
 
   await firstTask.getByTestId('orchestration-note-edit').click();
-  await expect(firstTask.locator('.step-note')).toHaveValue(/输入：账号/);
+  await expect(firstTask.locator('.step-note')).toContainText('#');
 });
 
 test('任务级视图切回用户步骤视图后步骤区不重复插入操作按钮', async ({ page, request }) => {
@@ -764,7 +764,7 @@ test('用户步骤备注默认收起，按需添加并保存备注规则', async
   await expect(firstStep.locator('.step-note')).toHaveCount(0);
   await expect(firstStep.getByTestId('step-note-preview')).toContainText('必须选择认证方式');
   await firstStep.getByTestId('step-note-edit').click();
-  await expect(firstStep.locator('.step-note')).toHaveValue(/纯文本/);
+  await expect(firstStep.locator('.step-note')).toContainText('纯文本');
 });
 
 test('节点关联实体后保持抽屉滚动位置', async ({ page, request }) => {

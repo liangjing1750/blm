@@ -275,6 +275,9 @@ const UI_NAV_HISTORY_KEYS = [
 ];
 
 function cloneBusinessModelDialog(dialog = {}) {
+  const draft = dialog?.draft && typeof dialog.draft === 'object'
+    ? JSON.parse(JSON.stringify(dialog.draft))
+    : null;
   return {
     mode: String(dialog?.mode || ''),
     capabilityId: String(dialog?.capabilityId || ''),
@@ -284,6 +287,7 @@ function cloneBusinessModelDialog(dialog = {}) {
     procId: String(dialog?.procId || ''),
     taskId: String(dialog?.taskId || ''),
     afterIdx: Number.isInteger(dialog?.afterIdx) ? dialog.afterIdx : null,
+    draft,
   };
 }
 

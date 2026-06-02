@@ -196,6 +196,128 @@ function findTaskDefinitionRef(taskDefinitionId) {
     .find((item) => String(item.id || item.name || '').trim() === targetId || String(item.name || '').trim() === targetId) || null;
 }
 
+function modelRefValues(item, keys = ['uid', 'id', 'name']) {
+  const values = [];
+  keys.forEach((key) => {
+    const value = item?.[key];
+    if (Array.isArray(value)) values.push(...value);
+    else values.push(value);
+  });
+  return values.map((value) => String(value || '').trim()).filter(Boolean);
+}
+
+function modelIdentitySet(item) {
+  return new Set(modelRefValues(item, ['uid', 'id', 'name']));
+}
+
+function refsIncludeItem(refs, item) {
+  const identities = modelIdentitySet(item);
+  return refs.some((ref) => identities.has(String(ref || '').trim()));
+}
+
+function isBusinessConstructAssignedToCapability(construct, capability) {
+  const capabilityRefs = modelRefValues(construct, [
+    'businessComponentUid',
+    'businessComponentId',
+    'capabilityUnitUid',
+    'capabilityUnitId',
+    'businessComponent',
+    'capabilityUnit',
+  ]);
+  const capabilityOwnRefs = [
+    ...(Array.isArray(capability?.constructIds) ? capability.constructIds : []),
+    ...(Array.isArray(capability?.constructUids) ? capability.constructUids : []),
+  ];
+  return refsIncludeItem(capabilityRefs, capability) || refsIncludeItem(capabilityOwnRefs, construct);
+}
+
+function isBusinessConstructAssignedToAnyCapability(construct, doc = S.doc) {
+  const directRefs = modelRefValues(construct, [
+    'businessComponentUid',
+    'businessComponentId',
+    'capabilityUnitUid',
+    'capabilityUnitId',
+    'businessComponent',
+    'capabilityUnit',
+  ]);
+  if (directRefs.length) return true;
+  return getCapabilityItems(doc).some((capability) => isBusinessConstructAssignedToCapability(construct, capability));
+}
+
+function isEntityAssignedToConstruct(entity, construct) {
+  const entityRefs = modelRefValues(entity, [
+    'businessConstructUid',
+    'businessConstructId',
+    'businessConstructUids',
+    'businessConstructIds',
+    'constructUid',
+    'constructId',
+    'constructUids',
+    'constructIds',
+    'businessConstruct',
+    'constructName',
+  ]);
+  const constructOwnRefs = [
+    ...(Array.isArray(construct?.entityIds) ? construct.entityIds : []),
+    ...(Array.isArray(construct?.entityUids) ? construct.entityUids : []),
+  ];
+  return refsIncludeItem(entityRefs, construct) || refsIncludeItem(constructOwnRefs, entity);
+}
+
+function isEntityAssignedToAnyConstruct(entity, doc = S.doc) {
+  const directRefs = modelRefValues(entity, [
+    'businessConstructUid',
+    'businessConstructId',
+    'businessConstructUids',
+    'businessConstructIds',
+    'constructUid',
+    'constructId',
+    'constructUids',
+    'constructIds',
+    'businessConstruct',
+    'constructName',
+  ]);
+  if (directRefs.length) return true;
+  return getBusinessConstructItems(doc).some((construct) => isEntityAssignedToConstruct(entity, construct));
+}
+
+function isTaskDefinitionAssignedToConstruct(task, construct) {
+  const taskRefs = modelRefValues(task, [
+    'businessConstructUid',
+    'businessConstructId',
+    'businessConstructUids',
+    'businessConstructIds',
+    'constructUid',
+    'constructId',
+    'constructUids',
+    'constructIds',
+    'businessConstruct',
+    'constructName',
+  ]);
+  const constructOwnRefs = [
+    ...(Array.isArray(construct?.taskDefinitionIds) ? construct.taskDefinitionIds : []),
+    ...(Array.isArray(construct?.taskDefinitionUids) ? construct.taskDefinitionUids : []),
+  ];
+  return refsIncludeItem(taskRefs, construct) || refsIncludeItem(constructOwnRefs, task);
+}
+
+function isTaskDefinitionAssignedToAnyConstruct(task, doc = S.doc) {
+  const directRefs = modelRefValues(task, [
+    'businessConstructUid',
+    'businessConstructId',
+    'businessConstructUids',
+    'businessConstructIds',
+    'constructUid',
+    'constructId',
+    'constructUids',
+    'constructIds',
+    'businessConstruct',
+    'constructName',
+  ]);
+  if (directRefs.length) return true;
+  return getBusinessConstructItems(doc).some((construct) => isTaskDefinitionAssignedToConstruct(task, construct));
+}
+
 function syncTaskDefinitionCapability(task, capability) {
   if (!task || !capability) return;
   task.businessComponentId = capability.id || '';
@@ -291,6 +413,49 @@ function addBusinessComponent(afterId = '') {
   markModified();
   renderSidebar();
   rerenderDomainTabPreserveScroll();
+  return capability;
+}
+
+function openBusinessComponentDraft(afterId = '') {
+  S.ui.businessModelDialog = {
+    mode: 'capabilityDraft',
+    capabilityId: '',
+    constructId: '',
+    taskDefinitionId: '',
+    returnMode: '',
+    procId: '',
+    taskId: '',
+    afterIdx: null,
+    draft: {
+      afterId: String(afterId || ''),
+      name: '',
+      kind: 'core',
+      note: '',
+    },
+  };
+  rerenderBusinessModelDialogContext();
+}
+
+function setBusinessModelDraft(key, value) {
+  const dialog = S.ui.businessModelDialog || {};
+  if (!dialog.draft || typeof dialog.draft !== 'object') return;
+  dialog.draft[key] = value;
+}
+
+function saveBusinessComponentDraft() {
+  const draft = S.ui.businessModelDialog?.draft || {};
+  const name = normalizeModelAssetName(draft.name);
+  if (!name) return alert('请填写业务组件名称。');
+  if (hasBusinessComponentNameConflict(name, '')) {
+    return alert(`业务组件“${name}”已存在，请换一个名称。`);
+  }
+  const capability = addBusinessComponent(draft.afterId || '');
+  if (!capability) return;
+  capability.name = name;
+  capability.kind = draft.kind === 'generic' ? 'generic' : 'core';
+  capability.note = String(draft.note || '');
+  markModified();
+  openBusinessModelDialog('capability', capability.id);
 }
 
 function setBusinessComponent(capabilityId, key, value) {
@@ -376,6 +541,45 @@ function addBusinessConstruct(afterId = '', capabilityId = '') {
   markModified();
   renderSidebar();
   rerenderDomainTabPreserveScroll();
+  return construct;
+}
+
+function openBusinessConstructDraft(capabilityId = '', afterId = '') {
+  const capability = capabilityId ? ensureBusinessComponentRef(capabilityId) : null;
+  S.ui.businessModelDialog = {
+    mode: 'constructDraft',
+    capabilityId: String(capability?.id || capabilityId || ''),
+    constructId: '',
+    taskDefinitionId: '',
+    returnMode: '',
+    procId: '',
+    taskId: '',
+    afterIdx: null,
+    draft: {
+      afterId: String(afterId || ''),
+      name: '',
+      note: '',
+      businessComponentId: String(capability?.id || capabilityId || ''),
+    },
+  };
+  rerenderBusinessModelDialogContext();
+}
+
+function saveBusinessConstructDraft() {
+  const dialog = S.ui.businessModelDialog || {};
+  const draft = dialog.draft || {};
+  const name = normalizeModelAssetName(draft.name);
+  const capabilityId = String(draft.businessComponentId || dialog.capabilityId || '').trim();
+  if (!name) return alert('请填写业务构件名称。');
+  if (hasBusinessConstructNameConflict(name, capabilityId, '')) {
+    return alert(`当前范围已存在业务构件“${name}”，请换一个名称。`);
+  }
+  const construct = addBusinessConstruct(draft.afterId || '', capabilityId);
+  if (!construct) return;
+  construct.name = name;
+  construct.note = String(draft.note || '');
+  markModified();
+  openBusinessModelDialog('construct', construct.businessComponentId || capabilityId, construct.id);
 }
 
 function setBusinessConstruct(constructId, key, value) {
@@ -553,8 +757,57 @@ function addTaskDefinition(afterId = '', capabilityId = '', constructId = '', op
 }
 
 function addTaskDefinitionAndOpen(capabilityId = '', constructId = '') {
-  const task = addTaskDefinition('', capabilityId, constructId);
-  if (task) openTaskDefinitionEditor(task.id, capabilityId, constructId);
+  openTaskDefinitionDraft(capabilityId, constructId);
+}
+
+function openTaskDefinitionDraft(capabilityId = '', constructId = '', returnMode = '', procId = '', taskId = '', afterIdx = null) {
+  const construct = constructId ? findBusinessConstructRef(constructId) : null;
+  const capability = capabilityId ? ensureBusinessComponentRef(capabilityId) : (construct?.businessComponentId ? ensureBusinessComponentRef(construct.businessComponentId) : null);
+  S.ui.businessModelDialog = {
+    mode: 'taskDraft',
+    capabilityId: String(capability?.id || capabilityId || ''),
+    constructId: String(construct?.id || constructId || ''),
+    taskDefinitionId: '',
+    returnMode: String(returnMode || ''),
+    procId: String(procId || ''),
+    taskId: String(taskId || ''),
+    afterIdx: Number.isInteger(afterIdx) ? afterIdx : null,
+    draft: {
+      name: '',
+      type: 'Service',
+      querySourceKind: 'Dictionary',
+      target: '',
+      note: '',
+      businessComponentId: String(capability?.id || capabilityId || ''),
+      constructId: String(construct?.id || constructId || ''),
+    },
+  };
+  rerenderBusinessModelDialogContext();
+}
+
+function saveTaskDefinitionDraft() {
+  const dialog = S.ui.businessModelDialog || {};
+  const draft = dialog.draft || {};
+  const name = String(draft.name || '').trim();
+  if (!name) return alert('请填写任务名称。');
+  if (ensureDocumentArray('taskDefinitions').some((item) => String(item.name || '').trim() === name)) {
+    return alert(`任务定义“${name}”已存在，请换一个名称。`);
+  }
+  if (!String(draft.constructId || '').trim()) return alert('请先选择所属业务构件。');
+  const task = addTaskDefinition('', draft.businessComponentId || dialog.capabilityId || '', draft.constructId || dialog.constructId || '', { skipRender: true });
+  if (!task) return;
+  task.name = name;
+  task.type = draft.type || 'Service';
+  task.querySourceKind = task.type === 'Query' ? (draft.querySourceKind || 'Dictionary') : '';
+  task.target = String(draft.target || '');
+  task.note = String(draft.note || '');
+  syncProcessTaskDefinitionFields(task);
+  markModified();
+  if (dialog.returnMode === 'processNode') {
+    openTaskDefinitionEditor(task.id, task.businessComponentId || '', task.constructId || '', dialog.returnMode, dialog.procId, dialog.taskId, dialog.afterIdx);
+  } else {
+    openTaskDefinitionEditor(task.id, task.businessComponentId || '', task.constructId || '');
+  }
 }
 
 function setTaskDefinition(taskDefinitionId, key, value) {
@@ -744,6 +997,13 @@ function openEntityDefinitionEditor(entityId) {
   S.ui.entityId = id;
   S.ui.entityRelationEditorCollapsed = false;
   render();
+}
+
+function addEntityDefinitionAndOpen(constructId = '') {
+  if (typeof addEntity !== 'function') return;
+  S.ui.dataView = 'relation';
+  S.ui.entityRelationEditorCollapsed = false;
+  addEntity(String(constructId || '').trim());
 }
 
 function closeBusinessModelDialog() {
@@ -1024,7 +1284,7 @@ function renderSubDomainMapCard(selectedDomainId = 'all', selectedDomainLabel = 
           <span class="subdomain-legend core">核心 ${coreItems.length}</span>
           <span class="subdomain-legend generic">通用 ${genericItems.length}</span>
         </div>
-        <button class="btn btn-outline btn-sm" type="button" data-testid="capability-add-button" onclick="addBusinessComponent();openBusinessModelDialog('capability',S.doc.businessComponents[S.doc.businessComponents.length-1].id)">＋ 组件</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="capability-add-button" onclick="openBusinessComponentDraft()">＋ 组件</button>
       </div>
     </div>
     <div class="domain-model-integrated" data-testid="business-model-card">
@@ -1085,9 +1345,9 @@ function renderMoveList(items, options) {
 
 function renderCapabilityDialog(capability) {
   const capId = String(capability.id || capability.name || '');
-  const groupedConstructs = getCapabilityConstructs(capability, S.doc);
-  const groupedIds = new Set(groupedConstructs.map((construct) => construct.id));
-  const ungroupedConstructs = getBusinessConstructItems(S.doc).filter((construct) => !construct.businessComponentId && !groupedIds.has(construct.id));
+  const allConstructs = getBusinessConstructItems(S.doc);
+  const groupedConstructs = allConstructs.filter((construct) => isBusinessConstructAssignedToCapability(construct, capability));
+  const ungroupedConstructs = allConstructs.filter((construct) => !isBusinessConstructAssignedToAnyCapability(construct, S.doc));
   return `<div class="business-model-dialog-panel" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
       <h3>业务组件</h3>
@@ -1120,7 +1380,7 @@ function renderCapabilityDialog(capability) {
       <div class="business-model-dialog-section">
         <div class="business-model-section-head">
           <h4>组件内构件</h4>
-          <button class="btn btn-outline btn-sm" type="button" data-testid="construct-add-button" onclick="addBusinessConstruct('','${esc(jsString(capId))}');openBusinessModelDialog('construct','${esc(jsString(capId))}',S.doc.businessConstructs[S.doc.businessConstructs.length-1].id)">＋ 构件</button>
+          <button class="btn btn-outline btn-sm" type="button" data-testid="construct-add-button" onclick="openBusinessConstructDraft('${esc(jsString(capId))}')">＋ 构件</button>
         </div>
         ${renderMoveList(groupedConstructs, {
           emptyText: '暂无构件',
@@ -1147,6 +1407,41 @@ function renderCapabilityDialog(capability) {
   </div>`;
 }
 
+function renderCapabilityDraftDialog(draft = {}) {
+  const name = String(draft.name || '');
+  return `<div class="business-model-dialog-panel" data-testid="business-model-dialog">
+    <div class="business-model-dialog-head">
+      <h3>新建业务组件</h3>
+      <div class="business-model-dialog-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="business-model-dialog-cancel" onclick="closeBusinessModelDialog()">取消</button>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="business-model-draft-save" onclick="saveBusinessComponentDraft()">保存</button>
+        <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">×</button>
+      </div>
+    </div>
+    <div class="business-model-dialog-body">
+      <div class="form-grid">
+        <div class="field-group">
+          <label>组件名称</label>
+          <input data-testid="capability-name-input" type="text" value="${esc(name)}" placeholder="请输入业务组件名称"
+            oninput="setBusinessModelDraft('name',this.value)">
+        </div>
+        <div class="field-group">
+          <label>组件类型</label>
+          <select data-testid="capability-kind-select" onchange="setBusinessModelDraft('kind',this.value)">
+            <option value="core" ${draft.kind !== 'generic' ? 'selected' : ''}>核心组件</option>
+            <option value="generic" ${draft.kind === 'generic' ? 'selected' : ''}>通用组件</option>
+          </select>
+        </div>
+        <div class="field-group field-group-wide">
+          <label>说明</label>
+          <input data-testid="capability-note-input" type="text" value="${esc(draft.note || '')}"
+            oninput="setBusinessModelDraft('note',this.value)">
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderConstructDialog(construct) {
   const constructId = String(construct.id || construct.name || '');
   const dialog = S.ui.businessModelDialog || {};
@@ -1158,12 +1453,11 @@ function renderConstructDialog(construct) {
   const afterDelete = parentCapabilityId
     ? `openBusinessModelDialog('capability','${esc(jsString(parentCapabilityId))}')`
     : 'closeBusinessModelDialog()';
-  const entityIds = new Set([...(construct.entityIds || []), ...(S.doc.entities || []).filter((entity) => entity.businessConstructId === construct.id).map((entity) => entity.id)]);
-  const assignedEntities = (S.doc.entities || []).filter((entity) => entityIds.has(entity.id));
-  const unassignedEntities = (S.doc.entities || []).filter((entity) => !entity.businessConstructId);
-  const taskIds = new Set([...(construct.taskDefinitionIds || []), ...getTaskDefinitionItems(S.doc).filter((task) => task.constructId === construct.id).map((task) => task.id)]);
-  const assignedTasks = getTaskDefinitionItems(S.doc).filter((task) => taskIds.has(task.id));
-  const unassignedTasks = getTaskDefinitionItems(S.doc).filter((task) => !task.constructId);
+  const assignedEntities = (S.doc.entities || []).filter((entity) => isEntityAssignedToConstruct(entity, construct));
+  const unassignedEntities = (S.doc.entities || []).filter((entity) => !isEntityAssignedToAnyConstruct(entity, S.doc));
+  const taskItems = getTaskDefinitionItems(S.doc);
+  const assignedTasks = taskItems.filter((task) => isTaskDefinitionAssignedToConstruct(task, construct));
+  const unassignedTasks = taskItems.filter((task) => !isTaskDefinitionAssignedToAnyConstruct(task, S.doc));
   const capabilityOptions = capabilities.map((capability) => {
     const id = String(capability.id || capability.name || '');
     return `<option value="${esc(id)}" ${id === construct.businessComponentId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
@@ -1199,7 +1493,11 @@ function renderConstructDialog(construct) {
       </div>
       <div class="business-model-dialog-grid">
         <div class="business-model-dialog-section">
-          <div class="business-model-section-head"><h4>构件实体</h4><span>移出后进入未分组</span></div>
+          <div class="business-model-section-head">
+            <h4>构件实体</h4>
+            <button class="btn btn-outline btn-sm" type="button" data-testid="entity-definition-add-button" onclick="addEntityDefinitionAndOpen('${esc(jsString(constructId))}')">＋ 实体定义</button>
+          </div>
+          <p class="business-model-section-hint">移出后进入未分组</p>
           ${renderMoveList(assignedEntities, {
             emptyText: '暂无实体',
             testId: 'construct-entity-edit',
@@ -1246,6 +1544,45 @@ function renderConstructDialog(construct) {
             onclick: (task) => `openTaskDefinitionEditor('${esc(jsString(task.id))}','${esc(jsString(construct.businessComponentId || ''))}','${esc(jsString(constructId))}')`,
             secondaryOnclick: (task) => `addTaskDefinitionToConstruct('${esc(jsString(constructId))}','${esc(jsString(task.id))}')`,
           })}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderConstructDraftDialog(draft = {}) {
+  const capabilities = getCapabilityItems(S.doc);
+  const activeCapabilityId = String(draft.businessComponentId || '').trim();
+  const capabilityOptions = capabilities.map((capability) => {
+    const id = String(capability.id || capability.name || '');
+    return `<option value="${esc(id)}" ${id === activeCapabilityId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
+  }).join('');
+  return `<div class="business-model-dialog-panel" data-testid="business-model-dialog">
+    <div class="business-model-dialog-head">
+      <h3>新建业务构件</h3>
+      <div class="business-model-dialog-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="business-model-dialog-cancel" onclick="closeBusinessModelDialog()">取消</button>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="business-model-draft-save" onclick="saveBusinessConstructDraft()">保存</button>
+        <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">×</button>
+      </div>
+    </div>
+    <div class="business-model-dialog-body">
+      <div class="form-grid">
+        <div class="field-group">
+          <label>构件名称</label>
+          <input data-testid="construct-name-input" type="text" value="${esc(draft.name || '')}" placeholder="请输入业务构件名称"
+            oninput="setBusinessModelDraft('name',this.value)">
+        </div>
+        <div class="field-group">
+          <label>所属组件</label>
+          <select data-testid="construct-capability-select" onchange="setBusinessModelDraft('businessComponentId',this.value)">
+            <option value="">未分组</option>${capabilityOptions}
+          </select>
+        </div>
+        <div class="field-group field-group-wide">
+          <label>说明</label>
+          <input data-testid="construct-note-input" type="text" value="${esc(draft.note || '')}"
+            oninput="setBusinessModelDraft('note',this.value)">
         </div>
       </div>
     </div>
@@ -1369,6 +1706,86 @@ function renderTaskDefinitionDialog(task) {
   </div>`;
 }
 
+function renderTaskDefinitionDraftDialog(draft = {}) {
+  const constructs = getBusinessConstructItems(S.doc);
+  const capabilities = getCapabilityItems(S.doc);
+  const activeCapabilityId = String(draft.businessComponentId || '').trim();
+  const activeCapability = capabilities.find((capability) => String(capability.id || capability.name || '') === activeCapabilityId);
+  const activeCapabilityName = String(activeCapability?.name || '').trim();
+  const capabilityOptions = `<option value="">请选择业务组件</option>${capabilities.map((capability) => {
+    const id = String(capability.id || capability.name || '');
+    return `<option value="${esc(id)}" ${id === activeCapabilityId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
+  }).join('')}`;
+  const constructOptions = `<option value="">请选择业务构件</option>${constructs.filter((construct) => {
+    const constructCapabilityId = String(construct.businessComponentId || construct.capabilityUnitId || '').trim();
+    const constructCapabilityName = String(construct.businessComponent || construct.capabilityUnit || '').trim();
+    return !activeCapabilityId
+      || constructCapabilityId === activeCapabilityId
+      || (activeCapabilityName && constructCapabilityName === activeCapabilityName)
+      || constructCapabilityName === activeCapabilityId;
+  }).map((construct) => {
+    const id = String(construct.id || construct.name || '');
+    const capability = capabilities.find((item) => item.id === construct.businessComponentId || item.name === construct.businessComponent);
+    const prefix = capability ? `${capability.name} / ` : '';
+    return `<option value="${esc(id)}" ${id === draft.constructId ? 'selected' : ''}>${esc(prefix + (construct.name || id))}</option>`;
+  }).join('')}`;
+  const typeValue = draft.type || 'Service';
+  return `<div class="business-model-dialog-panel task-definition-dialog" data-testid="business-model-dialog">
+    <div class="business-model-dialog-head">
+      <h3>新建任务定义</h3>
+      <div class="business-model-dialog-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="business-model-dialog-cancel" onclick="closeBusinessModelDialog()">取消</button>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="business-model-draft-save" onclick="saveTaskDefinitionDraft()">保存</button>
+        <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">×</button>
+      </div>
+    </div>
+    <div class="business-model-dialog-body">
+      <div class="form-grid">
+        <div class="field-group">
+          <label>任务名称</label>
+          <input data-testid="task-definition-name-input" type="text" value="${esc(draft.name || '')}" placeholder="请输入任务名称"
+            oninput="setBusinessModelDraft('name',this.value)">
+        </div>
+        <div class="field-group">
+          <label>所属业务组件</label>
+          <select data-testid="task-definition-capability-select"
+            onchange="setBusinessModelDraft('businessComponentId',this.value);setBusinessModelDraft('constructId','');rerenderBusinessModelDialogContext()">
+            ${capabilityOptions}
+          </select>
+        </div>
+        <div class="field-group">
+          <label>所属业务构件</label>
+          <select data-testid="task-definition-construct-select" onchange="setBusinessModelDraft('constructId',this.value)">
+            ${constructOptions}
+          </select>
+        </div>
+        <div class="field-group">
+          <label>任务类型</label>
+          <select data-testid="task-definition-type-select" onchange="setBusinessModelDraft('type',this.value);rerenderBusinessModelDialogContext()">
+            ${ORCHESTRATION_TYPES.map((option) => `<option value="${option.value}" ${typeValue === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+          </select>
+        </div>
+        ${typeValue === 'Query' ? `<div class="field-group">
+          <label>查询来源</label>
+          <select data-testid="task-definition-query-source-select" onchange="setBusinessModelDraft('querySourceKind',this.value)">
+            ${QUERY_SOURCE_KINDS.map((option) => `<option value="${option.value}" ${draft.querySourceKind === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+          </select>
+        </div>` : ''}
+        <div class="field-group field-group-wide task-definition-tech-group">
+          <label>技术承接</label>
+          <input data-testid="task-definition-target-input" type="text" value="${esc(draft.target || '')}" placeholder="目标服务 / 字典 / 枚举"
+            oninput="setBusinessModelDraft('target',this.value)">
+        </div>
+        <div class="field-group field-group-wide">
+          <label>说明</label>
+          <textarea class="auto-resize" data-testid="task-definition-note-input" rows="3"
+            oninput="setBusinessModelDraft('note',this.value);autoResize(this)">${esc(draft.note || '')}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderTaskDefinitionManagerDialog() {
   const tasks = getTaskDefinitionItems(S.doc);
   const constructs = getBusinessConstructItems(S.doc);
@@ -1479,7 +1896,13 @@ function renderBusinessModelDialog() {
   const capability = findExplicitBusinessComponent(dialog.capabilityId);
   const construct = findBusinessConstructRef(dialog.constructId);
   const task = findTaskDefinitionRef(dialog.taskDefinitionId);
-  const panel = dialog.mode === 'tasks'
+  const panel = dialog.mode === 'capabilityDraft'
+    ? renderCapabilityDraftDialog(dialog.draft || {})
+    : dialog.mode === 'constructDraft'
+    ? renderConstructDraftDialog(dialog.draft || {})
+    : dialog.mode === 'taskDraft'
+    ? renderTaskDefinitionDraftDialog(dialog.draft || {})
+    : dialog.mode === 'tasks'
     ? renderTaskDefinitionManagerDialog()
     : (dialog.mode === 'task' && task
     ? renderTaskDefinitionDialog(task)

@@ -2178,9 +2178,18 @@ function renderEntityStateGraphMarkup(entity, fieldName = '', options = {}) {
   </div>`;
 }
 
-function addEntity(constructId = '') {
+function createEntity(constructId = '', values = {}) {
+  S.doc.entities = S.doc.entities || [];
   const id = nextStableId('E', S.doc.entities);
-  const entity = { id, name: '新实体', businessConstructId: constructId || '', businessConstructIds: constructId ? [constructId] : [], fields: [], state_transitions: [] };
+  const entity = {
+    id,
+    name: String(values.name || '').trim() || '新实体',
+    note: String(values.note || ''),
+    businessConstructId: constructId || '',
+    businessConstructIds: constructId ? [constructId] : [],
+    fields: [],
+    state_transitions: [],
+  };
   S.doc.entities.push(entity);
   if (constructId && typeof addEntityToConstruct === 'function') {
     const construct = findBusinessConstructRef(constructId);
@@ -2189,6 +2198,40 @@ function addEntity(constructId = '') {
   S.ui.entityRelationEditorCollapsed = false;
   markModified();
   navigate('data', { entityId: id });
+}
+
+function addEntity(constructId = '') {
+  S.ui.entityDraft = {
+    name: '',
+    note: '',
+    businessConstructId: String(constructId || ''),
+  };
+  S.ui.dataView = 'relation';
+  S.ui.entityId = null;
+  S.ui.entityRelationEditorCollapsed = false;
+  navigate('data', {});
+}
+
+function setEntityDraft(key, value) {
+  if (!S.ui.entityDraft || typeof S.ui.entityDraft !== 'object') return;
+  S.ui.entityDraft[key] = value;
+}
+
+function cancelEntityDraft() {
+  S.ui.entityDraft = null;
+  if (!S.doc.entities?.length) S.ui.entityRelationEditorCollapsed = true;
+  render();
+}
+
+function saveEntityDraft() {
+  const draft = S.ui.entityDraft || {};
+  const name = String(draft.name || '').trim();
+  if (!name) return alert('请填写实体名称。');
+  if ((S.doc.entities || []).some((entity) => String(entity.name || '').trim() === name)) {
+    return alert(`实体“${name}”已存在，请换一个名称。`);
+  }
+  S.ui.entityDraft = null;
+  createEntity(String(draft.businessConstructId || ''), { name, note: draft.note || '' });
 }
 
 async function removeEntity(id) {
@@ -2927,10 +2970,44 @@ function renderEntityRelationsSection(entity, entities, scopedRelations) {
 
 function renderEntityDrawer(showEntityDrawer, entity, entities, drawerW) {
   const scopedRelations = entity ? getRelationsForEntity(entity.id) : [];
-  let markup = `<div class="entity-drawer${showEntityDrawer&&entity?' open':''}" style="width:${showEntityDrawer ? `${drawerW}px` : '0px'}">
+  const entityDraft = S.ui.entityDraft || null;
+  let markup = `<div class="entity-drawer${showEntityDrawer&&(entity || entityDraft)?' open':''}" style="width:${showEntityDrawer ? `${drawerW}px` : '0px'}">
     <div class="drawer-resize-handle" data-testid="entity-drawer-resize-handle" onmousedown="startDrawerResize(event)"></div>`;
 
-  if (showEntityDrawer && entity) {
+  if (showEntityDrawer && entityDraft) {
+    const selectedConstructId = String(entityDraft.businessConstructId || '');
+    markup += `<div class="drawer-head">
+      <div class="drawer-crumb">
+        <span style="font-weight:600">新建实体</span>
+      </div>
+      <div class="drawer-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="entity-draft-cancel" onclick="cancelEntityDraft()">取消</button>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="entity-draft-save" onclick="saveEntityDraft()">保存</button>
+        <button class="drawer-close" type="button" data-testid="entity-editor-close" onclick="cancelEntityDraft()" title="取消新建">×</button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="field-group">
+          <label>实体名称</label>
+          <input type="text" data-testid="entity-name-input" value="${esc(entityDraft.name || '')}" placeholder="请输入实体名称"
+            oninput="setEntityDraft('name',this.value)">
+        </div>
+        <div class="field-group">
+          <label>所属业务构件</label>
+          <select data-testid="entity-construct-select" onchange="setEntityDraft('businessConstructId',this.value)">
+            ${renderBusinessConstructOptions(selectedConstructId)}
+          </select>
+        </div>
+        <div class="field-group" style="grid-column:1/-1">
+          <label>说明</label>
+          <input type="text" value="${esc(entityDraft.note || '')}" placeholder="简要说明"
+            oninput="setEntityDraft('note',this.value)">
+        </div>
+      </div>
+      <p class="no-refs">保存后可继续维护字段、关系和状态流转。</p>
+    </div>`;
+  } else if (showEntityDrawer && entity) {
     const refs = getTasksReferencingEntity(entity.id);
     const selectedConstructId = getEntityBusinessConstructId(entity);
     markup += `<div class="drawer-head">
@@ -3055,7 +3132,7 @@ function renderDataTab() {
   const stateTransitionRows = entity ? getEntityStateTransitions(entity, stateField?.name || '') : [];
   const relationEditorCollapsed = isEntityRelationEditorCollapsed();
   const showEntityDrawer = dataView === 'relation' && !relationEditorCollapsed;
-  const relationEditorOffset = showEntityDrawer && entity ? drawerW : 0;
+  const relationEditorOffset = showEntityDrawer && (entity || S.ui.entityDraft) ? drawerW : 0;
   const stateEditorDrawerW = Math.max(getDrawerWidth('entity'), 620);
   const stateZoomLabel = `${Math.round(getStateDiagramZoom() * 100)}%`;
   const stateEditorCollapsed = Boolean(S.ui.stateEditorCollapsed);
