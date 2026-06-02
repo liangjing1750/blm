@@ -2740,6 +2740,10 @@ function getTaskBusinessRule(procId, taskId, ruleId) {
   return { task, rules, rule: rules.find((item) => item.id === ruleId) || null };
 }
 
+function getTaskBusinessRuleEditKey(procId, taskId, ruleId) {
+  return `${procId}::${taskId}::${ruleId}`;
+}
+
 function syncTaskBusinessRulesNote(task) {
   if (!task) return;
   task.rules_note = formatBusinessRulesText(getNodeBusinessRules(task));
@@ -2757,10 +2761,11 @@ function addTaskBusinessRule(procId, taskId, presetName = '') {
     content: '',
   };
   rules.push(rule);
+  S.ui.businessRuleEditKey = getTaskBusinessRuleEditKey(procId, taskId, rule.id);
   syncTaskBusinessRulesNote(task);
   markModified();
   rerenderProcessEditor({
-    focusSelector: `[data-testid="task-rule-content"][data-rule-id="${rule.id}"]`,
+    focusSelector: `.task-rule-card[data-rule-id="${rule.id}"] [data-testid="task-rule-rich-text-editor"]`,
     revealFocus: true,
   });
 }
@@ -2780,10 +2785,11 @@ function ensureTaskBusinessRuleTemplates(procId, taskId) {
     if (!firstAddedId) firstAddedId = rule.id;
   });
   if (!firstAddedId) return;
+  S.ui.businessRuleEditKey = getTaskBusinessRuleEditKey(procId, taskId, firstAddedId);
   syncTaskBusinessRulesNote(task);
   markModified();
   rerenderProcessEditor({
-    focusSelector: `[data-testid="task-rule-content"][data-rule-id="${firstAddedId}"]`,
+    focusSelector: `.task-rule-card[data-rule-id="${firstAddedId}"] [data-testid="task-rule-rich-text-editor"]`,
     revealFocus: true,
   });
 }
@@ -2792,6 +2798,7 @@ function removeTaskBusinessRule(procId, taskId, ruleId) {
   const { task, rules } = getTaskBusinessRule(procId, taskId, ruleId);
   if (!task) return;
   task.businessRules = rules.filter((rule) => rule.id !== ruleId);
+  if (S.ui.businessRuleEditKey === getTaskBusinessRuleEditKey(procId, taskId, ruleId)) S.ui.businessRuleEditKey = '';
   syncTaskBusinessRulesNote(task);
   markModified();
   rerenderProcessEditor({ anchorSelector: '[data-testid="task-business-rules-section"]' });
@@ -2817,6 +2824,33 @@ function setTaskBusinessRule(procId, taskId, ruleId, key, value) {
   rule[key] = value;
   syncTaskBusinessRulesNote(task);
   markModified();
+}
+
+function startTaskBusinessRuleContentEdit(procId, taskId, ruleId) {
+  S.ui.businessRuleEditKey = getTaskBusinessRuleEditKey(procId, taskId, ruleId);
+  rerenderProcessEditor({
+    focusSelector: `.task-rule-card[data-rule-id="${ruleId}"] [data-testid="task-rule-rich-text-editor"]`,
+    revealFocus: true,
+  });
+}
+
+function saveTaskBusinessRuleContent(procId, taskId, ruleId, value) {
+  const { task, rule } = getTaskBusinessRule(procId, taskId, ruleId);
+  if (!task || !rule) return;
+  rule.content = value;
+  if (S.ui.businessRuleEditKey === getTaskBusinessRuleEditKey(procId, taskId, ruleId)) S.ui.businessRuleEditKey = '';
+  syncTaskBusinessRulesNote(task);
+  markModified();
+  rerenderProcessEditor({
+    anchorSelector: `.task-rule-card[data-rule-id="${ruleId}"]`,
+  });
+}
+
+function cancelTaskBusinessRuleContentEdit(procId, taskId, ruleId) {
+  if (S.ui.businessRuleEditKey === getTaskBusinessRuleEditKey(procId, taskId, ruleId)) S.ui.businessRuleEditKey = '';
+  rerenderProcessEditor({
+    anchorSelector: `.task-rule-card[data-rule-id="${ruleId}"]`,
+  });
 }
 
 function rerenderProcessEditor(options = {}) {
@@ -6387,6 +6421,9 @@ function renderTaskFormsSection(proc, task) {
 }
 
 function renderTaskBusinessRuleCard(proc, task, rule, index, total) {
+  const editKey = getTaskBusinessRuleEditKey(proc.id, task.id, rule.id);
+  const isEditingContent = S.ui.businessRuleEditKey === editKey;
+  const hasContent = String(rule.content || '').trim();
   return `<div class="task-rule-card" data-rule-id="${esc(rule.id)}">
     <div class="task-rule-head">
       <span class="task-form-index">${index + 1}</span>
@@ -6402,13 +6439,27 @@ function renderTaskBusinessRuleCard(proc, task, rule, index, total) {
           onclick="removeTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}')">删除</button>
       </div>
     </div>
-    ${renderRichTextEditor({
-      value: rule.content || '',
-      testIdPrefix: 'task-rule-rich-text',
-      className: 'task-rule-content',
-      placeholder: '规则内容可多行记录，适合沉淀输入、输出、前置条件、后置条件、交互规则等',
-      oninput: `setTaskBusinessRule('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}','content',this.closest('.rich-text-field').querySelector('.rich-text-storage').value)`,
-    })}
+    ${isEditingContent ? `
+      ${renderRichTextEditor({
+        value: rule.content || '',
+        testIdPrefix: 'task-rule-rich-text',
+        className: 'task-rule-content',
+        placeholder: '规则内容可多行记录，适合沉淀输入、输出、前置条件、后置条件、交互规则等',
+      })}
+      <div class="task-rule-content-actions">
+        <span class="task-rule-draft-hint">编辑后点击保存才会同步到模型和预览。</span>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="task-rule-content-save"
+          onclick="saveTaskBusinessRuleContent('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}',this.closest('.task-rule-card').querySelector('.rich-text-storage').value)">保存</button>
+        <button class="btn btn-ghost-sm" type="button" data-testid="task-rule-content-cancel"
+          onclick="cancelTaskBusinessRuleContentEdit('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}')">取消</button>
+      </div>
+    ` : `
+      <div class="task-rule-content-preview" data-testid="task-rule-content-preview">
+        ${hasContent ? `<div class="rich-text-rendered">${renderRichTextValue(rule.content || '')}</div>` : '<span class="task-rule-empty-content">暂无规则内容</span>'}
+        <button class="btn btn-outline btn-sm" type="button" data-testid="task-rule-content-edit"
+          onclick="startTaskBusinessRuleContentEdit('${esc(proc.id)}','${esc(task.id)}','${esc(rule.id)}')">编辑内容</button>
+      </div>
+    `}
   </div>`;
 }
 

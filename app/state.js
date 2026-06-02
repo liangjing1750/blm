@@ -153,6 +153,7 @@ const S = {
     procEditorFocusSelector: '',
     stepNoteEditKey: '',
     orchestrationNoteEditKey: '',
+    businessRuleEditKey: '',
     procDrawerW: 480,
     stageGraphZoom: 1,
     stageEditorCollapsed: true,

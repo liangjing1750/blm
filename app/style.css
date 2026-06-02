@@ -3283,6 +3283,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   border-color: #93c5fd;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
 }
+.task-rule-content-preview {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.task-rule-content-preview .btn {
+  justify-self: start;
+}
+.task-rule-empty-content {
+  color: var(--text-m);
+  font-size: 12px;
+}
+.task-rule-content-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 28px;
+}
+.task-rule-draft-hint {
+  flex: 1;
+  min-width: 160px;
+  color: #64748b;
+  font-size: 12px;
+}
 .rich-text-field {
   position: relative;
   width: 100%;

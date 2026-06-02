@@ -226,6 +226,7 @@ function connectCollabSession(docName) {
   S.collab.syncing = false;
   S.collab.snapshotRevision = 0;
   S.collab.inFlightRevision = 0;
+  S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
   renderCollabStatus();
 
   socket.addEventListener('open', () => {
@@ -295,6 +296,9 @@ function disconnectCollabSession(options = {}) {
   S.collab.pingTimer = null;
   S.collab.snapshotRevision = 0;
   S.collab.inFlightRevision = 0;
+  S.collab.pendingRemoteSnapshot = null;
+  S.collab.hasConflict = false;
+  S.collab.lastAcceptedDocument = null;
   S.collab.recovering = false;
   S.collab.everConnected = false;
   renderCollabStatus();
@@ -339,6 +343,96 @@ function waitForCollabReady(timeoutMs = 3000) {
   });
 }
 
+function cloneCollabDocument(value) {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value || null));
+}
+
+function getCollabItemKey(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return '';
+  return String(item.uid || item.id || '').trim();
+}
+
+function mergeLocalArrayChanges(remoteValue, baseValue, localValue) {
+  if (!Array.isArray(localValue) || !Array.isArray(baseValue) || !Array.isArray(remoteValue)) return cloneCollabDocument(localValue);
+  const localKeys = localValue.map(getCollabItemKey);
+  const baseKeys = baseValue.map(getCollabItemKey);
+  const remoteKeys = remoteValue.map(getCollabItemKey);
+  const canMergeByKey = localKeys.every(Boolean) && baseKeys.every(Boolean) && remoteKeys.every(Boolean);
+  if (!canMergeByKey) {
+    return JSON.stringify(localValue) === JSON.stringify(baseValue) ? cloneCollabDocument(remoteValue) : cloneCollabDocument(localValue);
+  }
+  const next = remoteValue.map((item) => cloneCollabDocument(item));
+  const baseMap = new Map(baseValue.map((item) => [getCollabItemKey(item), item]));
+  const localMap = new Map(localValue.map((item) => [getCollabItemKey(item), item]));
+  const remoteIndexMap = new Map(next.map((item, index) => [getCollabItemKey(item), index]));
+
+  for (const key of baseKeys) {
+    if (localMap.has(key)) continue;
+    const remoteIndex = remoteIndexMap.get(key);
+    if (remoteIndex !== undefined) {
+      next.splice(remoteIndex, 1);
+      remoteIndexMap.clear();
+      next.forEach((item, index) => remoteIndexMap.set(getCollabItemKey(item), index));
+    }
+  }
+
+  for (const localItem of localValue) {
+    const key = getCollabItemKey(localItem);
+    const baseItem = baseMap.get(key);
+    const remoteIndex = remoteIndexMap.get(key);
+    if (!baseItem) {
+      if (remoteIndex === undefined) next.push(cloneCollabDocument(localItem));
+      continue;
+    }
+    if (remoteIndex !== undefined) {
+      next[remoteIndex] = mergeLocalDocumentChanges(next[remoteIndex], baseItem, localItem);
+    }
+  }
+  return next;
+}
+
+function mergeLocalDocumentChanges(remoteValue, baseValue, localValue) {
+  if (JSON.stringify(localValue) === JSON.stringify(baseValue)) return cloneCollabDocument(remoteValue);
+  if (Array.isArray(localValue) || Array.isArray(baseValue) || Array.isArray(remoteValue)) {
+    return mergeLocalArrayChanges(remoteValue, baseValue, localValue);
+  }
+  if (!localValue || typeof localValue !== 'object' || !baseValue || typeof baseValue !== 'object' || !remoteValue || typeof remoteValue !== 'object') {
+    return cloneCollabDocument(localValue);
+  }
+  const next = cloneCollabDocument(remoteValue);
+  const keys = new Set([...Object.keys(localValue), ...Object.keys(baseValue)]);
+  keys.forEach((key) => {
+    if (!(key in localValue)) {
+      delete next[key];
+      return;
+    }
+    next[key] = mergeLocalDocumentChanges(next[key], baseValue[key], localValue[key]);
+  });
+  return next;
+}
+
+function hasPendingRemoteCollabSnapshot() {
+  return Boolean(S.collab?.pendingRemoteSnapshot || S.collab?.hasConflict);
+}
+
+function preserveLocalSnapshotForImmediateSync() {
+  if (!hasPendingRemoteCollabSnapshot()) return false;
+  const remote = S.collab.pendingRemoteSnapshot;
+  const base = S.collab.lastAcceptedDocument || S.baseDocument;
+  if (remote && base && S.doc) {
+    S.doc = mergeLocalDocumentChanges(remote, base, S.doc);
+    hydrateDocumentForUi(S.doc);
+    S.collab.pendingMergedRender = true;
+  }
+  S.collab.pendingRemoteSnapshot = null;
+  S.collab.hasConflict = false;
+  S.collab.pendingSnapshot = true;
+  renderCollabConflictBanner();
+  if (typeof renderToolbar === 'function') renderToolbar();
+  return true;
+}
+
 async function syncCollabImmediatelyFromCommand() {
   if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return false;
   if (typeof flushCollabSnapshotSync !== 'function') return false;
@@ -347,7 +441,8 @@ async function syncCollabImmediatelyFromCommand() {
     showAppToast('协作连接尚未就绪，请稍后再试。');
     return true;
   }
-  if (!S.modified && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
+  const resolvedRemoteConflict = preserveLocalSnapshotForImmediateSync();
+  if (!S.modified && !resolvedRemoteConflict && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
     showAppToast('当前内容已同步。');
     return true;
   }
@@ -437,6 +532,13 @@ function handleCollabMessage(raw) {
         }
         S.collab.pendingSnapshot = false;
         S.modified = false;
+        S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
+        if (S.collab.pendingMergedRender && !hasActiveLocalEditingContext()) {
+          S.collab.pendingMergedRender = false;
+          render();
+        } else {
+          S.collab.pendingMergedRender = false;
+        }
         if (typeof renderToolbar === 'function') renderToolbar();
       }
       S.collab.lastSyncedAt = new Date().toISOString();
@@ -515,6 +617,7 @@ function sendCollabChanges(changes) {
 function applyRemoteCollabSnapshot(document) {
   if (!document || typeof document !== 'object') return;
   S.doc = document;
+  S.collab.lastAcceptedDocument = cloneCollabDocument(document);
   S.collab.pendingRemoteSnapshot = null;
   S.collab.hasConflict = false;
   hydrateDocumentForUi(S.doc);
@@ -559,10 +662,7 @@ function applyPendingRemoteCollabSnapshot() {
 }
 
 function keepLocalCollabSnapshot() {
-  S.collab.pendingRemoteSnapshot = null;
-  S.collab.hasConflict = false;
-  S.collab.pendingSnapshot = true;
-  renderCollabConflictBanner();
+  preserveLocalSnapshotForImmediateSync();
   flushCollabSnapshotSync();
 }
 

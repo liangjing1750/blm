@@ -65,6 +65,36 @@ function buildPreviewRichTextDoc(name) {
   return doc;
 }
 
+async function focusFirstProcessNode(page) {
+  const task = page.locator('#proc-context-diagram .pf-task, #proc-diagram .pf-task, #proc-context-diagram .ps-task, #proc-diagram .ps-task').first();
+  if (await task.isVisible().catch(() => false)) {
+    await task.click();
+  }
+}
+
+async function showFirstBusinessRuleEditor(page) {
+  if (await page.getByTestId('process-switch-card').isVisible().catch(() => false)) {
+    await page.getByTestId('process-switch-card').click();
+  }
+  if (await page.getByTestId('process-editor-open').isVisible().catch(() => false)) {
+    await page.getByTestId('process-editor-open').click();
+  }
+  const contentEditVisible = await page.getByTestId('task-rule-content-edit').first().isVisible().catch(() => false);
+  const contentEditorVisible = await page.getByTestId('task-rule-rich-text-editor').first().isVisible().catch(() => false);
+  if (!contentEditVisible && !contentEditorVisible) {
+    await focusFirstProcessNode(page);
+  }
+  if (await page.getByTestId('node-perspective-engineering').isVisible().catch(() => false)) {
+    await page.getByTestId('node-perspective-engineering').click();
+  }
+  if (await page.getByTestId('task-rule-content-edit').first().isVisible().catch(() => false)) {
+    await page.getByTestId('task-rule-content-edit').first().click();
+  }
+  const editor = page.getByTestId('task-rule-rich-text-editor').first();
+  await expect(editor).toBeVisible();
+  return editor;
+}
+
 test('rich text toolbar formats step notes and business rules', async ({ page, request }) => {
   const documentName = `rich-text-${Date.now()}`;
   await createDocument(request, documentName, buildRichTextDoc(documentName));
@@ -92,12 +122,14 @@ test('rich text toolbar formats step notes and business rules', async ({ page, r
   await firstStep.getByTestId('step-note-save').click();
   await expect(firstStep.getByTestId('step-note-preview').locator('ul li').first()).toContainText('line one');
 
-  const ruleEditor = page.getByTestId('task-rule-rich-text-editor').first();
+  const ruleEditor = await showFirstBusinessRuleEditor(page);
   await ruleEditor.fill('first\nsecond');
   await ruleEditor.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
   await page.getByTestId('task-rule-rich-text-ordered').first().click();
   await expect(ruleEditor.locator('ol li')).toHaveCount(2);
   await expect(ruleEditor.locator('ol li').nth(1)).toContainText('second');
+  await page.getByTestId('task-rule-content-save').first().click();
+  await expect(page.getByTestId('task-rule-content-preview').first().locator('ol li')).toHaveCount(2);
 });
 
 test('rich text paste converts legacy numbered text into nested visual lists', async ({ page, request }) => {
@@ -206,4 +238,47 @@ test('preview renders saved rich text consistently with editor display', async (
   expect(markerColor).toBe('rgb(37, 99, 235)');
   const nestedListType = await richBlocks.nth(0).locator(':scope > ol > li > ol').evaluate((el) => getComputedStyle(el).listStyleType);
   expect(nestedListType).toBe('lower-alpha');
+});
+
+test('business rule rich text is a draft until explicitly saved', async ({ page, request }) => {
+  const documentName = `rich-text-rule-draft-${Date.now()}`;
+  await createDocument(request, documentName, buildRichTextDoc(documentName));
+
+  await page.goto('/');
+  await openDocument(page, documentName);
+  await page.getByTestId('tab-process').click();
+  await page.getByTestId('process-switch-card').click();
+  await page.getByTestId('process-editor-open').click();
+  await page.locator('#proc-context-diagram .pf-task, #proc-diagram .pf-task, #proc-context-diagram .ps-task, #proc-diagram .ps-task').first().click();
+
+  const draftHtml = '<ol><li value="1"><strong>draft rule line</strong><ol><li value="1">draft sub rule</li></ol></li></ol>';
+  const ruleEditor = await showFirstBusinessRuleEditor(page);
+  await ruleEditor.evaluate((node, html) => {
+    node.innerHTML = html;
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+  }, draftHtml);
+
+  await page.getByTestId('tab-preview').click();
+  await expect(page.locator('#preview-rendered')).not.toContainText('draft rule line');
+  await expect(page.locator('#preview-rendered')).not.toContainText('draft sub rule');
+
+  await page.getByTestId('tab-process').click();
+  if (await page.getByTestId('process-switch-card').isVisible().catch(() => false)) {
+    await page.getByTestId('process-switch-card').click();
+  }
+  if (await page.getByTestId('process-editor-open').isVisible().catch(() => false)) {
+    await page.getByTestId('process-editor-open').click();
+  }
+  await page.locator('#proc-context-diagram .pf-task, #proc-diagram .pf-task, #proc-context-diagram .ps-task, #proc-diagram .ps-task').first().click();
+  const savedRuleEditor = await showFirstBusinessRuleEditor(page);
+  await savedRuleEditor.evaluate((node, html) => {
+    node.innerHTML = html;
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+  }, draftHtml);
+  await page.getByTestId('task-rule-content-save').first().click();
+
+  await page.getByTestId('tab-preview').click();
+  const renderedRule = page.locator('#preview-rendered .pv-rule-table .pv-rich-text').first();
+  await expect(renderedRule.locator('strong')).toContainText('draft rule line');
+  await expect(renderedRule.locator(':scope > ol > li > ol > li')).toContainText('draft sub rule');
 });

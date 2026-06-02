@@ -554,6 +554,7 @@ function getPreservedDocUiState(doc, sourceUi = {}) {
   next.procEditorFocusSelector = String(next.procEditorFocusSelector || '');
   next.stepNoteEditKey = String(next.stepNoteEditKey || '');
   next.orchestrationNoteEditKey = String(next.orchestrationNoteEditKey || '');
+  next.businessRuleEditKey = String(next.businessRuleEditKey || '');
   next.stageNameEditId = '';
 
   const processes = Array.isArray(doc?.processes) ? doc.processes : [];
@@ -3659,6 +3660,7 @@ function createDocUiState(doc) {
     procEditorFocusSelector: '',
     stepNoteEditKey: '',
     orchestrationNoteEditKey: '',
+    businessRuleEditKey: '',
     procDrawerW: getUiPrefNumber('procDrawerW', 480),
     stageGraphZoom: 1,
     stageEditorCollapsed: true,

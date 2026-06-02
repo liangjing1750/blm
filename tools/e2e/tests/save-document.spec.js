@@ -212,6 +212,45 @@ test('Ctrl+S does not fall back to the legacy save prompt while collaboration re
   await expect(page.getByTestId('collab-reconnect-overlay')).toBeHidden({ timeout: 10000 });
 });
 
+test('collaboration conflict banner only exposes immediate sync', async ({ page }) => {
+  const documentName = `collab-conflict-sync-${Date.now()}`;
+
+  await page.goto('/');
+  await page.getByTestId('toolbar-new-button').click();
+  await page.getByTestId('new-doc-name-input').fill(documentName);
+  await page.getByTestId('new-doc-confirm-button').click();
+
+  await page.getByTestId('domain-author-input').fill('本地编辑者');
+  await page.evaluate(() => {
+    const remote = JSON.parse(JSON.stringify(S.doc));
+    remote.meta = { ...(remote.meta || {}), author: '远端编辑者' };
+    S.collab.pendingRemoteSnapshot = remote;
+    S.collab.hasConflict = true;
+    renderCollabConflictBanner();
+  });
+
+  const banner = page.getByTestId('collab-conflict-alert');
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText('检测到其他人更新');
+  await expect(banner).toContainText('点击“立即同步”');
+  await expect(banner.getByRole('button')).toHaveCount(1);
+  await expect(banner.getByRole('button', { name: '立即同步' })).toBeVisible();
+  await expect(banner).not.toContainText('应用远程');
+  await expect(banner).not.toContainText('保留本地');
+  await expect(banner).not.toContainText('稍后处理');
+
+  await banner.getByRole('button', { name: '立即同步' }).click();
+  await expect
+    .poll(() => page.evaluate(() => ({
+      hasConflict: Boolean(S.collab.hasConflict),
+      pendingRemote: Boolean(S.collab.pendingRemoteSnapshot),
+    })), {
+      message: 'wait for immediate sync to clear the pending remote state',
+      timeout: 10000,
+    })
+    .toEqual({ hasConflict: false, pendingRemote: false });
+});
+
 test('opening another document first syncs current collaboration edits without an unsaved prompt', async ({ page, request }) => {
   const firstName = `open-after-sync-source-${Date.now()}`;
   const secondName = `open-after-sync-target-${Date.now()}`;
