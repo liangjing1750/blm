@@ -6147,14 +6147,14 @@ function renderUserStepsSection(proc, task) {
       <div class="step-row" data-step-index="${i}">
         <div class="step-row-top">
           <span class="step-num">${i + 1}</span>
-          <textarea class="step-name" rows="2" placeholder="步骤描述"
-            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value);this.style.height='auto';this.style.height=this.scrollHeight+'px'"
-            >${esc(s.name || '')}</textarea>
           <select class="step-type" onchange="onStepTypeChange(this,'${esc(proc.id)}','${esc(task.id)}',${i})">
             ${STEP_TYPES.map((t) => `<option value="${t.value}" ${(t.value === '__other__' ? isCustomStepType(s.type) : s.type === t.value) ? 'selected' : ''}>${t.label}</option>`).join('')}
           </select>
           ${isCustomStepType(s.type) ? `<input class="step-type-custom" type="text" value="${esc(s.type)}" placeholder="自定义类型"
             oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'type',this.value)">` : ''}
+          <textarea class="step-name" rows="2" placeholder="步骤描述"
+            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value);this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+            >${esc(s.name || '')}</textarea>
           <div class="step-actions">
             <button class="step-action step-add-after" type="button" title="在下方插入步骤" onclick="addStep('${esc(proc.id)}','${esc(task.id)}',${i})">+</button>
             <button class="step-action step-move-up" type="button" title="上移" ${i === 0 ? 'disabled' : ''} onclick="moveStep('${esc(proc.id)}','${esc(task.id)}',${i},-1)">↑</button>

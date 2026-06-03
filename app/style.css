@@ -3993,7 +3993,7 @@ select { appearance: auto; }
   flex-wrap: wrap;
 }
 .step-num  { font-size: 11px; color: var(--text-m); min-width: 18px; font-weight: 600; flex-shrink: 0; }
-input.step-name { flex: 1 1 260px; min-width: 0; }
+.step-name { flex: 1 1 260px; min-width: 0; }
 .step-type { width: 72px; flex-shrink: 0; }
 input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 .step-actions {

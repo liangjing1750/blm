@@ -730,6 +730,14 @@ function getTaskDefinitionParameterSummary(task) {
   };
 }
 
+function contractSummary(draft) {
+  const params = cloneTaskDefinitionParameters(draft?.parameters || { inputs: [], outputs: [] });
+  const address = String(draft?.address || draft?.target || '');
+  return address
+    ? `地址：${address} · 入参 ${params.inputs.length} · 出参 ${params.outputs.length}`
+    : `入参 ${params.inputs.length} · 出参 ${params.outputs.length}`;
+}
+
 function syncProcessTaskDefinitionFields(taskDefinition) {
   if (!taskDefinition?.id) return;
   (S.doc?.processes || []).forEach((proc) => {
@@ -826,6 +834,7 @@ function saveTaskDefinitionDraft() {
   if (!String(draft.constructId || '').trim()) return alert('请先选择所属业务构件。');
   const task = addTaskDefinition('', draft.businessComponentId || dialog.capabilityId || '', draft.constructId || dialog.constructId || '', { skipRender: true });
   if (!task) return;
+  draft._savedId = task.id;
   task.name = name;
   task.type = draft.type || 'Service';
   task.querySourceKind = task.type === 'Query' ? (draft.querySourceKind || 'Dictionary') : '';
@@ -1949,6 +1958,17 @@ function renderTaskDefinitionDraftDialog(draft = {}) {
           <textarea class="auto-resize" data-testid="task-definition-note-input" rows="3"
             oninput="setBusinessModelDraft('note',this.value);autoResize(this)">${esc(draft.note || '')}</textarea>
         </div>
+        ${draft._savedId ? `<div class="field-group field-group-wide task-definition-param-summary">
+          <label>任务调用契约</label>
+          <div class="task-definition-param-bar">
+            <span>${esc(contractSummary(draft))}</span>
+            <button class="btn btn-outline btn-sm" type="button"
+              onclick="openTaskParameterDialog('${esc(jsString(draft._savedId))}')">查看/编辑参数</button>
+          </div>
+        </div>` : `<div class="field-group field-group-wide">
+          <label>任务调用契约</label>
+          <p class="field-hint">保存后即可配置任务调用契约（入参/出参/地址等）。</p>
+        </div>`}
       </div>
     </div>
   </div>`;
