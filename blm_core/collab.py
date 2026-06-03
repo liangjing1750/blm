@@ -66,10 +66,9 @@ class CollabSession:
 
 
 class CollaborationManager:
-    def __init__(self, storage: WorkspaceStorage, *, autosave_interval: float = 3.0, async_persist: bool = True):
+    def __init__(self, storage: WorkspaceStorage, *, autosave_interval: float = 3.0):
         self.storage = storage
         self.autosave_interval = max(0.0, float(autosave_interval))
-        self.async_persist = bool(async_persist)
         self._sessions: dict[str, CollabSession] = {}
         self._lock = threading.RLock()
 
@@ -425,18 +424,11 @@ class CollaborationManager:
             self._write_sync_log(session, submit_id, base_seq, stats)
 
             if document_changed:
-                doc_copy = deepcopy(session.document)
-                doc_name = session.doc_name
-                if self.async_persist:
-                    threading.Thread(
-                        target=self._background_persist,
-                        args=(doc_name, doc_copy),
-                        daemon=True,
-                    ).start()
-                else:
-                    self._background_persist(doc_name, doc_copy)
-                    # 同步模式：对齐 session.document 到 canonical 输出
-                    session.document = self.storage.load(doc_name)
+                saved = self.storage.save_collaboration_working_copy(session.doc_name, session.document)
+                session.document = saved
+                self.storage._snapshot_document(
+                    session.doc_name, save_message="协作同步", snapshot_document=saved, kind="collab"
+                )
 
             log_event(
                 "blm.collab", "collab.snapshot",
@@ -461,15 +453,6 @@ class CollaborationManager:
             }
             return record
 
-    def _background_persist(self, doc_name: str, document: dict) -> None:
-        """后台线程：写manifest+snapshot，合并为一次canonical_document"""
-        try:
-            saved = self.storage.save_collaboration_working_copy(doc_name, document)
-            self.storage._snapshot_document(
-                doc_name, save_message="协作同步", snapshot_document=saved, kind="collab"
-            )
-        except OSError:
-            log_error("blm.collab", "collab.background_persist.error", doc=doc_name)
 
     def _save_submit_record(
         self, session: CollabSession, client: CollabClient, document: dict, base_seq: int

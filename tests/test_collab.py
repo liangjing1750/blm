@@ -102,7 +102,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
         return sock
 
     def _start_server(self, storage: WorkspaceStorage):
-        collab = CollaborationManager(storage, async_persist=False)
+        collab = CollaborationManager(storage)
         handler = create_handler(Path.cwd() / "app", storage, collab)
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -254,7 +254,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
     def test_session_users_drops_stale_connections(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
-            manager = CollaborationManager(storage, async_persist=False)
+            manager = CollaborationManager(storage)
             fresh = CollabClient("client-fresh", "张三", handler=None, user_id="u-zhangsan", user_name="张三")
             stale = CollabClient("client-stale", "旧用户", handler=None, user_id="u-old", user_name="旧用户")
             stale.last_seen = (datetime.now(timezone.utc) - timedelta(seconds=120)).timestamp()
@@ -361,7 +361,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False)
+            manager = CollaborationManager(storage)
             manager._append_changelog(
                 "CollabSmoke",
                 {
@@ -384,7 +384,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             document = create_empty_document("CollabSmoke")
             document["meta"]["author"] = "Manifest Author"
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False)
+            manager = CollaborationManager(storage)
             stale_snapshot = create_empty_document("CollabSmoke")
             stale_snapshot["meta"]["author"] = "Stale Snapshot"
             manager._append_changelog(
@@ -414,7 +414,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             storage = WorkspaceStorage(root / "workspace")
             document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
             session = CollabSession("CollabSmoke", storage.load("CollabSmoke"))
             manager._sessions["CollabSmoke"] = session
             client = CollabClient("client-test", "Tester", handler=None)
@@ -435,7 +435,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=3600)
+            manager = CollaborationManager(storage, autosave_interval=3600)
             session = CollabSession("CollabSmoke", storage.load("CollabSmoke"))
             manager._sessions["CollabSmoke"] = session
             client = CollabClient("client-test", "Tester", handler=None)
@@ -455,7 +455,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             document = create_empty_document("CollabSmoke")
             document["meta"]["author"] = "Poll Author"
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
             session = CollabSession("CollabSmoke", document, seq=3, snapshots={3: document})
             manager._sessions["CollabSmoke"] = session
 
@@ -472,7 +472,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             base_document["meta"]["author"] = "Base"
             base_document["meta"]["date"] = "2026-06-03"
             storage.save("CollabSmoke", base_document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
             server_document = create_empty_document("CollabSmoke")
             server_document["meta"]["author"] = "Server Author"
             server_document["meta"]["date"] = "2026-06-03"
@@ -496,7 +496,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             server_document = create_empty_document("CollabSmoke")
             server_document["meta"]["author"] = "Server Author"
             storage.save("CollabSmoke", server_document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
             session = CollabSession("CollabSmoke", server_document, seq=50, snapshots={50: server_document})
             manager._sessions["CollabSmoke"] = session
             client = CollabClient("client-test", "Tester", handler=None)
@@ -517,7 +517,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             base_document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", base_document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             def submit_role(index: int) -> dict:
                 local_document = create_empty_document("CollabSmoke")
@@ -552,7 +552,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             base_document = create_empty_document("CollabSmoke")
             base_document["meta"]["author"] = "Base"
             storage.save("CollabSmoke", base_document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             def submit_author(index: int) -> dict:
                 local_document = create_empty_document("CollabSmoke")
@@ -594,7 +594,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False)
+            manager = CollaborationManager(storage)
             for seq in range(1, 105):
                 record = {
                     "seq": seq,
@@ -622,7 +622,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             document = create_empty_document("CollabSmoke")
             document["meta"]["note"] = "x" * (2 * 1024 * 1024 + 1)
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False)
+            manager = CollaborationManager(storage)
             record = {
                 "seq": 1,
                 "doc": "CollabSmoke",
@@ -651,7 +651,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             document = create_empty_document("CollabSmoke")
             document["meta"]["author"] = "初始"
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             manager.apply_http_snapshot(
                 "CollabSmoke",
@@ -674,7 +674,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
                 {"uid": "role-2", "name": "角色B", "desc": "", "group": "业务参与方", "subDomains": []},
             ]
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             def submit_role_name(index):
                 local = create_empty_document("CollabSmoke")
@@ -730,7 +730,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             document = create_empty_document("CollabSmoke")
             document["meta"]["author"] = "原始"
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             def submit_author(value):
                 local = create_empty_document("CollabSmoke")
@@ -767,7 +767,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             document["meta"]["author"] = "V1"
             document["roles"] = [{"uid": "r1", "name": "角色1", "desc": "", "group": "业务参与方", "subDomains": []}]
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             # 先做10次提交推进seq
             for i in range(10):
@@ -813,7 +813,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             def submit_full(index):
                 local = create_empty_document("CollabSmoke")
@@ -894,7 +894,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
                                 "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
                                 "processLinks": []}]
             storage.save("CollabSmoke", base)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             def modify_roles(index):
                 local = create_empty_document("CollabSmoke")
@@ -993,7 +993,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             document = create_empty_document("CollabSmoke")
             document["meta"]["author"] = "初始"
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             # 第一次提交：修改了内容
             from copy import deepcopy
@@ -1026,7 +1026,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             for i in range(3):
                 local = create_empty_document("CollabSmoke")
@@ -1048,7 +1048,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             document = create_empty_document("CollabSmoke")
             storage.save("CollabSmoke", document)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             seen_seqs = []
             lock = threading.Lock()
@@ -1107,7 +1107,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
                                 "processLinks": []}]
             base["rules"] = [{"uid": "br-1", "name": "规则1", "content": "旧规则"}]
             storage.save("CollabSmoke", base)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             def change_everything(index):
                 local = create_empty_document("CollabSmoke")
@@ -1200,7 +1200,7 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             base = self._base_doc()
             storage.save("TestDoc", base)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             # 先提交一次推进seq
             first = create_empty_document("TestDoc")
@@ -1233,7 +1233,7 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
             base["meta"]["space"] = "交割业务"
             base["meta"]["tags"] = ["仓单", "入库"]
             storage.save("TestDoc", base)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             user_doc = create_empty_document("TestDoc")
             user_doc["meta"]["author"] = "新作者"
@@ -1257,7 +1257,7 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
             base = self._base_doc()
             base["meta"]["revision"] = 8
             storage.save("TestDoc", base)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             user_doc = create_empty_document("TestDoc")
             user_doc["meta"]["author"] = "新作者"
@@ -1323,7 +1323,7 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
             base["stageLinks"] = [{"uid": "sl-1", "fromStageUid": "s-1", "toStageUid": "s-1"}]
             base["stageFlowRefs"] = [{"uid": "sfr-1", "stageUid": "s-1", "processUid": "p-1", "order": 1, "pos": {"x": 0, "y": 0}}]
             storage.save("TestDoc", base)
-            manager = CollaborationManager(storage, async_persist=False, autosave_interval=0)
+            manager = CollaborationManager(storage, autosave_interval=0)
 
             # 并发修改：3个用户各自修改不同维度
             def modify_meta(index):
