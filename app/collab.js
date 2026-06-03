@@ -915,15 +915,15 @@ async function flushCollabSnapshotHttp() {
     }
     S.collab.seq = Number(result.seq || S.collab.seq || 0);
     S.collab.acceptedSeq = S.collab.seq;
+    // 检测同步期间用户是否有新编辑
+    const postSyncHash = hashCollabDocument(S.doc);
+    const hadNewEditsDuringSync = frozenHash !== postSyncHash;
     if (result.document && typeof result.document === 'object') {
       S.doc = result.document;
       hydrateDocumentForUi(S.doc);
     }
-    // 检测同步期间是否有新修改
-    const currentHash = hashCollabDocument(S.doc);
-    const hadNewEdits = frozenHash !== currentHash;
-    S.modified = hadNewEdits;
-    S.collab.pendingSnapshot = hadNewEdits;
+    S.modified = hadNewEditsDuringSync;
+    S.collab.pendingSnapshot = hadNewEditsDuringSync;
     S.collab.lastSyncedAt = new Date().toISOString();
     S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
     S.collab.lastSyncedDocumentHash = hashCollabDocument(S.doc);
