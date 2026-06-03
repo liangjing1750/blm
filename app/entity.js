@@ -2837,7 +2837,7 @@ function renderStateEditorPanel(entity, statusFields, stateField, stateValueText
       <div class="entity-state-editor-actions">
         <button class="btn btn-outline btn-sm" type="button" data-testid="entity-transition-route-reset-all"
           onclick="resetAllStateTransitionRoutes('${esc(entity.id)}','${esc(stateField?.name || '')}')" ${stateField ? '' : 'disabled'}>重置所有连线</button>
-        <button class="btn btn-outline btn-sm" data-testid="entity-transition-add-button" onclick="addStateTransition('${esc(entity.id)}')" ${stateField ? '' : 'disabled'}>＋ 添加流转</button>
+        <button class="btn btn-outline btn-sm" data-testid="entity-transition-add-button" onclick="addStateTransition('${esc(entity.id)}')" ${stateField ? '' : 'disabled'} title="${stateField ? '' : '请先在左侧选择一个主状态字段'}">＋ 添加流转</button>
       </div>
     </div>
     <div class="entity-state-config-row">

@@ -4940,7 +4940,7 @@ function renderStageFlowNodeGroupEditor(node, pos) {
       onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
       <span>分组</span>
       <input data-testid="stage-flow-node-group-input" data-process-id="${esc(processId)}"
-        aria-label="流程分组" type="text" value="${esc(node.group || '')}" placeholder="未分组"
+        aria-label="流程分组" type="text" value="${esc(node.group || '')}" placeholder="未分组" size="20"
         onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
         oninput="setFlowGroupForProcesses('${esc(processId)}',this.value)"
         onblur="rerenderStageWorkbench()"
@@ -6147,8 +6147,9 @@ function renderUserStepsSection(proc, task) {
       <div class="step-row" data-step-index="${i}">
         <div class="step-row-top">
           <span class="step-num">${i + 1}</span>
-          <input class="step-name" type="text" value="${esc(s.name || '')}" placeholder="步骤描述"
-            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value)">
+          <textarea class="step-name" rows="2" placeholder="步骤描述"
+            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value);this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+            >${esc(s.name || '')}</textarea>
           <select class="step-type" onchange="onStepTypeChange(this,'${esc(proc.id)}','${esc(task.id)}',${i})">
             ${STEP_TYPES.map((t) => `<option value="${t.value}" ${(t.value === '__other__' ? isCustomStepType(s.type) : s.type === t.value) ? 'selected' : ''}>${t.label}</option>`).join('')}
           </select>
