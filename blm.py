@@ -12,6 +12,7 @@ from blm_core.server import run_server
 
 
 PORT = 8081
+ADMIN_PORT = 8091
 ROOT = Path(__file__).parent
 
 
@@ -46,13 +47,14 @@ def build_runtime_config() -> RuntimeConfig:
         port = int(port_text)
     except ValueError as exc:
         raise ValueError("BLM_PORT 必须是整数") from exc
-    admin_port_text = (os.getenv("BLM_ADMIN_PORT") or "").strip()
+    admin_port_text = (os.getenv("BLM_ADMIN_PORT") or str(ADMIN_PORT)).strip()
     admin_port = None
     if admin_port_text:
         try:
-            admin_port = int(admin_port_text)
+            parsed_admin_port = int(admin_port_text)
         except ValueError as exc:
             raise ValueError("BLM_ADMIN_PORT 必须是整数") from exc
+        admin_port = parsed_admin_port if parsed_admin_port > 0 else None
 
     app_dir = _resolve_path(ROOT, os.getenv("BLM_APP_DIR"), ROOT / "app")
     workspace_dir = _resolve_path(ROOT, os.getenv("BLM_WORKSPACE_DIR"), ROOT / "workspace")

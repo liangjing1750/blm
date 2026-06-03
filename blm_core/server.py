@@ -40,6 +40,12 @@ DOCS_MANIFEST = [
         "filename": "业务建模思考.md",
         "summary": "理解业务组件、业务阶段、业务流程和分类标签之间的关系。",
     },
+    {
+        "id": "collaboration-troubleshooting",
+        "title": "协作与弱网排障指南",
+        "filename": "BLM协作与弱网排障指南.md",
+        "summary": "查看实时协作、HTTP 降级、日志格式、管理端和跨网段断线排查步骤。",
+    },
 ]
 DOCS_INDEX = {item["id"]: item for item in DOCS_MANIFEST}
 API_VERSION = 2
@@ -757,17 +763,22 @@ def run_server(
     server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
     admin_server = None
     if admin_port:
-        admin_handler = create_admin_handler(
-            storage,
-            collab,
-            workspace_dir=workspace_dir,
-            app_port=port,
-            started_at=started_at,
-        )
-        admin_server = http.server.ThreadingHTTPServer(("0.0.0.0", admin_port), admin_handler)
-        admin_thread = threading.Thread(target=admin_server.serve_forever, daemon=True)
-        admin_thread.start()
-        log_admin_start(admin_port, workspace_dir)
+        try:
+            admin_handler = create_admin_handler(
+                storage,
+                collab,
+                workspace_dir=workspace_dir,
+                app_port=port,
+                started_at=started_at,
+            )
+            admin_server = http.server.ThreadingHTTPServer(("0.0.0.0", admin_port), admin_handler)
+            admin_thread = threading.Thread(target=admin_server.serve_forever, daemon=True)
+            admin_thread.start()
+            log_admin_start(admin_port, workspace_dir)
+        except OSError as exc:
+            admin_server = None
+            log_error("blm.admin", "admin.start.error", port=admin_port, error=str(exc))
+            print(f"管理端启动失败: 端口 {admin_port} 不可用，主服务继续运行。")
     url = f"http://0.0.0.0:{port}"
 
     print(f"BLM Tool 已启动: {url}")

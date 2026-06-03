@@ -221,6 +221,14 @@ function getCollabDiagnosticsSnapshot() {
     clientId: state.clientId || '',
     socketReadyState: socket ? readyStateMap[socket.readyState] || String(socket.readyState) : 'NONE',
     fallbackMode: Boolean(state.fallbackMode),
+    syncChannel: state.connected
+      ? 'WebSocket'
+      : state.fallbackMode
+      ? 'HTTP 降级'
+      : state.recovering
+      ? '重连中'
+      : '未连接',
+    lastError: state.lastError || '',
     pendingSnapshot: Boolean(state.pendingSnapshot || state.snapshotTimer),
     syncing: Boolean(state.syncing),
     pendingRemote: Boolean(state.pendingRemoteSnapshot || state.hasConflict),
@@ -242,6 +250,7 @@ function formatCollabDiagnosticsText(snapshot = getCollabDiagnosticsSnapshot()) 
     `当前用户：${snapshot.currentUser || '-'}`,
     `连接状态：${snapshot.connected ? '已连接' : snapshot.recovering ? '重连中' : '未连接'}`,
     `Socket：${snapshot.socketReadyState}`,
+    `当前同步通道：${snapshot.syncChannel}`,
     `降级轮询：${snapshot.fallbackMode ? '是' : '否'}`,
     `Seq：${snapshot.seq}`,
     `ClientId：${snapshot.clientId || '-'}`,
@@ -249,6 +258,7 @@ function formatCollabDiagnosticsText(snapshot = getCollabDiagnosticsSnapshot()) 
     `同步中：${snapshot.syncing ? '是' : '否'}`,
     `远端更新待同步：${snapshot.pendingRemote ? '是' : '否'}`,
     `最近同步：${snapshot.lastSyncedAt || '-'}`,
+    `最近错误：${snapshot.lastError || '-'}`,
     `最近活动：${snapshot.lastActivity?.user ? `${snapshot.lastActivity.user} / ${snapshot.lastActivity.mode || ''} / ${snapshot.lastActivity.at || ''}` : '-'}`,
     '在线用户：',
   ];
@@ -267,6 +277,12 @@ function renderCollabDiagnosticsModal() {
   if (!container) return;
   const snapshot = getCollabDiagnosticsSnapshot();
   const statusText = snapshot.connected ? '已连接' : snapshot.recovering ? '重连恢复中' : '未连接';
+  const lastActivityText = snapshot.lastActivity?.user
+    ? `${snapshot.lastActivity.user} / ${snapshot.lastActivity.mode || ''} / ${snapshot.lastActivity.at || ''}`
+    : '-';
+  const errorHtml = snapshot.lastError
+    ? `<div class="collab-diagnostic-error"><span>最近错误</span><strong>${escapeCollabHtml(snapshot.lastError)}</strong></div>`
+    : '';
   const usersHtml = snapshot.users.length
     ? snapshot.users.map((user) => `
         <div class="collab-diagnostic-user">
@@ -279,19 +295,23 @@ function renderCollabDiagnosticsModal() {
     <div class="collab-diagnostic-grid">
       <div><span>文档</span><strong>${escapeCollabHtml(snapshot.document || '-')}</strong></div>
       <div><span>连接状态</span><strong>${escapeCollabHtml(statusText)}</strong></div>
+      <div><span>同步通道</span><strong>${escapeCollabHtml(snapshot.syncChannel)}</strong></div>
       <div><span>Socket</span><strong>${escapeCollabHtml(snapshot.socketReadyState)}</strong></div>
       <div><span>Seq</span><strong>${snapshot.seq}</strong></div>
       <div><span>待自动同步</span><strong>${snapshot.pendingSnapshot ? '是' : '否'}</strong></div>
       <div><span>同步中</span><strong>${snapshot.syncing ? '是' : '否'}</strong></div>
       <div><span>远端更新</span><strong>${snapshot.pendingRemote ? '待同步' : '无'}</strong></div>
+      <div><span>降级轮询</span><strong>${snapshot.fallbackMode ? '是' : '否'}</strong></div>
       <div><span>最近同步</span><strong>${escapeCollabHtml(snapshot.lastSyncedAt || '-')}</strong></div>
+      <div><span>最近活动</span><strong>${escapeCollabHtml(lastActivityText)}</strong></div>
     </div>
+    ${errorHtml}
     <div class="collab-diagnostic-section">
       <h4>在线用户</h4>
       <div class="collab-diagnostic-users">${usersHtml}</div>
     </div>
-    <details class="collab-diagnostic-raw">
-      <summary>展开原始诊断信息</summary>
+    <details class="collab-diagnostic-raw" open>
+      <summary>原始诊断信息</summary>
       <pre>${escapeCollabHtml(formatCollabDiagnosticsText(snapshot))}</pre>
     </details>
   `;

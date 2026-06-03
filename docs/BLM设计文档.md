@@ -9,7 +9,7 @@
 - BLM 是本地浏览器应用，由 Python HTTP 服务提供静态页面和 API。
 - 一个工作区文档对应一份 JSON，保存时同步生成 Markdown。
 - 前后端通过 HTTP 通信，前端在浏览器内持有当前编辑态，后端负责加载、保存、导出、合并、历史快照、回收站和附件落盘。
-- 顶部左侧显示产品版本号，当前为 `v2.5`。
+- 顶部左侧显示产品版本号，当前为 `v2.6`。
 - 用户建模时关注业务概念，不需要看到或维护内部 ID。流程、实体、节点、分支、连线等内部标识由系统生成和迁移维护。
 
 ## 3. 模块职责
@@ -146,7 +146,8 @@ WebSocket 不稳定时，前端会进入轮询降级模式：
 
 - 结构化日志默认写入 `workspace/.logs/blm.log`，错误日志写入 `workspace/.logs/errors.log`。
 - 日志记录服务启动、HTTP 请求、WebSocket join/leave/error/ping、snapshot、rebase、autosave 等关键事件。
-- 设置环境变量 `BLM_ADMIN_PORT` 后，会启动独立只读管理端。
+- 管理端默认随主服务启动，默认端口 `8091`，可在 `blm.py` 顶部 `ADMIN_PORT` 修改，也可用 `BLM_ADMIN_PORT` 覆盖。
+- 如果临时不需要管理端，可以设置 `BLM_ADMIN_PORT=0`。
 - 管理端提供 `/api/status`、`/api/logs/recent`、`/api/diagnostics.zip`，用于跨网段断线排查。
 
 ### 7.6 与传统保存的关系

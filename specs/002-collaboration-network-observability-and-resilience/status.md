@@ -2,21 +2,25 @@
 
 ## 当前状态
 
-T1-T6 已完成。等待用户最终验收。
+T1-T7 已完成。等待用户最终验收。
 
 ## 本轮完成
 
-- 更新 `docs/BLM设计文档.md`：补充实时协作、HTTP 降级、changelog 生命周期、日志与管理端。
-- 更新 `docs/BLM用户手册.md`：补充立即同步、协作诊断、管理端启用和日志位置。
-- 完成最终可用自动验收。
+- 协作连接诊断弹窗改成更大的排障面板，原始诊断信息默认展开。
+- 诊断信息增加同步通道、降级轮询、最近活动、最近错误。
+- 新增 `docs/BLM协作与弱网排障指南.md`，说明 HTTP 降级、日志 JSONL 格式、常见事件和排查 SOP。
+- 将《协作与弱网排障指南》加入内置文档列表。
+- 管理端默认端口改为 `8091`，配置常量放在 `blm.py` 顶部；可用 `BLM_ADMIN_PORT=0` 临时关闭。
+- 管理端端口占用时不拖死主服务，会记录 `admin.start.error`。
 
 ## 自动验收
 
 - `python -m py_compile blm_core\admin.py blm_core\diagnostics.py blm_core\server.py blm_core\collab.py blm.py` 通过。
 - `node --check app\collab.js`、`node --check app\api.js` 通过。
-- 诊断日志 smoke test 通过。
-- HTTP 降级 snapshot rebase smoke test 通过。
-- 管理端临时端口 `/api/status` smoke test 通过。
+- 配置默认值 smoke test 通过：`build_runtime_config().admin_port == 8091`。
+- 内置文档入口 smoke test 通过：`collaboration-troubleshooting` 已注册。
+- 排障指南文件存在并包含日志格式、HTTP 降级、排查 SOP。
+- 诊断日志、HTTP 降级、管理端 smoke tests 在上一轮已通过。
 - Playwright 点击验收暂未执行：本机 npm/npx 缓存路径异常，暂无可用浏览器自动化工具。
 
 ## 下一步

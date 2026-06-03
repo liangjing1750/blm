@@ -159,16 +159,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   width: min(420px, calc(100vw - 48px));
 }
 .collab-diagnostics-modal {
-  width: min(720px, calc(100vw - 48px));
+  width: min(960px, calc(100vw - 64px));
+  max-height: calc(100vh - 72px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .collab-diagnostics-content {
   display: grid;
   gap: 14px;
+  overflow: auto;
+  padding-right: 2px;
 }
 .collab-diagnostic-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(128px, 1fr));
+  gap: 10px;
 }
 .collab-diagnostic-grid > div {
   min-width: 0;
@@ -188,9 +194,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   display: block;
   color: #0f172a;
   font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.collab-diagnostic-grid > div:first-child {
+  grid-column: span 2;
+}
+.collab-diagnostic-error {
+  padding: 10px 12px;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #9f1239;
+}
+.collab-diagnostic-error span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 900;
+}
+.collab-diagnostic-error strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .collab-diagnostic-section h4 {
   margin: 0 0 8px;
@@ -236,7 +264,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 800;
 }
 .collab-diagnostic-raw pre {
-  max-height: 220px;
+  max-height: 360px;
   overflow: auto;
   padding: 10px;
   border-top: 1px solid #e2e8f0;
@@ -244,6 +272,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font: 12px/1.6 Consolas, 'Courier New', monospace;
   white-space: pre-wrap;
   word-break: break-word;
+}
+@media (max-width: 760px) {
+  .collab-diagnostic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .collab-diagnostic-grid > div:first-child {
+    grid-column: 1 / -1;
+  }
 }
 .user-form-field {
   display: flex;
