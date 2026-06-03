@@ -15,6 +15,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from blm_core.admin import _admin_page, _status_payload
 from blm_core.document import canonical_document, create_empty_document, migrate_document
 from blm_core.markdown import MarkdownExporter
 from blm_core.server import create_handler
@@ -116,6 +117,59 @@ class MigrateDocumentTests(unittest.TestCase):
         self.assertEqual(len(refs), 1)
         self.assertEqual(refs[0]["stageUid"], "stage-1")
         self.assertEqual(refs[0]["processUid"], "process-1")
+
+    def test_canonical_document_normalizes_task_parameters(self):
+        document = {
+            "meta": {"title": "Task Params"},
+            "roles": [],
+            "stages": [],
+            "processes": [
+                {
+                    "uid": "process-1",
+                    "name": "流程一",
+                    "nodes": [
+                        {
+                            "uid": "node-1",
+                            "name": "节点一",
+                            "orchestrationTasks": [
+                                {
+                                    "uid": "orch-1",
+                                    "name": "查询任务",
+                                    "type": "Query",
+                                    "address": "  http://service/query  ",
+                                    "parameters": {
+                                        "inputs": [{"name": "仓单编号", "type": "String", "required": True}],
+                                        "outputs": [{"name": "审核结果", "note": "结果说明"}],
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "entities": [],
+            "businessComponents": [],
+            "businessConstructs": [],
+            "taskDefinitions": [
+                {
+                    "uid": "td-1",
+                    "name": "查询任务",
+                    "type": "Query",
+                    "address": "  package.Task.query  ",
+                    "parameters": {"inputs": [{"name": "请求", "type": "Object"}], "outputs": []},
+                }
+            ],
+        }
+
+        canonical = canonical_document(document)
+        definition = canonical["taskDefinitions"][0]
+        node_task = canonical["processes"][0]["nodes"][0]["orchestrationTasks"][0]
+
+        self.assertEqual(definition["address"], "package.Task.query")
+        self.assertEqual(definition["parameters"]["inputs"][0]["name"], "请求")
+        self.assertIn("uid", definition["parameters"]["inputs"][0])
+        self.assertEqual(node_task["address"], "http://service/query")
+        self.assertEqual(node_task["parameters"]["outputs"][0]["description"], "结果说明")
 
     def test_migrate_document_converts_legacy_shapes_and_normalizes_values(self):
         legacy_document = {
@@ -705,6 +759,51 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(summaries[0]["space"], "交割业务")
             self.assertEqual(summaries[0]["tags"], ["担保品", "WPF"])
             self.assertEqual(summaries[0]["author"], "Tester")
+
+    def test_admin_status_payload_exposes_relationships(self):
+        class FakeCollab:
+            def diagnostics(self):
+                return {
+                    "sessionCount": 1,
+                    "sessions": [
+                        {
+                            "doc": "Loans",
+                            "seq": 8,
+                            "dirty": False,
+                            "connectionCount": 2,
+                            "snapshotCount": 1,
+                            "autosavePending": False,
+                            "users": [
+                                {
+                                    "id": "user-a",
+                                    "userId": "user-a",
+                                    "name": "张三",
+                                    "connectionCount": 2,
+                                    "clientIds": ["c1", "c2"],
+                                    "sessionIds": ["s1"],
+                                    "remoteAddrs": ["10.0.0.8"],
+                                }
+                            ],
+                        }
+                    ],
+                }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            document["meta"]["space"] = "交割业务"
+            storage.save("Loans", document)
+
+            payload = _status_payload(storage, FakeCollab(), workspace, 8081, time.time() - 5)
+            page = _admin_page()
+
+            self.assertEqual(payload["relationships"]["users"][0]["name"], "张三")
+            self.assertEqual(payload["relationships"]["documents"][0]["name"], "Loans")
+            self.assertEqual(payload["relationships"]["documents"][0]["connectionCount"], 2)
+            self.assertIn("logSummary", payload)
+            self.assertIn("协作关系", page)
+            self.assertIn("panel-connections", page)
 
     def test_save_stores_process_prototypes_as_package_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -773,6 +773,34 @@ def normalize_query_source_kind(kind: str) -> str:
     return QUERY_SOURCE_KIND_ALIASES.get(kind.strip().casefold(), kind)
 
 
+def normalize_task_parameters(value) -> dict:
+    raw = value if isinstance(value, dict) else {}
+
+    def normalize_list(items) -> list[dict]:
+        if not isinstance(items, list):
+            return []
+        normalized: list[dict] = []
+        for index, item in enumerate(items, start=1):
+            if not isinstance(item, dict):
+                continue
+            param = dict(item)
+            _ensure_uid(param)
+            param["name"] = str(param.get("name", "")).strip()
+            param["type"] = str(param.get("type", "")).strip()
+            param["required"] = bool(param.get("required", False))
+            param["description"] = str(param.get("description", param.get("note", ""))).strip()
+            param["example"] = str(param.get("example", "")).strip()
+            if not param["name"] and not param["type"] and not param["description"] and not param["example"]:
+                param["name"] = f"参数{index}"
+            normalized.append(param)
+        return normalized
+
+    return {
+        "inputs": normalize_list(raw.get("inputs")),
+        "outputs": normalize_list(raw.get("outputs")),
+    }
+
+
 def normalize_field_type(field_type: str) -> str:
     if not field_type:
         return "string"
@@ -1353,6 +1381,8 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
                 _pop_legacy_business_component_fields(orchestration_task)
                 orchestration_task.setdefault("name", "")
                 orchestration_task.setdefault("target", "")
+                orchestration_task["address"] = str(orchestration_task.get("address", "")).strip()
+                orchestration_task["parameters"] = normalize_task_parameters(orchestration_task.get("parameters"))
                 orchestration_task.setdefault("note", "")
                 orchestration_task["type"] = normalize_orchestration_type(
                     orchestration_task.get("type", "Custom")
@@ -1596,6 +1626,8 @@ def migrate_document(document: dict | None) -> dict:
         query_source_kind = normalize_query_source_kind(task_definition.get("querySourceKind", ""))
         task_definition["querySourceKind"] = query_source_kind if task_definition["type"] == "Query" else ""
         task_definition["target"] = str(task_definition.get("target", "")).strip()
+        task_definition["address"] = str(task_definition.get("address", "")).strip()
+        task_definition["parameters"] = normalize_task_parameters(task_definition.get("parameters"))
         task_definition["note"] = str(task_definition.get("note", "")).strip()
         task_definition["businessComponentId"] = str(task_definition.get("businessComponentId", "")).strip()
         task_definition["businessComponent"] = str(task_definition.get("businessComponent", "")).strip()

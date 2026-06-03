@@ -696,12 +696,38 @@ function applyTaskDefinitionToProcessNodeTask(item, taskDefinition) {
     ? (taskDefinition.querySourceKind || item.querySourceKind || 'Dictionary')
     : '';
   item.target = taskDefinition.target || '';
+  item.address = taskDefinition.address || '';
+  item.parameters = cloneTaskDefinitionParameters(taskDefinition.parameters);
   item.note = taskDefinition.note || '';
   item.constructId = taskDefinition.constructId || '';
   item.businessConstructId = taskDefinition.constructId || '';
   item.constructName = taskDefinition.constructName || '';
   item.businessComponentId = taskDefinition.businessComponentId || '';
   item.businessComponent = taskDefinition.businessComponent || '';
+}
+
+function cloneTaskDefinitionParameters(parameters = {}) {
+  const normalizeList = (items) => (Array.isArray(items) ? items : []).map((item) => ({
+    uid: String(item?.uid || createUiUid('param')),
+    name: String(item?.name || ''),
+    type: String(item?.type || ''),
+    required: Boolean(item?.required),
+    description: String(item?.description || item?.note || ''),
+    example: String(item?.example || ''),
+  }));
+  return {
+    inputs: normalizeList(parameters?.inputs),
+    outputs: normalizeList(parameters?.outputs),
+  };
+}
+
+function getTaskDefinitionParameterSummary(task) {
+  const parameters = cloneTaskDefinitionParameters(task?.parameters);
+  return {
+    inputCount: parameters.inputs.length,
+    outputCount: parameters.outputs.length,
+    address: String(task?.address || ''),
+  };
 }
 
 function syncProcessTaskDefinitionFields(taskDefinition) {
@@ -734,6 +760,8 @@ function addTaskDefinition(afterId = '', capabilityId = '', constructId = '', op
     name: getUniqueTaskDefinitionName('新任务定义'),
     type: 'Service',
     target: '',
+    address: '',
+    parameters: { inputs: [], outputs: [] },
     note: '',
     entityIds: [],
     processIds: [],
@@ -777,6 +805,8 @@ function openTaskDefinitionDraft(capabilityId = '', constructId = '', returnMode
       type: 'Service',
       querySourceKind: 'Dictionary',
       target: '',
+      address: '',
+      parameters: { inputs: [], outputs: [] },
       note: '',
       businessComponentId: String(capability?.id || capabilityId || ''),
       constructId: String(construct?.id || constructId || ''),
@@ -800,6 +830,8 @@ function saveTaskDefinitionDraft() {
   task.type = draft.type || 'Service';
   task.querySourceKind = task.type === 'Query' ? (draft.querySourceKind || 'Dictionary') : '';
   task.target = String(draft.target || '');
+  task.address = String(draft.address || '');
+  task.parameters = cloneTaskDefinitionParameters(draft.parameters);
   task.note = String(draft.note || '');
   syncProcessTaskDefinitionFields(task);
   markModified();
@@ -812,7 +844,7 @@ function saveTaskDefinitionDraft() {
 
 function setTaskDefinition(taskDefinitionId, key, value) {
   const task = findTaskDefinitionRef(taskDefinitionId);
-  if (!task || !['name', 'type', 'querySourceKind', 'target', 'note', 'businessComponentId', 'constructId'].includes(key)) return false;
+  if (!task || !['name', 'type', 'querySourceKind', 'target', 'address', 'note', 'businessComponentId', 'constructId'].includes(key)) return false;
   if (key === 'name') {
     const nextName = String(value || '').trim();
     if (nextName && ensureDocumentArray('taskDefinitions').some((item) => item.id !== task.id && String(item.name || '').trim() === nextName)) {
@@ -873,6 +905,133 @@ function setTaskDefinition(taskDefinitionId, key, value) {
   markModified();
   renderSidebar();
   return true;
+}
+
+function openTaskParameterDialog(taskDefinitionId) {
+  const task = findTaskDefinitionRef(taskDefinitionId);
+  if (!task) return;
+  S.ui.taskParameterDialog = {
+    taskDefinitionId: String(task.id || task.name || ''),
+    draft: {
+      address: String(task.address || ''),
+      parameters: cloneTaskDefinitionParameters(task.parameters),
+    },
+  };
+  renderTaskParameterDialog();
+  openModalById('task-parameter-modal-overlay');
+}
+
+function closeTaskParameterDialog() {
+  S.ui.taskParameterDialog = null;
+  closeModalById('task-parameter-modal-overlay');
+}
+
+function getTaskParameterDialogDraft() {
+  if (!S.ui.taskParameterDialog) S.ui.taskParameterDialog = { taskDefinitionId: '', draft: { address: '', parameters: { inputs: [], outputs: [] } } };
+  const draft = S.ui.taskParameterDialog.draft || {};
+  draft.address = String(draft.address || '');
+  draft.parameters = cloneTaskDefinitionParameters(draft.parameters);
+  S.ui.taskParameterDialog.draft = draft;
+  return draft;
+}
+
+function setTaskParameterAddress(value) {
+  getTaskParameterDialogDraft().address = String(value || '');
+}
+
+function setTaskParameterField(kind, index, key, value) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  const row = draft.parameters[normalizedKind]?.[index];
+  if (!row || !['name', 'type', 'required', 'description', 'example'].includes(key)) return;
+  row[key] = key === 'required' ? Boolean(value) : String(value || '');
+}
+
+function addTaskParameter(kind) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  draft.parameters[normalizedKind].push({
+    uid: createUiUid(normalizedKind === 'inputs' ? 'in' : 'out'),
+    name: '',
+    type: '',
+    required: false,
+    description: '',
+    example: '',
+  });
+  renderTaskParameterDialog();
+}
+
+function removeTaskParameter(kind, index) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  draft.parameters[normalizedKind].splice(index, 1);
+  renderTaskParameterDialog();
+}
+
+function saveTaskParameterDialog() {
+  const dialog = S.ui.taskParameterDialog || {};
+  const task = findTaskDefinitionRef(dialog.taskDefinitionId);
+  if (!task) return closeTaskParameterDialog();
+  const draft = getTaskParameterDialogDraft();
+  task.address = String(draft.address || '').trim();
+  task.parameters = cloneTaskDefinitionParameters(draft.parameters);
+  syncProcessTaskDefinitionFields(task);
+  markModified();
+  rerenderBusinessModelDialogContext();
+  closeTaskParameterDialog();
+}
+
+function renderTaskParameterRows(kind, rows) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  return rows.length ? rows.map((row, index) => `
+    <div class="task-param-row" data-testid="task-parameter-row">
+      <input type="text" value="${esc(row.name || '')}" placeholder="参数名称"
+        oninput="setTaskParameterField('${normalizedKind}',${index},'name',this.value)">
+      <input type="text" value="${esc(row.type || '')}" placeholder="类型，如 String"
+        oninput="setTaskParameterField('${normalizedKind}',${index},'type',this.value)">
+      <label class="task-param-required"><input type="checkbox" ${row.required ? 'checked' : ''}
+        onchange="setTaskParameterField('${normalizedKind}',${index},'required',this.checked)"> 必填</label>
+      <input type="text" value="${esc(row.description || '')}" placeholder="说明"
+        oninput="setTaskParameterField('${normalizedKind}',${index},'description',this.value)">
+      <input type="text" value="${esc(row.example || '')}" placeholder="示例"
+        oninput="setTaskParameterField('${normalizedKind}',${index},'example',this.value)">
+      <button class="stage-quick-btn danger" type="button" title="删除参数" onclick="removeTaskParameter('${normalizedKind}',${index})">×</button>
+    </div>`).join('') : '<p class="task-param-empty">暂未定义参数，可按需补充。</p>';
+}
+
+function renderTaskParameterDialog() {
+  const overlay = document.getElementById('task-parameter-modal-overlay');
+  if (!overlay) return;
+  const dialog = S.ui.taskParameterDialog || {};
+  const task = findTaskDefinitionRef(dialog.taskDefinitionId);
+  const draft = getTaskParameterDialogDraft();
+  overlay.querySelector('.task-parameter-modal-body').innerHTML = `
+    <div class="task-param-address">
+      <label>任务地址</label>
+      <input data-testid="task-parameter-address-input" type="text" value="${esc(draft.address || '')}"
+        placeholder="http://service/path 或 package.module.method"
+        oninput="setTaskParameterAddress(this.value)">
+      <span>可填写 HTTP 地址、包路径、类方法或服务标识；不强制填写。</span>
+    </div>
+    <div class="task-param-grid">
+      <section class="task-param-panel">
+        <div class="task-param-panel-head">
+          <h4>输入参数</h4>
+          <button class="btn btn-outline btn-sm" type="button" data-testid="task-parameter-add-input" onclick="addTaskParameter('inputs')">＋ 入参</button>
+        </div>
+        <div class="task-param-header"><span>名称</span><span>类型</span><span>必填</span><span>说明</span><span>示例</span><span></span></div>
+        ${renderTaskParameterRows('inputs', draft.parameters.inputs)}
+      </section>
+      <section class="task-param-panel">
+        <div class="task-param-panel-head">
+          <h4>输出参数</h4>
+          <button class="btn btn-outline btn-sm" type="button" data-testid="task-parameter-add-output" onclick="addTaskParameter('outputs')">＋ 出参</button>
+        </div>
+        <div class="task-param-header"><span>名称</span><span>类型</span><span>必填</span><span>说明</span><span>示例</span><span></span></div>
+        ${renderTaskParameterRows('outputs', draft.parameters.outputs)}
+      </section>
+    </div>`;
+  overlay.querySelector('.task-parameter-modal-title').textContent = `任务参数：${task?.name || task?.id || '未命名任务'}`;
 }
 
 function addEntityToConstruct(constructId, entityId) {
@@ -1614,6 +1773,7 @@ function renderTaskDefinitionDialog(task) {
       ? `openBusinessModelDialog('capability','${esc(jsString(parentCapabilityId))}')`
       : 'closeBusinessModelDialog()');
   const typeValue = task.type || 'Service';
+  const parameterSummary = getTaskDefinitionParameterSummary(task);
   const capabilities = getCapabilityItems(S.doc);
   const activeCapabilityId = String(parentCapabilityId || task.businessComponentId || '').trim();
   const activeCapability = capabilities.find((capability) => String(capability.id || capability.name || '') === activeCapabilityId);
@@ -1694,6 +1854,14 @@ function renderTaskDefinitionDialog(task) {
           <label>技术承接</label>
           <input data-testid="task-definition-target-input" type="text" value="${esc(task.target || '')}" placeholder="目标服务 / 字典 / 枚举"
             oninput="setTaskDefinition('${esc(jsString(taskId))}','target',this.value)">
+        </div>
+        <div class="field-group field-group-wide task-definition-param-summary">
+          <label>任务调用契约</label>
+          <div class="task-definition-param-bar">
+            <span>${parameterSummary.address ? `地址：${esc(parameterSummary.address)}` : '未填写任务地址'} · 入参 ${parameterSummary.inputCount} · 出参 ${parameterSummary.outputCount}</span>
+            <button class="btn btn-outline btn-sm" type="button" data-testid="task-parameter-open-button"
+              onclick="openTaskParameterDialog('${esc(jsString(taskId))}')">查看/编辑参数</button>
+          </div>
         </div>
         <div class="field-group field-group-wide">
           <label>说明</label>

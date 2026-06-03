@@ -2590,6 +2590,10 @@ function applyTaskDefinitionToNodeTask(item, definition) {
   item.type = definition.type || item.type || 'Service';
   item.querySourceKind = item.type === 'Query' ? (definition.querySourceKind || item.querySourceKind || 'Dictionary') : '';
   item.target = definition.target || '';
+  item.address = definition.address || '';
+  item.parameters = typeof cloneTaskDefinitionParameters === 'function'
+    ? cloneTaskDefinitionParameters(definition.parameters)
+    : { inputs: [], outputs: [] };
   item.note = definition.note || '';
   item.constructId = definition.constructId || '';
   item.businessConstructId = definition.constructId || '';
@@ -2641,6 +2645,10 @@ function ensureTaskDefinitionForNodeTask(item) {
     type: rawType,
     querySourceKind: rawType === 'Query' ? (item.querySourceKind || 'Dictionary') : '',
     target: item.target || '',
+    address: item.address || '',
+    parameters: typeof cloneTaskDefinitionParameters === 'function'
+      ? cloneTaskDefinitionParameters(item.parameters)
+      : { inputs: [], outputs: [] },
     note: item.note || '',
     entityIds: [],
     processIds: [],
@@ -3488,6 +3496,10 @@ function findReusableOrchestrationTask(key) {
       type: taskDefinition.type === 'Process' ? 'Service' : (taskDefinition.type || 'Query'),
       querySourceKind: taskDefinition.type === 'Query' ? (taskDefinition.querySourceKind || 'Dictionary') : '',
       target: taskDefinition.target || '',
+      address: taskDefinition.address || '',
+      parameters: typeof cloneTaskDefinitionParameters === 'function'
+        ? cloneTaskDefinitionParameters(taskDefinition.parameters)
+        : { inputs: [], outputs: [] },
       note: taskDefinition.note || '',
       constructId: taskDefinition.constructId || '',
       businessConstructId: taskDefinition.constructId || '',
@@ -3512,6 +3524,10 @@ function cloneReusableOrchestrationTask(item) {
     type: clone.type || 'Query',
     querySourceKind: clone.type === 'Query' ? (clone.querySourceKind || 'Dictionary') : (clone.querySourceKind || ''),
     target: clone.target || '',
+    address: clone.address || '',
+    parameters: typeof cloneTaskDefinitionParameters === 'function'
+      ? cloneTaskDefinitionParameters(clone.parameters)
+      : { inputs: [], outputs: [] },
     note: clone.note || '',
     constructId: clone.constructId || clone.businessConstructId || '',
     businessConstructId: clone.constructId || clone.businessConstructId || '',
@@ -3531,6 +3547,8 @@ function addOrchestrationTask(procId, taskId, afterIdx) {
     type: 'Service',
     querySourceKind: '',
     target: '',
+    address: '',
+    parameters: { inputs: [], outputs: [] },
     note: '',
   };
   ensureTaskDefinitionForNodeTask(item);
@@ -3622,7 +3640,7 @@ function setOrchestrationTask(procId, taskId, idx, key, val) {
   if (!item) return;
   const normalizedKey = key === 'businessConstructId' ? 'constructId' : key;
   const definition = item.taskDefinitionId ? findTaskDefinitionRef(item.taskDefinitionId) : null;
-  if (definition && ['name', 'type', 'querySourceKind', 'target', 'note', 'constructId', 'businessComponentId'].includes(normalizedKey)) {
+  if (definition && ['name', 'type', 'querySourceKind', 'target', 'address', 'note', 'constructId', 'businessComponentId'].includes(normalizedKey)) {
     const updated = setTaskDefinition(definition.id, normalizedKey, val);
     if (!updated) return;
     applyTaskDefinitionToNodeTask(item, findTaskDefinitionRef(definition.id));

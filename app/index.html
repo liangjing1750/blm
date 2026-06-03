@@ -211,6 +211,20 @@
   </div>
 </div>
 
+<div id="task-parameter-modal-overlay" class="hidden" onclick="closeTaskParameterDialog()" data-testid="task-parameter-modal">
+  <div class="modal task-parameter-modal" onclick="event.stopPropagation()">
+    <div class="modal-title-row">
+      <h3 class="task-parameter-modal-title">任务参数</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeTaskParameterDialog()">关闭</button>
+    </div>
+    <div class="task-parameter-modal-body"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeTaskParameterDialog()">取消</button>
+      <button type="button" class="btn btn-primary" data-testid="task-parameter-save-button" onclick="saveTaskParameterDialog()">保存参数</button>
+    </div>
+  </div>
+</div>
+
 <div id="compare-modal-overlay" class="hidden" data-testid="compare-modal">
   <div class="modal merge-modal compare-modal" onclick="event.stopPropagation()">
     <div class="modal-title-row">

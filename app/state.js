@@ -154,6 +154,7 @@ const S = {
     stepNoteEditKey: '',
     orchestrationNoteEditKey: '',
     businessRuleEditKey: '',
+    taskParameterDialog: null,
     procDrawerW: 480,
     stageGraphZoom: 1,
     stageEditorCollapsed: true,
