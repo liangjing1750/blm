@@ -408,7 +408,14 @@ class CollaborationManager:
                 if base_seq < session.seq:
                     base_document = session.snapshots.get(base_seq)
                     if not isinstance(base_document, dict):
-                        raise WebSocketProtocolError("snapshot baseSeq is too old; reload latest document before syncing")
+                        self._write_conflict_snapshot(
+                            session,
+                            client,
+                            payload,
+                            document,
+                            reason="baseSeq_too_old",
+                        )
+                        raise WebSocketProtocolError("snapshot baseSeq is too old; local draft has been retained on server")
                     document = self._merge_local_document_changes(session.document, base_document, document)
                     rebased = True
             session.document = deepcopy(document)
@@ -457,6 +464,62 @@ class CollaborationManager:
             return
         for seq in sorted(session.snapshots)[:-40]:
             session.snapshots.pop(seq, None)
+
+    def _write_conflict_snapshot(
+        self,
+        session: CollabSession,
+        client: CollabClient,
+        payload: dict,
+        document: dict,
+        *,
+        reason: str,
+    ) -> None:
+        try:
+            conflict_dir = self._collab_dir(session.doc_name) / "conflicts"
+            conflict_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+            file_name = f"{timestamp}__seq{session.seq}__{client.client_id}.json"
+            conflict_path = conflict_dir / file_name
+            conflict_path.write_text(
+                json.dumps(
+                    {
+                        "reason": reason,
+                        "doc": session.doc_name,
+                        "serverSeq": session.seq,
+                        "baseSeq": payload.get("baseSeq"),
+                        "clientId": client.client_id,
+                        "userId": client.user_id,
+                        "user": client.user_name,
+                        "createdAt": datetime.now(timezone.utc).isoformat(),
+                        "document": document,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            log_event(
+                "blm.collab",
+                "collab.conflict_snapshot",
+                doc=session.doc_name,
+                serverSeq=session.seq,
+                baseSeq=payload.get("baseSeq"),
+                clientId=client.client_id,
+                user=client.user_name,
+                reason=reason,
+                path=str(conflict_path),
+            )
+        except OSError:
+            log_error(
+                "blm.collab",
+                "collab.conflict_snapshot.error",
+                doc=session.doc_name,
+                serverSeq=session.seq,
+                baseSeq=payload.get("baseSeq"),
+                clientId=client.client_id,
+                user=client.user_name,
+                reason=reason,
+            )
 
     def _collab_item_key(self, item: Any) -> str:
         if not isinstance(item, dict):

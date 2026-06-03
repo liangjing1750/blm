@@ -6,6 +6,9 @@ const COLLAB_PING_MS = 10000;
 const COLLAB_POLL_MS = 10000;
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
 const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
+const COLLAB_DRAFT_DB_NAME = 'blm-collab-drafts';
+const COLLAB_DRAFT_STORE_NAME = 'drafts';
+const COLLAB_DRAFT_STORAGE_PREFIX = 'blm.collab.draft.';
 
 function normalizeCollabDisplayName(value) {
   const text = String(value || '').trim();
@@ -23,6 +26,12 @@ function escapeCollabHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function formatCollabTime(value) {
+  const date = new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  return date.toLocaleString('zh-CN', { hour12: false });
 }
 
 function createLocalUserId() {
@@ -133,6 +142,182 @@ function getCollabPayloadUserName(payload) {
   return normalizeCollabDisplayName(raw) || '其他用户';
 }
 
+function getCollabDraftKey(docName = S.currentFile) {
+  const profile = loadCollabUserProfile();
+  const userId = String(profile.id || 'anonymous').trim() || 'anonymous';
+  return `${String(docName || '').trim()}::${userId}`;
+}
+
+function getCollabDraftStorageKey(docName = S.currentFile) {
+  return `${COLLAB_DRAFT_STORAGE_PREFIX}${encodeURIComponent(getCollabDraftKey(docName))}`;
+}
+
+function openCollabDraftDb() {
+  if (!window.indexedDB) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const request = window.indexedDB.open(COLLAB_DRAFT_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(COLLAB_DRAFT_STORE_NAME)) {
+        db.createObjectStore(COLLAB_DRAFT_STORE_NAME, { keyPath: 'key' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+    request.onblocked = () => resolve(null);
+  });
+}
+
+async function putCollabDraftRecord(record) {
+  const db = await openCollabDraftDb();
+  if (db) {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(COLLAB_DRAFT_STORE_NAME, 'readwrite');
+      tx.objectStore(COLLAB_DRAFT_STORE_NAME).put(record);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('draft db write failed'));
+    }).finally(() => db.close());
+    return;
+  }
+  localStorage.setItem(getCollabDraftStorageKey(record.docName), JSON.stringify(record));
+}
+
+async function getCollabDraftRecord(docName = S.currentFile) {
+  const key = getCollabDraftKey(docName);
+  const db = await openCollabDraftDb();
+  if (db) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(COLLAB_DRAFT_STORE_NAME, 'readonly');
+        const request = tx.objectStore(COLLAB_DRAFT_STORE_NAME).get(key);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('draft db read failed'));
+      }).finally(() => db.close());
+    } catch (_) {
+      // Fall through to localStorage fallback.
+    }
+  }
+  try {
+    return JSON.parse(localStorage.getItem(getCollabDraftStorageKey(docName)) || 'null');
+  } catch (_) {
+    return null;
+  }
+}
+
+async function deleteCollabDraftRecord(docName = S.currentFile) {
+  const key = getCollabDraftKey(docName);
+  const db = await openCollabDraftDb();
+  if (db) {
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(COLLAB_DRAFT_STORE_NAME, 'readwrite');
+        tx.objectStore(COLLAB_DRAFT_STORE_NAME).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('draft db delete failed'));
+      }).finally(() => db.close());
+    } catch (_) {
+      // Keep fallback cleanup below.
+    }
+  }
+  localStorage.removeItem(getCollabDraftStorageKey(docName));
+}
+
+function setLocalDraftState(pending, draft = null, error = '') {
+  S.collab.localDraftPending = Boolean(pending);
+  S.collab.localDraftUpdatedAt = draft?.updatedAt || '';
+  S.collab.localDraftKey = draft?.key || '';
+  S.collab.localDraftError = error || '';
+}
+
+async function saveLocalCollabDraft(documentHash = '') {
+  if (!S.currentFile || !S.doc || S.readOnly || !S.runtime.supportsCollab) return;
+  const profile = loadCollabUserProfile();
+  const generation = Number(S.collab.localDraftGeneration || 0) + 1;
+  S.collab.localDraftGeneration = generation;
+  const draft = {
+    key: getCollabDraftKey(S.currentFile),
+    docName: S.currentFile,
+    userId: profile.id,
+    userName: profile.name,
+    sessionId: profile.sessionId,
+    baseSeq: Number(S.collab?.draftBaseSeqOverride ?? S.collab?.seq ?? 0),
+    generation,
+    updatedAt: new Date().toISOString(),
+    contentHash: documentHash || hashCollabDocument(S.doc),
+    document: cloneCollabDocument(S.doc),
+  };
+  try {
+    await putCollabDraftRecord(draft);
+    if (generation <= Number(S.collab.localDraftClearedGeneration || 0)) {
+      await deleteCollabDraftRecord(draft.docName);
+      return;
+    }
+    setLocalDraftState(true, draft);
+    renderCollabStatus();
+  } catch (error) {
+    setLocalDraftState(true, draft, String(error?.message || error || 'draft save failed'));
+    renderCollabStatus();
+  }
+}
+
+async function clearLocalCollabDraft(docName = S.currentFile) {
+  if (!docName) return;
+  S.collab.localDraftClearedGeneration = Math.max(
+    Number(S.collab.localDraftClearedGeneration || 0),
+    Number(S.collab.localDraftGeneration || 0),
+  );
+  try {
+    await deleteCollabDraftRecord(docName);
+  } finally {
+    setLocalDraftState(false);
+    S.collab.draftBaseSeqOverride = null;
+    renderCollabStatus();
+  }
+}
+
+async function maybePromptLocalCollabDraftRecovery(docName = S.currentFile) {
+  if (!docName || S.readOnly || !S.doc || S.collab?.checkingLocalDraft) return;
+  S.collab.checkingLocalDraft = true;
+  try {
+    const draft = await getCollabDraftRecord(docName);
+    if (!draft || !draft.document || draft.docName !== docName) {
+      setLocalDraftState(false);
+      return;
+    }
+    const currentHash = hashCollabDocument(S.doc);
+    const draftHash = draft.contentHash || hashCollabDocument(draft.document);
+    if (draftHash && currentHash && draftHash === currentHash) {
+      await clearLocalCollabDraft(docName);
+      return;
+    }
+    setLocalDraftState(true, draft);
+    if (S.collab.promptingLocalDraft) return;
+    S.collab.promptingLocalDraft = true;
+    const confirmed = await showAppConfirm(
+      `检测到当前浏览器存在未同步草稿（${formatCollabTime(draft.updatedAt || new Date().toISOString())}）。是否恢复草稿并立即同步？`,
+      {
+        title: '发现本地草稿',
+        confirmLabel: '恢复并同步',
+        cancelLabel: '稍后处理',
+      },
+    );
+    if (confirmed && S.currentFile === docName) {
+      S.doc = cloneCollabDocument(draft.document);
+      hydrateDocumentForUi(S.doc);
+      S.modified = true;
+      S.collab.draftBaseSeqOverride = Number(draft.baseSeq || 0);
+      S.collab.pendingSnapshot = true;
+      render();
+      queueCollabSnapshotSync();
+      showAppToast('已恢复本地草稿，正在同步。');
+    }
+  } finally {
+    S.collab.checkingLocalDraft = false;
+    S.collab.promptingLocalDraft = false;
+    renderCollabStatus();
+  }
+}
+
 function renderCollabStatus() {
   const badge = document.getElementById('collab-status');
   if (!badge) return;
@@ -175,10 +360,13 @@ function renderCollabStatus() {
     : `${names.length || 1} 人`;
   const hasQueuedSnapshot = Boolean(state.pendingSnapshot || state.snapshotTimer);
   const hasRemoteUpdate = Boolean(state.pendingRemoteSnapshot || state.hasConflict);
+  const hasLocalDraft = Boolean(state.localDraftPending);
   const suffix = state.syncing
     ? ' · 同步中'
     : hasQueuedSnapshot
     ? ' · 待自动同步'
+    : hasLocalDraft
+    ? ' · 本地草稿待同步'
     : hasRemoteUpdate
     ? ' · 有更新待同步'
     : state.lastSyncedAt
@@ -232,6 +420,10 @@ function getCollabDiagnosticsSnapshot() {
     pendingSnapshot: Boolean(state.pendingSnapshot || state.snapshotTimer),
     syncing: Boolean(state.syncing),
     pendingRemote: Boolean(state.pendingRemoteSnapshot || state.hasConflict),
+    localDraftPending: Boolean(state.localDraftPending),
+    localDraftUpdatedAt: state.localDraftUpdatedAt || '',
+    localDraftError: state.localDraftError || '',
+    draftBaseSeq: state.draftBaseSeqOverride ?? null,
     lastSyncedAt: state.lastSyncedAt || '',
     lastActivity: state.lastActivity || null,
     users: users.map((item) => ({
@@ -257,6 +449,9 @@ function formatCollabDiagnosticsText(snapshot = getCollabDiagnosticsSnapshot()) 
     `待自动同步：${snapshot.pendingSnapshot ? '是' : '否'}`,
     `同步中：${snapshot.syncing ? '是' : '否'}`,
     `远端更新待同步：${snapshot.pendingRemote ? '是' : '否'}`,
+    `本地草稿：${snapshot.localDraftPending ? '有' : '无'}`,
+    `草稿时间：${snapshot.localDraftUpdatedAt || '-'}`,
+    `草稿基线Seq：${snapshot.draftBaseSeq ?? '-'}`,
     `最近同步：${snapshot.lastSyncedAt || '-'}`,
     `最近错误：${snapshot.lastError || '-'}`,
     `最近活动：${snapshot.lastActivity?.user ? `${snapshot.lastActivity.user} / ${snapshot.lastActivity.mode || ''} / ${snapshot.lastActivity.at || ''}` : '-'}`,
@@ -301,11 +496,14 @@ function renderCollabDiagnosticsModal() {
       <div><span>待自动同步</span><strong>${snapshot.pendingSnapshot ? '是' : '否'}</strong></div>
       <div><span>同步中</span><strong>${snapshot.syncing ? '是' : '否'}</strong></div>
       <div><span>远端更新</span><strong>${snapshot.pendingRemote ? '待同步' : '无'}</strong></div>
+      <div><span>本地草稿</span><strong>${snapshot.localDraftPending ? '有' : '无'}</strong></div>
+      <div><span>草稿时间</span><strong>${escapeCollabHtml(snapshot.localDraftUpdatedAt ? formatCollabTime(snapshot.localDraftUpdatedAt) : '-')}</strong></div>
       <div><span>降级轮询</span><strong>${snapshot.fallbackMode ? '是' : '否'}</strong></div>
       <div><span>最近同步</span><strong>${escapeCollabHtml(snapshot.lastSyncedAt || '-')}</strong></div>
       <div><span>最近活动</span><strong>${escapeCollabHtml(lastActivityText)}</strong></div>
     </div>
     ${errorHtml}
+    ${snapshot.localDraftError ? `<div class="collab-diagnostic-error"><span>草稿错误</span><strong>${escapeCollabHtml(snapshot.localDraftError)}</strong></div>` : ''}
     <div class="collab-diagnostic-section">
       <h4>在线用户</h4>
       <div class="collab-diagnostic-users">${usersHtml}</div>
@@ -383,6 +581,8 @@ function connectCollabSession(docName) {
   S.collab.lastSyncedDocumentHash = hashCollabDocument(S.modified ? (S.baseDocument || null) : S.doc);
   S.collab.fallbackMode = false;
   S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
+  S.collab.localDraftKey = getCollabDraftKey(docName);
+  S.collab.draftBaseSeqOverride = null;
   renderCollabStatus();
 
   socket.addEventListener('open', () => {
@@ -465,6 +665,11 @@ function disconnectCollabSession(options = {}) {
   S.collab.pendingRemoteSnapshot = null;
   S.collab.hasConflict = false;
   S.collab.lastAcceptedDocument = null;
+  S.collab.localDraftPending = false;
+  S.collab.localDraftUpdatedAt = '';
+  S.collab.localDraftError = '';
+  S.collab.localDraftKey = '';
+  S.collab.draftBaseSeqOverride = null;
   S.collab.recovering = false;
   S.collab.everConnected = false;
   renderCollabStatus();
@@ -679,6 +884,7 @@ async function flushCollabSnapshotHttp() {
   if (documentHash && documentHash === S.collab.lastSyncedDocumentHash && !hasPendingRemoteCollabSnapshot()) {
     S.modified = false;
     S.collab.pendingSnapshot = false;
+    await clearLocalCollabDraft(S.currentFile);
     return true;
   }
   S.collab.syncing = true;
@@ -688,7 +894,7 @@ async function flushCollabSnapshotHttp() {
   if (typeof renderToolbar === 'function') renderToolbar();
   try {
     const result = await api.collabSnapshot(S.currentFile, S.doc, {
-      baseSeq: S.collab.seq || 0,
+      baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.seq ?? 0),
       documentHash,
       user: getCollabUserProfile(),
     });
@@ -709,6 +915,7 @@ async function flushCollabSnapshotHttp() {
     S.collab.lastSyncedDocumentHash = hashCollabDocument(S.doc);
     S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
     S.collab.inFlightDocumentHash = '';
+    await clearLocalCollabDraft(S.currentFile);
     startCollabPollingFallback();
     if (!hasActiveLocalEditingContext()) render();
     if (typeof renderToolbar === 'function') renderToolbar();
@@ -767,6 +974,10 @@ function handleCollabMessage(raw) {
     if (typeof renderToolbar === 'function') renderToolbar();
     if (S.modified || S.collab.pendingSnapshot) {
       flushCollabSnapshotSync();
+    } else {
+      setTimeout(() => {
+        maybePromptLocalCollabDraftRecovery(S.currentFile);
+      }, 100);
     }
     return;
   }
@@ -811,6 +1022,7 @@ function handleCollabMessage(raw) {
         S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
         S.collab.inFlightDocumentHash = '';
         S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
+        clearLocalCollabDraft(S.currentFile);
         if (S.collab.pendingMergedRender && !hasActiveLocalEditingContext()) {
           S.collab.pendingMergedRender = false;
           render();
@@ -827,6 +1039,7 @@ function handleCollabMessage(raw) {
   if (payload.type === 'error') {
     S.collab.syncing = false;
     S.collab.pendingSnapshot = true;
+    S.collab.lastError = payload.message || '同步失败';
     if (S.collab.snapshotTimer) {
       clearTimeout(S.collab.snapshotTimer);
       S.collab.snapshotTimer = null;
@@ -864,6 +1077,7 @@ function queueCollabSnapshotSync() {
   S.collab.snapshotRevision = Number(S.collab.snapshotRevision || 0) + 1;
   S.collab.pendingSnapshot = true;
   S.collab.queuedDocumentHash = documentHash;
+  saveLocalCollabDraft(documentHash);
   if (!S.collab?.connected || S.collab?.socket?.readyState !== WebSocket.OPEN) {
     if (S.currentFile && S.collab?.everConnected) S.collab.recovering = true;
     renderCollabStatus();
@@ -892,6 +1106,7 @@ function flushCollabSnapshotSync() {
     S.collab.pendingSnapshot = false;
     S.collab.syncing = false;
     S.modified = false;
+    clearLocalCollabDraft(S.currentFile);
     renderCollabStatus();
     if (typeof renderToolbar === 'function') renderToolbar();
     return;
@@ -906,14 +1121,14 @@ function flushCollabSnapshotSync() {
   if (typeof renderToolbar === 'function') renderToolbar();
   socket.send(JSON.stringify({
     type: 'snapshot',
-    baseSeq: S.collab.seq || 0,
+    baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.seq ?? 0),
     documentHash,
     document: S.doc,
   }));
 }
 
 function hasLocalPendingCollabSnapshot() {
-  return Boolean(S.collab?.pendingSnapshot || S.collab?.syncing || S.collab?.snapshotTimer);
+  return Boolean(S.modified || S.collab?.localDraftPending || S.collab?.pendingSnapshot || S.collab?.syncing || S.collab?.snapshotTimer);
 }
 
 function sendCollabChange(path, oldValue, newValue) {

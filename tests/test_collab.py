@@ -12,7 +12,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from blm_core.collab import CollabClient, CollabSession, CollaborationManager
+from blm_core.collab import CollabClient, CollabSession, CollaborationManager, WebSocketProtocolError
 from blm_core.document import create_empty_document
 from blm_core.server import create_handler
 from blm_core.storage import WorkspaceStorage
@@ -304,7 +304,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
                 _, left_ack = _recv_json_frame(left)
                 self.assertEqual(left_ack["type"], "ack")
                 self.assertEqual(left_ack["mode"], "snapshot")
-                self.assertNotIn("document", left_ack)
+                self.assertEqual(left_ack["document"]["meta"]["author"], "Snapshot Author")
                 self.assertEqual(storage.load("CollabSmoke")["meta"]["author"], "Snapshot Author")
                 _, right_snapshot = _recv_json_frame(right)
                 self.assertEqual(right_snapshot["type"], "snapshot")
@@ -443,6 +443,56 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertFalse(session.dirty)
             self.assertEqual(storage.load("CollabSmoke")["meta"]["author"], "Persisted before ack")
             self.assertEqual(session.document["meta"]["author"], "Persisted before ack")
+
+    def test_stale_snapshot_is_rebased_against_server_document(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_document = create_empty_document("CollabSmoke")
+            base_document["meta"]["author"] = "Base"
+            base_document["meta"]["date"] = "2026-06-03"
+            storage.save("CollabSmoke", base_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+            server_document = create_empty_document("CollabSmoke")
+            server_document["meta"]["author"] = "Server Author"
+            server_document["meta"]["date"] = "2026-06-03"
+            session = CollabSession("CollabSmoke", server_document, seq=1, snapshots={0: base_document, 1: server_document})
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-test", "Tester", handler=None)
+
+            local_document = create_empty_document("CollabSmoke")
+            local_document["meta"]["author"] = "Base"
+            local_document["meta"]["date"] = "2026-06-04"
+            record = manager._apply_snapshot(session, client, {"baseSeq": 0, "document": local_document})
+
+            self.assertTrue(record["rebased"])
+            self.assertEqual(session.document["meta"]["author"], "Server Author")
+            self.assertEqual(session.document["meta"]["date"], "2026-06-04")
+
+    def test_too_old_snapshot_does_not_overwrite_and_writes_conflict_copy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            server_document = create_empty_document("CollabSmoke")
+            server_document["meta"]["author"] = "Server Author"
+            storage.save("CollabSmoke", server_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+            session = CollabSession("CollabSmoke", server_document, seq=50, snapshots={50: server_document})
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-test", "Tester", handler=None)
+
+            stale_document = create_empty_document("CollabSmoke")
+            stale_document["meta"]["author"] = "Local Draft"
+            with self.assertRaisesRegex(WebSocketProtocolError, "baseSeq is too old"):
+                manager._apply_snapshot(session, client, {"baseSeq": 1, "document": stale_document})
+
+            self.assertEqual(session.document["meta"]["author"], "Server Author")
+            conflict_dir = storage._package_dir("CollabSmoke") / "collab" / "conflicts"
+            conflict_files = list(conflict_dir.glob("*.json"))
+            self.assertEqual(len(conflict_files), 1)
+            conflict = json.loads(conflict_files[0].read_text("utf-8"))
+            self.assertEqual(conflict["reason"], "baseSeq_too_old")
+            self.assertEqual(conflict["serverSeq"], 50)
+            self.assertEqual(conflict["baseSeq"], 1)
+            self.assertEqual(conflict["document"]["meta"]["author"], "Local Draft")
 
     def test_named_version_is_readonly_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
