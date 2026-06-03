@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from blm_core.diagnostics import log_error, log_event
 from blm_core.storage import WorkspaceStorage
 
 
@@ -34,6 +35,7 @@ class CollabClient:
     user_id: str = ""
     user_name: str = ""
     session_id: str = ""
+    remote_addr: str = ""
     last_seen: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     send_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -146,6 +148,13 @@ class CollaborationManager:
                     )
                 elif event_type == "ping":
                     if client:
+                        log_event(
+                            "blm.collab",
+                            "collab.ping",
+                            doc=session.doc_name if session else "",
+                            clientId=client.client_id,
+                            user=client.user_name,
+                        )
                         self._send_json(client, {"type": "pong"})
                     else:
                         self._send_frame(handler.connection, json.dumps({"type": "pong"}).encode("utf-8"))
@@ -156,6 +165,15 @@ class CollaborationManager:
                     else:
                         self._send_raw_error(handler, message)
         except (ConnectionError, OSError, WebSocketProtocolError) as exc:
+            log_error(
+                "blm.collab",
+                "collab.websocket.error",
+                doc=session.doc_name if session else "",
+                clientId=client.client_id if client else "",
+                user=client.user_name if client else "",
+                error=str(exc),
+                remoteAddr=_handler_remote_addr(handler),
+            )
             try:
                 self._send_raw_error(handler, str(exc))
             except OSError:
@@ -236,14 +254,36 @@ class CollaborationManager:
                 user_id=user_profile["id"],
                 user_name=user_profile["name"],
                 session_id=user_profile["sessionId"],
+                remote_addr=_handler_remote_addr(handler),
                 handler=handler,
             )
             session.clients[client.client_id] = client
+            log_event(
+                "blm.collab",
+                "collab.join",
+                doc=session.doc_name,
+                seq=session.seq,
+                clientId=client.client_id,
+                user=client.user_name,
+                userId=client.user_id,
+                sessionId=client.session_id,
+                remoteAddr=client.remote_addr,
+                connectionCount=len(session.clients),
+            )
             return client, session
 
     def _leave(self, session: CollabSession, client_id: str) -> None:
         with self._lock:
-            session.clients.pop(client_id, None)
+            client = session.clients.pop(client_id, None)
+            log_event(
+                "blm.collab",
+                "collab.leave",
+                doc=session.doc_name,
+                clientId=client_id,
+                user=client.user_name if client else "",
+                remoteAddr=client.remote_addr if client else "",
+                remainingConnections=len(session.clients),
+            )
             if session.clients:
                 self._broadcast_presence(session)
             else:
@@ -251,6 +291,7 @@ class CollaborationManager:
                 self._sessions.pop(session.doc_name, None)
 
     def _apply_change(self, session: CollabSession, client: CollabClient, payload: dict) -> dict:
+        started_at = datetime.now(timezone.utc).timestamp()
         changes = payload.get("changes")
         if not isinstance(changes, list):
             changes = []
@@ -287,9 +328,20 @@ class CollaborationManager:
             self._remember_snapshot(session)
             session.dirty = True
             self._schedule_autosave(session)
+            log_event(
+                "blm.collab",
+                "collab.change",
+                doc=session.doc_name,
+                seq=session.seq,
+                clientId=client.client_id,
+                user=client.user_name,
+                changeCount=len(normalized_changes),
+                elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
+            )
             return record
 
     def _apply_snapshot(self, session: CollabSession, client: CollabClient, payload: dict) -> dict:
+        started_at = datetime.now(timezone.utc).timestamp()
         document = payload.get("document")
         if not isinstance(document, dict):
             raise WebSocketProtocolError("snapshot document must be object")
@@ -322,6 +374,18 @@ class CollaborationManager:
             self._remember_snapshot(session)
             session.dirty = True
             self._flush_autosave(session.doc_name)
+            log_event(
+                "blm.collab",
+                "collab.snapshot",
+                doc=session.doc_name,
+                seq=session.seq,
+                baseSeq=base_seq,
+                rebased=rebased,
+                clientId=client.client_id,
+                user=client.user_name,
+                documentBytes=len(json.dumps(document, ensure_ascii=False)),
+                elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
+            )
             return record
 
     def _parse_base_seq(self, value: Any) -> int | None:
@@ -408,6 +472,7 @@ class CollaborationManager:
         timer.start()
 
     def _flush_autosave(self, doc_name: str) -> None:
+        started_at = datetime.now(timezone.utc).timestamp()
         with self._lock:
             self._autosave_timers.pop(doc_name, None)
             session = self._sessions.get(doc_name)
@@ -422,11 +487,24 @@ class CollaborationManager:
                 session = self._sessions.get(doc_name)
                 if session and not session.dirty:
                     session.document = saved_document
+            log_event(
+                "blm.collab",
+                "collab.autosave",
+                doc=doc_name,
+                documentBytes=len(json.dumps(saved_document, ensure_ascii=False)),
+                elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
+            )
         except OSError:
             with self._lock:
                 session = self._sessions.get(doc_name)
                 if session:
                     session.dirty = True
+            log_error(
+                "blm.collab",
+                "collab.autosave.error",
+                doc=doc_name,
+                elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
+            )
 
     def _session_users(self, session: CollabSession) -> list[dict]:
         self._drop_stale_clients(session)
@@ -442,12 +520,36 @@ class CollaborationManager:
                     "clientIds": [],
                     "sessionIds": [],
                     "connectionCount": 0,
+                    "remoteAddrs": [],
                 }
             grouped[user_id]["clientIds"].append(client.client_id)
             if client.session_id:
                 grouped[user_id]["sessionIds"].append(client.session_id)
             grouped[user_id]["connectionCount"] += 1
+            if client.remote_addr:
+                grouped[user_id]["remoteAddrs"].append(client.remote_addr)
         return sorted(grouped.values(), key=lambda item: str(item["name"]))
+
+    def diagnostics(self) -> dict:
+        with self._lock:
+            sessions = []
+            for session in self._sessions.values():
+                sessions.append(
+                    {
+                        "doc": session.doc_name,
+                        "seq": session.seq,
+                        "dirty": bool(session.dirty),
+                        "connectionCount": len(session.clients),
+                        "snapshotCount": len(session.snapshots),
+                        "autosavePending": session.doc_name in self._autosave_timers,
+                        "users": self._session_users(session),
+                    }
+                )
+            return {
+                "autosaveInterval": self.autosave_interval,
+                "sessionCount": len(sessions),
+                "sessions": sorted(sessions, key=lambda item: str(item["doc"])),
+            }
 
     def _drop_stale_clients(self, session: CollabSession) -> None:
         now = datetime.now(timezone.utc).timestamp()
@@ -722,3 +824,10 @@ class CollaborationManager:
             if rest:
                 tokens.append(rest)
         return tokens
+
+
+def _handler_remote_addr(handler: Any) -> str:
+    client_address = getattr(handler, "client_address", None)
+    if isinstance(client_address, tuple) and client_address:
+        return str(client_address[0])
+    return ""

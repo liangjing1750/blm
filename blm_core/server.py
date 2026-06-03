@@ -10,6 +10,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
+from blm_core.diagnostics import configure_diagnostics, log_error, log_event, runtime_fields
 from blm_core.document import canonical_document, migrate_document
 from blm_core.collab import CollaborationManager
 from blm_core.merge import analyze_merge, apply_merge, validate_document
@@ -61,6 +62,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
 
     class BlmRequestHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
+            self._request_status = 0
+            self._request_started_at = 0.0
             super().__init__(*args, directory=str(app_dir), **kwargs)
 
         def end_headers(self):
@@ -69,99 +72,136 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             self.send_header("Expires", "0")
             super().end_headers()
 
+        def send_response(self, code, message=None):
+            self._request_status = int(code or 0)
+            super().send_response(code, message)
+
         def do_GET(self):
-            path = urlparse(self.path).path
-            if path == "/api/runtime":
-                return self._json(
-                    {
-                        "api_version": API_VERSION,
-                        "mode": "browser",
-                        "supports_workspace": True,
-                        "supports_merge": True,
-                        "supports_docs": True,
-                        "supports_copy": True,
-                        "supports_collab": bool(collab),
-                    }
-                )
-            if path == "/api/collab/ws" and collab:
-                return collab.handle_websocket(self)
-            if path == "/api/files":
-                return self._json(storage.list_documents())
-            if path == "/api/files/meta":
-                return self._json(storage.list_document_summaries())
-            if path == "/api/trash":
-                return self._json(storage.list_trash())
-            if path == "/api/docs":
-                return self._json(DOCS_MANIFEST)
-            if path.startswith("/api/docs/assets/"):
-                return self._handle_docs_asset(path)
-            if path.startswith("/api/docs/"):
-                return self._handle_docs(path)
-            if path.startswith("/api/load/"):
-                return self._handle_load(path)
-            if path.startswith("/api/attachment/"):
-                return self._handle_attachment(path)
-            if path.startswith("/api/export-docx/"):
-                return self._handle_export_docx(path)
-            if path.startswith("/api/export-jobs/") and path.endswith("/download"):
-                return self._handle_export_job_download(path)
-            if path.startswith("/api/export-jobs/"):
-                return self._handle_export_job_status(path)
-            if path.startswith("/api/export-bundle/"):
-                return self._handle_export_bundle(path)
-            if path.startswith("/api/export/"):
-                return self._handle_export(path)
-            if path.startswith("/api/history/"):
-                return self._handle_history(path)
-            if path.startswith("/api/versions/"):
-                return self._handle_versions(path)
-            return super().do_GET()
+            self._begin_request()
+            try:
+                path = urlparse(self.path).path
+                if path == "/api/runtime":
+                    return self._json(
+                        {
+                            "api_version": API_VERSION,
+                            "mode": "browser",
+                            "supports_workspace": True,
+                            "supports_merge": True,
+                            "supports_docs": True,
+                            "supports_copy": True,
+                            "supports_collab": bool(collab),
+                        }
+                    )
+                if path == "/api/collab/ws" and collab:
+                    return collab.handle_websocket(self)
+                if path == "/api/files":
+                    return self._json(storage.list_documents())
+                if path == "/api/files/meta":
+                    return self._json(storage.list_document_summaries())
+                if path == "/api/trash":
+                    return self._json(storage.list_trash())
+                if path == "/api/docs":
+                    return self._json(DOCS_MANIFEST)
+                if path.startswith("/api/docs/assets/"):
+                    return self._handle_docs_asset(path)
+                if path.startswith("/api/docs/"):
+                    return self._handle_docs(path)
+                if path.startswith("/api/load/"):
+                    return self._handle_load(path)
+                if path.startswith("/api/attachment/"):
+                    return self._handle_attachment(path)
+                if path.startswith("/api/export-docx/"):
+                    return self._handle_export_docx(path)
+                if path.startswith("/api/export-jobs/") and path.endswith("/download"):
+                    return self._handle_export_job_download(path)
+                if path.startswith("/api/export-jobs/"):
+                    return self._handle_export_job_status(path)
+                if path.startswith("/api/export-bundle/"):
+                    return self._handle_export_bundle(path)
+                if path.startswith("/api/export/"):
+                    return self._handle_export(path)
+                if path.startswith("/api/history/"):
+                    return self._handle_history(path)
+                if path.startswith("/api/versions/"):
+                    return self._handle_versions(path)
+                return super().do_GET()
+            except Exception as exc:
+                log_error("blm.http", "http.request.error", method="GET", path=self.path, error=str(exc))
+                raise
+            finally:
+                self._finish_request("GET")
 
         def do_POST(self):
-            path = urlparse(self.path).path
-            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            self._begin_request()
+            try:
+                path = urlparse(self.path).path
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
 
-            if path.startswith("/api/save/"):
-                return self._handle_save(path, body)
-            if path == "/api/attachment-upload":
-                return self._handle_attachment_upload(body)
-            if path == "/api/rename":
-                return self._handle_rename(body)
-            if path == "/api/copy":
-                return self._handle_copy(body)
-            if path == "/api/new":
-                return self._handle_new(body)
-            if path.startswith("/api/delete/"):
-                return self._handle_delete(path)
-            if path == "/api/history/load":
-                return self._handle_history_load(body)
-            if path == "/api/history/restore":
-                return self._handle_history_restore(body)
-            if path == "/api/version/create":
-                return self._handle_version_create(body)
-            if path == "/api/version/load":
-                return self._handle_version_load(body)
-            if path == "/api/trash/restore":
-                return self._handle_trash_restore(body)
-            if path == "/api/trash/delete":
-                return self._handle_trash_delete(body)
-            if path == "/api/trash/clear":
-                return self._handle_trash_clear(body)
-            if path == "/api/document/normalize":
-                return self._handle_document_normalize(body)
-            if path == "/api/document/validate":
-                return self._handle_document_validate(body)
-            if path == "/api/merge/analyze":
-                return self._handle_merge_analyze(body)
-            if path == "/api/merge/apply":
-                return self._handle_merge_apply(body)
-            if path == "/api/export-docx/start":
-                return self._handle_export_docx_start(body)
+                if path.startswith("/api/save/"):
+                    return self._handle_save(path, body)
+                if path == "/api/attachment-upload":
+                    return self._handle_attachment_upload(body)
+                if path == "/api/rename":
+                    return self._handle_rename(body)
+                if path == "/api/copy":
+                    return self._handle_copy(body)
+                if path == "/api/new":
+                    return self._handle_new(body)
+                if path.startswith("/api/delete/"):
+                    return self._handle_delete(path)
+                if path == "/api/history/load":
+                    return self._handle_history_load(body)
+                if path == "/api/history/restore":
+                    return self._handle_history_restore(body)
+                if path == "/api/version/create":
+                    return self._handle_version_create(body)
+                if path == "/api/version/load":
+                    return self._handle_version_load(body)
+                if path == "/api/trash/restore":
+                    return self._handle_trash_restore(body)
+                if path == "/api/trash/delete":
+                    return self._handle_trash_delete(body)
+                if path == "/api/trash/clear":
+                    return self._handle_trash_clear(body)
+                if path == "/api/document/normalize":
+                    return self._handle_document_normalize(body)
+                if path == "/api/document/validate":
+                    return self._handle_document_validate(body)
+                if path == "/api/merge/analyze":
+                    return self._handle_merge_analyze(body)
+                if path == "/api/merge/apply":
+                    return self._handle_merge_apply(body)
+                if path == "/api/export-docx/start":
+                    return self._handle_export_docx_start(body)
 
-            return self._json({"error": "not found"}, 404)
+                return self._json({"error": "not found"}, 404)
+            except Exception as exc:
+                log_error("blm.http", "http.request.error", method="POST", path=self.path, error=str(exc))
+                raise
+            finally:
+                self._finish_request("POST")
 
         def log_message(self, *_):
             pass
+
+        def _begin_request(self) -> None:
+            self._request_started_at = time.perf_counter()
+            self._request_status = 0
+
+        def _finish_request(self, method: str) -> None:
+            elapsed_ms = int((time.perf_counter() - float(self._request_started_at or time.perf_counter())) * 1000)
+            path = urlparse(self.path).path
+            if path.startswith(("/api/collab/ws", "/favicon")):
+                return
+            log_event(
+                "blm.http",
+                "http.request",
+                method=method,
+                path=path,
+                status=self._request_status or 0,
+                elapsedMs=elapsed_ms,
+                clientIp=self.client_address[0] if self.client_address else "",
+            )
 
         def _handle_load(self, path: str):
             name = unquote(path[len("/api/load/"):])
@@ -666,6 +706,7 @@ def run_server(
     open_browser: bool = True,
 ) -> None:
     storage = WorkspaceStorage(workspace_dir)
+    log_dir = configure_diagnostics(workspace_dir)
     collab = CollaborationManager(storage)
     migration_result = storage.migrate_workspace_layout()
     handler = create_handler(app_dir, storage, collab)
@@ -674,6 +715,17 @@ def run_server(
 
     print(f"BLM Tool 已启动: {url}")
     print(f"文档目录: {workspace_dir}")
+    print(f"日志目录: {log_dir}")
+    log_event(
+        "blm.server",
+        "server.start",
+        url=url,
+        port=port,
+        appDir=app_dir,
+        workspaceDir=workspace_dir,
+        logDir=log_dir,
+        **runtime_fields(),
+    )
     if any(migration_result.values()):
         print(
             "已完成文档包迁移: "
