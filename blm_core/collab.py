@@ -474,28 +474,198 @@ class CollaborationManager:
             source = "3way"
 
         conflicts = result.get("conflicts", [])
+        delete_conflicts = 0
+        merged = result.get("merged_document") or server_doc or base_doc or user_doc or {}
+
+        # 删除保护：server删除了但user未修改的元素，应从合并结果中移除
+        # （merge引擎将"未修改+被对方删除"的元素保留，对协作场景这是错误的）
+        if server_doc is not None and isinstance(conflicts, list):
+            uc = self._clean_deleted_items(merged, base_doc, user_doc, server_doc)
+            delete_conflicts = uc
+
         stats = {
             "merged": True,
             "conflictCount": len(conflicts) if isinstance(conflicts, list) else 0,
+            "deleteConflicts": delete_conflicts,
             "source": source,
         }
-
-        merged = result.get("merged_document") or server_doc or base_doc or user_doc or {}
 
         # 保护meta不被合并引擎污染（title/domain被覆盖为"xxx-合并"，space/tags等被丢弃）
         current_meta = (server_doc or base_doc).get("meta") if isinstance((server_doc or base_doc), dict) else {}
         if isinstance(merged.get("meta"), dict) and isinstance(current_meta, dict):
             merged_meta = merged["meta"]
-            # 还原文档标识字段（合并引擎在combine模式下会覆盖）
             for field in ("title", "domain"):
                 if current_meta.get(field):
                     merged_meta[field] = current_meta[field]
-            # 保留合并引擎未处理的字段（space, tags, revision等）
             for field, value in current_meta.items():
                 if field not in merged_meta:
                     merged_meta[field] = deepcopy(value)
 
         return merged, stats
+
+    @staticmethod
+    def _clean_deleted_items(
+        merged: dict, base: dict, user: dict, server: dict
+    ) -> int:
+        """移除合并结果中server已删除但user未修改的uid元素。返回删除冲突数。"""
+        list_fields = [
+            "roles", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
+            "processes", "entities", "relations", "rules",
+            "businessComponents", "businessConstructs", "taskDefinitions",
+        ]
+        count = 0
+        for field in list_fields:
+            base_list = base.get(field) if isinstance(base.get(field), list) else []
+            user_list = user.get(field) if isinstance(user.get(field), list) else []
+            server_list = server.get(field) if isinstance(server.get(field), list) else []
+            merged_list = merged.get(field) if isinstance(merged.get(field), list) else []
+            if not base_list:
+                continue
+
+            base_by_uid = {str(item.get("uid", "")).strip(): item for item in base_list if isinstance(item, dict)}
+            user_by_uid = {str(item.get("uid", "")).strip(): item for item in user_list if isinstance(item, dict)}
+            server_uids = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
+
+            keep = []
+            for item in merged_list:
+                if not isinstance(item, dict):
+                    keep.append(item)
+                    continue
+                uid = str(item.get("uid", "")).strip()
+                base_item = base_by_uid.get(uid)
+                user_item = user_by_uid.get(uid)
+                # 条件：base中存在、server中不存在（被server删除）、user未修改或不存在
+                if base_item is not None and uid not in server_uids:
+                    if user_item is None:
+                        # user也删了 → 保留server的删除
+                        count += 1
+                        continue
+                    if json.dumps(user_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) == \
+                       json.dumps(base_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")):
+                        # user未修改 → 保留server的删除
+                        continue
+                    # user修改了 → 删改冲突，保留user的修改但记录
+                    count += 1
+                keep.append(item)
+            merged[field] = keep
+
+        # 递归处理嵌套列表（processes->nodes, processes->flow->nodes, processes->flow->edges,
+        # processes->nodes->userSteps, entity_ops, orchestrationTasks, forms, etc.）
+        for p_base, p_user, p_server, p_merged in zip(
+            base.get("processes", []) if isinstance(base.get("processes"), list) else [],
+            user.get("processes", []) if isinstance(user.get("processes"), list) else [],
+            server.get("processes", []) if isinstance(server.get("processes"), list) else [],
+            merged.get("processes", []) if isinstance(merged.get("processes"), list) else [],
+        ):
+            if not isinstance(p_merged, dict):
+                continue
+            proc_uid = str(p_merged.get("uid", "")).strip()
+            p_base_d = p_base if isinstance(p_base, dict) and str(p_base.get("uid", "")).strip() == proc_uid else {}
+            p_user_d = p_user if isinstance(p_user, dict) and str(p_user.get("uid", "")).strip() == proc_uid else {}
+            p_server_d = p_server if isinstance(p_server, dict) and str(p_server.get("uid", "")).strip() == proc_uid else {}
+
+            # nodes
+            count += CollaborationManager._clean_sublist(
+                p_merged, p_base_d, p_user_d, p_server_d, "nodes"
+            )
+            # flow.nodes (gateways)
+            flow = p_merged.get("flow") if isinstance(p_merged.get("flow"), dict) else {}
+            if isinstance(flow, dict) and flow.get("nodes"):
+                base_flow = p_base_d.get("flow") if isinstance(p_base_d.get("flow"), dict) else {}
+                user_flow = p_user_d.get("flow") if isinstance(p_user_d.get("flow"), dict) else {}
+                server_flow = p_server_d.get("flow") if isinstance(p_server_d.get("flow"), dict) else {}
+                count += CollaborationManager._clean_sublist(
+                    flow, base_flow, user_flow, server_flow, "nodes"
+                )
+                count += CollaborationManager._clean_sublist(
+                    flow, base_flow, user_flow, server_flow, "edges"
+                )
+
+            # node sub-lists
+            nodes_by_uid = {str(n.get("uid", "")).strip(): n for n in p_base_d.get("nodes", []) if isinstance(n, dict)}
+            user_nodes_by_uid = {str(n.get("uid", "")).strip(): n for n in p_user_d.get("nodes", []) if isinstance(n, dict)}
+            server_nodes_by_uid = {str(n.get("uid", "")).strip(): n for n in p_server_d.get("nodes", []) if isinstance(n, dict)}
+            for node in p_merged.get("nodes", []) if isinstance(p_merged.get("nodes"), list) else []:
+                if not isinstance(node, dict):
+                    continue
+                nuid = str(node.get("uid", "")).strip()
+                bn = nodes_by_uid.get(nuid, {})
+                un = user_nodes_by_uid.get(nuid, {})
+                sn = server_nodes_by_uid.get(nuid, {})
+                for sub in ("userSteps", "entity_ops", "orchestrationTasks", "businessRules", "forms"):
+                    count += CollaborationManager._clean_sublist(node, bn, un, sn, sub)
+                # sections/fields in forms
+                b_forms = {str(f.get("uid", "")).strip(): f for f in bn.get("forms", []) if isinstance(f, dict)}
+                u_forms = {str(f.get("uid", "")).strip(): f for f in un.get("forms", []) if isinstance(f, dict)}
+                s_forms = {str(f.get("uid", "")).strip(): f for f in sn.get("forms", []) if isinstance(f, dict)}
+                for form in node.get("forms", []) if isinstance(node.get("forms"), list) else []:
+                    if not isinstance(form, dict):
+                        continue
+                    fuid = str(form.get("uid", "")).strip()
+                    bf = b_forms.get(fuid, {})
+                    uf = u_forms.get(fuid, {})
+                    sf = s_forms.get(fuid, {})
+                    count += CollaborationManager._clean_sublist(form, bf, uf, sf, "sections")
+                    b_secs = {str(s.get("uid", "")).strip(): s for s in bf.get("sections", []) if isinstance(s, dict)}
+                    u_secs = {str(s.get("uid", "")).strip(): s for s in uf.get("sections", []) if isinstance(s, dict)}
+                    s_secs = {str(s.get("uid", "")).strip(): s for s in sf.get("sections", []) if isinstance(s, dict)}
+                    for sec in form.get("sections", []) if isinstance(form.get("sections"), list) else []:
+                        if not isinstance(sec, dict):
+                            continue
+                        suid = str(sec.get("uid", "")).strip()
+                        count += CollaborationManager._clean_sublist(
+                            sec, b_secs.get(suid, {}), u_secs.get(suid, {}), s_secs.get(suid, {}), "fields"
+                        )
+
+        # entities -> fields, state_transitions
+        e_base_by_uid = {str(e.get("uid", "")).strip(): e for e in base.get("entities", []) if isinstance(e, dict)}
+        e_user_by_uid = {str(e.get("uid", "")).strip(): e for e in user.get("entities", []) if isinstance(e, dict)}
+        e_server_by_uid = {str(e.get("uid", "")).strip(): e for e in server.get("entities", []) if isinstance(e, dict)}
+        for entity in merged.get("entities", []) if isinstance(merged.get("entities"), list) else []:
+            if not isinstance(entity, dict):
+                continue
+            euid = str(entity.get("uid", "")).strip()
+            be = e_base_by_uid.get(euid, {})
+            ue = e_user_by_uid.get(euid, {})
+            se = e_server_by_uid.get(euid, {})
+            count += CollaborationManager._clean_sublist(entity, be, ue, se, "fields")
+            count += CollaborationManager._clean_sublist(entity, be, ue, se, "state_transitions")
+
+        return count
+
+    @staticmethod
+    def _clean_sublist(parent_merged: dict, base: dict, user: dict, server: dict, field: str) -> int:
+        """清理单个子列表中被server删除但user未修改的元素"""
+        base_list = base.get(field) if isinstance(base.get(field), list) else []
+        user_list = user.get(field) if isinstance(user.get(field), list) else []
+        server_list = server.get(field) if isinstance(server.get(field), list) else []
+        merged_list = parent_merged.get(field) if isinstance(parent_merged.get(field), list) else []
+        if not base_list or not merged_list:
+            return 0
+
+        base_by_uid = {str(item.get("uid", "")).strip(): item for item in base_list if isinstance(item, dict)}
+        user_by_uid = {str(item.get("uid", "")).strip(): item for item in user_list if isinstance(item, dict)}
+        server_uids = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
+
+        count = 0
+        keep = []
+        for item in merged_list:
+            if not isinstance(item, dict):
+                keep.append(item)
+                continue
+            uid = str(item.get("uid", "")).strip()
+            base_item = base_by_uid.get(uid)
+            user_item = user_by_uid.get(uid)
+            if base_item is not None and uid not in server_uids:
+                if user_item is None or \
+                   json.dumps(user_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) == \
+                   json.dumps(base_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")):
+                    count += 1
+                    continue
+                count += 1  # 删改冲突，保留user修改，记录
+            keep.append(item)
+        parent_merged[field] = keep
+        return count
 
     def _parse_base_seq(self, value: Any) -> int | None:
         if value is None or value == "":
