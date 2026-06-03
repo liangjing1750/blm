@@ -1181,5 +1181,247 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             self.assertEqual(len(submit_files), 6)
 
 
+class CollaborationMetaPreservationTests(unittest.TestCase):
+    """验证合并后meta字段不被污染或丢弃"""
+
+    def _base_doc(self):
+        doc = create_empty_document("TestDoc")
+        doc["meta"]["title"] = "原始标题"
+        doc["meta"]["domain"] = "原始域"
+        doc["meta"]["author"] = "原始作者"
+        doc["meta"]["date"] = "2026-01-01"
+        doc["meta"]["space"] = "原始空间"
+        doc["meta"]["tags"] = ["标签A", "标签B"]
+        doc["meta"]["revision"] = 5
+        return doc
+
+    def test_meta_title_not_appended_merge_on_combine(self):
+        """缺陷1: combine合并后title不应被加'合并'"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base = self._base_doc()
+            storage.save("TestDoc", base)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 先提交一次推进seq
+            first = create_empty_document("TestDoc")
+            first["meta"]["author"] = "第一个用户"
+            manager.apply_http_snapshot(
+                "TestDoc",
+                {"id": "u0", "name": "用户0", "sessionId": "s0"},
+                {"baseSeq": 0, "document": first},
+            )
+
+            # 第二次提交用旧baseSeq，触发combine合并
+            user_doc = create_empty_document("TestDoc")
+            user_doc["meta"]["author"] = "第二个用户"
+            result = manager.apply_http_snapshot(
+                "TestDoc",
+                {"id": "u1", "name": "用户1", "sessionId": "s1"},
+                {"baseSeq": 0, "document": user_doc},
+            )
+            self.assertTrue(result["ok"])
+            final = storage.load("TestDoc")
+            self.assertNotIn("合并", final["meta"]["title"], "title不应含合并")
+            self.assertNotIn("合并", final["meta"]["domain"], "domain不应含合并")
+            self.assertTrue(final["meta"]["title"])  # 非空即可
+
+    def test_meta_space_and_tags_preserved_after_merge(self):
+        """缺陷2: space和tags合并后不丢失"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base = self._base_doc()
+            base["meta"]["space"] = "交割业务"
+            base["meta"]["tags"] = ["仓单", "入库"]
+            storage.save("TestDoc", base)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            user_doc = create_empty_document("TestDoc")
+            user_doc["meta"]["author"] = "新作者"
+            user_doc["meta"]["space"] = "交割业务"
+            user_doc["meta"]["tags"] = ["仓单", "入库", "风控"]
+            result = manager.apply_http_snapshot(
+                "TestDoc",
+                {"id": "u1", "name": "用户1", "sessionId": "s1"},
+                {"baseSeq": 0, "document": user_doc},
+            )
+            self.assertTrue(result["ok"])
+            final = storage.load("TestDoc")
+            self.assertEqual(final["meta"]["space"], "交割业务", "space应保留")
+            self.assertIn("仓单", final["meta"]["tags"])
+            self.assertIn("入库", final["meta"]["tags"])
+
+    def test_meta_revision_preserved(self):
+        """revision字段合并后保留"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base = self._base_doc()
+            base["meta"]["revision"] = 8
+            storage.save("TestDoc", base)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            user_doc = create_empty_document("TestDoc")
+            user_doc["meta"]["author"] = "新作者"
+            result = manager.apply_http_snapshot(
+                "TestDoc",
+                {"id": "u1", "name": "用户1", "sessionId": "s1"},
+                {"baseSeq": 0, "document": user_doc},
+            )
+            final = storage.load("TestDoc")
+            self.assertIn("revision", final["meta"])
+            self.assertGreaterEqual(final["meta"]["revision"], 1)
+
+    def test_all_entity_fields_preserved_after_concurrent_merge(self):
+        """全字段回归：角色/流程/节点/流转/实体/字段/阶段/规则"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base = create_empty_document("TestDoc")
+            base["meta"]["space"] = "测试空间"
+            base["meta"]["tags"] = ["v1"]
+            base["meta"]["author"] = "Base"
+            base["meta"]["domain"] = "TestDoc"
+            base["meta"]["title"] = "TestDoc"
+            base["roles"] = [{"uid": "r-1", "name": "角色1", "desc": "描述1", "group": "业务参与方", "subDomains": ["仓储"]}]
+            base["processes"] = [{
+                "uid": "p-1", "name": "流程1",
+                "subDomain": "仓储", "flowGroup": "", "trigger": "事件1", "outcome": "结果1",
+                "stageUid": "s-1", "stagePos": {"x": 0, "y": 0},
+                "prototypeFiles": [], "businessComponentUids": [], "businessConstructUids": [],
+                "businessComponentUid": "", "businessConstructUid": "",
+                "nodes": [{
+                    "uid": "t-1", "name": "节点1",
+                    "role_uid": "r-1", "role_uids": ["r-1"], "roles": ["角色1"], "role": "角色1",
+                    "repeatable": False, "rules_note": "规则备注",
+                    "userSteps": [{"uid": "us-1", "name": "步骤1", "type": "form", "note": "步骤备注"}],
+                    "orchestrationTasks": [{"uid": "ot-1", "name": "编排1", "type": "Custom", "target": "", "note": "", "querySourceKind": ""}],
+                    "forms": [{"uid": "f-1", "name": "表单1", "note": "", "entity_id": "e-1",
+                               "sections": [{"uid": "sec-1", "name": "区块1", "note": "", "entity_id": "e-1",
+                                             "fields": [{"uid": "fld-1", "name": "字段1", "type": "string", "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}]}]}],
+                    "entity_ops": [{"uid": "eo-1", "entity_id": "e-1", "ops": ["C", "R"]}],
+                    "businessRules": [{"uid": "br-1", "name": "规则1", "content": "旧规则内容"}],
+                }],
+                "flow": {"version": 2, "nodes": [
+                    {"uid": "g-1", "kind": "gateway", "title": "网关1", "gatewayType": "exclusive", "role_uid": ""}
+                ], "edges": [
+                    {"uid": "edge-1", "from": "t-1", "to": "g-1", "label": "边1", "condition": ""}
+                ], "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+            }]
+            base["entities"] = [{
+                "uid": "e-1", "name": "实体1",
+                "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                "businessConstructUid": "", "businessConstructUids": [], "businessComponentUid": "",
+                "fields": [{"uid": "ef-1", "name": "字段1", "type": "string", "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
+                "state_transitions": [{"uid": "st-1", "from": "A", "to": "B", "label": "转换", "note": ""}],
+                "taxonomies": [],
+            }]
+            base["stages"] = [{
+                "uid": "s-1", "name": "阶段1", "subDomain": "仓储",
+                "panoramaColumnUid": "", "panoramaLaneUid": "",
+                "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
+                "processLinks": [{"uid": "pl-1", "fromProcessUid": "p-1", "toProcessUid": "p-1"}],
+            }]
+            base["rules"] = [{"uid": "r-1", "name": "规则1", "content": "内容1"}]
+            base["stageLinks"] = [{"uid": "sl-1", "fromStageUid": "s-1", "toStageUid": "s-1"}]
+            base["stageFlowRefs"] = [{"uid": "sfr-1", "stageUid": "s-1", "processUid": "p-1", "order": 1, "pos": {"x": 0, "y": 0}}]
+            storage.save("TestDoc", base)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 并发修改：3个用户各自修改不同维度
+            def modify_meta(index):
+                local = create_empty_document("TestDoc")
+                local["meta"]["author"] = f"作者{index}"
+                local["meta"]["space"] = f"空间{index}"
+                local["meta"]["tags"] = [f"标签{index}"]
+                return manager.apply_http_snapshot(
+                    "TestDoc", {"id": f"um{index}", "name": f"Meta{index}", "sessionId": f"sm{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            def modify_roles_and_process(index):
+                local = create_empty_document("TestDoc")
+                local["roles"] = [
+                    {"uid": "r-1", "name": f"角色{index}", "desc": f"描述{index}", "group": "业务参与方", "subDomains": ["仓储"]},
+                    {"uid": f"r-new-{index}", "name": f"新角色{index}", "desc": "", "group": "业务参与方", "subDomains": []},
+                ]
+                local["processes"] = [{
+                    "uid": "p-1", "name": f"流程{index}",
+                    "subDomain": "仓储", "flowGroup": "", "trigger": f"触发{index}", "outcome": f"结果{index}",
+                    "stageUid": "s-1", "stagePos": {"x": 0, "y": 0},
+                    "prototypeFiles": [], "businessComponentUids": [], "businessConstructUids": [],
+                    "businessComponentUid": "", "businessConstructUid": "",
+                    "nodes": [{
+                        "uid": "t-1", "name": f"节点{index}", "role_uid": "r-1", "role_uids": ["r-1"], "roles": [f"角色{index}"], "role": f"角色{index}",
+                        "repeatable": False, "rules_note": "",
+                        "userSteps": [], "orchestrationTasks": [], "forms": [],
+                        "entity_ops": [], "businessRules": [],
+                    }],
+                    "flow": {"version": 2, "nodes": [], "edges": [], "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+                }]
+                return manager.apply_http_snapshot(
+                    "TestDoc", {"id": f"up{index}", "name": f"Proc{index}", "sessionId": f"sp{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            def modify_entity_and_stage(index):
+                local = create_empty_document("TestDoc")
+                local["entities"] = [{
+                    "uid": "e-1", "name": f"实体{index}", "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                    "businessConstructUid": "", "businessConstructUids": [], "businessComponentUid": "",
+                    "fields": [{"uid": "ef-1", "name": f"字段{index}", "type": "string", "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
+                    "state_transitions": [],
+                    "taxonomies": [],
+                }]
+                local["stages"] = [{
+                    "uid": "s-1", "name": f"阶段{index}", "subDomain": "仓储",
+                    "panoramaColumnUid": "", "panoramaLaneUid": "",
+                    "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
+                    "processLinks": [],
+                }]
+                return manager.apply_http_snapshot(
+                    "TestDoc", {"id": f"ue{index}", "name": f"Entity{index}", "sessionId": f"se{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                futures = []
+                for i in range(2):
+                    futures.append(executor.submit(modify_meta, i))
+                    futures.append(executor.submit(modify_roles_and_process, i))
+                    futures.append(executor.submit(modify_entity_and_stage, i))
+                for f in futures:
+                    self.assertTrue(f.result()["ok"])
+
+            final = storage.load("TestDoc")
+            # 验证所有实体类型都有数据
+            self.assertIsInstance(final, dict)
+            self.assertIn("meta", final)
+            self.assertIn("roles", final)
+            self.assertGreaterEqual(len(final["roles"]), 1)
+            self.assertIn("processes", final)
+            self.assertGreaterEqual(len(final["processes"]), 1)
+            self.assertIn("entities", final)
+            self.assertGreaterEqual(len(final["entities"]), 1)
+            self.assertIn("stages", final)
+            self.assertGreaterEqual(len(final["stages"]), 1)
+
+            # 验证meta关键字段
+            meta = final["meta"]
+            self.assertNotIn("合并", str(meta.get("title", "")), "title不应含'合并'")
+            self.assertNotIn("合并", str(meta.get("domain", "")), "domain不应含'合并'")
+            self.assertIn("space", meta, "space字段存在")
+            self.assertIn("tags", meta, "tags字段存在")
+
+            # 验证所有实体集合都存在
+            proc = final["processes"][0] if final["processes"] else {}
+            self.assertIn("name", proc, "流程应有名称")
+            entities = final.get("entities", [])
+            self.assertGreaterEqual(len(entities), 1, "至少1个实体")
+
+            # 提交原文全部存在
+            submits_dir = Path(temp_dir) / "workspace" / "TestDoc" / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertEqual(len(submit_files), 6)
+
+
 if __name__ == "__main__":
     unittest.main()

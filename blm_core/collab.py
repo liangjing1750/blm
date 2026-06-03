@@ -473,6 +473,20 @@ class CollaborationManager:
         }
 
         merged = result.get("merged_document") or server_doc or base_doc or user_doc or {}
+
+        # 保护meta不被合并引擎污染（title/domain被覆盖为"xxx-合并"，space/tags等被丢弃）
+        current_meta = (server_doc or base_doc).get("meta") if isinstance((server_doc or base_doc), dict) else {}
+        if isinstance(merged.get("meta"), dict) and isinstance(current_meta, dict):
+            merged_meta = merged["meta"]
+            # 还原文档标识字段（合并引擎在combine模式下会覆盖）
+            for field in ("title", "domain"):
+                if current_meta.get(field):
+                    merged_meta[field] = current_meta[field]
+            # 保留合并引擎未处理的字段（space, tags, revision等）
+            for field, value in current_meta.items():
+                if field not in merged_meta:
+                    merged_meta[field] = deepcopy(value)
+
         return merged, stats
 
     def _parse_base_seq(self, value: Any) -> int | None:
