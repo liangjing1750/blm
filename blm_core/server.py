@@ -760,7 +760,14 @@ def run_server(
     collab = CollaborationManager(storage)
     migration_result = storage.migrate_workspace_layout()
     handler = create_handler(app_dir, storage, collab)
-    server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+    try:
+        server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+        server.allow_reuse_address = True
+    except OSError as exc:
+        print(f"\n?? 端口 {port} 已被占用，无法启动 BLM 服务。")
+        print(f"   请先关闭占用该端口的进程，或设置环境变量 BLM_PORT 使用其他端口。")
+        print(f"   错误详情: {exc}\n")
+        raise SystemExit(1) from exc
     admin_server = None
     if admin_port:
         try:
