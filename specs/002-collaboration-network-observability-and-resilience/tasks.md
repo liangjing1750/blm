@@ -52,11 +52,11 @@
   - [x] 自动验收：HTTP snapshot 旧 baseSeq rebase smoke test、JS 语法检查、Python 编译
   - [ ] 断开 WebSocket 后立即同步 UI 测试：当前本机 Playwright/npm 环境不可用
 
-- [ ] T5 独立管理端
-  - [ ] 支持 BLM_ADMIN_PORT 启动只读管理端
-  - [ ] 管理端展示服务状态、文档状态、协作连接、日志摘要
-  - [ ] 支持下载诊断包
-  - [ ] 自动验收：管理端 health/status API 测试
+- [x] T5 独立管理端
+  - [x] 支持 BLM_ADMIN_PORT 启动只读管理端
+  - [x] 管理端展示服务状态、文档状态、协作连接、日志摘要
+  - [x] 支持下载诊断包
+  - [x] 自动验收：管理端 status API smoke test、Python 编译
 
 - [ ] T6 回归与文档收口
   - [ ] 更新 docs 中协作、changelog 生命周期、弱网排障说明

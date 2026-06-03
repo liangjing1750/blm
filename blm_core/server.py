@@ -10,6 +10,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from blm_core.admin import create_admin_handler, log_admin_start
 from blm_core.diagnostics import configure_diagnostics, log_error, log_event, runtime_fields
 from blm_core.document import canonical_document, migrate_document
 from blm_core.collab import CollaborationManager
@@ -745,18 +746,35 @@ def run_server(
     app_dir: Path,
     workspace_dir: Path,
     open_browser: bool = True,
+    admin_port: int | None = None,
 ) -> None:
+    started_at = time.time()
     storage = WorkspaceStorage(workspace_dir)
     log_dir = configure_diagnostics(workspace_dir)
     collab = CollaborationManager(storage)
     migration_result = storage.migrate_workspace_layout()
     handler = create_handler(app_dir, storage, collab)
     server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+    admin_server = None
+    if admin_port:
+        admin_handler = create_admin_handler(
+            storage,
+            collab,
+            workspace_dir=workspace_dir,
+            app_port=port,
+            started_at=started_at,
+        )
+        admin_server = http.server.ThreadingHTTPServer(("0.0.0.0", admin_port), admin_handler)
+        admin_thread = threading.Thread(target=admin_server.serve_forever, daemon=True)
+        admin_thread.start()
+        log_admin_start(admin_port, workspace_dir)
     url = f"http://0.0.0.0:{port}"
 
     print(f"BLM Tool 已启动: {url}")
     print(f"文档目录: {workspace_dir}")
     print(f"日志目录: {log_dir}")
+    if admin_server:
+        print(f"管理端: http://0.0.0.0:{admin_port}")
     log_event(
         "blm.server",
         "server.start",
@@ -783,3 +801,6 @@ def run_server(
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n已退出")
+    finally:
+        if admin_server:
+            admin_server.shutdown()

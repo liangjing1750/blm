@@ -18,6 +18,7 @@ ROOT = Path(__file__).parent
 @dataclass(frozen=True)
 class RuntimeConfig:
     port: int
+    admin_port: int | None
     app_dir: Path
     workspace_dir: Path
     open_browser: bool
@@ -45,12 +46,20 @@ def build_runtime_config() -> RuntimeConfig:
         port = int(port_text)
     except ValueError as exc:
         raise ValueError("BLM_PORT 必须是整数") from exc
+    admin_port_text = (os.getenv("BLM_ADMIN_PORT") or "").strip()
+    admin_port = None
+    if admin_port_text:
+        try:
+            admin_port = int(admin_port_text)
+        except ValueError as exc:
+            raise ValueError("BLM_ADMIN_PORT 必须是整数") from exc
 
     app_dir = _resolve_path(ROOT, os.getenv("BLM_APP_DIR"), ROOT / "app")
     workspace_dir = _resolve_path(ROOT, os.getenv("BLM_WORKSPACE_DIR"), ROOT / "workspace")
     open_browser = not _read_bool_env("BLM_NO_BROWSER", False)
     return RuntimeConfig(
         port=port,
+        admin_port=admin_port,
         app_dir=app_dir,
         workspace_dir=workspace_dir,
         open_browser=open_browser,
@@ -64,4 +73,5 @@ if __name__ == "__main__":
         app_dir=config.app_dir,
         workspace_dir=config.workspace_dir,
         open_browser=config.open_browser,
+        admin_port=config.admin_port,
     )
