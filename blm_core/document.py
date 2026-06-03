@@ -115,10 +115,11 @@ def _semantic_panorama_uid(prefix: str, name: object, index: int, used: set[str]
     return uid
 
 
-def _ensure_uid(item: dict) -> str:
+def _ensure_uid(item: dict, *, prefix: str = "item") -> str:
     uid = str(item.get("uid", "")).strip()
     if not uid:
-        uid = _new_uid()
+        name = str(item.get("name", "")).strip()
+        uid = _deterministic_ui_uid(prefix, name) if name else _new_uid()
         item["uid"] = uid
     return uid
 
@@ -694,7 +695,7 @@ def _normalize_stages(stages: list[dict], processes: list[dict]) -> None:
     for stage_index, stage in enumerate(stages, start=1):
         if not isinstance(stage, dict):
             continue
-        _ensure_uid(stage)
+        _ensure_uid(stage, prefix="stage")
         # uid already set by _ensure_uid
         stage.setdefault("name", f"{DEFAULT_STAGE_NAME}{stage_index}")
         if not stage.get("subDomain"):
@@ -784,7 +785,7 @@ def normalize_task_parameters(value) -> dict:
             if not isinstance(item, dict):
                 continue
             param = dict(item)
-            _ensure_uid(param)
+            _ensure_uid(param, prefix="param")
             param["name"] = str(param.get("name", "")).strip()
             param["type"] = str(param.get("type", "")).strip()
             param["required"] = bool(param.get("required", False))
@@ -1063,7 +1064,7 @@ def _normalize_prototype_versions(prototype: dict, prototype_index: int) -> tupl
 
 def _normalize_rules(rules: list[dict]) -> None:
     for rule in rules:
-        _ensure_uid(rule)
+        _ensure_uid(rule, prefix="rule")
         rule.setdefault("name", "")
         rule.setdefault("type", "")
         rule.setdefault("applies_to", "")
@@ -1073,14 +1074,14 @@ def _normalize_rules(rules: list[dict]) -> None:
 
 def _normalize_language(language: list[dict]) -> None:
     for item in language:
-        _ensure_uid(item)
+        _ensure_uid(item, prefix="item")
         item.setdefault("term", "")
         item.setdefault("definition", "")
 
 
 def _normalize_relations(relations: list[dict]) -> None:
     for relation in relations:
-        _ensure_uid(relation)
+        _ensure_uid(relation, prefix="relation")
         relation.setdefault("from", "")
         relation.setdefault("to", "")
         relation.setdefault("type", "")
@@ -1111,7 +1112,7 @@ def _normalize_node_business_rules(node: dict) -> None:
     rules = []
     for index, raw_rule in enumerate(raw_rules, start=1):
         rule = raw_rule if isinstance(raw_rule, dict) else {"content": str(raw_rule or "").strip()}
-        _ensure_uid(rule)
+        _ensure_uid(rule, prefix="rule")
         # uid already set
         rule["name"] = str(rule.get("name", rule.get("title", f"规则{index}")) or "").strip()
         rule["content"] = str(
@@ -1136,7 +1137,7 @@ def _normalize_node_business_rules(node: dict) -> None:
 
 def _normalize_entities(entities: list[dict]) -> None:
     for entity_index, entity in enumerate(entities, start=1):
-        _ensure_uid(entity)
+        _ensure_uid(entity, prefix="entity")
         # uid already set by _ensure_uid
         entity.setdefault("name", "")
         entity.setdefault("group", "")
@@ -1146,7 +1147,7 @@ def _normalize_entities(entities: list[dict]) -> None:
 
         primary_status_assigned = False
         for field in entity["fields"]:
-            _ensure_uid(field)
+            _ensure_uid(field, prefix="field")
             is_key = bool(field.pop("pk", field.get("is_key", False)))
             legacy_is_status = bool(field.pop("status", field.get("is_status", False)))
             status_role = normalize_status_role(
@@ -1208,7 +1209,7 @@ def _normalize_node_forms(node: dict) -> None:
         if not isinstance(raw_form, dict):
             continue
         form = raw_form
-        _ensure_uid(form)
+        _ensure_uid(form, prefix="form")
         # uid already set by _ensure_uid
         form["name"] = str(form.get("name", "")).strip()
         form["purpose"] = str(form.get("purpose", "")).strip()
@@ -1224,7 +1225,7 @@ def _normalize_node_forms(node: dict) -> None:
             if not isinstance(raw_section, dict):
                 continue
             section = raw_section
-            _ensure_uid(section)
+            _ensure_uid(section, prefix="section")
             # uid already set by _ensure_uid
             section["name"] = str(section.get("name", "")).strip()
             section["note"] = str(section.get("note", "")).strip()
@@ -1239,7 +1240,7 @@ def _normalize_node_forms(node: dict) -> None:
                 if not isinstance(raw_field, dict):
                     continue
                 field = raw_field
-                _ensure_uid(field)
+                _ensure_uid(field, prefix="field")
                 # uid already set by _ensure_uid
                 field["name"] = str(field.get("name", "")).strip()
                 field["type"] = str(field.get("type", "Text") or "Text").strip()
@@ -1259,7 +1260,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
     roles_by_name = {role["name"]: role for role in roles}
 
     for process_index, process in enumerate(processes, start=1):
-        _ensure_uid(process)
+        _ensure_uid(process, prefix="process")
         _pop_legacy_business_component_fields(process)
         process.setdefault("name", DEFAULT_PROCESS_NAME if process_index == 1 else f"\u6d41\u7a0b{process_index}")
         process.setdefault("trigger", "")
@@ -1274,7 +1275,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
             prototype_sources = []
         for prototype_index, prototype in enumerate(prototype_sources, start=1):
             normalized = prototype if isinstance(prototype, dict) else {"name": str(prototype or "").strip()}
-            _ensure_uid(normalized)
+            _ensure_uid(normalized, prefix="proto")
             normalized_versions, current_version = _normalize_prototype_versions(normalized, prototype_index)
             normalized_prototypes.append(
                 {
@@ -1297,7 +1298,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
             process["nodes"].extend(legacy_nodes)
 
         for node_index, node in enumerate(process["nodes"], start=1):
-            _ensure_uid(node)
+            _ensure_uid(node, prefix="node")
             _pop_legacy_business_component_fields(node)
             node.setdefault("name", "")
             node_roles: list[dict] = []
@@ -1582,13 +1583,8 @@ def migrate_document(document: dict | None) -> dict:
     _normalize_processes(doc["processes"], doc["roles"])
     _normalize_stages(doc["stages"], doc["processes"])
     doc["stageLinks"] = _normalize_stage_links(doc["stageLinks"])
-    doc["stageFlowRefs"] = _supplement_stage_flow_refs_from_legacy(
-        _normalize_stage_flow_refs(doc["stageFlowRefs"]),
-        doc["processes"],
-    )
+    doc["stageFlowRefs"] = _normalize_stage_flow_refs(doc["stageFlowRefs"])
     doc["stageFlowLinks"] = _normalize_stage_flow_links(doc["stageFlowLinks"])
-    if not doc["stageFlowLinks"]:
-        doc["stageFlowLinks"] = _build_stage_flow_links_from_legacy(doc["stages"], doc["stageFlowRefs"])
     _normalize_entities(doc["entities"])
     _normalize_relations(doc["relations"])
     _normalize_rules(doc["rules"])

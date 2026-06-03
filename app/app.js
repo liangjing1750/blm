@@ -1745,11 +1745,65 @@ function uniqueCompareLayoutItems(items) {
   });
 }
 
-function formatCompareBusinessValue(value) {
+function formatCompareBusinessValue(value, fieldLabel) {
   if (value === undefined || value === null || value === '') return '未填写';
   if (value === true) return '是';
   if (value === false) return '否';
-  return `“${compactCompareValue(value)}”`;
+  // 尝试将UID解析为可读名称
+  const fieldLower = String(fieldLabel || '').toLowerCase();
+  if (fieldLower.includes('uid') || fieldLower.endsWith('uid') || fieldLower.endsWith('uids')) {
+    const resolved = resolveCompareUidToName(value);
+    if (resolved) return `”${resolved}”`;
+  }
+  return `”${compactCompareValue(value)}”`;
+}
+
+function resolveCompareUidToName(value) {
+  // 单个UID
+  if (typeof value === 'string' && value.length >= 20) {
+    return resolveSingleUid(value);
+  }
+  // UID数组
+  if (Array.isArray(value)) {
+    const names = value.map((v) => resolveSingleUid(v)).filter(Boolean);
+    return names.length ? names.join('、') : '';
+  }
+  return '';
+}
+
+function resolveSingleUid(uid) {
+  if (!uid || typeof uid !== 'string') return '';
+  // 在所有实体列表中按uid查找名称
+  const sources = [
+    ['roles', 'name'],
+    ['stages', 'name'],
+    ['processes', 'name'],
+    ['entities', 'name'],
+    ['businessComponents', 'name'],
+    ['businessConstructs', 'name'],
+    ['taskDefinitions', 'name'],
+  ];
+  for (const [collection, nameField] of sources) {
+    const items = S.doc?.[collection] || [];
+    if (!Array.isArray(items)) continue;
+    const found = items.find((item) => item?.uid === uid || item?.id === uid);
+    if (found) return found[nameField] || found.name || uid;
+  }
+  // 在流程节点中查找
+  if (S.doc?.processes) {
+    for (const proc of S.doc.processes) {
+      for (const node of (proc.nodes || [])) {
+        if (node.uid === uid) return node.name || uid;
+        for (const step of (node.userSteps || [])) {
+          if (step.uid === uid) return step.name || uid;
+        }
+        for (const form of (node.forms || [])) {
+          if (form.uid === uid) return form.name || uid;
+        }
+      }
+    }
+  }
+  return '';
 }
 
 function summarizeCompareFields(items) {
@@ -1838,7 +1892,7 @@ function buildCompareBusinessRows(businessItems) {
       levelLabel: item.businessLevel?.label || '模型',
       levelId: item.businessLevel?.id || 'document',
       rank: item.businessLevel?.rank || 99,
-      detail: `修改${subject}的${item.fieldLabel || '内容'}：由${formatCompareBusinessValue(item.right)}调整为${formatCompareBusinessValue(item.left)}。`,
+      detail: `修改${subject}的${item.fieldLabel || '内容'}：由${formatCompareBusinessValue(item.right, item.fieldLabel)}调整为${formatCompareBusinessValue(item.left, item.fieldLabel)}。`,
     });
   });
 
@@ -2128,8 +2182,8 @@ function renderCompareDiffList(title, items, type) {
             <span>${esc(item.fieldLabel || '内容')}</span>
           </div>
           ${type === 'changed'
-            ? `<div class="compare-diff-values"><span><em>新版本</em>${esc(compactCompareValue(item.left))}</span><span><em>旧版本</em>${esc(compactCompareValue(item.right))}</span></div>`
-            : `<div class="compare-diff-values"><span><em>${type === 'added' ? '新版本' : '旧版本'}</em>${esc(compactCompareValue(item.left ?? item.right))}</span></div>`}
+            ? `<div class="compare-diff-values"><span><em>新版本</em>${esc(formatCompareBusinessValue(item.left, item.fieldLabel))}</span><span><em>旧版本</em>${esc(formatCompareBusinessValue(item.right, item.fieldLabel))}</span></div>`
+            : `<div class="compare-diff-values"><span><em>${type === 'added' ? '新版本' : '旧版本'}</em>${esc(formatCompareBusinessValue(item.left ?? item.right, item.fieldLabel))}</span></div>`}
         </div>`).join('')}
       </div>`).join('')}
     </div>
@@ -3177,17 +3231,6 @@ const App = {
     if (S.currentFile && S.runtime.supportsCollab && typeof syncCollabImmediatelyFromCommand === 'function') {
       const handledByCollab = await syncCollabImmediatelyFromCommand();
       if (handledByCollab) return;
-    }
-    if (S.currentFile && S.runtime.supportsCollab && S.collab?.connected) {
-      if (typeof flushCollabSnapshotSync === 'function') {
-        if (!S.modified && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
-          showAppToast('当前内容已同步。');
-          return;
-        }
-        flushCollabSnapshotSync();
-        showAppToast('已发起立即同步。');
-        return;
-      }
     }
     if (!S.currentFile) {
       openWorkspaceSaveAsModal((S.doc.meta?.domain || S.doc.meta?.title || '').trim(), 'save');

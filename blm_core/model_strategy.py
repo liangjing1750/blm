@@ -190,7 +190,8 @@ RULE_APPLIES_TO_COLLECTIONS = (
 )
 
 
-INTERNAL_SCALAR_FIELDS = {"pos", "stagePos", "labelPos", "markerPos"}
+# 位置字段在协作同步中作为普通标量参与合并和冲突检测
+INTERNAL_SCALAR_FIELDS: set[str] = set()
 
 
 # Each tuple describes one fallback semantic identity candidate. A tuple with

@@ -545,22 +545,10 @@ async function copyCollabDiagnostics() {
 }
 
 function renderCollabReconnectOverlay() {
+  // v2: 弱网环境不弹窗阻塞，只在状态栏提示
   const overlay = document.getElementById('collab-reconnect-overlay');
-  const detail = document.getElementById('collab-reconnect-detail');
-  const active = Boolean(
-    S.currentFile
-      && S.runtime.supportsCollab
-      && !S.readOnly
-      && S.collab?.recovering
-      && !S.collab?.connected,
-  );
-  overlay?.classList.toggle('hidden', !active);
-  document.body?.classList.toggle('is-collab-reconnecting', active);
-  if (detail && active) {
-    detail.textContent = S.modified || S.collab?.pendingSnapshot
-      ? '本地修改仍保留在当前浏览器内存中，重连成功后会立即同步。请不要关闭页面。'
-      : '正在恢复实时协作连接，恢复前暂时暂停编辑。请不要关闭页面。';
-  }
+  overlay?.classList.add('hidden');
+  document.body?.classList.remove('is-collab-reconnecting');
 }
 
 function connectCollabSession(docName) {
@@ -879,13 +867,15 @@ function preserveLocalSnapshotForImmediateSync() {
 
 async function syncCollabImmediatelyFromCommand() {
   if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return false;
-  const resolvedRemoteConflict = preserveLocalSnapshotForImmediateSync();
-  if (!S.modified && !resolvedRemoteConflict && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
-    showAppToast('当前内容已同步。');
-    return true;
-  }
+  // 总是走 HTTP 同步，不依赖 WebSocket 状态
+  preserveLocalSnapshotForImmediateSync();
   const syncedByHttp = await flushCollabSnapshotHttp();
-  showAppToast(syncedByHttp ? '已完成同步。' : '同步失败，请稍后重试。');
+  if (syncedByHttp) {
+    S.collab.hasConflict = false;
+    S.collab.forceSnapshotSync = false;
+    renderCollabConflictBanner();
+  }
+  showAppToast(syncedByHttp ? '已同步。' : `同步失败：${S.collab.lastError || '请稍后重试'}`);
   return true;
 }
 
@@ -929,6 +919,42 @@ async function flushCollabSnapshotHttp() {
     // 检测同步期间用户是否有新编辑
     const postSyncHash = hashCollabDocument(S.doc);
     const hadNewEditsDuringSync = frozenHash !== postSyncHash;
+    if (result.conflictCount > 0) {
+      // 有冲突 → 弹窗让用户决策，不自动合并
+      const conflicts = Array.isArray(result.conflicts) ? result.conflicts : [];
+      const paths = conflicts.map((c) => c.path || '未知字段').slice(0, 10).join('\n');
+      const confirmed = await showAppConfirm(
+        `检测到 ${result.conflictCount} 处修改冲突（双方修改了同一字段），已保留服务端最新版本。\n\n冲突字段：\n${paths}\n\n您的提交已保存为草稿，可稍后手动处理。`,
+        { title: '检测到修改冲突', confirmLabel: '使用服务端版本', cancelLabel: '查看我的版本' },
+      );
+      if (!confirmed) {
+        // 用户想保留自己的版本 → 恢复草稿
+        S.collab.pendingSnapshot = true;
+        S.collab.hasConflict = false;
+        renderCollabConflictBanner();
+        renderCollabStatus();
+        if (typeof setSaveProgress === 'function') setTimeout(() => setSaveProgress(false), 350);
+        return true;
+      }
+      if (result.document && typeof result.document === 'object') {
+        S.doc = result.document;
+        hydrateDocumentForUi(S.doc);
+      }
+      S.modified = false;
+      S.collab.pendingSnapshot = false;
+      S.collab.hasConflict = false;
+      S.collab.acceptedSeq = S.collab.seq;
+      S.collab.lastSyncedDocumentHash = hashCollabDocument(S.doc);
+      await clearLocalCollabDraft(S.currentFile);
+      renderCollabConflictBanner();
+      renderCollabStatus();
+      render();
+      if (typeof setSaveProgress === 'function') {
+        setSaveProgress(true, 100, '已应用服务端版本', '提交原文已保留，可稍后处理冲突。');
+        setTimeout(() => setSaveProgress(false), 350);
+      }
+      return true;
+    }
     if (result.document && typeof result.document === 'object') {
       S.doc = result.document;
       hydrateDocumentForUi(S.doc);
@@ -948,10 +974,10 @@ async function flushCollabSnapshotHttp() {
     if (typeof renderToolbar === 'function') renderToolbar();
     renderCollabStatus();
     if (typeof setSaveProgress === 'function') {
-      setSaveProgress(true, 100, hadNewEdits ? '同步完成（有新修改待同步）' : '同步完成', '文档已更新到最新版本。');
+      setSaveProgress(true, 100, hadNewEditsDuringSync ? '同步完成（有新修改待同步）' : '同步完成', '文档已更新到最新版本。');
       setTimeout(() => setSaveProgress(false), 350);
     }
-    if (hadNewEdits) {
+    if (hadNewEditsDuringSync) {
       queueCollabSnapshotSync();
     }
     return true;

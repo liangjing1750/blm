@@ -124,13 +124,16 @@ def _merge_panorama_item(existing: dict, candidate: dict) -> dict:
 
 
 def _panorama_item_key(item: dict) -> str:
+    uid = str(item.get("uid", "")).strip()
+    if uid:
+        return f"uid:{uid}"
     name_key = _normalize_name(item.get("name"))
     if name_key:
         return f"name:{name_key}"
     id_key = _normalize_name(item.get("id"))
     if id_key:
         return f"id:{id_key}"
-    return f"uid:{_normalize_name(item.get('uid'))}"
+    return ""
 
 
 def _resolution_choice(resolution: dict | None) -> str:

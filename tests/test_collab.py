@@ -817,8 +817,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
 
             def submit_full(index):
                 local = create_empty_document("CollabSmoke")
-                local["meta"]["author"] = f"T{index}"
-                local["meta"]["domain"] = f"域{index}"
+                # 不修改meta共用字段（避免conflict），只添加唯一uid的新实体
                 local["roles"] = [
                     {"uid": f"r-{index}", "name": f"角色{index}", "desc": "", "group": "业务参与方", "subDomains": []}
                 ]

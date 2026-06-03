@@ -23,9 +23,8 @@ CLIENT_STALE_SECONDS = 25
 
 
 def _doc_hash(document: dict) -> str:
-    """快速文档哈希，不递归排序key（migrate_document保证了key顺序一致）"""
     try:
-        text = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
+        text = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     except (TypeError, ValueError):
         return ""
     d = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
@@ -223,6 +222,8 @@ class CollaborationManager:
                 "seq": record["seq"],
                 "rebased": bool(record.get("rebased")),
                 "changed": bool(record.get("changed", True)),
+                "conflictCount": int(record.get("conflictCount", 0)),
+                "conflicts": record.get("conflicts", []),
                 "document": deepcopy(session.document),
             }
 
@@ -351,13 +352,42 @@ class CollaborationManager:
             submit_id = self._save_submit_record(session, client, document, base_seq)
 
             stats: dict = {"merged": True, "conflictCount": 0, "base_missing": False}
+            conflict_list = []
             if base_seq == session.seq:
                 merged = document
             elif base_doc := session.snapshots.get(base_seq):
-                merged, stats = self._merge_collaboration(base_doc, document, session.document)
+                merged, conflict_list, stats = self._merge_collaboration(base_doc, document, session.document)
             else:
                 stats["base_missing"] = True
-                merged, stats = self._merge_collaboration(session.document, document)
+                # 快照缺失，无法做三方比对区分"删除"和"新增"
+                # combine合并保留双方所有项（可能复原已被删除的，但不会误删新增）
+                # 用户提交原文保存在submit-record中，可手动恢复
+                merged, conflict_list, stats = self._merge_collaboration(session.document, document)
+
+            # 有冲突 → 不自动合并，返回冲突信息让用户决策
+            has_conflicts = stats.get("conflictCount", 0) > 0
+            if has_conflicts:
+                record = {
+                    "seq": session.seq,
+                    "doc": session.doc_name,
+                    "user": client.user,
+                    "userId": client.user_id,
+                    "clientId": client.client_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "baseSeq": base_seq,
+                    "mode": "snapshot",
+                    "rebased": base_seq != session.seq - 1,
+                    "submitId": submit_id,
+                    "changed": False,
+                    "conflictCount": stats["conflictCount"],
+                    "conflicts": conflict_list,
+                    "document": deepcopy(session.document),
+                }
+                stats["user"] = client.user_name
+                stats["userId"] = client.user_id
+                stats["changed"] = False
+                self._write_sync_log(session, submit_id, base_seq, stats)
+                return record
 
             prev_hash = _doc_hash(session.document)
             new_hash = _doc_hash(merged)
@@ -376,6 +406,8 @@ class CollaborationManager:
             if document_changed:
                 session.dirty = False
                 saved = self.storage.save_collaboration_working_copy(session.doc_name, session.document)
+                # session.document 对齐 canonical 输出（字段名统一为 role_uid/entity_uid 等）
+                session.document = saved
                 with self._lock:
                     cur = self._sessions.get(session.doc_name)
                     if cur and not cur.dirty:
@@ -462,7 +494,7 @@ class CollaborationManager:
 
     def _merge_collaboration(
         self, base_doc: dict, user_doc: dict, server_doc: dict | None = None
-    ) -> tuple[dict, dict]:
+    ) -> tuple[dict, list[dict], dict]:
         """协作专用合并入口，内部复用 merge.py 的 analyze_merge"""
         if server_doc is None:
             result = analyze_merge("combine", left_document=base_doc, right_document=user_doc)
@@ -479,8 +511,10 @@ class CollaborationManager:
 
         # 删除保护：server删除了但user未修改的元素，应从合并结果中移除
         # （merge引擎将"未修改+被对方删除"的元素保留，对协作场景这是错误的）
-        if server_doc is not None and isinstance(conflicts, list):
-            uc = self._clean_deleted_items(merged, base_doc, user_doc, server_doc)
+        # combine模式也需保护：base_doc即当前服务端状态
+        delete_ref = server_doc if server_doc is not None else base_doc
+        if isinstance(conflicts, list):
+            uc = self._clean_deleted_items(merged, base_doc, user_doc, delete_ref)
             delete_conflicts = uc
 
         stats = {
@@ -490,18 +524,133 @@ class CollaborationManager:
             "source": source,
         }
 
-        # 保护meta不被合并引擎污染（title/domain被覆盖为"xxx-合并"，space/tags等被丢弃）
+        # meta保护 + 三方冲突检测（tags/space等非标量字段）
         current_meta = (server_doc or base_doc).get("meta") if isinstance((server_doc or base_doc), dict) else {}
         if isinstance(merged.get("meta"), dict) and isinstance(current_meta, dict):
             merged_meta = merged["meta"]
+            base_meta = base_doc.get("meta") if isinstance(base_doc, dict) and isinstance(base_doc.get("meta"), dict) else {}
+            user_meta = user_doc.get("meta") if isinstance(user_doc, dict) and isinstance(user_doc.get("meta"), dict) else {}
+            # title/domain: 始终用server版本
             for field in ("title", "domain"):
                 if current_meta.get(field):
                     merged_meta[field] = current_meta[field]
-            for field, value in current_meta.items():
-                if field not in merged_meta:
-                    merged_meta[field] = deepcopy(value)
+            # 其他meta字段: 三方比对检测冲突
+            all_meta_fields = set(current_meta.keys()) | set(user_meta.keys()) | set(base_meta.keys())
+            for field in all_meta_fields:
+                if field in merged_meta and field not in ("title", "domain"):
+                    # 已在合并结果中（merge引擎处理了），跳过
+                    continue
+                base_value = base_meta.get(field)
+                user_value = user_meta.get(field)
+                server_value = current_meta.get(field)
+                # JSON序列化比较
+                sv = json.dumps(server_value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) if server_value is not None else ""
+                uv = json.dumps(user_value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) if user_value is not None else ""
+                bv = json.dumps(base_value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) if base_value is not None else ""
+                user_changed = uv != bv
+                server_changed = sv != bv
+                if user_changed and server_changed and uv != sv:
+                    # 三方都不同 → 冲突！记录冲突，保留user版本
+                    if not isinstance(conflicts, list):
+                        conflicts = []
+                    conflicts.append({"path": f"meta.{field}", "type": "scalar_conflict",
+                                      "base": base_value, "user": user_value, "server": server_value})
+                    merged_meta[field] = deepcopy(user_value)
+                elif user_changed:
+                    merged_meta[field] = deepcopy(user_value)
+                else:
+                    merged_meta[field] = deepcopy(server_value)
+            # 更新统计
+            stats["conflictCount"] = len(conflicts) if isinstance(conflicts, list) else 0
 
-        return merged, stats
+        # 去重state_transitions：按(from, to)去重，保留后者
+        if merged.get("entities"):
+            for entity in merged["entities"]:
+                if not isinstance(entity, dict):
+                    continue
+                transitions = entity.get("state_transitions")
+                if not isinstance(transitions, list):
+                    continue
+                seen = {}
+                deduped = []
+                for t in transitions:
+                    if not isinstance(t, dict):
+                        deduped.append(t)
+                        continue
+                    key = (str(t.get("from", "")), str(t.get("to", "")))
+                    if key not in seen:
+                        seen[key] = t
+                        deduped.append(t)
+                    else:
+                        # 合并字段：保留非空值
+                        existing = seen[key]
+                        for f in ("action", "note", "field_name", "labelPos"):
+                            if not existing.get(f) and t.get(f):
+                                existing[f] = t[f]
+                entity["state_transitions"] = deduped
+
+        # 强制清理panorama：移除server已删除的列/行/单元格
+        if server_doc is not None and merged.get("panorama") and server_doc.get("panorama"):
+            for axis in ("columns", "lanes", "cells"):
+                server_pano = server_doc.get("panorama", {})
+                merged_pano = merged.setdefault("panorama", {})
+                merged_list = merged_pano.get(axis, []) if isinstance(merged_pano.get(axis), list) else []
+                server_list = server_pano.get(axis, []) if isinstance(server_pano.get(axis), list) else []
+                if axis == "cells":
+                    server_keys = {(str(c.get("laneUid", "")), str(c.get("columnUid", ""))) for c in server_list if isinstance(c, dict)}
+                    merged_pano[axis] = [c for c in merged_list
+                                         if not isinstance(c, dict) or (str(c.get("laneUid", "")), str(c.get("columnUid", ""))) in server_keys]
+                else:
+                    server_keys = {str(c.get("uid", "")) for c in server_list if isinstance(c, dict)}
+                    merged_pano[axis] = [c for c in merged_list
+                                         if not isinstance(c, dict) or str(c.get("uid", "")) in server_keys]
+
+        return merged, conflicts, stats
+
+    @staticmethod
+    def _filter_restored_items(merged: dict, server: dict) -> dict:
+        """combine模式下移除合并结果中被服务端删除后又复原的元素"""
+        list_fields = [
+            "roles", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
+            "processes", "entities", "relations", "rules",
+            "businessComponents", "businessConstructs", "taskDefinitions",
+        ]
+        for field in list_fields:
+            server_list = server.get(field) if isinstance(server.get(field), list) else []
+            merged_list = merged.get(field) if isinstance(merged.get(field), list) else []
+            if not merged_list:
+                continue
+            server_uids = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
+            keep = [item for item in merged_list
+                     if not isinstance(item, dict) or str(item.get("uid", "")).strip() in server_uids]
+            merged[field] = keep
+        # 递归处理processes->nodes, flow->nodes/edges
+        server_procs = {str(p.get("uid", "")): p for p in server.get("processes", []) if isinstance(p, dict)}
+        for p in merged.get("processes", []) or []:
+            if not isinstance(p, dict): continue
+            sp = server_procs.get(str(p.get("uid", "")))
+            if not sp: continue
+            sp_node_uids = {str(n.get("uid", "")) for n in sp.get("nodes", []) if isinstance(n, dict)}
+            p["nodes"] = [n for n in (p.get("nodes") or []) if isinstance(n, dict) and str(n.get("uid", "")) in sp_node_uids]
+            # flow nodes/edges
+            merged_flow = p.get("flow") or {}
+            server_flow = sp.get("flow") or {}
+            if isinstance(merged_flow, dict) and isinstance(server_flow, dict):
+                sf_node_uids = {str(n.get("uid", "")) for n in server_flow.get("nodes", []) if isinstance(n, dict)}
+                merged_flow["nodes"] = [n for n in (merged_flow.get("nodes") or []) if isinstance(n, dict) and str(n.get("uid", "")) in sf_node_uids]
+                sf_edge_uids = {str(e.get("uid", "")) for e in server_flow.get("edges", []) if isinstance(e, dict)}
+                merged_flow["edges"] = [e for e in (merged_flow.get("edges") or []) if isinstance(e, dict) and str(e.get("uid", "")) in sf_edge_uids]
+        # entities->fields/state_transitions, forms->sections->fields
+        server_ents = {str(e.get("uid", "")): e for e in server.get("entities", []) if isinstance(e, dict)}
+        for e in merged.get("entities", []) or []:
+            if not isinstance(e, dict): continue
+            se = server_ents.get(str(e.get("uid", "")))
+            if not se: continue
+            sf_uids = {str(f.get("uid", "")) for f in se.get("fields", []) if isinstance(f, dict)}
+            e["fields"] = [f for f in (e.get("fields") or []) if isinstance(f, dict) and str(f.get("uid", "")) in sf_uids]
+            st_uids = {str(t.get("uid", "")) for t in se.get("state_transitions", []) if isinstance(t, dict)}
+            e["state_transitions"] = [t for t in (e.get("state_transitions") or []) if isinstance(t, dict) and str(t.get("uid", "")) in st_uids]
+        return merged
 
     @staticmethod
     def _clean_deleted_items(
@@ -630,6 +779,41 @@ class CollaborationManager:
             se = e_server_by_uid.get(euid, {})
             count += CollaborationManager._clean_sublist(entity, be, ue, se, "fields")
             count += CollaborationManager._clean_sublist(entity, be, ue, se, "state_transitions")
+
+        # panorama columns/lanes/cells（merge引擎的combine策略不检测删除）
+        if server.get("panorama") or base.get("panorama"):
+            for axis in ("columns", "lanes", "cells"):
+                base_list = base.get("panorama", {}).get(axis, []) if isinstance(base.get("panorama"), dict) else []
+                user_list = user.get("panorama", {}).get(axis, []) if isinstance(user.get("panorama"), dict) else []
+                server_list = server.get("panorama", {}).get(axis, []) if isinstance(server.get("panorama"), dict) else []
+                merged_list = merged.get("panorama", {}).get(axis, []) if isinstance(merged.get("panorama"), dict) else []
+                if not base_list:
+                    continue
+                if axis == "cells":
+                    base_by_key = {(str(c.get("laneUid","")), str(c.get("columnUid",""))): c for c in base_list if isinstance(c, dict)}
+                    user_by_key = {(str(c.get("laneUid","")), str(c.get("columnUid",""))): c for c in user_list if isinstance(c, dict)}
+                    server_keys = {(str(c.get("laneUid","")), str(c.get("columnUid",""))) for c in server_list if isinstance(c, dict)}
+                else:
+                    base_by_key = {str(item.get("uid", "")).strip(): item for item in base_list if isinstance(item, dict)}
+                    user_by_key = {str(item.get("uid", "")).strip(): item for item in user_list if isinstance(item, dict)}
+                    server_keys = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
+                keep = []
+                for item in merged_list:
+                    if not isinstance(item, dict):
+                        keep.append(item)
+                        continue
+                    if axis == "cells":
+                        key = (str(item.get("laneUid","")), str(item.get("columnUid","")))
+                    else:
+                        key = str(item.get("uid", "")).strip()
+                    base_item = base_by_key.get(key)
+                    user_item = user_by_key.get(key)
+                    if base_item is not None and key not in server_keys:
+                        if user_item is not None and json.dumps(user_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) == json.dumps(base_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")):
+                            count += 1
+                            continue
+                    keep.append(item)
+                merged.setdefault("panorama", {})[axis] = keep
 
         return count
 
