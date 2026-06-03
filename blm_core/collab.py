@@ -23,8 +23,9 @@ CLIENT_STALE_SECONDS = 25
 
 
 def _doc_hash(document: dict) -> str:
+    """快速文档哈希，不递归排序key（migrate_document保证了key顺序一致）"""
     try:
-        text = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        text = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
     except (TypeError, ValueError):
         return ""
     d = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
