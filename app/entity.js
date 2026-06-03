@@ -2520,8 +2520,12 @@ function addStateTransition(entityId, afterIndex = null) {
   if (!entity) return;
   ensureEntityStateShape(entity);
   const fieldName = getEntityStatusField(entity, S.ui.stateFieldName)?.name || '';
+  if (!fieldName) {
+    alert('请先在左侧选择一个主状态字段，才能添加状态流转。');
+    return;
+  }
   if (!getEntityStatusValues(entity, fieldName).length) {
-    alert('请先在字段规则中填写主状态字段的状态值，再配置状态流转。');
+    alert('请先在字段规则中填写主状态字段"${fieldName}"的状态值（如：待处理、处理中、已完成），再配置状态流转。');
     return;
   }
   const insertIndex = Number.isInteger(afterIndex) ? Math.max(0, afterIndex + 1) : entity.state_transitions.length;
@@ -2837,7 +2841,7 @@ function renderStateEditorPanel(entity, statusFields, stateField, stateValueText
       <div class="entity-state-editor-actions">
         <button class="btn btn-outline btn-sm" type="button" data-testid="entity-transition-route-reset-all"
           onclick="resetAllStateTransitionRoutes('${esc(entity.id)}','${esc(stateField?.name || '')}')" ${stateField ? '' : 'disabled'}>重置所有连线</button>
-        <button class="btn btn-outline btn-sm" data-testid="entity-transition-add-button" onclick="addStateTransition('${esc(entity.id)}')" ${stateField ? '' : 'disabled'} title="${stateField ? '' : '请先在左侧选择一个主状态字段'}">＋ 添加流转</button>
+        <button class="btn btn-outline btn-sm" data-testid="entity-transition-add-button" onclick="addStateTransition('${esc(entity.id)}')">＋ 添加流转</button>
       </div>
     </div>
     <div class="entity-state-config-row">
