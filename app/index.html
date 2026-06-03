@@ -16,7 +16,7 @@
     </span>
     <span id="file-name" class="file-name" data-testid="current-file-name">-</span>
     <span id="modified-badge" class="modified-badge hidden" data-testid="modified-badge">未保存</span>
-    <span id="collab-status" class="collab-status hidden" data-testid="collab-status">协作未连接</span>
+    <span id="collab-status" class="collab-status hidden" role="button" tabindex="0" onclick="openCollabDiagnosticsModal()" onkeydown="if(event.key==='Enter'||event.key===' ') openCollabDiagnosticsModal()" data-testid="collab-status">协作未连接</span>
     <button id="user-account-button" class="user-account-button" type="button" onclick="openUserAccountModal()" data-testid="user-account-button">用户信息配置</button>
   </div>
   <div class="toolbar-right">
@@ -193,6 +193,20 @@
     <div class="modal-footer">
       <button onclick="closeUserAccountModal()" class="btn btn-ghost">取消</button>
       <button onclick="saveUserAccountFromModal()" class="btn btn-primary" data-testid="user-save-button">保存配置</button>
+    </div>
+  </div>
+</div>
+
+<div id="collab-diagnostics-modal-overlay" class="hidden" onclick="closeCollabDiagnosticsModal()" data-testid="collab-diagnostics-modal">
+  <div class="modal collab-diagnostics-modal" onclick="event.stopPropagation()">
+    <div class="modal-title-row">
+      <h3>协作连接诊断</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeCollabDiagnosticsModal()">关闭</button>
+    </div>
+    <div id="collab-diagnostics-content" class="collab-diagnostics-content"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="copyCollabDiagnostics()">复制诊断信息</button>
+      <button type="button" class="btn btn-primary" onclick="syncCollabImmediatelyFromCommand()">立即同步</button>
     </div>
   </div>
 </div>

@@ -2,25 +2,25 @@
 
 ## 当前状态
 
-T1“日志与诊断基础”已完成代码实现，准备提交第一轮。
+T1、T2 已完成并分别提交；当前准备进入 T3“大文档与弱网同步优化”。
 
 ## 本轮完成
 
-- 新增 `blm_core.diagnostics`，提供结构化 JSONL 日志、滚动文件、最近日志读取能力。
-- 服务启动时记录端口、workspace、日志目录、Python/platform 信息。
-- HTTP 请求记录 method、path、status、clientIp、elapsedMs。
-- 协作会话记录 join、leave、ping、change、snapshot、autosave、error。
-- `CollaborationManager.diagnostics()` 可返回会话、seq、在线用户、待自动保存状态，供管理端复用。
+- 顶栏协作状态徽标支持点击和键盘打开“协作连接诊断”弹窗。
+- 诊断弹窗显示当前文档、连接状态、socket readyState、seq、待自动同步、同步中、远端更新、最近同步、在线用户。
+- 支持复制诊断信息，便于用户截图/粘贴给管理员排障。
+- 复用现有轻量远端更新状态，不新增横幅。
 
 ## 自动验收
 
+- `node --check app\collab.js` 通过。
 - `python -m py_compile blm_core\diagnostics.py blm_core\server.py blm_core\collab.py blm.py` 通过。
-- 诊断日志 smoke test 通过，已能写入并读取 `workspace/.logs/blm.log`。
-- Playwright 回归暂未执行：PowerShell 阻止 `npx.ps1` 后，`npx.cmd` 又因 npm 缓存目录 `D:\Program Files\devsoft\node\node_cache` 不可写/不可创建而失败。
+- 静态检查通过：HTML 入口、弹窗、JS 函数、CSS 类均存在。
+- Playwright 点击验收暂未执行：本机 npm/npx 缓存路径异常，暂无可用浏览器自动化工具。
 
 ## 下一步
 
-进入 T2“前端连接诊断与少打扰提示”，补诊断弹窗和连接状态可复制信息。
+进入 T3：snapshot hash 去重、弱网防抖和旧 baseSeq 底线测试。
 
 ## 风险与备注
 

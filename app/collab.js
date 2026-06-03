@@ -15,6 +15,15 @@ function normalizeCollabDisplayName(value) {
   return text.slice(0, 40);
 }
 
+function escapeCollabHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function createLocalUserId() {
   if (crypto?.randomUUID) return `user-${crypto.randomUUID()}`;
   return `user-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
@@ -186,6 +195,117 @@ function renderCollabStatus() {
   } else {
     badge.removeAttribute('data-users');
   }
+}
+
+function getCollabDiagnosticsSnapshot() {
+  const state = S.collab || {};
+  const socket = state.socket || null;
+  const users = Array.isArray(state.users) ? state.users : [];
+  const userProfile = loadCollabUserProfile();
+  const readyStateMap = {
+    0: 'CONNECTING',
+    1: 'OPEN',
+    2: 'CLOSING',
+    3: 'CLOSED',
+  };
+  return {
+    document: S.currentFile || '',
+    readOnly: Boolean(S.readOnly),
+    currentUser: userProfile.name || '未设置',
+    userId: userProfile.id || '',
+    sessionId: userProfile.sessionId || '',
+    connected: Boolean(state.connected),
+    recovering: Boolean(state.recovering),
+    seq: Number(state.seq || 0),
+    clientId: state.clientId || '',
+    socketReadyState: socket ? readyStateMap[socket.readyState] || String(socket.readyState) : 'NONE',
+    pendingSnapshot: Boolean(state.pendingSnapshot || state.snapshotTimer),
+    syncing: Boolean(state.syncing),
+    pendingRemote: Boolean(state.pendingRemoteSnapshot || state.hasConflict),
+    lastSyncedAt: state.lastSyncedAt || '',
+    lastActivity: state.lastActivity || null,
+    users: users.map((item) => ({
+      name: item?.name || item?.user || '',
+      userId: item?.userId || item?.id || '',
+      connectionCount: Number(item?.connectionCount || 1),
+      sessionIds: Array.isArray(item?.sessionIds) ? item.sessionIds : [],
+      remoteAddrs: Array.isArray(item?.remoteAddrs) ? item.remoteAddrs : [],
+    })),
+  };
+}
+
+function formatCollabDiagnosticsText(snapshot = getCollabDiagnosticsSnapshot()) {
+  const lines = [
+    `文档：${snapshot.document || '-'}`,
+    `当前用户：${snapshot.currentUser || '-'}`,
+    `连接状态：${snapshot.connected ? '已连接' : snapshot.recovering ? '重连中' : '未连接'}`,
+    `Socket：${snapshot.socketReadyState}`,
+    `Seq：${snapshot.seq}`,
+    `ClientId：${snapshot.clientId || '-'}`,
+    `待自动同步：${snapshot.pendingSnapshot ? '是' : '否'}`,
+    `同步中：${snapshot.syncing ? '是' : '否'}`,
+    `远端更新待同步：${snapshot.pendingRemote ? '是' : '否'}`,
+    `最近同步：${snapshot.lastSyncedAt || '-'}`,
+    `最近活动：${snapshot.lastActivity?.user ? `${snapshot.lastActivity.user} / ${snapshot.lastActivity.mode || ''} / ${snapshot.lastActivity.at || ''}` : '-'}`,
+    '在线用户：',
+  ];
+  if (!snapshot.users.length) {
+    lines.push('- 暂无');
+  } else {
+    snapshot.users.forEach((user) => {
+      lines.push(`- ${user.name || '未设置'} (${user.connectionCount || 1} 个窗口) ${user.userId || ''}`);
+    });
+  }
+  return lines.join('\n');
+}
+
+function renderCollabDiagnosticsModal() {
+  const container = document.getElementById('collab-diagnostics-content');
+  if (!container) return;
+  const snapshot = getCollabDiagnosticsSnapshot();
+  const statusText = snapshot.connected ? '已连接' : snapshot.recovering ? '重连恢复中' : '未连接';
+  const usersHtml = snapshot.users.length
+    ? snapshot.users.map((user) => `
+        <div class="collab-diagnostic-user">
+          <strong>${escapeCollabHtml(user.name || '未设置用户')}</strong>
+          <span>${Number(user.connectionCount || 1)} 个窗口</span>
+        </div>
+      `).join('')
+    : '<div class="diag-empty">暂无在线用户。</div>';
+  container.innerHTML = `
+    <div class="collab-diagnostic-grid">
+      <div><span>文档</span><strong>${escapeCollabHtml(snapshot.document || '-')}</strong></div>
+      <div><span>连接状态</span><strong>${escapeCollabHtml(statusText)}</strong></div>
+      <div><span>Socket</span><strong>${escapeCollabHtml(snapshot.socketReadyState)}</strong></div>
+      <div><span>Seq</span><strong>${snapshot.seq}</strong></div>
+      <div><span>待自动同步</span><strong>${snapshot.pendingSnapshot ? '是' : '否'}</strong></div>
+      <div><span>同步中</span><strong>${snapshot.syncing ? '是' : '否'}</strong></div>
+      <div><span>远端更新</span><strong>${snapshot.pendingRemote ? '待同步' : '无'}</strong></div>
+      <div><span>最近同步</span><strong>${escapeCollabHtml(snapshot.lastSyncedAt || '-')}</strong></div>
+    </div>
+    <div class="collab-diagnostic-section">
+      <h4>在线用户</h4>
+      <div class="collab-diagnostic-users">${usersHtml}</div>
+    </div>
+    <details class="collab-diagnostic-raw">
+      <summary>展开原始诊断信息</summary>
+      <pre>${escapeCollabHtml(formatCollabDiagnosticsText(snapshot))}</pre>
+    </details>
+  `;
+}
+
+function openCollabDiagnosticsModal() {
+  renderCollabDiagnosticsModal();
+  openModalById('collab-diagnostics-modal-overlay');
+}
+
+function closeCollabDiagnosticsModal() {
+  closeModalById('collab-diagnostics-modal-overlay');
+}
+
+async function copyCollabDiagnostics() {
+  const copied = await copyTextToClipboard(formatCollabDiagnosticsText());
+  showAppToast(copied ? '协作诊断信息已复制。' : '复制失败，请手动展开诊断信息复制。');
 }
 
 function renderCollabReconnectOverlay() {

@@ -88,6 +88,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #cbd5e1;
   font-size: 12px;
   white-space: nowrap;
+  cursor: pointer;
+}
+.collab-status:hover {
+  border-color: #93c5fd;
 }
 .collab-status[data-users]::after {
   content: attr(data-users);
@@ -153,6 +157,93 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 .user-modal-shell {
   width: min(420px, calc(100vw - 48px));
+}
+.collab-diagnostics-modal {
+  width: min(720px, calc(100vw - 48px));
+}
+.collab-diagnostics-content {
+  display: grid;
+  gap: 14px;
+}
+.collab-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.collab-diagnostic-grid > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.collab-diagnostic-grid span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 5px;
+}
+.collab-diagnostic-grid strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collab-diagnostic-section h4 {
+  margin: 0 0 8px;
+  color: #334155;
+  font-size: 13px;
+}
+.collab-diagnostic-users {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.collab-diagnostic-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 12px;
+}
+.collab-diagnostic-user strong {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collab-diagnostic-user span {
+  color: #64748b;
+}
+.collab-diagnostic-raw {
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #fff;
+}
+.collab-diagnostic-raw summary {
+  padding: 9px 10px;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+.collab-diagnostic-raw pre {
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+  border-top: 1px solid #e2e8f0;
+  color: #334155;
+  font: 12px/1.6 Consolas, 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .user-form-field {
   display: flex;
@@ -4816,7 +4907,7 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 .diagram-svg { overflow-x: auto; }
 
 /* ─── 模态框 ─────────────────────────────────────────────── */
-#modal-overlay, #open-modal-overlay, #history-modal-overlay, #save-as-modal-overlay, #user-modal-overlay, #compare-modal-overlay, #merge-modal-overlay, #app-dialog-overlay {
+#modal-overlay, #open-modal-overlay, #history-modal-overlay, #save-as-modal-overlay, #user-modal-overlay, #collab-diagnostics-modal-overlay, #compare-modal-overlay, #merge-modal-overlay, #app-dialog-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.4);
   display: grid; place-items: center;
   padding: 24px;
