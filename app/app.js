@@ -4035,24 +4035,26 @@ App.cmdOpen = async function cmdOpenLazy() {
   renderOpenLoading();
   if (typeof renderToolbar === 'function') renderToolbar();
   try {
-    const filesPromise = loadWorkspaceDocumentNames();
-    const summariesPromise = loadWorkspaceDocumentSummaries().then((summaries) => {
+    // 先快速加载文件名列表并立即渲染，不必等摘要
+    const files = await loadWorkspaceDocumentNames();
+    if (files) {
+      S.files = files;
+      S.recovery.workspaceLoading = false;
+      renderWorkspaceFileList(files);
+    }
+    // 后台加载摘要，到达后增量刷新
+    loadWorkspaceDocumentSummaries().then((summaries) => {
       const summaryNames = (Array.isArray(summaries) ? summaries : [])
         .map((item) => String(item?.name || '').trim())
         .filter(Boolean);
       if (summaryNames.length) S.files = summaryNames;
-      S.recovery.workspaceLoading = false;
       renderWorkspaceFileList(S.files || []);
     });
-    const trashPromise = loadWorkspaceTrashEntries().then((trashEntries) => {
+    // 后台加载回收站
+    loadWorkspaceTrashEntries().then((trashEntries) => {
       S.recovery.trashLoading = false;
       if (trashEntries) renderTrashEntries(trashEntries);
     });
-    await summariesPromise;
-    const files = await filesPromise;
-    if (files) renderWorkspaceFileList(files);
-    await trashPromise;
-    renderTrashEntries(S.recovery.trashEntries || []);
     syncOpenModalTabs();
   } finally {
     S.recovery.isOpeningModal = false;

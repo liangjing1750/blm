@@ -122,10 +122,11 @@ class WorkspaceStorage(DocumentFileStore):
         summaries: list[dict] = []
         for name in self.list_documents():
             try:
-                document = self.load(name)
+                meta = self._load_manifest_meta(name)
             except (FileNotFoundError, InvalidDocumentNameError, OSError, ValueError):
                 continue
-            meta = document.get("meta") if isinstance(document.get("meta"), dict) else {}
+            if not meta:
+                continue
             raw_tags = meta.get("tags", [])
             tags = raw_tags if isinstance(raw_tags, list) else str(raw_tags or "").replace("，", ",").split(",")
             summaries.append(
@@ -139,6 +140,43 @@ class WorkspaceStorage(DocumentFileStore):
                 }
             )
         return summaries
+
+    def _load_manifest_meta(self, name: str) -> dict | None:
+        """只读manifest的meta段，不加载完整文档"""
+        safe_name = self._validate_name(name)
+        path = self._manifest_path(self._package_dir(safe_name))
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                # 读取前8KB足够覆盖meta段
+                head = f.read(8192)
+            # 简单解析：找到"meta"后的{...}对象
+            idx = head.find('"meta"')
+            if idx < 0:
+                return None
+            # 跳到"meta": 后的 {
+            rest = head[idx + 6:]  # skip "meta"
+            brace_idx = rest.find('{')
+            if brace_idx < 0:
+                return None
+            rest = rest[brace_idx:]
+            depth = 0
+            end = 0
+            for i, ch in enumerate(rest):
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+            if end == 0:
+                return None
+            meta_json = rest[:end]
+            return json.loads(meta_json)
+        except (json.JSONDecodeError, OSError):
+            return None
 
     def list_history(self, name: str) -> list[dict]:
         safe_name = self._validate_name(name)
