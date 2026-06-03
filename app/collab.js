@@ -305,11 +305,10 @@ async function maybePromptLocalCollabDraftRecovery(docName = S.currentFile) {
       {
         title: '发现本地草稿',
         confirmLabel: '恢复并同步',
-        cancelLabel: draftSeq < serverSeq ? '丢弃草稿（使用最新版）' : '稍后处理',
+        cancelLabel: '丢弃草稿（使用最新版）',
       },
     );
-    if (!confirmed && draftSeq < serverSeq) {
-      // 用户选择丢弃旧草稿
+    if (!confirmed) {
       await clearLocalCollabDraft(docName);
       return;
     }
