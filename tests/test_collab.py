@@ -987,6 +987,40 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             submit_files = list(submits_dir.glob("*.json"))
             self.assertEqual(len(submit_files), 12, "12次提交都应有原文")
 
+    def test_unchanged_document_does_not_broadcast_or_increment_seq(self):
+        """无修改的Ctrl+S不触发广播，seq不变"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["author"] = "初始"
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 第一次提交：修改了内容
+            from copy import deepcopy
+            local = deepcopy(storage.load("CollabSmoke"))
+            local["meta"]["author"] = "修改后"
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "u1", "name": "用户1", "sessionId": "s1"},
+                {"baseSeq": 0, "document": local},
+            )
+            self.assertTrue(r1["ok"])
+            changed1 = r1.get("changed", True)
+            self.assertTrue(changed1, "首次修改应触发changed")
+
+            # 第二次提交：完全相同的文档
+            same_doc = deepcopy(local)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "u1", "name": "用户1", "sessionId": "s1"},
+                {"baseSeq": r1["seq"], "document": same_doc},
+            )
+            self.assertTrue(r2["ok"])
+            changed2 = r2.get("changed", True)
+            self.assertFalse(changed2, "无修改的提交不应触发changed")
+            self.assertEqual(r2["seq"], r1["seq"], "无修改时seq不变")
+
     def test_sync_log_written_on_each_save(self):
         """sync-log.jsonl每收到Ctrl+S时应追加"""
         with tempfile.TemporaryDirectory() as temp_dir:

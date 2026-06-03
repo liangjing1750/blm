@@ -22,6 +22,15 @@ WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 CLIENT_STALE_SECONDS = 25
 
 
+def _doc_hash(document: dict) -> str:
+    try:
+        text = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return ""
+    d = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
+    return d
+
+
 class WebSocketProtocolError(RuntimeError):
     pass
 
@@ -104,6 +113,7 @@ class CollaborationManager:
                     except WebSocketProtocolError as exc:
                         self._send_json(client, {"type": "error", "message": str(exc), "mode": "snapshot"})
                         continue
+                    changed = bool(record.get("changed", True))
                     self._send_json(
                         client,
                         {
@@ -112,20 +122,22 @@ class CollaborationManager:
                             "mode": "snapshot",
                             "rebased": bool(record.get("rebased")),
                             "document": session.document,
+                            "changed": changed,
                         },
                     )
-                    self._broadcast_json(
-                        session,
-                        {
-                            "type": "snapshot_notice",
-                            "doc": session.doc_name,
-                            "seq": record["seq"],
-                            "user": client.user,
-                            "userId": client.user_id,
-                            "clientId": client.client_id,
-                        },
-                        exclude_client_id=client.client_id,
-                    )
+                    if changed:
+                        self._broadcast_json(
+                            session,
+                            {
+                                "type": "snapshot_notice",
+                                "doc": session.doc_name,
+                                "seq": record["seq"],
+                                "user": client.user,
+                                "userId": client.user_id,
+                                "clientId": client.client_id,
+                            },
+                            exclude_client_id=client.client_id,
+                        )
                 elif event_type == "ping":
                     if client:
                         log_event(
@@ -192,22 +204,24 @@ class CollaborationManager:
                 handler=None,
             )
             record = self._apply_snapshot(session, client, payload)
-            self._broadcast_json(
-                session,
-                {
-                    "type": "snapshot_notice",
-                    "doc": session.doc_name,
-                    "seq": record["seq"],
-                    "user": client.user,
-                    "userId": client.user_id,
-                    "clientId": client.client_id,
-                },
-            )
+            if record.get("changed", True):
+                self._broadcast_json(
+                    session,
+                    {
+                        "type": "snapshot_notice",
+                        "doc": session.doc_name,
+                        "seq": record["seq"],
+                        "user": client.user,
+                        "userId": client.user_id,
+                        "clientId": client.client_id,
+                    },
+                )
             return {
                 "ok": True,
                 "doc": session.doc_name,
                 "seq": record["seq"],
                 "rebased": bool(record.get("rebased")),
+                "changed": bool(record.get("changed", True)),
                 "document": deepcopy(session.document),
             }
 
@@ -344,16 +358,23 @@ class CollaborationManager:
                 stats["base_missing"] = True
                 merged, stats = self._merge_collaboration(session.document, document)
 
-            session.document = deepcopy(merged)
-            session.seq += 1
-            self._remember_snapshot(session)
-            session.dirty = True
+            old_json = json.dumps(session.document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            new_json = json.dumps(merged, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            document_changed = old_json != new_json
+
+            if document_changed:
+                session.document = deepcopy(merged)
+                session.seq += 1
+                self._remember_snapshot(session)
+                session.dirty = True
 
             stats["user"] = client.user_name
             stats["userId"] = client.user_id
+            stats["changed"] = document_changed
             self._write_sync_log(session, submit_id, base_seq, stats)
 
-            self._flush_autosave(session.doc_name)
+            if document_changed:
+                self._flush_autosave(session.doc_name)
             log_event(
                 "blm.collab",
                 "collab.snapshot",
@@ -379,6 +400,7 @@ class CollaborationManager:
                 "mode": "snapshot",
                 "rebased": base_seq != session.seq - 1,
                 "submitId": submit_id,
+                "changed": document_changed,
             }
             return record
 
