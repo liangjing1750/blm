@@ -512,7 +512,7 @@ function renderCollabDiagnosticsModal() {
       <h4>在线用户</h4>
       <div class="collab-diagnostic-users">${usersHtml}</div>
     </div>
-    <details class="collab-diagnostic-raw" open>
+    <details class="collab-diagnostic-raw">
       <summary>原始诊断信息</summary>
       <pre>${escapeCollabHtml(formatCollabDiagnosticsText(snapshot))}</pre>
     </details>
@@ -887,15 +887,22 @@ async function flushCollabSnapshotHttp() {
     await clearLocalCollabDraft(S.currentFile);
     return true;
   }
+  // 冻结当前文档快照，防止同步期间用户继续编辑导致发送不一致内容
+  const frozenDoc = cloneCollabDocument(S.doc);
+  const frozenHash = hashCollabDocument(frozenDoc);
   S.collab.syncing = true;
   S.collab.pendingSnapshot = false;
-  S.collab.inFlightDocumentHash = documentHash;
+  S.collab.inFlightDocumentHash = frozenHash;
   renderCollabStatus();
   if (typeof renderToolbar === 'function') renderToolbar();
+  // 显示保存进度
+  if (typeof setSaveProgress === 'function') {
+    setSaveProgress(true, 30, '正在同步协作内容...', '正在发送文档到服务端进行合并。');
+  }
   try {
-    const result = await api.collabSnapshot(S.currentFile, S.doc, {
+    const result = await api.collabSnapshot(S.currentFile, frozenDoc, {
       baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.acceptedSeq ?? S.collab.seq ?? 0),
-      documentHash,
+      documentHash: frozenHash,
       user: getCollabUserProfile(),
     });
     if (!result || result.error) {
@@ -903,14 +910,20 @@ async function flushCollabSnapshotHttp() {
       S.collab.lastError = result?.error || 'HTTP snapshot failed';
       return false;
     }
+    if (typeof setSaveProgress === 'function') {
+      setSaveProgress(true, 70, '正在接收合并结果...', '服务端已完成合并，正在刷新本地内容。');
+    }
     S.collab.seq = Number(result.seq || S.collab.seq || 0);
     S.collab.acceptedSeq = S.collab.seq;
     if (result.document && typeof result.document === 'object') {
       S.doc = result.document;
       hydrateDocumentForUi(S.doc);
     }
-    S.modified = false;
-    S.collab.pendingSnapshot = false;
+    // 检测同步期间是否有新修改
+    const currentHash = hashCollabDocument(S.doc);
+    const hadNewEdits = frozenHash !== currentHash;
+    S.modified = hadNewEdits;
+    S.collab.pendingSnapshot = hadNewEdits;
     S.collab.lastSyncedAt = new Date().toISOString();
     S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
     S.collab.lastSyncedDocumentHash = hashCollabDocument(S.doc);
@@ -919,9 +932,17 @@ async function flushCollabSnapshotHttp() {
     S.collab.forceSnapshotSync = false;
     await clearLocalCollabDraft(S.currentFile);
     startCollabPollingFallback();
-    if (!hasActiveLocalEditingContext()) render();
+    // 总是刷新界面，确保所有实体类型（角色/步骤/实体/表单/规则等）渲染更新
+    render();
     if (typeof renderToolbar === 'function') renderToolbar();
     renderCollabStatus();
+    if (typeof setSaveProgress === 'function') {
+      setSaveProgress(true, 100, hadNewEdits ? '同步完成（有新修改待同步）' : '同步完成', '文档已更新到最新版本。');
+      setTimeout(() => setSaveProgress(false), 350);
+    }
+    if (hadNewEdits) {
+      queueCollabSnapshotSync();
+    }
     return true;
   } catch (error) {
     S.collab.pendingSnapshot = true;
@@ -931,6 +952,9 @@ async function flushCollabSnapshotHttp() {
     S.collab.syncing = false;
     renderCollabStatus();
     if (typeof renderToolbar === 'function') renderToolbar();
+    if (typeof setSaveProgress === 'function') {
+      setTimeout(() => setSaveProgress(false), 350);
+    }
   }
 }
 
