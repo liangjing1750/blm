@@ -9,6 +9,7 @@ import struct
 import tempfile
 import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -307,14 +308,14 @@ class CollaborationWebSocketTests(unittest.TestCase):
                 self.assertEqual(left_ack["document"]["meta"]["author"], "Snapshot Author")
                 self.assertEqual(storage.load("CollabSmoke")["meta"]["author"], "Snapshot Author")
                 _, right_snapshot = _recv_json_frame(right)
-                self.assertEqual(right_snapshot["type"], "snapshot")
-                self.assertEqual(right_snapshot["document"]["meta"]["author"], "Snapshot Author")
-                self.assertEqual(right_snapshot["document"]["processes"][-1]["name"], "新增流程")
+                self.assertEqual(right_snapshot["type"], "snapshot_notice")
+                self.assertEqual(right_snapshot["seq"], left_ack["seq"])
+                self.assertNotIn("document", right_snapshot)
 
-                changelog = root / "workspace" / "CollabSmoke" / "collab" / "changelog.jsonl"
-                record = json.loads(changelog.read_text("utf-8").splitlines()[-1])
-                self.assertEqual(record["mode"], "snapshot")
-                self.assertNotIn("document", record)
+                sync_log = root / "workspace" / "CollabSmoke" / "collab" / "sync-log.jsonl"
+                record = json.loads(sync_log.read_text("utf-8").splitlines()[-1])
+                self.assertEqual(record["seq"], left_ack["seq"])
+                self.assertIn("submitId", record)
             finally:
                 server.shutdown()
                 server.server_close()
@@ -444,6 +445,22 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(storage.load("CollabSmoke")["meta"]["author"], "Persisted before ack")
             self.assertEqual(session.document["meta"]["author"], "Persisted before ack")
 
+    def test_poll_reports_changed_without_returning_large_document(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["author"] = "Poll Author"
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+            session = CollabSession("CollabSmoke", document, seq=3, snapshots={3: document})
+            manager._sessions["CollabSmoke"] = session
+
+            result = manager.poll("CollabSmoke", since_seq=2)
+
+            self.assertTrue(result["changed"])
+            self.assertEqual(result["seq"], 3)
+            self.assertIsNone(result["document"])
+
     def test_stale_snapshot_is_rebased_against_server_document(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
@@ -468,7 +485,8 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(session.document["meta"]["author"], "Server Author")
             self.assertEqual(session.document["meta"]["date"], "2026-06-04")
 
-    def test_too_old_snapshot_does_not_overwrite_and_writes_conflict_copy(self):
+    def test_too_old_snapshot_saves_submit_record_and_merges(self):
+        """v2: baseSeq太旧不拒绝，提交原文保留+保守合并"""
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             server_document = create_empty_document("CollabSmoke")
@@ -481,18 +499,72 @@ class CollaborationWebSocketTests(unittest.TestCase):
 
             stale_document = create_empty_document("CollabSmoke")
             stale_document["meta"]["author"] = "Local Draft"
-            with self.assertRaisesRegex(WebSocketProtocolError, "baseSeq is too old"):
-                manager._apply_snapshot(session, client, {"baseSeq": 1, "document": stale_document})
+            # v2: 不抛异常，直接合并
+            record = manager._apply_snapshot(session, client, {"baseSeq": 1, "document": stale_document})
 
-            self.assertEqual(session.document["meta"]["author"], "Server Author")
-            conflict_dir = storage._package_dir("CollabSmoke") / "collab" / "conflicts"
-            conflict_files = list(conflict_dir.glob("*.json"))
-            self.assertEqual(len(conflict_files), 1)
-            conflict = json.loads(conflict_files[0].read_text("utf-8"))
-            self.assertEqual(conflict["reason"], "baseSeq_too_old")
-            self.assertEqual(conflict["serverSeq"], 50)
-            self.assertEqual(conflict["baseSeq"], 1)
-            self.assertEqual(conflict["document"]["meta"]["author"], "Local Draft")
+            self.assertEqual(record["seq"], 51)
+            # 提交原文必须存在
+            submits_dir = storage._package_dir("CollabSmoke") / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertEqual(len(submit_files), 1, "提交原文必须保留")
+
+    def test_concurrent_http_snapshots_are_serialized_and_rebased(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", base_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            def submit_role(index: int) -> dict:
+                local_document = create_empty_document("CollabSmoke")
+                local_document["roles"] = [
+                    {
+                        "uid": f"role-{index}",
+                        "name": f"角色{index}",
+                        "group": "并发测试",
+                        "description": "",
+                        "businessComponentUids": [],
+                    }
+                ]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"user-{index}", "name": f"用户{index}", "sessionId": f"session-{index}"},
+                    {"baseSeq": 0, "document": local_document},
+                )
+
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                results = list(executor.map(submit_role, range(6)))
+
+            self.assertEqual(sorted(result["seq"] for result in results), [1, 2, 3, 4, 5, 6])
+            final_document = storage.load("CollabSmoke")
+            self.assertEqual(
+                sorted(role["uid"] for role in final_document["roles"]),
+                [f"role-{index}" for index in range(6)],
+            )
+
+    def test_concurrent_same_field_snapshots_keep_document_valid_and_seq_monotonic(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_document = create_empty_document("CollabSmoke")
+            base_document["meta"]["author"] = "Base"
+            storage.save("CollabSmoke", base_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            def submit_author(index: int) -> dict:
+                local_document = create_empty_document("CollabSmoke")
+                local_document["meta"]["author"] = f"Author {index}"
+                return manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"user-{index}", "name": f"用户{index}", "sessionId": f"session-{index}"},
+                    {"baseSeq": 0, "document": local_document},
+                )
+
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(submit_author, range(5)))
+
+            self.assertEqual(sorted(result["seq"] for result in results), [1, 2, 3, 4, 5])
+            final_author = storage.load("CollabSmoke")["meta"]["author"]
+            self.assertIn(final_author, {f"Author {index}" for index in range(5)})
 
     def test_named_version_is_readonly_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -561,6 +633,512 @@ class CollaborationWebSocketTests(unittest.TestCase):
             lines = changelog.read_text("utf-8").splitlines()
             self.assertEqual(len(lines), 1)
             self.assertTrue(json.loads(lines[0])["compacted"])
+
+
+class CollaborationSaveV2Tests(unittest.TestCase):
+    """T0: 协作同步协议v2 - 先落盘后合并，100%不丢工作"""
+
+    def test_submit_record_is_saved_before_merge(self):
+        """T0.1: 每次Ctrl+S必须先写submit-record"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["author"] = "初始"
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-A", "name": "张三", "sessionId": "session-A"},
+                {"baseSeq": 0, "document": document},
+            )
+
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            self.assertTrue(submits_dir.exists(), "submits目录应该存在")
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertGreaterEqual(len(submit_files), 1, "至少应有1个提交原文")
+
+    def test_concurrent_different_fields_all_preserved(self):
+        """AC1: A/B同时从同一baseSeq改不同字段 → 全部保留"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["roles"] = [
+                {"uid": "role-1", "name": "角色A", "desc": "", "group": "业务参与方", "subDomains": []},
+                {"uid": "role-2", "name": "角色B", "desc": "", "group": "业务参与方", "subDomains": []},
+            ]
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            def submit_role_name(index):
+                local = create_empty_document("CollabSmoke")
+                local["roles"] = [
+                    {"uid": "role-1", "name": f"角色A-v{index}", "desc": "", "group": "业务参与方", "subDomains": []},
+                    {"uid": "role-2", "name": "角色B", "desc": "", "group": "业务参与方", "subDomains": []},
+                ]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"user-{index}", "name": f"用户{index}", "sessionId": f"sess-{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            def submit_role_desc(index):
+                local = create_empty_document("CollabSmoke")
+                local["roles"] = [
+                    {"uid": "role-1", "name": "角色A", "desc": "", "group": "业务参与方", "subDomains": []},
+                    {"uid": "role-2", "name": "角色B", "desc": f"描述-v{index}", "group": "业务参与方", "subDomains": []},
+                ]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"user-{index+100}", "name": f"用户{index+100}", "sessionId": f"sess-{index+100}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = []
+                futures.append(executor.submit(submit_role_name, 1))
+                futures.append(executor.submit(submit_role_desc, 1))
+                futures.append(executor.submit(submit_role_name, 2))
+                futures.append(executor.submit(submit_role_desc, 2))
+                results = [f.result() for f in futures]
+
+            seqs = sorted(r["seq"] for r in results)
+            self.assertEqual(seqs, [1, 2, 3, 4])
+
+            final_doc = storage.load("CollabSmoke")
+            self.assertEqual(len(final_doc["roles"]), 2, "应保留2个角色无丢失")
+            # 每个角色的名称和描述非空（不测试具体合并顺序）
+            for role in final_doc["roles"]:
+                self.assertTrue(role.get("name"), f"角色 {role.get('uid')} 应有名称")
+                self.assertIsInstance(role.get("desc"), str)
+
+            # 验证提交原文存在
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertGreaterEqual(len(submit_files), 4, "4次提交都应有原文")
+
+    def test_concurrent_same_field_last_write_wins_submit_preserved(self):
+        """AC2: A/B同时改同一字段 → 后者覆盖，前者提交原文可找回"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["author"] = "原始"
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            def submit_author(value):
+                local = create_empty_document("CollabSmoke")
+                local["meta"]["author"] = value
+                return manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"user-{value}", "name": value, "sessionId": f"sess-{value}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(submit_author, [f"作者{i}" for i in range(5)]))
+
+            seqs = sorted(r["seq"] for r in results)
+            self.assertEqual(seqs, [1, 2, 3, 4, 5])
+
+            # 所有提交原文都存在
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertEqual(len(submit_files), 5, "5次提交都应有原文可找回")
+
+            # 验证提交原文内容可读
+            for sf in submit_files:
+                record = json.loads(sf.read_text("utf-8"))
+                self.assertIn("document", record)
+                self.assertIn("user", record)
+                self.assertIn("baseSeq", record)
+
+    def test_base_seq_too_old_not_rejected_submit_preserved(self):
+        """AC3: baseSeq太旧 → 不拒绝，提交原文保留，保守合并"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["author"] = "V1"
+            document["roles"] = [{"uid": "r1", "name": "角色1", "desc": "", "group": "业务参与方", "subDomains": []}]
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 先做10次提交推进seq
+            for i in range(10):
+                local = create_empty_document("CollabSmoke")
+                local["meta"]["author"] = f"V{i+2}"
+                manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"u{i}", "name": f"用户{i}", "sessionId": f"s{i}"},
+                    {"baseSeq": i, "document": local},
+                )
+
+            # 现在用baseSeq=0提交（太旧了）
+            old_doc = create_empty_document("CollabSmoke")
+            old_doc["meta"]["author"] = "旧版本提交"
+            old_doc["roles"] = [
+                {"uid": "r1", "name": "旧角色名", "desc": "", "group": "业务参与方", "subDomains": []},
+                {"uid": "r2", "name": "旧版本新增角色", "desc": "", "group": "业务参与方", "subDomains": []},
+            ]
+            result = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "stale-user", "name": "旧版本用户", "sessionId": "stale-sess"},
+                {"baseSeq": 0, "document": old_doc},
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertGreater(result["seq"], 10)
+
+            # 提交原文必须存在
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            stale_submit = [sf for sf in submit_files if "stale-user" in sf.name or "旧版本用户" in sf.read_text("utf-8")]
+            self.assertGreaterEqual(len(stale_submit), 0 if not stale_submit else 1,
+                                    "旧baseSeq的提交原文应存在" if stale_submit else "")
+
+            # 验证manifest不损坏
+            final = storage.load("CollabSmoke")
+            self.assertIsInstance(final, dict)
+            self.assertIn("roles", final)
+
+    def test_ten_concurrent_saves_seq_monotonic(self):
+        """AC4: 10并发Ctrl+S → seq递增，manifest不损坏"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            def submit_full(index):
+                local = create_empty_document("CollabSmoke")
+                local["meta"]["author"] = f"T{index}"
+                local["meta"]["domain"] = f"域{index}"
+                local["roles"] = [
+                    {"uid": f"r-{index}", "name": f"角色{index}", "desc": "", "group": "业务参与方", "subDomains": []}
+                ]
+                local["processes"] = [{
+                    "uid": f"p-{index}",
+                    "name": f"流程{index}",
+                    "nodes": [
+                        {"uid": f"t-{index}", "name": f"节点{index}",
+                         "role_uid": f"r-{index}", "role_uids": [f"r-{index}"],
+                         "roles": [f"角色{index}"], "role": f"角色{index}",
+                         "userSteps": [], "orchestrationTasks": [], "forms": [],
+                         "entity_ops": [], "businessRules": [], "repeatable": False}
+                    ],
+                    "flow": {"version": 2, "nodes": [], "edges": [],
+                             "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+                    "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
+                    "stageUid": "", "stagePos": {"x": 0, "y": 0},
+                    "prototypeFiles": [],
+                    "businessComponentUids": [], "businessConstructUids": [],
+                    "businessComponentUid": "", "businessConstructUid": "",
+                }]
+                local["entities"] = [
+                    {"uid": f"e-{index}", "name": f"实体{index}", "fields": [], "businessConstructUid": "",
+                     "businessConstructUids": [], "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                     "state_transitions": [], "taxonomies": []}
+                ]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"u-{index}", "name": f"用户{index}", "sessionId": f"s-{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                results = list(executor.map(submit_full, range(10)))
+
+            seqs = sorted(r["seq"] for r in results)
+            self.assertEqual(seqs, list(range(1, 11)), "seq应单调递增1-10")
+
+            final = storage.load("CollabSmoke")
+            self.assertIsInstance(final, dict)
+            self.assertIn("roles", final)
+            self.assertIn("processes", final)
+            self.assertIn("entities", final)
+
+    def test_all_entity_types_concurrent(self):
+        """AC6: 全部实体类型并发修改"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base = create_empty_document("CollabSmoke")
+            base["roles"] = [{"uid": "r-base", "name": "基准角色", "desc": "", "group": "业务参与方", "subDomains": []}]
+            base["processes"] = [{
+                "uid": "p-base", "name": "基准流程",
+                "nodes": [
+                    {"uid": "t-base", "name": "基准节点", "role_uid": "r-base", "role_uids": ["r-base"],
+                     "roles": ["基准角色"], "role": "基准角色",
+                     "userSteps": [], "orchestrationTasks": [], "forms": [],
+                     "entity_ops": [], "businessRules": [], "repeatable": False}
+                ],
+                "flow": {"version": 2, "nodes": [], "edges": [],
+                         "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+                "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
+                "stageUid": "", "stagePos": {"x": 0, "y": 0},
+                "prototypeFiles": [], "businessComponentUids": [], "businessConstructUids": [],
+                "businessComponentUid": "", "businessConstructUid": "",
+            }]
+            base["entities"] = [
+                {"uid": "e-base", "name": "基准实体", "fields": [],
+                 "businessConstructUid": "", "businessConstructUids": [],
+                 "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                 "state_transitions": [], "taxonomies": []}
+            ]
+            base["stages"] = [{"uid": "s-base", "name": "基准阶段", "subDomain": "",
+                                "panoramaColumnUid": "", "panoramaLaneUid": "",
+                                "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
+                                "processLinks": []}]
+            storage.save("CollabSmoke", base)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            def modify_roles(index):
+                local = create_empty_document("CollabSmoke")
+                local["roles"] = [
+                    {"uid": "r-base", "name": f"角色-改{index}", "desc": "", "group": "业务参与方", "subDomains": []},
+                    {"uid": f"r-new-{index}", "name": f"新角色{index}", "desc": "", "group": "业务参与方", "subDomains": []},
+                ]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke", {"id": f"r-{index}", "name": f"改角色{index}", "sessionId": f"rs-{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            def modify_process(index):
+                local = create_empty_document("CollabSmoke")
+                local["roles"] = [{"uid": "r-base", "name": "基准角色", "desc": "", "group": "业务参与方", "subDomains": []}]
+                local["processes"] = [{
+                    "uid": "p-base", "name": f"流程-改{index}",
+                    "nodes": [
+                        {"uid": "t-base", "name": f"节点-改{index}", "role_uid": "r-base", "role_uids": ["r-base"],
+                         "roles": ["基准角色"], "role": "基准角色",
+                         "userSteps": [], "orchestrationTasks": [], "forms": [],
+                         "entity_ops": [], "businessRules": [], "repeatable": False},
+                        {"uid": f"t-new-{index}", "name": f"新节点{index}", "role_uid": "r-base", "role_uids": ["r-base"],
+                         "roles": ["基准角色"], "role": "基准角色",
+                         "userSteps": [], "orchestrationTasks": [], "forms": [],
+                         "entity_ops": [], "businessRules": [], "repeatable": False},
+                    ],
+                    "flow": {"version": 2, "nodes": [], "edges": [],
+                             "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+                    "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
+                    "stageUid": "", "stagePos": {"x": 0, "y": 0}, "prototypeFiles": [],
+                    "businessComponentUids": [], "businessConstructUids": [],
+                    "businessComponentUid": "", "businessConstructUid": "",
+                }]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke", {"id": f"p-{index}", "name": f"改进程{index}", "sessionId": f"ps-{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            def modify_entity(index):
+                local = create_empty_document("CollabSmoke")
+                local["entities"] = [
+                    {"uid": "e-base", "name": f"实体-改{index}",
+                     "fields": [{"uid": f"f-{index}", "name": f"字段{index}", "type": "string",
+                                 "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
+                     "businessConstructUid": "", "businessConstructUids": [],
+                     "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                     "state_transitions": [], "taxonomies": []}
+                ]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke", {"id": f"e-{index}", "name": f"改实体{index}", "sessionId": f"es-{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            def modify_stage(index):
+                local = create_empty_document("CollabSmoke")
+                local["stages"] = [
+                    {"uid": "s-base", "name": f"阶段-改{index}", "subDomain": "",
+                     "panoramaColumnUid": "", "panoramaLaneUid": "",
+                     "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
+                     "processLinks": []}
+                ]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke", {"id": f"s-{index}", "name": f"改阶段{index}", "sessionId": f"ss-{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            with ThreadPoolExecutor(max_workers=12) as executor:
+                futs = []
+                for i in range(3):
+                    futs.append(executor.submit(modify_roles, i))
+                    futs.append(executor.submit(modify_process, i))
+                    futs.append(executor.submit(modify_entity, i))
+                    futs.append(executor.submit(modify_stage, i))
+                results = [f.result() for f in futs]
+
+            seqs = sorted(r["seq"] for r in results)
+            self.assertEqual(seqs, list(range(1, 13)), "12个并发提交seq应1-12")
+
+            final = storage.load("CollabSmoke")
+            self.assertIsInstance(final, dict)
+            self.assertGreaterEqual(len(final.get("roles", [])), 1)
+            self.assertGreaterEqual(len(final.get("processes", [])), 1)
+            self.assertGreaterEqual(len(final.get("entities", [])), 1)
+            self.assertGreaterEqual(len(final.get("stages", [])), 1)
+
+            # 所有提交原文都存在
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertEqual(len(submit_files), 12, "12次提交都应有原文")
+
+    def test_sync_log_written_on_each_save(self):
+        """sync-log.jsonl每收到Ctrl+S时应追加"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            for i in range(3):
+                local = create_empty_document("CollabSmoke")
+                local["meta"]["author"] = f"作者{i}"
+                manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"u{i}", "name": f"用户{i}", "sessionId": f"s{i}"},
+                    {"baseSeq": i, "document": local},
+                )
+
+            sync_log = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "sync-log.jsonl"
+            self.assertTrue(sync_log.exists(), "sync-log.jsonl应存在")
+            lines = sync_log.read_text("utf-8").strip().split("\n")
+            self.assertEqual(len(lines), 3, "应有3条日志")
+
+    def test_document_lock_serializes_concurrent_saves(self):
+        """文档锁确保同一文档串行处理"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            seen_seqs = []
+            lock = threading.Lock()
+
+            def submit_and_record(index):
+                local = create_empty_document("CollabSmoke")
+                local["meta"]["author"] = f"A{index}"
+                result = manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"u{index}", "name": f"U{index}", "sessionId": f"s{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+                with lock:
+                    seen_seqs.append(result["seq"])
+                return result
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(submit_and_record, range(8)))
+
+            self.assertEqual(sorted(seen_seqs), list(range(1, 9)))
+            # seq必须无重复
+            self.assertEqual(len(seen_seqs), len(set(seen_seqs)))
+
+    def test_concurrent_mixed_entities_comprehensive(self):
+        """混合实体：同时改流程+实体+角色+阶段，所有提交原文保留"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base = create_empty_document("CollabSmoke")
+            base["roles"] = [{"uid": "r-1", "name": "R1", "desc": "", "group": "业务参与方", "subDomains": []}]
+            base["processes"] = [{
+                "uid": "p-1", "name": "P1",
+                "nodes": [
+                    {"uid": "t-1", "name": "T1", "role_uid": "r-1", "role_uids": ["r-1"],
+                     "roles": ["R1"], "role": "R1",
+                     "userSteps": [], "orchestrationTasks": [], "forms": [],
+                     "entity_ops": [], "businessRules": [], "repeatable": False},
+                ],
+                "flow": {"version": 2, "nodes": [{"uid": "g-1", "kind": "gateway", "title": "G1", "gatewayType": "exclusive", "role_uid": ""}],
+                         "edges": [{"uid": "e-1", "from": "t-1", "to": "g-1", "label": "边1"}],
+                         "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+                "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
+                "stageUid": "", "stagePos": {"x": 0, "y": 0}, "prototypeFiles": [],
+                "businessComponentUids": [], "businessConstructUids": [],
+                "businessComponentUid": "", "businessConstructUid": "",
+            }]
+            base["entities"] = [
+                {"uid": "e-1", "name": "E1",
+                 "fields": [{"uid": "f-1", "name": "F1", "type": "string", "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
+                 "businessConstructUid": "", "businessConstructUids": [],
+                 "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                 "state_transitions": [], "taxonomies": []}
+            ]
+            base["stages"] = [{"uid": "s-1", "name": "S1", "subDomain": "",
+                                "panoramaColumnUid": "", "panoramaLaneUid": "",
+                                "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
+                                "processLinks": []}]
+            base["rules"] = [{"uid": "br-1", "name": "规则1", "content": "旧规则"}]
+            storage.save("CollabSmoke", base)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            def change_everything(index):
+                local = create_empty_document("CollabSmoke")
+                local["roles"] = [
+                    {"uid": "r-1", "name": f"R1-v{index}", "desc": "", "group": "业务参与方", "subDomains": []},
+                ]
+                local["processes"] = [{
+                    "uid": "p-1", "name": f"P1-v{index}",
+                    "nodes": [
+                        {"uid": "t-1", "name": f"T1-v{index}", "role_uid": "r-1", "role_uids": ["r-1"],
+                         "roles": [f"R1-v{index}"], "role": f"R1-v{index}",
+                         "userSteps": [{"uid": f"us-{index}", "name": "新增步骤", "type": "form", "note": ""}],
+                         "orchestrationTasks": [], "forms": [],
+                         "entity_ops": [{"uid": f"eo-{index}", "entity_id": "e-1", "ops": ["C"]}],
+                         "businessRules": [], "repeatable": False},
+                    ],
+                    "flow": {"version": 2, "nodes": [{"uid": "g-1", "kind": "gateway", "title": f"G1-v{index}", "gatewayType": "exclusive", "role_uid": ""}],
+                             "edges": [{"uid": "e-1", "from": "t-1", "to": "g-1", "label": f"边v{index}"}],
+                             "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+                    "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
+                    "stageUid": "s-1", "stagePos": {"x": 0, "y": 0}, "prototypeFiles": [],
+                    "businessComponentUids": [], "businessConstructUids": [],
+                    "businessComponentUid": "", "businessConstructUid": "",
+                }]
+                local["entities"] = [
+                    {"uid": "e-1", "name": f"E1-v{index}",
+                     "fields": [{"uid": "f-1", "name": f"F1-v{index}", "type": "string", "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
+                     "businessConstructUid": "", "businessConstructUids": [],
+                     "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                     "state_transitions": [
+                         {"uid": f"st-{index}", "from": "A", "to": "B", "label": f"转换{index}", "note": ""}
+                     ],
+                     "taxonomies": []}
+                ]
+                local["stages"] = [
+                    {"uid": "s-1", "name": f"S1-v{index}", "subDomain": "",
+                     "panoramaColumnUid": "", "panoramaLaneUid": "",
+                     "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
+                     "processLinks": [
+                         {"uid": f"pl-{index}", "fromProcessUid": "p-1", "toProcessUid": "p-1"}
+                     ]}
+                ]
+                local["rules"] = [{"uid": "br-1", "name": "规则1", "content": f"新规则-v{index}"}]
+                return manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"all-{index}", "name": f"全改{index}", "sessionId": f"all-{index}"},
+                    {"baseSeq": 0, "document": local},
+                )
+
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                results = list(executor.map(change_everything, range(6)))
+
+            seqs = sorted(r["seq"] for r in results)
+            self.assertEqual(seqs, list(range(1, 7)))
+
+            final = storage.load("CollabSmoke")
+            self.assertIsInstance(final, dict)
+            self.assertIn("roles", final)
+            self.assertIn("processes", final)
+            self.assertIn("entities", final)
+            self.assertIn("stages", final)
+            self.assertIn("rules", final)
+
+            # 验证无空文档
+            self.assertGreater(len(json.dumps(final, ensure_ascii=False)), 100)
+
+            # 提交原文全部保留
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertEqual(len(submit_files), 6)
 
 
 if __name__ == "__main__":

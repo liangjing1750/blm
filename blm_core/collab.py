@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from blm_core.diagnostics import log_error, log_event
+from blm_core.merge import analyze_merge
 from blm_core.storage import WorkspaceStorage
 
 
@@ -136,13 +137,12 @@ class CollaborationManager:
                     self._broadcast_json(
                         session,
                         {
-                            "type": "snapshot",
+                            "type": "snapshot_notice",
                             "doc": session.doc_name,
                             "seq": record["seq"],
                             "user": client.user,
                             "userId": client.user_id,
                             "clientId": client.client_id,
-                            "document": session.document,
                         },
                         exclude_client_id=client.client_id,
                     )
@@ -187,13 +187,14 @@ class CollaborationManager:
         with self._lock:
             session = self._get_or_create_session(safe_name)
             seq = int(session.seq or 0)
-            include_document = seq > int(since_seq or 0)
+            include_document = False
+            changed = seq > int(since_seq or 0)
             return {
                 "ok": True,
                 "doc": session.doc_name,
                 "seq": seq,
-                "changed": include_document,
-                "document": deepcopy(session.document) if include_document else None,
+                "changed": changed,
+                "document": None,
                 "users": self._session_users(session),
             }
 
@@ -214,13 +215,12 @@ class CollaborationManager:
             self._broadcast_json(
                 session,
                 {
-                    "type": "snapshot",
+                    "type": "snapshot_notice",
                     "doc": session.doc_name,
                     "seq": record["seq"],
                     "user": client.user,
                     "userId": client.user_id,
                     "clientId": client.client_id,
-                    "document": session.document,
                 },
             )
             return {
@@ -400,40 +400,29 @@ class CollaborationManager:
         if not isinstance(document, dict):
             raise WebSocketProtocolError("snapshot document must be object")
         with self._lock:
-            base_seq = self._parse_base_seq(payload.get("baseSeq"))
-            rebased = False
-            if base_seq is not None:
-                if base_seq > session.seq:
-                    raise WebSocketProtocolError("snapshot baseSeq is newer than server sequence")
-                if base_seq < session.seq:
-                    base_document = session.snapshots.get(base_seq)
-                    if not isinstance(base_document, dict):
-                        self._write_conflict_snapshot(
-                            session,
-                            client,
-                            payload,
-                            document,
-                            reason="baseSeq_too_old",
-                        )
-                        raise WebSocketProtocolError("snapshot baseSeq is too old; local draft has been retained on server")
-                    document = self._merge_local_document_changes(session.document, base_document, document)
-                    rebased = True
-            session.document = deepcopy(document)
+            base_seq = self._parse_base_seq(payload.get("baseSeq")) or 0
+
+            # 底线：先落盘提交原文
+            submit_id = self._save_submit_record(session, client, document, base_seq)
+
+            stats: dict = {"merged": True, "conflictCount": 0, "base_missing": False}
+            if base_seq == session.seq:
+                merged = document
+            elif base_doc := session.snapshots.get(base_seq):
+                merged, stats = self._merge_collaboration(base_doc, document, session.document)
+            else:
+                stats["base_missing"] = True
+                merged, stats = self._merge_collaboration(session.document, document)
+
+            session.document = deepcopy(merged)
             session.seq += 1
-            record = {
-                "seq": session.seq,
-                "doc": session.doc_name,
-                "user": client.user,
-                "userId": client.user_id,
-                "clientId": client.client_id,
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "baseSeq": payload.get("baseSeq"),
-                "mode": "snapshot",
-                "rebased": rebased,
-            }
-            self._append_changelog(session.doc_name, record)
             self._remember_snapshot(session)
             session.dirty = True
+
+            stats["user"] = client.user_name
+            stats["userId"] = client.user_id
+            self._write_sync_log(session, submit_id, base_seq, stats)
+
             self._flush_autosave(session.doc_name)
             log_event(
                 "blm.collab",
@@ -441,13 +430,98 @@ class CollaborationManager:
                 doc=session.doc_name,
                 seq=session.seq,
                 baseSeq=base_seq,
-                rebased=rebased,
                 clientId=client.client_id,
                 user=client.user_name,
-                documentBytes=len(json.dumps(document, ensure_ascii=False)),
+                submitId=submit_id,
+                conflictCount=stats.get("conflictCount", 0),
+                baseMissing=bool(stats.get("base_missing")),
+                documentBytes=len(json.dumps(merged, ensure_ascii=False)),
                 elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
             )
+            record = {
+                "seq": session.seq,
+                "doc": session.doc_name,
+                "user": client.user,
+                "userId": client.user_id,
+                "clientId": client.client_id,
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "baseSeq": base_seq,
+                "mode": "snapshot",
+                "rebased": base_seq != session.seq - 1,
+                "submitId": submit_id,
+            }
             return record
+
+    def _save_submit_record(
+        self, session: CollabSession, client: CollabClient, document: dict, base_seq: int
+    ) -> str:
+        """每次Ctrl+S先落盘提交原文，返回 submit_id"""
+        submits_dir = self._collab_dir(session.doc_name) / "submits"
+        submits_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        submit_id = f"{ts}__seq{session.seq + 1}__baseSeq{base_seq}__{client.user_name}"
+        submit_path = submits_dir / f"{submit_id}.json"
+        submit_path.write_text(
+            json.dumps(
+                {
+                    "submitId": submit_id,
+                    "doc": session.doc_name,
+                    "seq": session.seq + 1,
+                    "baseSeq": base_seq,
+                    "user": client.user_name,
+                    "userId": client.user_id,
+                    "clientId": client.client_id,
+                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                    "document": document,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return submit_id
+
+    def _write_sync_log(
+        self, session: CollabSession, submit_id: str, base_seq: int, stats: dict
+    ) -> None:
+        """追加sync-log.jsonl"""
+        log_path = self._collab_dir(session.doc_name) / "sync-log.jsonl"
+        record = {
+            "seq": session.seq,
+            "baseSeq": base_seq,
+            "user": stats.get("user", ""),
+            "userId": stats.get("userId", ""),
+            "submitId": submit_id,
+            "merged": stats.get("merged", True),
+            "conflictCount": int(stats.get("conflictCount", 0)),
+            "baseMissing": bool(stats.get("base_missing", False)),
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+        }
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+    def _merge_collaboration(
+        self, base_doc: dict, user_doc: dict, server_doc: dict | None = None
+    ) -> tuple[dict, dict]:
+        """协作专用合并入口，内部复用 merge.py 的 analyze_merge"""
+        if server_doc is None:
+            result = analyze_merge("combine", left_document=base_doc, right_document=user_doc)
+            source = "combine"
+        else:
+            result = analyze_merge(
+                "3way", left_document=user_doc, right_document=server_doc, base_document=base_doc
+            )
+            source = "3way"
+
+        conflicts = result.get("conflicts", [])
+        stats = {
+            "merged": True,
+            "conflictCount": len(conflicts) if isinstance(conflicts, list) else 0,
+            "source": source,
+        }
+
+        merged = result.get("merged_document") or server_doc or base_doc or user_doc or {}
+        return merged, stats
 
     def _parse_base_seq(self, value: Any) -> int | None:
         if value is None or value == "":
