@@ -23,16 +23,7 @@ CLIENT_STALE_SECONDS = 25
 
 
 def _doc_hash(document: dict) -> str:
-    try:
-        text = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    except (TypeError, ValueError):
-        return ""
-    d = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
-    return d
-
-
-def _content_hash(document: dict) -> str:
-    """内容哈希（排除自动变化的字段），用于快速路径比较"""
+    """内容哈希（排除自动变化字段），用于变更检测"""
     try:
         doc = deepcopy(document)
         meta = doc.get("meta")
@@ -371,10 +362,10 @@ class CollaborationManager:
             new_hash = ""
             fast_path = False
             if base_seq == session.seq:
-                new_hash = _content_hash(document)
+                new_hash = _doc_hash(document)
                 cached = session._doc_hash_cache
                 if not cached:
-                    session._doc_hash_cache = _content_hash(session.document)
+                    session._doc_hash_cache = _doc_hash(session.document)
                 if cached and cached == new_hash:
                     fast_path = True
 
@@ -422,9 +413,9 @@ class CollaborationManager:
                 self._write_sync_log(session, submit_id, base_seq, stats)
                 return record
 
-            prev_hash = session._doc_hash_cache or _content_hash(session.document)
+            prev_hash = session._doc_hash_cache or _doc_hash(session.document)
             if not new_hash:
-                new_hash = _content_hash(merged)
+                new_hash = _doc_hash(merged)
             document_changed = prev_hash != new_hash
 
             if document_changed:
@@ -632,51 +623,6 @@ class CollaborationManager:
                                          if not isinstance(c, dict) or str(c.get("uid", "")) in server_keys]
 
         return merged, conflicts, stats
-
-    @staticmethod
-    def _filter_restored_items(merged: dict, server: dict) -> dict:
-        """combine模式下移除合并结果中被服务端删除后又复原的元素"""
-        list_fields = [
-            "roles", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
-            "processes", "entities", "relations", "rules",
-            "businessComponents", "businessConstructs", "taskDefinitions",
-        ]
-        for field in list_fields:
-            server_list = server.get(field) if isinstance(server.get(field), list) else []
-            merged_list = merged.get(field) if isinstance(merged.get(field), list) else []
-            if not merged_list:
-                continue
-            server_uids = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
-            keep = [item for item in merged_list
-                     if not isinstance(item, dict) or str(item.get("uid", "")).strip() in server_uids]
-            merged[field] = keep
-        # 递归处理processes->nodes, flow->nodes/edges
-        server_procs = {str(p.get("uid", "")): p for p in server.get("processes", []) if isinstance(p, dict)}
-        for p in merged.get("processes", []) or []:
-            if not isinstance(p, dict): continue
-            sp = server_procs.get(str(p.get("uid", "")))
-            if not sp: continue
-            sp_node_uids = {str(n.get("uid", "")) for n in sp.get("nodes", []) if isinstance(n, dict)}
-            p["nodes"] = [n for n in (p.get("nodes") or []) if isinstance(n, dict) and str(n.get("uid", "")) in sp_node_uids]
-            # flow nodes/edges
-            merged_flow = p.get("flow") or {}
-            server_flow = sp.get("flow") or {}
-            if isinstance(merged_flow, dict) and isinstance(server_flow, dict):
-                sf_node_uids = {str(n.get("uid", "")) for n in server_flow.get("nodes", []) if isinstance(n, dict)}
-                merged_flow["nodes"] = [n for n in (merged_flow.get("nodes") or []) if isinstance(n, dict) and str(n.get("uid", "")) in sf_node_uids]
-                sf_edge_uids = {str(e.get("uid", "")) for e in server_flow.get("edges", []) if isinstance(e, dict)}
-                merged_flow["edges"] = [e for e in (merged_flow.get("edges") or []) if isinstance(e, dict) and str(e.get("uid", "")) in sf_edge_uids]
-        # entities->fields/state_transitions, forms->sections->fields
-        server_ents = {str(e.get("uid", "")): e for e in server.get("entities", []) if isinstance(e, dict)}
-        for e in merged.get("entities", []) or []:
-            if not isinstance(e, dict): continue
-            se = server_ents.get(str(e.get("uid", "")))
-            if not se: continue
-            sf_uids = {str(f.get("uid", "")) for f in se.get("fields", []) if isinstance(f, dict)}
-            e["fields"] = [f for f in (e.get("fields") or []) if isinstance(f, dict) and str(f.get("uid", "")) in sf_uids]
-            st_uids = {str(t.get("uid", "")) for t in se.get("state_transitions", []) if isinstance(t, dict)}
-            e["state_transitions"] = [t for t in (e.get("state_transitions") or []) if isinstance(t, dict) and str(t.get("uid", "")) in st_uids]
-        return merged
 
     @staticmethod
     def _clean_deleted_items(
@@ -1114,67 +1060,6 @@ class CollaborationManager:
     def _load_document_with_changelog(self, doc_name: str) -> tuple[dict, int]:
         document = self.storage.load(doc_name)
         return document, 0
-
-    def _get_path(self, document: dict, path: str) -> Any:
-        current: Any = document
-        for token in self._parse_path(path):
-            if isinstance(token, int):
-                if not isinstance(current, list) or token >= len(current):
-                    return None
-                current = current[token]
-            else:
-                if not isinstance(current, dict):
-                    return None
-                current = current.get(token)
-        return deepcopy(current)
-
-    def _set_path(self, document: dict, path: str, value: Any) -> None:
-        tokens = self._parse_path(path)
-        if not tokens:
-            return
-        current: Any = document
-        for token in tokens[:-1]:
-            if isinstance(token, int):
-                if not isinstance(current, list):
-                    raise WebSocketProtocolError(f"path segment is not list: {path}")
-                while len(current) <= token:
-                    current.append({})
-                current = current[token]
-            else:
-                if not isinstance(current, dict):
-                    raise WebSocketProtocolError(f"path segment is not object: {path}")
-                if token not in current or current[token] is None:
-                    current[token] = {}
-                current = current[token]
-        last = tokens[-1]
-        if isinstance(last, int):
-            if not isinstance(current, list):
-                raise WebSocketProtocolError(f"path target is not list: {path}")
-            while len(current) <= last:
-                current.append(None)
-            current[last] = value
-        else:
-            if not isinstance(current, dict):
-                raise WebSocketProtocolError(f"path target is not object: {path}")
-            current[last] = value
-
-    def _parse_path(self, path: str) -> list[str | int]:
-        tokens: list[str | int] = []
-        for segment in str(path or "").split("."):
-            rest = segment.strip()
-            if not rest:
-                continue
-            while "[" in rest:
-                before, after = rest.split("[", 1)
-                if before:
-                    tokens.append(before)
-                index_text, _, rest = after.partition("]")
-                if not index_text.isdigit():
-                    raise WebSocketProtocolError(f"invalid path index: {path}")
-                tokens.append(int(index_text))
-            if rest:
-                tokens.append(rest)
-        return tokens
 
 
 def _handler_remote_addr(handler: Any) -> str:
