@@ -1615,7 +1615,7 @@ class WorkspaceStorage(DocumentFileStore):
             process["prototypeFiles"] = prototype_refs
         package_dir.mkdir(parents=True, exist_ok=True)
         self._manifest_path(package_dir).write_text(
-            json.dumps(canonical_document(manifest_document), ensure_ascii=False, indent=2),
+            json.dumps(canonical_document(manifest_document, skip_migrate=True), ensure_ascii=False, indent=2),
             "utf-8",
         )
         self._package_markdown_path(package_dir, safe_name).write_text(

@@ -454,8 +454,9 @@ def strip_legacy_element_ids(value):
     return result
 
 
-def canonical_document(document: dict | None) -> dict:
-    return strip_legacy_element_ids(rename_reference_fields_to_uid(canonicalize_model_references(migrate_document(document))))
+def canonical_document(document: dict | None, *, skip_migrate: bool = False) -> dict:
+    doc = document if skip_migrate else migrate_document(document)
+    return strip_legacy_element_ids(rename_reference_fields_to_uid(canonicalize_model_references(doc)))
 
 
 def _normalize_text_list(values: list[str] | None) -> list[str]:
