@@ -1010,8 +1010,10 @@ function renderTaskParameterRows(kind, rows) {
     <div class="task-param-row" data-testid="task-parameter-row">
       <input type="text" value="${esc(row.name || '')}" placeholder="参数名称"
         oninput="setTaskParameterField('${normalizedKind}',${index},'name',this.value)">
-      <input type="text" value="${esc(row.type || '')}" placeholder="类型，如 String"
-        oninput="setTaskParameterField('${normalizedKind}',${index},'type',this.value)">
+      <select onchange="setTaskParameterField('${normalizedKind}',${index},'type',this.value)">
+        <option value="" ${!row.type ? 'selected' : ''}>类型</option>
+        ${FIELD_TYPES.map((t) => `<option value="${t.value}" ${row.type === t.value ? 'selected' : ''}>${t.label}</option>`).join('')}
+      </select>
       <label class="task-param-required"><input type="checkbox" ${row.required ? 'checked' : ''}
         onchange="setTaskParameterField('${normalizedKind}',${index},'required',this.checked)"> 必填</label>
       <input type="text" value="${esc(row.description || '')}" placeholder="说明"

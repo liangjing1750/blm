@@ -7506,7 +7506,8 @@ body.is-collab-reconnecting * {
   border-radius: 8px;
   background: #fff;
 }
-.task-param-row input[type="text"] {
+.task-param-row input[type="text"],
+.task-param-row select {
   min-width: 0;
   width: 100%;
   height: 30px;
