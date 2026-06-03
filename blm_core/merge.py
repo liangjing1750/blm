@@ -11,6 +11,7 @@ from blm_core.model_strategy import (
     DESCRIPTORS,
     INTERNAL_SCALAR_FIELDS,
     RULE_APPLIES_TO_COLLECTIONS,
+    SEMANTIC_KEY_ONLY_TYPES,
     SEMANTIC_UNIQUE_IN_COMBINE,
     collection_label,
     normalize_strategy_text,
@@ -104,11 +105,28 @@ def _has_shared_model_identity(left: MergeInput, right: MergeInput) -> bool:
 
 
 def _merge_set_values(base_value: Any, left_value: Any, right_value: Any) -> list[Any]:
+    """3-way merge of set-like lists（如 businessConstructUids）。
+
+    协议：- base ∩ left ∩ right → 保留（双方都保留的原有项）
+          - (left - base)   → 保留（left 新增的项）
+          - (right - base)  → 保留（right 新增的项）
+          - base 中存在但 left 或 right 移除的项 → 删除
+    避免纯 union 导致的"删除永远不传播"缺陷。
+    """
+    base_set = {str(item) for item in (base_value or [])}
+    left_set = {str(item) for item in (left_value or [])}
+    right_set = {str(item) for item in (right_value or [])}
+
+    # 三方都保留的 + 各自新增的
+    keep_keys = (base_set & left_set & right_set) | (left_set - base_set) | (right_set - base_set)
+
     result = []
     seen = set()
-    for source in (base_value or [], left_value or [], right_value or []):
+    for source in (left_value or [], right_value or []):
         for item in source:
             key = str(item)
+            if key not in keep_keys:
+                continue
             if key in seen:
                 continue
             seen.add(key)
@@ -117,10 +135,40 @@ def _merge_set_values(base_value: Any, left_value: Any, right_value: Any) -> lis
 
 
 def _merge_panorama_item(existing: dict, candidate: dict) -> dict:
+    """Fill-empty merge for combine mode (无 base 时的 2-way 合并)。"""
     for field in ("uid", "id", "name", "badge", "scope", "note", "status", "text"):
         if _is_empty(existing.get(field)) and not _is_empty(candidate.get(field)):
             existing[field] = _copy(candidate.get(field))
     return existing
+
+
+def _merge_panorama_item_3way(base_item: dict, left_item: dict, right_item: dict) -> dict:
+    """3-way merge of a single panorama item's scalar fields。
+
+    与 _merge_scalar 一致的语义：
+    - left == right → 无冲突，取 left
+    - left == base → right 变更 → 取 right
+    - right == base → left 变更 → 取 left
+    - 其他 → 冲突，暂取 left（保留用户修改）
+    """
+    result = _copy(left_item or right_item or base_item or {})
+    for field in ("uid", "id", "name", "badge", "scope", "note", "status", "text"):
+        bv = base_item.get(field) if isinstance(base_item, dict) else None
+        lv = left_item.get(field) if isinstance(left_item, dict) else None
+        rv = right_item.get(field) if isinstance(right_item, dict) else None
+        if _value_equal(lv, rv):
+            result[field] = _copy(lv)
+        elif not _value_equal(lv, bv) and _value_equal(rv, bv):
+            result[field] = _copy(lv)
+        elif _value_equal(lv, bv) and not _value_equal(rv, bv):
+            result[field] = _copy(rv)
+        elif _is_empty(lv) and not _is_empty(rv):
+            result[field] = _copy(rv)
+        elif _is_empty(rv) and not _is_empty(lv):
+            result[field] = _copy(lv)
+        else:
+            result[field] = _copy(lv if lv is not None else rv)
+    return result
 
 
 def _panorama_item_key(item: dict) -> str:
@@ -288,12 +336,11 @@ class MergeEngine:
         return merged
 
     def _merge_panorama(self, base_document: dict, left_document: dict, right_document: dict) -> tuple[dict, dict[str, dict[str, dict[str, str]]]]:
-        sources = [
-            ("left", left_document.get("panorama", {})),
-            ("right", right_document.get("panorama", {})),
-            ("base", base_document.get("panorama", {})),
-        ]
-        if not any(isinstance(panorama, dict) and panorama for _, panorama in sources):
+        left_pano = left_document.get("panorama", {}) if isinstance(left_document.get("panorama"), dict) else {}
+        right_pano = right_document.get("panorama", {}) if isinstance(right_document.get("panorama"), dict) else {}
+        base_pano = base_document.get("panorama", {}) if isinstance(base_document.get("panorama"), dict) else {}
+
+        if not any(isinstance(p, dict) and p for p in (left_pano, right_pano, base_pano)):
             return {}, {}
 
         maps: dict[str, dict[str, dict[str, str]]] = {
@@ -302,31 +349,70 @@ class MergeEngine:
             "base": {"columns": {}, "lanes": {}},
         }
 
-        def merge_axis(axis: str) -> list[dict]:
-            by_key: dict[str, dict] = {}
+        def collect_by_key(panorama: dict, axis: str) -> dict[str, dict]:
+            result: dict[str, dict] = {}
+            for item in panorama.get(axis, []) if isinstance(panorama, dict) else []:
+                if not isinstance(item, dict):
+                    continue
+                key = _panorama_item_key(item)
+                if not key or key == "uid:":
+                    continue
+                result[key] = item
+            return result
+
+        def merge_axis_3way(axis: str) -> list[dict]:
+            base_items = collect_by_key(base_pano, axis)
+            left_items = collect_by_key(left_pano, axis)
+            right_items = collect_by_key(right_pano, axis)
+
+            all_keys: set[str] = set()
+            for items in (base_items, left_items, right_items):
+                all_keys.update(items.keys())
+
+            base_keys = set(base_items.keys())
+            left_keys = set(left_items.keys())
+            right_keys = set(right_items.keys())
+
+            # 3-way deletion：base中存在但被任一方移除的项 → 删除
+            keep_keys = (base_keys & left_keys & right_keys) | (left_keys - base_keys) | (right_keys - base_keys)
+
             ordered: list[dict] = []
-            for source_name, panorama in sources:
-                for item in (panorama.get(axis, []) if isinstance(panorama, dict) else []):
-                    if not isinstance(item, dict):
+            seen: set[str] = set()
+            # 保持 left → right → base 的顺序，确保新增项优先取 left
+            for items in (left_items, right_items):
+                for key, item in items.items():
+                    if key not in keep_keys or key in seen:
                         continue
-                    key = _panorama_item_key(item)
-                    if not key or key == "uid:":
-                        continue
-                    if key not in by_key:
-                        by_key[key] = _copy(item)
-                        ordered.append(by_key[key])
+                    seen.add(key)
+                    base_item = base_items.get(key, {})
+                    left_item = left_items.get(key, {})
+                    right_item = right_items.get(key, {})
+                    if self.mode == "3way" and base_item:
+                        merged = _merge_panorama_item_3way(base_item, left_item, right_item)
                     else:
-                        _merge_panorama_item(by_key[key], item)
-                    target_uid = str(by_key[key].get("uid") or by_key[key].get("id") or "").strip()
+                        merged = _copy(left_item or right_item)
+                        if right_item:
+                            _merge_panorama_item(merged, right_item)
+                        if base_item:
+                            _merge_panorama_item(merged, base_item)
+                    ordered.append(merged)
+
+                    # reference maps
+                    target_uid = str(merged.get("uid") or merged.get("id") or "").strip()
                     if target_uid:
-                        for source_field in ("uid", "id"):
-                            source_ref = str(item.get(source_field, "")).strip()
-                            if source_ref:
-                                maps[source_name][axis][source_ref] = target_uid
+                        for source_name, source_items in [("left", left_items), ("right", right_items), ("base", base_items)]:
+                            source_item = source_items.get(key)
+                            if source_item:
+                                for source_field in ("uid", "id"):
+                                    source_ref = str(source_item.get(source_field, "")).strip()
+                                    if source_ref:
+                                        maps[source_name][axis][source_ref] = target_uid
+
             return ordered
 
-        columns = merge_axis("columns")
-        lanes = merge_axis("lanes")
+        columns = merge_axis_3way("columns")
+        lanes = merge_axis_3way("lanes")
+        # 构建全局 reference map（解决 uid/id 引用不一致）
         for axis in ("columns", "lanes"):
             global_map: dict[str, str] = {}
             ambiguous_refs: set[str] = set()
@@ -342,13 +428,13 @@ class MergeEngine:
                 for source_ref, target_ref in global_map.items():
                     source_maps[axis].setdefault(source_ref, target_ref)
 
-        merged_cells: list[dict] = []
-        cell_by_key: dict[tuple[str, str], dict] = {}
-        for source_name, panorama in sources:
+        # 收集所有 source 的 cells（按标准化 key）
+        def collect_cells(panorama: dict, source_maps_item: dict) -> dict[tuple[str, str], dict]:
+            result: dict[tuple[str, str], dict] = {}
             if not isinstance(panorama, dict):
-                continue
-            column_map = maps[source_name]["columns"]
-            lane_map = maps[source_name]["lanes"]
+                return result
+            column_map = source_maps_item.get("columns", {})
+            lane_map = source_maps_item.get("lanes", {})
             for cell in panorama.get("cells", []):
                 if not isinstance(cell, dict):
                     continue
@@ -359,16 +445,42 @@ class MergeEngine:
                 if not column_id or not lane_id:
                     continue
                 key = (lane_id, column_id)
-                normalized_cell = _copy(cell)
-                normalized_cell["columnUid"] = column_id
-                normalized_cell["laneUid"] = lane_id
-                normalized_cell.pop("columnId", None)
-                normalized_cell.pop("laneId", None)
-                if key not in cell_by_key:
-                    cell_by_key[key] = normalized_cell
-                    merged_cells.append(normalized_cell)
+                normalized = _copy(cell)
+                normalized["columnUid"] = column_id
+                normalized["laneUid"] = lane_id
+                normalized.pop("columnId", None)
+                normalized.pop("laneId", None)
+                result[key] = normalized
+            return result
+
+        base_cells = collect_cells(base_pano, maps["base"])
+        left_cells = collect_cells(left_pano, maps["left"])
+        right_cells = collect_cells(right_pano, maps["right"])
+
+        base_cell_keys = set(base_cells.keys())
+        left_cell_keys = set(left_cells.keys())
+        right_cell_keys = set(right_cells.keys())
+
+        # 3-way deletion for cells
+        keep_cell_keys = (base_cell_keys & left_cell_keys & right_cell_keys) | (left_cell_keys - base_cell_keys) | (right_cell_keys - base_cell_keys)
+
+        merged_cells: list[dict] = []
+        seen_cell_keys: set[tuple[str, str]] = set()
+        # 先 left 后 right（新增项优先取 left 的字段值）
+        for cell_items in (left_cells, right_cells):
+            for key, cell in cell_items.items():
+                if key not in keep_cell_keys or key in seen_cell_keys:
+                    continue
+                seen_cell_keys.add(key)
+                if self.mode == "3way":
+                    merged = _merge_panorama_item_3way(
+                        base_cells.get(key, {}), left_cells.get(key, {}), right_cells.get(key, {})
+                    )
                 else:
-                    _merge_panorama_item(cell_by_key[key], normalized_cell)
+                    merged = _copy(left_cells.get(key) or right_cells.get(key) or {})
+                    if right_cells.get(key):
+                        _merge_panorama_item(merged, right_cells[key])
+                merged_cells.append(merged)
 
         return {"columns": columns, "lanes": lanes, "cells": merged_cells}, maps
 
@@ -751,6 +863,29 @@ class MergeEngine:
         left_trust: bool,
         right_trust: bool,
     ) -> list[tuple[str, str]]:
+        base_keys = [self._item_key(item_type, item, base_trust) for item in base_items]
+        left_keys = [self._item_key(item_type, item, left_trust) for item in left_items]
+        right_keys = [self._item_key(item_type, item, right_trust) for item in right_items]
+
+        if self.mode == "3way":
+            left_changed = left_keys != base_keys
+            right_changed = right_keys != base_keys
+            if left_changed and not right_changed:
+                ordered = list(left_keys)
+            elif right_changed and not left_changed:
+                ordered = list(right_keys)
+            else:
+                ordered = list(left_keys) if left_changed else list(base_keys)
+            # 追加对方新增的项（本方的排序中不包含对方独有的 key）
+            for key in right_keys:
+                if key not in ordered:
+                    ordered.append(key)
+            for key in left_keys:
+                if key not in ordered:
+                    ordered.append(key)
+            return ordered
+
+        # combine mode: left → right → base
         ordered: list[tuple[str, str]] = []
         seen: set[tuple[str, str]] = set()
         for item, trust in [*[(item, left_trust) for item in left_items], *[(item, right_trust) for item in right_items], *[(item, base_trust) for item in base_items]]:
@@ -765,6 +900,9 @@ class MergeEngine:
         uid = str(item.get("uid", "")).strip()
         item_semantic_key = semantic_key(item_type, item)
         if self.mode == "combine" and item_type in SEMANTIC_UNIQUE_IN_COMBINE and item_semantic_key:
+            return ("name", item_semantic_key)
+        # uid随机、无确定性名称的类型只能用语义key匹配（如relation）
+        if item_type in SEMANTIC_KEY_ONLY_TYPES and item_semantic_key:
             return ("name", item_semantic_key)
         if trust_identity and uid:
             return ("uid", uid)

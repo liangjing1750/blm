@@ -241,6 +241,7 @@ const STEP_TYPES = [
   {value:'Query',  label:'查询'}, {value:'Check',  label:'校验'},
   {value:'Fill',   label:'填写'}, {value:'Select', label:'选择'},
   {value:'Compute',label:'计算'}, {value:'Mutate', label:'变更'},
+  {value:'Display',label:'显示'},
   {value:'__other__', label:'其它…'},
 ];
 const ORCHESTRATION_TYPES = [

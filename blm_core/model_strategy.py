@@ -43,7 +43,7 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "role": {"scalars": ["name", "desc", "group"], "set_lists": ["subDomains"], "lists": {}},
     "language": {"scalars": ["term", "definition"], "lists": {}},
     "stage": {
-        "scalars": ["name", "subDomain", "panoramaColumnUid", "panoramaLaneUid", "pos"],
+        "scalars": ["name", "subDomain", "panoramaColumnUid", "panoramaLaneUid", "panoramaSlot", "panoramaPos", "pos"],
         "lists": {"processLinks": "process_link"},
     },
     "stage_link": {"scalars": ["fromStageUid", "toStageUid"], "lists": {}},
@@ -122,6 +122,8 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
             "type",
             "querySourceKind",
             "target",
+            "address",
+            "parameters",
             "note",
             "businessComponentUid",
             "businessComponent",
@@ -178,6 +180,9 @@ LEGACY_FIELD_RENAMES: dict[str, str] = {
 
 SEMANTIC_UNIQUE_IN_COMBINE = {"rule", "business_rule"}
 
+# uid 为随机生成（无确定性名称），只能用语义 key 匹配的类型
+SEMANTIC_KEY_ONLY_TYPES = {"relation"}
+
 
 RULE_APPLIES_TO_COLLECTIONS = (
     "roles",
@@ -221,6 +226,7 @@ SEMANTIC_KEY_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "relation": [("from", "to", "type", "label")],
     "rule": [("name",), ("uid",)],
     "entity_op": [("entity_uid",)],
+    "process_link": [("fromProcessUid", "toProcessUid")],
 }
 
 

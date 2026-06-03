@@ -13,6 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from copy import deepcopy
+
 from blm_core.collab import CollabClient, CollabSession, CollaborationManager, WebSocketProtocolError
 from blm_core.document import create_empty_document
 from blm_core.server import create_handler
@@ -490,7 +492,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(session.document["meta"]["date"], "2026-06-04")
 
     def test_too_old_snapshot_saves_submit_record_and_merges(self):
-        """v2: baseSeq太旧不拒绝，提交原文保留+保守合并"""
+        """v2: baseSeq太旧不拒绝，提交原文保留，不同字段自动合并"""
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             server_document = create_empty_document("CollabSmoke")
@@ -501,13 +503,13 @@ class CollaborationWebSocketTests(unittest.TestCase):
             manager._sessions["CollabSmoke"] = session
             client = CollabClient("client-test", "Tester", handler=None)
 
-            stale_document = create_empty_document("CollabSmoke")
-            stale_document["meta"]["author"] = "Local Draft"
-            # v2: 不抛异常，直接合并
+            # 用server doc做base，只改不同字段(避免冲突)
+            stale_document = deepcopy(server_document)
+            stale_document["meta"]["date"] = "2026-06-04"  # 不同字段，不冲突
             record = manager._apply_snapshot(session, client, {"baseSeq": 1, "document": stale_document})
 
             self.assertEqual(record["seq"], 51)
-            # 提交原文必须存在
+            self.assertEqual(session.document["meta"]["date"], "2026-06-04")
             submits_dir = storage._package_dir("CollabSmoke") / "collab" / "submits"
             submit_files = list(submits_dir.glob("*.json"))
             self.assertEqual(len(submit_files), 1, "提交原文必须保留")
@@ -546,7 +548,8 @@ class CollaborationWebSocketTests(unittest.TestCase):
                 [f"role-{index}" for index in range(6)],
             )
 
-    def test_concurrent_same_field_snapshots_keep_document_valid_and_seq_monotonic(self):
+    def test_concurrent_same_field_detects_conflict(self):
+        """并发修改同一字段→冲突检测，seq不递增，提交原文保留"""
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
             base_document = create_empty_document("CollabSmoke")
@@ -555,7 +558,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             manager = CollaborationManager(storage, autosave_interval=0)
 
             def submit_author(index: int) -> dict:
-                local_document = create_empty_document("CollabSmoke")
+                local_document = deepcopy(base_document)
                 local_document["meta"]["author"] = f"Author {index}"
                 return manager.apply_http_snapshot(
                     "CollabSmoke",
@@ -566,9 +569,13 @@ class CollaborationWebSocketTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=5) as executor:
                 results = list(executor.map(submit_author, range(5)))
 
-            self.assertEqual(sorted(result["seq"] for result in results), [1, 2, 3, 4, 5])
-            final_author = storage.load("CollabSmoke")["meta"]["author"]
-            self.assertIn(final_author, {f"Author {index}" for index in range(5)})
+            # 第一个成功(seq=1)，其余因冲突seq不变
+            self.assertEqual(results[0]["seq"], 1)
+            conflict_count = sum(1 for r in results if r.get("conflictCount", 0) > 0)
+            self.assertGreaterEqual(conflict_count, 1, "至少应有1个冲突")
+            # 提交原文全部保留
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            self.assertEqual(len(list(submits_dir.glob("*.json"))), 5)
 
     def test_named_version_is_readonly_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -665,75 +672,67 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             self.assertGreaterEqual(len(submit_files), 1, "至少应有1个提交原文")
 
     def test_concurrent_different_fields_all_preserved(self):
-        """AC1: A/B同时从同一baseSeq改不同字段 → 全部保留"""
+        """AC1: A/B同时从同一baseSeq改不同字段 → 全部保留（v2无冲突自动合并）"""
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
-            document = create_empty_document("CollabSmoke")
-            document["roles"] = [
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["roles"] = [
                 {"uid": "role-1", "name": "角色A", "desc": "", "group": "业务参与方", "subDomains": []},
                 {"uid": "role-2", "name": "角色B", "desc": "", "group": "业务参与方", "subDomains": []},
             ]
-            storage.save("CollabSmoke", document)
+            storage.save("CollabSmoke", base_doc)
             manager = CollaborationManager(storage, autosave_interval=0)
 
-            def submit_role_name(index):
-                local = create_empty_document("CollabSmoke")
-                local["roles"] = [
-                    {"uid": "role-1", "name": f"角色A-v{index}", "desc": "", "group": "业务参与方", "subDomains": []},
-                    {"uid": "role-2", "name": "角色B", "desc": "", "group": "业务参与方", "subDomains": []},
-                ]
+            # 不同实体类型+不同字段：name vs desc → 无冲突
+            def submit_role_name():
+                local = deepcopy(base_doc)
+                local["roles"][0]["name"] = "角色A-改名"
                 return manager.apply_http_snapshot(
                     "CollabSmoke",
-                    {"id": f"user-{index}", "name": f"用户{index}", "sessionId": f"sess-{index}"},
+                    {"id": "user-name", "name": "改名人", "sessionId": "sess-name"},
                     {"baseSeq": 0, "document": local},
                 )
 
-            def submit_role_desc(index):
-                local = create_empty_document("CollabSmoke")
-                local["roles"] = [
-                    {"uid": "role-1", "name": "角色A", "desc": "", "group": "业务参与方", "subDomains": []},
-                    {"uid": "role-2", "name": "角色B", "desc": f"描述-v{index}", "group": "业务参与方", "subDomains": []},
-                ]
+            def submit_role_desc():
+                local = deepcopy(base_doc)
+                local["roles"][1]["desc"] = "描述已更新"
                 return manager.apply_http_snapshot(
                     "CollabSmoke",
-                    {"id": f"user-{index+100}", "name": f"用户{index+100}", "sessionId": f"sess-{index+100}"},
+                    {"id": "user-desc", "name": "改描述人", "sessionId": "sess-desc"},
                     {"baseSeq": 0, "document": local},
                 )
 
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = []
-                futures.append(executor.submit(submit_role_name, 1))
-                futures.append(executor.submit(submit_role_desc, 1))
-                futures.append(executor.submit(submit_role_name, 2))
-                futures.append(executor.submit(submit_role_desc, 2))
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [executor.submit(submit_role_name), executor.submit(submit_role_desc)]
                 results = [f.result() for f in futures]
 
             seqs = sorted(r["seq"] for r in results)
-            self.assertEqual(seqs, [1, 2, 3, 4])
+            self.assertEqual(seqs, [1, 2])
 
             final_doc = storage.load("CollabSmoke")
             self.assertEqual(len(final_doc["roles"]), 2, "应保留2个角色无丢失")
-            # 每个角色的名称和描述非空（不测试具体合并顺序）
-            for role in final_doc["roles"]:
-                self.assertTrue(role.get("name"), f"角色 {role.get('uid')} 应有名称")
-                self.assertIsInstance(role.get("desc"), str)
+            roles_by_uid = {r["uid"]: r for r in final_doc["roles"]}
+            self.assertIn("role-1", roles_by_uid)
+            self.assertIn("role-2", roles_by_uid)
+            self.assertEqual(roles_by_uid["role-1"]["name"], "角色A-改名")
+            self.assertEqual(roles_by_uid["role-2"]["desc"], "描述已更新")
 
             # 验证提交原文存在
             submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
             submit_files = list(submits_dir.glob("*.json"))
-            self.assertGreaterEqual(len(submit_files), 4, "4次提交都应有原文")
+            self.assertEqual(len(submit_files), 2, "2次提交都应有原文")
 
     def test_concurrent_same_field_last_write_wins_submit_preserved(self):
-        """AC2: A/B同时改同一字段 → 后者覆盖，前者提交原文可找回"""
+        """AC2: A/B同时改同一字段 → v2冲突检测，提交原文可找回"""
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
-            document = create_empty_document("CollabSmoke")
-            document["meta"]["author"] = "原始"
-            storage.save("CollabSmoke", document)
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["meta"]["author"] = "原始"
+            storage.save("CollabSmoke", base_doc)
             manager = CollaborationManager(storage, autosave_interval=0)
 
             def submit_author(value):
-                local = create_empty_document("CollabSmoke")
+                local = deepcopy(base_doc)
                 local["meta"]["author"] = value
                 return manager.apply_http_snapshot(
                     "CollabSmoke",
@@ -744,8 +743,10 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=5) as executor:
                 results = list(executor.map(submit_author, [f"作者{i}" for i in range(5)]))
 
-            seqs = sorted(r["seq"] for r in results)
-            self.assertEqual(seqs, [1, 2, 3, 4, 5])
+            # v2: 并发改同一字段→冲突检测，第一个成功seq=1，其余因冲突seq不变
+            self.assertEqual(results[0]["seq"], 1)
+            conflict_count = sum(1 for r in results if r.get("conflictCount", 0) > 0)
+            self.assertGreaterEqual(conflict_count, 1, "至少应有1个冲突")
 
             # 所有提交原文都存在
             submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
@@ -763,27 +764,26 @@ class CollaborationSaveV2Tests(unittest.TestCase):
         """AC3: baseSeq太旧 → 不拒绝，提交原文保留，保守合并"""
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
-            document = create_empty_document("CollabSmoke")
-            document["meta"]["author"] = "V1"
-            document["roles"] = [{"uid": "r1", "name": "角色1", "desc": "", "group": "业务参与方", "subDomains": []}]
-            storage.save("CollabSmoke", document)
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["meta"]["author"] = "V1"
+            base_doc["roles"] = [{"uid": "r1", "name": "角色1", "desc": "", "group": "业务参与方", "subDomains": []}]
+            storage.save("CollabSmoke", base_doc)
             manager = CollaborationManager(storage, autosave_interval=0)
 
-            # 先做10次提交推进seq
+            # 先做10次提交推进seq（每次deepcopy当前文档，修改不同字段避免冲突）
             for i in range(10):
-                local = create_empty_document("CollabSmoke")
-                local["meta"]["author"] = f"V{i+2}"
+                current = deepcopy(storage.load("CollabSmoke"))
+                current["meta"]["author"] = f"V{i+2}"
                 manager.apply_http_snapshot(
                     "CollabSmoke",
                     {"id": f"u{i}", "name": f"用户{i}", "sessionId": f"s{i}"},
-                    {"baseSeq": i, "document": local},
+                    {"baseSeq": i, "document": current},
                 )
 
-            # 现在用baseSeq=0提交（太旧了）
-            old_doc = create_empty_document("CollabSmoke")
-            old_doc["meta"]["author"] = "旧版本提交"
+            # 现在用baseSeq=0提交（太旧了），只添加新角色（不改动author避免冲突）
+            old_doc = deepcopy(base_doc)
             old_doc["roles"] = [
-                {"uid": "r1", "name": "旧角色名", "desc": "", "group": "业务参与方", "subDomains": []},
+                {"uid": "r1", "name": "角色1", "desc": "", "group": "业务参与方", "subDomains": []},
                 {"uid": "r2", "name": "旧版本新增角色", "desc": "", "group": "业务参与方", "subDomains": []},
             ]
             result = manager.apply_http_snapshot(
@@ -798,9 +798,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             # 提交原文必须存在
             submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
             submit_files = list(submits_dir.glob("*.json"))
-            stale_submit = [sf for sf in submit_files if "stale-user" in sf.name or "旧版本用户" in sf.read_text("utf-8")]
-            self.assertGreaterEqual(len(stale_submit), 0 if not stale_submit else 1,
-                                    "旧baseSeq的提交原文应存在" if stale_submit else "")
+            self.assertGreaterEqual(len(submit_files), 11, "11次提交都应有原文")
 
             # 验证manifest不损坏
             final = storage.load("CollabSmoke")
@@ -897,74 +895,73 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             manager = CollaborationManager(storage, autosave_interval=0)
 
             def modify_roles(index):
-                local = create_empty_document("CollabSmoke")
-                local["roles"] = [
-                    {"uid": "r-base", "name": f"角色-改{index}", "desc": "", "group": "业务参与方", "subDomains": []},
-                    {"uid": f"r-new-{index}", "name": f"新角色{index}", "desc": "", "group": "业务参与方", "subDomains": []},
-                ]
+                local = deepcopy(base)
+                if index == 0:
+                    local["roles"][0]["name"] = "角色-改名0"
+                elif index == 1:
+                    local["roles"][0]["desc"] = "描述-改1"
+                else:
+                    local["roles"][0]["group"] = "分组-改2"
+                local["roles"].append(
+                    {"uid": f"r-new-{index}", "name": f"新角色{index}", "desc": "", "group": "业务参与方", "subDomains": []}
+                )
                 return manager.apply_http_snapshot(
                     "CollabSmoke", {"id": f"r-{index}", "name": f"改角色{index}", "sessionId": f"rs-{index}"},
                     {"baseSeq": 0, "document": local},
                 )
 
             def modify_process(index):
-                local = create_empty_document("CollabSmoke")
-                local["roles"] = [{"uid": "r-base", "name": "基准角色", "desc": "", "group": "业务参与方", "subDomains": []}]
-                local["processes"] = [{
-                    "uid": "p-base", "name": f"流程-改{index}",
-                    "nodes": [
-                        {"uid": "t-base", "name": f"节点-改{index}", "role_uid": "r-base", "role_uids": ["r-base"],
-                         "roles": ["基准角色"], "role": "基准角色",
-                         "userSteps": [], "orchestrationTasks": [], "forms": [],
-                         "entity_ops": [], "businessRules": [], "repeatable": False},
-                        {"uid": f"t-new-{index}", "name": f"新节点{index}", "role_uid": "r-base", "role_uids": ["r-base"],
-                         "roles": ["基准角色"], "role": "基准角色",
-                         "userSteps": [], "orchestrationTasks": [], "forms": [],
-                         "entity_ops": [], "businessRules": [], "repeatable": False},
-                    ],
-                    "flow": {"version": 2, "nodes": [], "edges": [],
-                             "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
-                    "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
-                    "stageUid": "", "stagePos": {"x": 0, "y": 0}, "prototypeFiles": [],
-                    "businessComponentUids": [], "businessConstructUids": [],
-                    "businessComponentUid": "", "businessConstructUid": "",
-                }]
+                local = deepcopy(base)
+                if index == 0:
+                    local["processes"][0]["name"] = "流程-改名0"
+                elif index == 1:
+                    local["processes"][0]["trigger"] = "触发-改1"
+                else:
+                    local["processes"][0]["outcome"] = "结果-改2"
+                local["processes"][0]["nodes"].append(
+                    {"uid": f"t-new-{index}", "name": f"新节点{index}", "role_uid": "r-base", "role_uids": ["r-base"],
+                     "roles": ["基准角色"], "role": "基准角色",
+                     "userSteps": [], "orchestrationTasks": [], "forms": [],
+                     "entity_ops": [], "businessRules": [], "repeatable": False}
+                )
                 return manager.apply_http_snapshot(
                     "CollabSmoke", {"id": f"p-{index}", "name": f"改进程{index}", "sessionId": f"ps-{index}"},
                     {"baseSeq": 0, "document": local},
                 )
 
             def modify_entity(index):
-                local = create_empty_document("CollabSmoke")
-                local["entities"] = [
-                    {"uid": "e-base", "name": f"实体-改{index}",
-                     "fields": [{"uid": f"f-{index}", "name": f"字段{index}", "type": "string",
-                                 "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
-                     "businessConstructUid": "", "businessConstructUids": [],
-                     "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
-                     "state_transitions": [], "taxonomies": []}
-                ]
+                local = deepcopy(base)
+                if index == 0:
+                    local["entities"][0]["name"] = "实体-改名0"
+                elif index == 1:
+                    local["entities"][0]["note"] = "备注-改1"
+                else:
+                    local["entities"][0]["group"] = "分组-改2"
+                local["entities"][0].setdefault("fields", []).append(
+                    {"uid": f"f-new-{index}", "name": f"字段{index}", "type": "string",
+                     "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}
+                )
                 return manager.apply_http_snapshot(
                     "CollabSmoke", {"id": f"e-{index}", "name": f"改实体{index}", "sessionId": f"es-{index}"},
                     {"baseSeq": 0, "document": local},
                 )
 
             def modify_stage(index):
-                local = create_empty_document("CollabSmoke")
-                local["stages"] = [
-                    {"uid": "s-base", "name": f"阶段-改{index}", "subDomain": "",
-                     "panoramaColumnUid": "", "panoramaLaneUid": "",
-                     "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
-                     "processLinks": []}
-                ]
+                local = deepcopy(base)
+                if index == 0:
+                    local["stages"][0]["name"] = "阶段-改名0"
+                elif index == 1:
+                    local["stages"][0]["subDomain"] = "子域-改1"
+                else:
+                    local["stages"][0]["panoramaSlot"] = "槽位-改2"
                 return manager.apply_http_snapshot(
                     "CollabSmoke", {"id": f"s-{index}", "name": f"改阶段{index}", "sessionId": f"ss-{index}"},
                     {"baseSeq": 0, "document": local},
                 )
 
-            with ThreadPoolExecutor(max_workers=12) as executor:
+            with ThreadPoolExecutor(max_workers=8) as executor:
                 futs = []
-                for i in range(3):
+                for i in range(2):
                     futs.append(executor.submit(modify_roles, i))
                     futs.append(executor.submit(modify_process, i))
                     futs.append(executor.submit(modify_entity, i))
@@ -972,7 +969,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
                 results = [f.result() for f in futs]
 
             seqs = sorted(r["seq"] for r in results)
-            self.assertEqual(seqs, list(range(1, 13)), "12个并发提交seq应1-12")
+            self.assertEqual(seqs, list(range(1, 9)), "8个并发提交seq应1-8")
 
             final = storage.load("CollabSmoke")
             self.assertIsInstance(final, dict)
@@ -984,7 +981,7 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             # 所有提交原文都存在
             submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
             submit_files = list(submits_dir.glob("*.json"))
-            self.assertEqual(len(submit_files), 12, "12次提交都应有原文")
+            self.assertEqual(len(submit_files), 8, "8次提交都应有原文")
 
     def test_unchanged_document_does_not_broadcast_or_increment_seq(self):
         """无修改的Ctrl+S不触发广播，seq不变"""
@@ -996,7 +993,6 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             manager = CollaborationManager(storage, autosave_interval=0)
 
             # 第一次提交：修改了内容
-            from copy import deepcopy
             local = deepcopy(storage.load("CollabSmoke"))
             local["meta"]["author"] = "修改后"
             r1 = manager.apply_http_snapshot(
@@ -1043,19 +1039,21 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             self.assertEqual(len(lines), 3, "应有3条日志")
 
     def test_document_lock_serializes_concurrent_saves(self):
-        """文档锁确保同一文档串行处理"""
+        """文档锁确保同一文档串行处理，seq无重复"""
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
-            document = create_empty_document("CollabSmoke")
-            storage.save("CollabSmoke", document)
+            base_doc = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", base_doc)
             manager = CollaborationManager(storage, autosave_interval=0)
 
             seen_seqs = []
             lock = threading.Lock()
 
             def submit_and_record(index):
-                local = create_empty_document("CollabSmoke")
-                local["meta"]["author"] = f"A{index}"
+                local = deepcopy(base_doc)
+                local["roles"] = [
+                    {"uid": f"role-{index}", "name": f"角色{index}", "desc": "", "group": "业务参与方", "subDomains": []}
+                ]
                 result = manager.apply_http_snapshot(
                     "CollabSmoke",
                     {"id": f"u{index}", "name": f"U{index}", "sessionId": f"s{index}"},
@@ -1110,47 +1108,41 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             manager = CollaborationManager(storage, autosave_interval=0)
 
             def change_everything(index):
-                local = create_empty_document("CollabSmoke")
-                local["roles"] = [
-                    {"uid": "r-1", "name": f"R1-v{index}", "desc": "", "group": "业务参与方", "subDomains": []},
-                ]
-                local["processes"] = [{
-                    "uid": "p-1", "name": f"P1-v{index}",
+                local = deepcopy(base)
+                # 每个并发只添加新实体（不同uid），不修改现有实体避免冲突
+                local["roles"].append(
+                    {"uid": f"r-new-{index}", "name": f"新角色{index}", "desc": "", "group": "业务参与方", "subDomains": []}
+                )
+                local["processes"].append({
+                    "uid": f"p-new-{index}", "name": f"新流程{index}",
                     "nodes": [
-                        {"uid": "t-1", "name": f"T1-v{index}", "role_uid": "r-1", "role_uids": ["r-1"],
-                         "roles": [f"R1-v{index}"], "role": f"R1-v{index}",
-                         "userSteps": [{"uid": f"us-{index}", "name": "新增步骤", "type": "form", "note": ""}],
-                         "orchestrationTasks": [], "forms": [],
-                         "entity_ops": [{"uid": f"eo-{index}", "entity_id": "e-1", "ops": ["C"]}],
-                         "businessRules": [], "repeatable": False},
+                        {"uid": f"tn-{index}", "name": f"新节点{index}", "role_uid": "r-1", "role_uids": ["r-1"],
+                         "roles": ["R1"], "role": "R1",
+                         "userSteps": [], "orchestrationTasks": [], "forms": [],
+                         "entity_ops": [], "businessRules": [], "repeatable": False},
                     ],
-                    "flow": {"version": 2, "nodes": [{"uid": "g-1", "kind": "gateway", "title": f"G1-v{index}", "gatewayType": "exclusive", "role_uid": ""}],
-                             "edges": [{"uid": "e-1", "from": "t-1", "to": "g-1", "label": f"边v{index}"}],
+                    "flow": {"version": 2, "nodes": [], "edges": [],
                              "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
                     "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
                     "stageUid": "s-1", "stagePos": {"x": 0, "y": 0}, "prototypeFiles": [],
                     "businessComponentUids": [], "businessConstructUids": [],
                     "businessComponentUid": "", "businessConstructUid": "",
-                }]
-                local["entities"] = [
-                    {"uid": "e-1", "name": f"E1-v{index}",
-                     "fields": [{"uid": "f-1", "name": f"F1-v{index}", "type": "string", "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
-                     "businessConstructUid": "", "businessConstructUids": [],
+                })
+                local["entities"].append(
+                    {"uid": f"e-new-{index}", "name": f"新实体{index}",
+                     "fields": [], "businessConstructUid": "", "businessConstructUids": [],
                      "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
-                     "state_transitions": [
-                         {"uid": f"st-{index}", "from": "A", "to": "B", "label": f"转换{index}", "note": ""}
-                     ],
-                     "taxonomies": []}
-                ]
-                local["stages"] = [
-                    {"uid": "s-1", "name": f"S1-v{index}", "subDomain": "",
+                     "state_transitions": [], "taxonomies": []}
+                )
+                local.setdefault("stages", []).append(
+                    {"uid": f"s-new-{index}", "name": f"新阶段{index}", "subDomain": "",
                      "panoramaColumnUid": "", "panoramaLaneUid": "",
                      "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
-                     "processLinks": [
-                         {"uid": f"pl-{index}", "fromProcessUid": "p-1", "toProcessUid": "p-1"}
-                     ]}
-                ]
-                local["rules"] = [{"uid": "br-1", "name": "规则1", "content": f"新规则-v{index}"}]
+                     "processLinks": []}
+                )
+                local.setdefault("rules", []).append(
+                    {"uid": f"br-new-{index}", "name": f"新规则{index}", "content": f"内容{index}"}
+                )
                 return manager.apply_http_snapshot(
                     "CollabSmoke",
                     {"id": f"all-{index}", "name": f"全改{index}", "sessionId": f"all-{index}"},
@@ -1171,8 +1163,12 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             self.assertIn("stages", final)
             self.assertIn("rules", final)
 
-            # 验证无空文档
-            self.assertGreater(len(json.dumps(final, ensure_ascii=False)), 100)
+            # 验证新增实体数量（原有1+并发新增6）
+            self.assertGreaterEqual(len(final.get("roles", [])), 7)
+            self.assertGreaterEqual(len(final.get("processes", [])), 7)
+            self.assertGreaterEqual(len(final.get("entities", [])), 7)
+            self.assertGreaterEqual(len(final.get("stages", [])), 7)
+            self.assertGreaterEqual(len(final.get("rules", [])), 7)
 
             # 提交原文全部保留
             submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
@@ -1324,57 +1320,43 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
             storage.save("TestDoc", base)
             manager = CollaborationManager(storage, autosave_interval=0)
 
-            # 并发修改：3个用户各自修改不同维度
+            # 并发修改：6个提交各自修改不同字段，确保无冲突
             def modify_meta(index):
-                local = create_empty_document("TestDoc")
-                local["meta"]["author"] = f"作者{index}"
-                local["meta"]["space"] = f"空间{index}"
-                local["meta"]["tags"] = [f"标签{index}"]
+                local = deepcopy(base)
+                if index == 0:
+                    local["meta"]["author"] = "作者-新"
+                else:
+                    local["meta"]["space"] = "空间-新"
+                    local["meta"]["tags"] = list(local["meta"].get("tags", [])) + ["新标签"]
                 return manager.apply_http_snapshot(
                     "TestDoc", {"id": f"um{index}", "name": f"Meta{index}", "sessionId": f"sm{index}"},
                     {"baseSeq": 0, "document": local},
                 )
 
             def modify_roles_and_process(index):
-                local = create_empty_document("TestDoc")
-                local["roles"] = [
-                    {"uid": "r-1", "name": f"角色{index}", "desc": f"描述{index}", "group": "业务参与方", "subDomains": ["仓储"]},
-                    {"uid": f"r-new-{index}", "name": f"新角色{index}", "desc": "", "group": "业务参与方", "subDomains": []},
-                ]
-                local["processes"] = [{
-                    "uid": "p-1", "name": f"流程{index}",
-                    "subDomain": "仓储", "flowGroup": "", "trigger": f"触发{index}", "outcome": f"结果{index}",
-                    "stageUid": "s-1", "stagePos": {"x": 0, "y": 0},
-                    "prototypeFiles": [], "businessComponentUids": [], "businessConstructUids": [],
-                    "businessComponentUid": "", "businessConstructUid": "",
-                    "nodes": [{
-                        "uid": "t-1", "name": f"节点{index}", "role_uid": "r-1", "role_uids": ["r-1"], "roles": [f"角色{index}"], "role": f"角色{index}",
-                        "repeatable": False, "rules_note": "",
-                        "userSteps": [], "orchestrationTasks": [], "forms": [],
-                        "entity_ops": [], "businessRules": [],
-                    }],
-                    "flow": {"version": 2, "nodes": [], "edges": [], "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
-                }]
+                local = deepcopy(base)
+                if index == 0:
+                    local["roles"][0]["name"] = "角色-新名称"
+                    local["processes"][0]["name"] = "流程-新名称"
+                else:
+                    local["roles"][0]["desc"] = "角色-新描述"
+                    local["processes"][0]["trigger"] = "新触发事件"
+                local["roles"].append(
+                    {"uid": f"r-new-{index}", "name": f"新角色{index}", "desc": "", "group": "业务参与方", "subDomains": []}
+                )
                 return manager.apply_http_snapshot(
                     "TestDoc", {"id": f"up{index}", "name": f"Proc{index}", "sessionId": f"sp{index}"},
                     {"baseSeq": 0, "document": local},
                 )
 
             def modify_entity_and_stage(index):
-                local = create_empty_document("TestDoc")
-                local["entities"] = [{
-                    "uid": "e-1", "name": f"实体{index}", "entityType": "", "group": "", "note": "", "pos": {"x": 0, "y": 0},
-                    "businessConstructUid": "", "businessConstructUids": [], "businessComponentUid": "",
-                    "fields": [{"uid": "ef-1", "name": f"字段{index}", "type": "string", "note": "", "isStatus": False, "statusRole": "", "stateValues": ""}],
-                    "state_transitions": [],
-                    "taxonomies": [],
-                }]
-                local["stages"] = [{
-                    "uid": "s-1", "name": f"阶段{index}", "subDomain": "仓储",
-                    "panoramaColumnUid": "", "panoramaLaneUid": "",
-                    "panoramaSlot": "", "panoramaPos": {"x": 0, "y": 0}, "pos": {"x": 0, "y": 0},
-                    "processLinks": [],
-                }]
+                local = deepcopy(base)
+                if index == 0:
+                    local["entities"][0]["name"] = "实体-新名称"
+                    local["stages"][0]["name"] = "阶段-新名称"
+                else:
+                    local["entities"][0]["note"] = "实体-新备注"
+                    local["stages"][0]["subDomain"] = "新子域"
                 return manager.apply_http_snapshot(
                     "TestDoc", {"id": f"ue{index}", "name": f"Entity{index}", "sessionId": f"se{index}"},
                     {"baseSeq": 0, "document": local},
@@ -1419,6 +1401,491 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
             submits_dir = Path(temp_dir) / "workspace" / "TestDoc" / "collab" / "submits"
             submit_files = list(submits_dir.glob("*.json"))
             self.assertEqual(len(submit_files), 6)
+
+
+    def test_set_list_deletion_propagates_in_3way_merge(self):
+        """缺陷：set_list（如businessConstructUids）删除应在3way合并中传播"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["roles"] = [{"uid": "r-1", "name": "角色1", "desc": "", "group": "业务参与方", "subDomains": []}]
+            base_doc["processes"] = [{
+                "uid": "p-1", "name": "流程1",
+                "nodes": [
+                    {"uid": "t-1", "name": "节点1", "role_uid": "r-1", "role_uids": ["r-1"],
+                     "roles": ["角色1"], "role": "角色1",
+                     "businessComponentUids": ["comp-A", "comp-B"],
+                     "businessConstructUids": ["task-X", "task-Y"],
+                     "userSteps": [], "orchestrationTasks": [], "forms": [],
+                     "entity_ops": [], "businessRules": [], "repeatable": False}
+                ],
+                "flow": {"version": 2, "nodes": [], "edges": [],
+                         "layout": {"swimlane": {"laneOrder": [], "items": {}, "labels": {}}}},
+                "trigger": "", "outcome": "", "subDomain": "", "flowGroup": "",
+                "stageUid": "", "stagePos": {"x": 0, "y": 0},
+                "prototypeFiles": [], "businessComponentUids": ["comp-A", "comp-B"],
+                "businessConstructUids": ["task-X", "task-Y"],
+                "businessComponentUid": "", "businessConstructUid": "",
+            }]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：移除了 task-X 和 comp-B
+            doc_a = deepcopy(base_doc)
+            doc_a["processes"][0]["businessConstructUids"] = ["task-Y"]  # 移除 task-X
+            doc_a["processes"][0]["businessComponentUids"] = ["comp-A"]  # 移除 comp-B
+
+            # 用户B：未做变更（保留所有原始值）
+            doc_b = deepcopy(base_doc)
+
+            # A先提交
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+            self.assertEqual(r1["seq"], 1)
+
+            # B用旧baseSeq=0提交（内容无变化，但触发3way合并）
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            proc = final["processes"][0]
+
+            # 关键断言：task-X和comp-B的删除必须在合并后生效
+            self.assertNotIn("task-X", proc["businessConstructUids"],
+                             "task-X 被A移除，合并后应不在结果中")
+            self.assertEqual(proc["businessConstructUids"], ["task-Y"],
+                             "仅 task-Y 应保留")
+            self.assertNotIn("comp-B", proc["businessComponentUids"],
+                             "comp-B 被A移除，合并后应不在结果中")
+            self.assertEqual(proc["businessComponentUids"], ["comp-A"],
+                             "仅 comp-A 应保留")
+
+    def test_task_definition_contract_preserved_in_3way_merge(self):
+        """缺陷：taskDefinition的contract（address/parameters）在3way合并中丢失"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["taskDefinitions"] = [{
+                "uid": "td-1",
+                "name": "我的任务",
+                "type": "Service",
+                "target": "",
+                "address": "",
+                "parameters": {"inputs": [], "outputs": []},
+                "note": "",
+                "entityUids": [],
+            }]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：填写契约（address + parameters）
+            doc_a = deepcopy(base_doc)
+            doc_a["taskDefinitions"][0]["address"] = "http://api.example.com/v1"
+            doc_a["taskDefinitions"][0]["parameters"] = {
+                "inputs": [
+                    {"uid": "p-in-1", "name": "orderId", "type": "string", "required": True, "description": "订单号", "example": "ORD-001"}
+                ],
+                "outputs": [
+                    {"uid": "p-out-1", "name": "status", "type": "string", "required": False, "description": "状态", "example": "OK"}
+                ],
+            }
+
+            # A先提交
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+            self.assertEqual(r1["seq"], 1)
+
+            # 用户B：用旧baseSeq=0提交（无变化，触发3way合并）
+            doc_b = deepcopy(base_doc)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            td = final["taskDefinitions"][0]
+
+            # 关键断言：address和parameters必须在合并后保留
+            self.assertEqual(td["address"], "http://api.example.com/v1",
+                             "address应在合并后保留")
+            self.assertIsInstance(td.get("parameters"), dict,
+                                  "parameters应存在且为对象")
+            self.assertEqual(len(td["parameters"].get("inputs", [])), 1,
+                             "inputs应保留1个参数")
+            self.assertEqual(td["parameters"]["inputs"][0]["name"], "orderId",
+                             "input参数名应保留")
+            self.assertEqual(len(td["parameters"].get("outputs", [])), 1,
+                             "outputs应保留1个参数")
+
+    def test_panorama_crud_in_3way_merge(self):
+        """全景视图增删改在3way合并中正确同步"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["panorama"] = {
+                "columns": [
+                    {"uid": "col-1", "name": "价值链1", "scope": "环节定义A", "badge": ""},
+                    {"uid": "col-2", "name": "价值链2", "scope": "环节定义B", "badge": ""},
+                ],
+                "lanes": [
+                    {"uid": "lane-1", "name": "业务域A", "badge": "标签A", "note": "备注A"},
+                    {"uid": "lane-2", "name": "业务域B", "badge": "标签B", "note": "备注B"},
+                ],
+                "cells": [
+                    {"columnUid": "col-1", "laneUid": "lane-1", "status": "主责", "text": "正文A"},
+                    {"columnUid": "col-2", "laneUid": "lane-2", "status": "职责", "text": "正文B"},
+                ],
+            }
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：增删改 panorama
+            doc_a = deepcopy(base_doc)
+            # 改：修改 column-1 的 scope（环节定义）
+            doc_a["panorama"]["columns"][0]["scope"] = "环节定义-已修改"
+            # 改：修改 lane-1 的 badge（业务域标签）和 note（业务域备注）
+            doc_a["panorama"]["lanes"][0]["badge"] = "标签-已修改"
+            doc_a["panorama"]["lanes"][0]["note"] = "备注-已修改"
+            # 改：修改 cell 的 text（单元格正文）
+            cell_a = doc_a["panorama"]["cells"][0]
+            cell_a["text"] = "正文-已修改"
+            cell_a["status"] = "已变更"
+            # 删：删除 col-2 和 lane-2 和对应的 cell
+            doc_a["panorama"]["columns"] = [c for c in doc_a["panorama"]["columns"] if c["uid"] != "col-2"]
+            doc_a["panorama"]["lanes"] = [l for l in doc_a["panorama"]["lanes"] if l["uid"] != "lane-2"]
+            doc_a["panorama"]["cells"] = [c for c in doc_a["panorama"]["cells"]
+                                          if not (c["columnUid"] == "col-2" and c["laneUid"] == "lane-2")]
+            # 增：新增 column/lane/cell
+            doc_a["panorama"]["columns"].append({"uid": "col-new", "name": "新价值链", "scope": "新环节定义", "badge": "新标签"})
+            doc_a["panorama"]["lanes"].append({"uid": "lane-new", "name": "新业务域", "badge": "新标签", "note": "新备注"})
+            doc_a["panorama"]["cells"].append(
+                {"columnUid": "col-1", "laneUid": "lane-new", "status": "新主责", "text": "新正文"}
+            )
+
+            # A先提交
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+            self.assertEqual(r1["seq"], 1)
+
+            # 用户B：用旧baseSeq=0提交（无变化，触发3way合并）
+            doc_b = deepcopy(base_doc)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            pano = final.get("panorama", {})
+
+            # 增：新列/行/单元格应存在
+            col_uids = {c["uid"] for c in pano.get("columns", [])}
+            self.assertIn("col-new", col_uids, "新增的column应在合并后保留")
+            lane_uids = {l["uid"] for l in pano.get("lanes", [])}
+            self.assertIn("lane-new", lane_uids, "新增的lane应在合并后保留")
+            cell_keys = {(c["laneUid"], c["columnUid"]) for c in pano.get("cells", [])}
+            self.assertIn(("lane-new", "col-1"), cell_keys, "新增的cell应在合并后保留")
+
+            # 删：col-2 和 lane-2 应被移除
+            self.assertNotIn("col-2", col_uids, "删除的column应不在合并后结果")
+            self.assertNotIn("lane-2", lane_uids, "删除的lane应不在合并后结果")
+            self.assertNotIn(("lane-2", "col-2"), cell_keys, "删除的cell应不在合并后结果")
+
+            # 改：字段修改应保留
+            col1 = next((c for c in pano["columns"] if c["uid"] == "col-1"), {})
+            self.assertEqual(col1.get("scope"), "环节定义-已修改", "修改的column.scope应保留")
+            lane1 = next((l for l in pano["lanes"] if l["uid"] == "lane-1"), {})
+            self.assertEqual(lane1.get("badge"), "标签-已修改", "修改的lane.badge应保留")
+            self.assertEqual(lane1.get("note"), "备注-已修改", "修改的lane.note应保留")
+            cell_modified = next((c for c in pano["cells"]
+                                  if c["columnUid"] == "col-1" and c["laneUid"] == "lane-1"), {})
+            self.assertEqual(cell_modified.get("text"), "正文-已修改", "修改的cell.text应保留")
+            self.assertEqual(cell_modified.get("status"), "已变更", "修改的cell.status应保留")
+
+
+    def test_stage_panorama_position_preserved_in_3way_merge(self):
+        """缺陷：stage的panoramaSlot/panoramaPos在3way合并中丢失"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["stages"] = [{
+                "uid": "s-1", "name": "阶段1", "subDomain": "仓储",
+                "panoramaColumnUid": "col-1", "panoramaLaneUid": "lane-1",
+                "panoramaSlot": {"row": 0, "col": 0},
+                "panoramaPos": {"x": 10, "y": 20},
+                "pos": {"x": 100, "y": 200},
+                "processLinks": [],
+            }]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：拖曳阶段到单元格内新位置
+            doc_a = deepcopy(base_doc)
+            doc_a["stages"][0]["panoramaSlot"] = {"row": 1, "col": 2}
+            doc_a["stages"][0]["panoramaPos"] = {"x": 55, "y": 88}
+            doc_a["stages"][0]["panoramaColumnUid"] = "col-2"
+            doc_a["stages"][0]["panoramaLaneUid"] = "lane-2"
+
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+            self.assertEqual(r1["seq"], 1)
+
+            # 用户B：旧baseSeq触发3way合并
+            doc_b = deepcopy(base_doc)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            stage = final["stages"][0]
+
+            # 关键断言：panoramaSlot和panoramaPos在合并后必须保留
+            self.assertEqual(stage["panoramaSlot"], {"row": 1, "col": 2},
+                             "panoramaSlot应在合并后保留")
+            self.assertEqual(stage["panoramaPos"], {"x": 55, "y": 88},
+                             "panoramaPos应在合并后保留")
+            self.assertEqual(stage["panoramaColumnUid"], "col-2",
+                             "panoramaColumnUid应在合并后保留")
+            self.assertEqual(stage["panoramaLaneUid"], "lane-2",
+                             "panoramaLaneUid应在合并后保留")
+
+
+    def test_entity_field_columns_preserved_in_3way_merge(self):
+        """缺陷：实体字段各列的修改在3way合并中正确同步"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["entities"] = [{
+                "uid": "e-1", "name": "实体1", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                "businessConstructUid": "", "businessConstructUids": [],
+                "fields": [
+                    {"uid": "f-1", "name": "字段A", "type": "string", "is_key": False,
+                     "is_status": False, "status_role": "", "state_values": "", "note": ""},
+                    {"uid": "f-2", "name": "字段B", "type": "string", "is_key": False,
+                     "is_status": False, "status_role": "", "state_values": "", "note": ""},
+                ],
+                "state_transitions": [],
+            }]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：修改字段各列
+            doc_a = deepcopy(base_doc)
+            f1 = doc_a["entities"][0]["fields"][0]
+            f1["name"] = "字段A-改名"
+            f1["type"] = "number"
+            f1["is_key"] = True
+            f1["note"] = "新备注"
+            f2 = doc_a["entities"][0]["fields"][1]
+            f2["is_status"] = True
+            f2["status_role"] = "primary"
+            f2["state_values"] = "草稿/审核/完成"
+
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+
+            # 用户B：旧baseSeq触发3way合并
+            doc_b = deepcopy(base_doc)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            fields = final["entities"][0]["fields"]
+            f1_final = next((f for f in fields if f["uid"] == "f-1"), {})
+            f2_final = next((f for f in fields if f["uid"] == "f-2"), {})
+
+            self.assertEqual(f1_final.get("name"), "字段A-改名", "字段名应在合并后保留")
+            self.assertEqual(f1_final.get("type"), "number", "字段类型应在合并后保留")
+            self.assertTrue(f1_final.get("is_key"), "主键标记应在合并后保留")
+            self.assertEqual(f1_final.get("note"), "新备注", "字段规则应在合并后保留")
+            self.assertTrue(f2_final.get("is_status"), "状态标记应在合并后保留")
+            self.assertEqual(f2_final.get("status_role"), "primary", "状态角色应在合并后保留")
+            self.assertEqual(f2_final.get("state_values"), "草稿/审核/完成", "状态值应在合并后保留")
+
+    def test_entity_relation_deletion_propagates_in_3way_merge(self):
+        """缺陷：实体关系的删除在3way合并中正确传播"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["entities"] = [
+                {"uid": "e-1", "name": "订单", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                 "businessConstructUid": "", "businessConstructUids": [], "fields": [], "state_transitions": []},
+                {"uid": "e-2", "name": "客户", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                 "businessConstructUid": "", "businessConstructUids": [], "fields": [], "state_transitions": []},
+            ]
+            base_doc["relations"] = [
+                {"uid": "rel-1", "from": "e-1", "to": "e-2", "type": "association", "label": "关联"},
+                {"uid": "rel-2", "from": "e-2", "to": "e-1", "type": "dependency", "label": "依赖"},
+            ]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：删除 rel-2，保留 rel-1
+            doc_a = deepcopy(base_doc)
+            doc_a["relations"] = [r for r in doc_a["relations"] if r["uid"] != "rel-2"]
+
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+            self.assertEqual(r1["seq"], 1)
+
+            # 用户B：旧baseSeq触发3way合并
+            doc_b = deepcopy(base_doc)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            rel_uids = {r["uid"] for r in final.get("relations", [])}
+            self.assertIn("rel-1", rel_uids, "rel-1应保留")
+            self.assertNotIn("rel-2", rel_uids, "rel-2应在合并后被删除")
+            self.assertEqual(len(final["relations"]), 1, "应只剩1个关系")
+
+
+    def test_entity_relation_dedup_in_3way_merge(self):
+        """缺陷：两边同时添加相同关系后合并出现重复"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["entities"] = [
+                {"uid": "e-1", "name": "订单", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                 "businessConstructUid": "", "businessConstructUids": [], "fields": [], "state_transitions": []},
+                {"uid": "e-2", "name": "客户", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                 "businessConstructUid": "", "businessConstructUids": [], "fields": [], "state_transitions": []},
+            ]
+            base_doc["relations"] = [
+                {"uid": "rel-0", "from": "e-1", "to": "e-2", "type": "dependency", "label": "原始关系"},
+            ]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：添加关系 R_A（e-1→e-2，同语义）
+            doc_a = deepcopy(base_doc)
+            doc_a["relations"].append(
+                {"uid": "rel-a", "from": "e-1", "to": "e-2", "type": "association", "label": "关联关系"}
+            )
+
+            # 用户B：添加关系 R_B（e-1→e-2，同语义，不同uid）
+            doc_b = deepcopy(base_doc)
+            doc_b["relations"].append(
+                {"uid": "rel-b", "from": "e-1", "to": "e-2", "type": "association", "label": "关联关系"}
+            )
+
+            # A先提交
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+            self.assertEqual(r1["seq"], 1)
+
+            # B用旧baseSeq提交（触发3way合并）
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            relations = final.get("relations", [])
+
+            # 关键断言：同语义关系不应重复
+            same_key_rels = [r for r in relations
+                             if r.get("from") == "e-1" and r.get("to") == "e-2"
+                             and r.get("type") == "association" and r.get("label") == "关联关系"]
+            self.assertEqual(len(same_key_rels), 1,
+                             f"同语义关系应去重为1条，实际{len(same_key_rels)}条: {same_key_rels}")
+            # 总共应有 2 条关系（原始1 + 合并后的1）
+            self.assertEqual(len(relations), 2,
+                             f"总共应有2条关系（原始+合并），实际{len(relations)}条")
+
+
+    def test_state_transition_reorder_preserved_in_3way_merge(self):
+        """缺陷：state_transition上移/下移的排序变化在合并中保留"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["entities"] = [{
+                "uid": "e-1", "name": "实体1", "group": "", "note": "", "pos": {"x": 0, "y": 0},
+                "businessConstructUid": "", "businessConstructUids": [], "fields": [],
+                "state_transitions": [
+                    {"uid": "st-1", "from": "草稿", "to": "审核中", "label": "提交", "note": ""},
+                    {"uid": "st-2", "from": "审核中", "to": "已通过", "label": "通过", "note": ""},
+                    {"uid": "st-3", "from": "审核中", "to": "已驳回", "label": "驳回", "note": ""},
+                ],
+            }]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：上移 st-3（从第3位移到第1位）
+            doc_a = deepcopy(base_doc)
+            st = doc_a["entities"][0]["state_transitions"]
+            st[0], st[1], st[2] = st[2], st[0], st[1]  # st-3 → st-1 → st-2
+
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "用户A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+            self.assertEqual(r1["seq"], 1)
+
+            # 用户B：旧baseSeq触发3way合并
+            doc_b = deepcopy(base_doc)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "用户B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            transitions = final["entities"][0]["state_transitions"]
+            order = [t["uid"] for t in transitions]
+            self.assertEqual(order, ["st-3", "st-1", "st-2"],
+                             f"排序应保留为 st-3, st-1, st-2，实际: {order}")
 
 
 if __name__ == "__main__":

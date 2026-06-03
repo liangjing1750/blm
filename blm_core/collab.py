@@ -212,6 +212,8 @@ class CollaborationManager:
             )
             record = self._apply_snapshot(session, client, payload)
             if record.get("changed", True):
+                # 排除提交者自己的 WebSocket 连接，避免"自己的保存"触发"他人有更新"横幅
+                exclude_ws = str(user_profile.get("wsClientId", "")).strip() or None
                 self._broadcast_json(
                     session,
                     {
@@ -222,6 +224,7 @@ class CollaborationManager:
                         "userId": client.user_id,
                         "clientId": client.client_id,
                     },
+                    exclude_client_id=exclude_ws,
                 )
             return {
                 "ok": True,
@@ -606,22 +609,7 @@ class CollaborationManager:
                                 existing[f] = t[f]
                 entity["state_transitions"] = deduped
 
-        # 强制清理panorama：移除server已删除的列/行/单元格
-        if server_doc is not None and merged.get("panorama") and server_doc.get("panorama"):
-            for axis in ("columns", "lanes", "cells"):
-                server_pano = server_doc.get("panorama", {})
-                merged_pano = merged.setdefault("panorama", {})
-                merged_list = merged_pano.get(axis, []) if isinstance(merged_pano.get(axis), list) else []
-                server_list = server_pano.get(axis, []) if isinstance(server_pano.get(axis), list) else []
-                if axis == "cells":
-                    server_keys = {(str(c.get("laneUid", "")), str(c.get("columnUid", ""))) for c in server_list if isinstance(c, dict)}
-                    merged_pano[axis] = [c for c in merged_list
-                                         if not isinstance(c, dict) or (str(c.get("laneUid", "")), str(c.get("columnUid", ""))) in server_keys]
-                else:
-                    server_keys = {str(c.get("uid", "")) for c in server_list if isinstance(c, dict)}
-                    merged_pano[axis] = [c for c in merged_list
-                                         if not isinstance(c, dict) or str(c.get("uid", "")) in server_keys]
-
+        # panorama 的删除检测已由 _merge_panorama (3-way) + _clean_deleted_items 正确覆盖
         return merged, conflicts, stats
 
     @staticmethod
@@ -630,7 +618,7 @@ class CollaborationManager:
     ) -> int:
         """移除合并结果中server已删除但user未修改的uid元素。返回删除冲突数。"""
         list_fields = [
-            "roles", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
+            "roles", "language", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
             "processes", "entities", "relations", "rules",
             "businessComponents", "businessConstructs", "taskDefinitions",
         ]

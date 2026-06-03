@@ -254,9 +254,18 @@ function renderRichTextEditor({ value = '', testIdPrefix = 'rich-text', classNam
   return `<div class="rich-text-field">
     ${renderRichTextToolbar(testIdPrefix)}
     <div class="${esc(className)} rich-text-editor" data-testid="${esc(testIdPrefix)}-editor" contenteditable="true" role="textbox" aria-multiline="true"
-      data-placeholder="${esc(placeholder)}" oninput="${sync}" onpaste="handleRichTextPaste(event,this)" onkeydown="handleRichTextKeydown(event,this)">${safeHtml}</div>
+      data-placeholder="${esc(placeholder)}" onfocus="moveCursorToEndOfContent(this)" oninput="${sync}" onpaste="handleRichTextPaste(event,this)" onkeydown="handleRichTextKeydown(event,this)">${safeHtml}</div>
     <textarea class="rich-text-storage" data-testid="${esc(testIdPrefix)}-storage" aria-hidden="true" tabindex="-1">${esc(sanitizeRichTextHtml(safeHtml))}</textarea>
   </div>`;
+}
+
+function moveCursorToEndOfContent(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function syncRichTextEditor(editor) {
@@ -4494,6 +4503,8 @@ function startStageNodeDrag(kind, nodeId, event) {
 function clearStageDragTargetCell() {
   document.querySelectorAll('.value-stream-cell.is-drag-target').forEach((cell) => {
     cell.classList.remove('is-drag-target');
+    const overlay = cell.querySelector('.stage-drag-slot-overlay');
+    if (overlay) overlay.style.display = 'none';
   });
 }
 
@@ -4518,23 +4529,55 @@ function getStageDragTargetCell(event) {
   const draggedNode = document.querySelector(`.stage-graph-node[data-node-id="${CSS.escape(stageDragState.nodeId)}"]`);
   const elements = document.elementsFromPoint(event.clientX, event.clientY) || [];
   for (const element of elements) {
+    // 跳过拖动物本身（z-index=5，始终在最上层）
+    if (draggedNode && (element === draggedNode || draggedNode.contains(element))) continue;
     const cell = element?.closest?.('.value-stream-cell');
-    if (!cell) continue;
-    if (draggedNode && cell.contains(draggedNode)) continue;
-    return cell;
+    if (cell) return cell;
   }
   return null;
+}
+
+function getStageDragTargetSlot(cell, event) {
+  if (!cell || !event) return null;
+  const board = cell.querySelector('.value-stream-stage-board');
+  if (!board) return null;
+  const boardRect = board.getBoundingClientRect();
+  const col = Math.max(0, Math.round((event.clientX - boardRect.left - MATRIX_STAGE_BOARD_PAD) / MATRIX_STAGE_SLOT_W));
+  const row = Math.max(0, Math.round((event.clientY - boardRect.top - MATRIX_STAGE_BOARD_PAD) / MATRIX_STAGE_SLOT_H));
+  return { row, col };
+}
+
+function highlightStageDragSlot(cell, slot) {
+  if (!cell || !slot) return;
+  let overlay = cell.querySelector('.stage-drag-slot-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'stage-drag-slot-overlay';
+    const board = cell.querySelector('.value-stream-stage-board');
+    if (board) board.appendChild(overlay);
+  }
+  const x = MATRIX_STAGE_BOARD_PAD + slot.col * MATRIX_STAGE_SLOT_W;
+  const y = MATRIX_STAGE_BOARD_PAD + slot.row * MATRIX_STAGE_SLOT_H;
+  overlay.style.cssText = `left:${x}px;top:${y}px;width:${MATRIX_STAGE_SLOT_W}px;height:${MATRIX_STAGE_SLOT_H}px;display:block`;
+  overlay.dataset.slotRow = slot.row;
+  overlay.dataset.slotCol = slot.col;
 }
 
 function updateStageDragTargetCell(event) {
   clearStageDragTargetCell();
   const cell = getStageDragTargetCell(event);
-  if (cell) cell.classList.add('is-drag-target');
+  if (cell) {
+    cell.classList.add('is-drag-target');
+    const slot = getStageDragTargetSlot(cell, event);
+    if (slot) highlightStageDragSlot(cell, slot);
+  }
   return cell;
 }
 
 function onStageNodeDrag(event) {
   if (!stageDragState) return;
+  // 非编辑模式下不显示拖曳反馈（不移动卡片、不高亮格子）
+  if (stageDragState.kind === 'stage' && !isStagePanoramaEditing()) return;
   const dx = event.clientX - stageDragState.startX;
   const dy = event.clientY - stageDragState.startY;
   const zoom = getStageGraphZoom() || 1;
@@ -4582,6 +4625,13 @@ function endStageNodeDrag(event) {
     } else navigate('process', { procId: nodeId, taskId: null });
     return;
   }
+  // 非编辑模式下拖曳不生效：不调位置、不显示"待保存"
+  if (kind === 'stage' && !isStagePanoramaEditing()) {
+    clearStageDragTargetCell();
+    stageDragState = null;
+    return;
+  }
+
   if (kind === 'stage' && isStagePanoramaEditing()) {
     const cell = updateStageDragTargetCell(event);
     const stage = findStage(nodeId, S.doc);
@@ -6153,8 +6203,8 @@ function renderUserStepsSection(proc, task) {
           </select>
           ${isCustomStepType(s.type) ? `<input class="step-type-custom" type="text" value="${esc(s.type)}" placeholder="自定义类型"
             oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'type',this.value)">` : ''}
-          <textarea class="step-name" rows="1" placeholder="步骤描述"
-            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value);this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+          <textarea class="step-name auto-resize" rows="1" placeholder="步骤描述"
+            oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value);autoResize(this)"
             >${esc(s.name || '')}</textarea>
           <div class="step-actions">
             <button class="step-action step-add-after" type="button" title="在下方插入步骤" onclick="addStep('${esc(proc.id)}','${esc(task.id)}',${i})">+</button>
@@ -6349,9 +6399,10 @@ function renderTaskFormFieldRow(proc, task, form, section, field, fieldIndex) {
       </select>
     </td>
     <td>
-      <input type="text" data-testid="task-form-field-note" data-field-id="${esc(field.id)}"
-        value="${esc(field.note || '')}" placeholder="校验规则 / 展示说明"
-        oninput="setTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}','note',this.value)">
+      <textarea class="auto-resize" rows="1" data-testid="task-form-field-note" data-field-id="${esc(field.id)}"
+        placeholder="校验规则 / 展示说明"
+        oninput="setTaskFormField('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','${esc(field.id)}','note',this.value);autoResize(this)"
+        >${esc(field.note || '')}</textarea>
     </td>
     <td class="task-form-action-cell">
       <div class="step-actions task-form-inline-actions">

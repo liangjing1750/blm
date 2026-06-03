@@ -90,6 +90,7 @@ function getCollabUserProfile() {
     id: profile.id,
     name: profile.name,
     sessionId: profile.sessionId,
+    wsClientId: S.collab?.clientId || '',
   };
 }
 
@@ -919,22 +920,27 @@ async function flushCollabSnapshotHttp() {
     const postSyncHash = hashCollabDocument(S.doc);
     const hadNewEditsDuringSync = frozenHash !== postSyncHash;
     if (result.conflictCount > 0) {
-      // 有冲突 → 弹窗让用户决策，不自动合并
+      // 有冲突 → 先关闭等待框，再弹冲突裁决界面
+      if (typeof setSaveProgress === 'function') setSaveProgress(false);
       const conflicts = Array.isArray(result.conflicts) ? result.conflicts : [];
-      const paths = conflicts.map((c) => c.path || '未知字段').slice(0, 10).join('\n');
-      const confirmed = await showAppConfirm(
-        `检测到 ${result.conflictCount} 处修改冲突（双方修改了同一字段），已保留服务端最新版本。\n\n冲突字段：\n${paths}\n\n您的提交已保存为草稿，可稍后手动处理。`,
-        { title: '检测到修改冲突', confirmLabel: '使用服务端版本', cancelLabel: '查看我的版本' },
-      );
-      if (!confirmed) {
-        // 用户想保留自己的版本 → 恢复草稿
+      const resolution = await showCollabConflictDialog(conflicts);
+      if (resolution === 'mine') {
+        // 用户选择保留自己的版本：恢复冻结文档，标记待同步
+        S.doc = frozenDoc;
+        hydrateDocumentForUi(S.doc);
+        S.modified = true;
         S.collab.pendingSnapshot = true;
         S.collab.hasConflict = false;
+        S.collab.acceptedSeq = S.collab.seq;
         renderCollabConflictBanner();
         renderCollabStatus();
-        if (typeof setSaveProgress === 'function') setTimeout(() => setSaveProgress(false), 350);
+        const snapMine = captureScrollSnapshots();
+        render();
+        restoreScrollSnapshots(snapMine);
+        if (typeof renderToolbar === 'function') renderToolbar();
         return true;
       }
+      // 使用服务端版本
       if (result.document && typeof result.document === 'object') {
         S.doc = result.document;
         hydrateDocumentForUi(S.doc);
@@ -947,11 +953,9 @@ async function flushCollabSnapshotHttp() {
       await clearLocalCollabDraft(S.currentFile);
       renderCollabConflictBanner();
       renderCollabStatus();
+      const snapServer = captureScrollSnapshots();
       render();
-      if (typeof setSaveProgress === 'function') {
-        setSaveProgress(true, 100, '已应用服务端版本', '提交原文已保留，可稍后处理冲突。');
-        setTimeout(() => setSaveProgress(false), 350);
-      }
+      restoreScrollSnapshots(snapServer);
       return true;
     }
     if (result.document && typeof result.document === 'object') {
@@ -968,8 +972,10 @@ async function flushCollabSnapshotHttp() {
     S.collab.forceSnapshotSync = false;
     await clearLocalCollabDraft(S.currentFile);
     startCollabPollingFallback();
-    // 总是刷新界面，确保所有实体类型（角色/步骤/实体/表单/规则等）渲染更新
+    // 保存滚动位置，render() 后恢复，避免界面跳动
+    const scrollSnap = captureScrollSnapshots();
     render();
+    restoreScrollSnapshots(scrollSnap);
     if (typeof renderToolbar === 'function') renderToolbar();
     renderCollabStatus();
     if (typeof setSaveProgress === 'function') {
@@ -1269,8 +1275,152 @@ function receiveRemoteCollabNotice() {
   S.collab.hasConflict = true;
   S.collab.forceSnapshotSync = true;
   renderCollabStatus();
-  renderCollabConflictBanner();
   if (typeof renderToolbar === 'function') renderToolbar();
+}
+
+function showCollabConflictDialog(conflicts) {
+  return new Promise((resolve) => {
+    const conflictList = (conflicts || []).map((c, i) => {
+      // 兼容两种冲突来源：collab meta（user/server/字段名）和 merge 引擎（left_value/right_value）
+      const userVal = formatCollabConflictValue(c.user ?? c.left_value);
+      const serverVal = formatCollabConflictValue(c.server ?? c.right_value);
+      const rawPath = c.path || '';
+      const label = c.label
+        || formatCollabConflictField(rawPath)
+        || (c.kind ? `${c.kind} - ${c.item_type || ''}`.replace(/_/g, ' ') : rawPath);
+      return `<div class="collab-conflict-item" data-conflict-index="${i}">
+        <div class="collab-conflict-field">${esc(label)}</div>
+        <div class="collab-conflict-cols">
+          <div class="collab-conflict-col">
+            <div class="collab-conflict-label">我的版本</div>
+            <pre>${esc(userVal)}</pre>
+            <button class="btn btn-outline btn-sm collab-conflict-choose" data-choice="mine" data-index="${i}">保留此项</button>
+          </div>
+          <div class="collab-conflict-col">
+            <div class="collab-conflict-label">服务端版本</div>
+            <pre>${esc(serverVal)}</pre>
+            <button class="btn btn-outline btn-sm collab-conflict-choose" data-choice="server" data-index="${i}">保留此项</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    const html = `<div class="modal-overlay collab-conflict-overlay" id="collab-conflict-modal">
+      <div class="modal collab-conflict-dialog">
+        <h3>检测到 ${conflicts.length} 处修改冲突</h3>
+        <p class="field-hint">以下字段被你和其他人同时修改了，请逐项选择保留哪个版本，或使用底部按钮一键处理。</p>
+        <div class="collab-conflict-list">${conflictList}</div>
+        <div class="collab-conflict-actions" style="justify-content:flex-end;gap:10px;margin-top:10px">
+          <button class="btn btn-outline" id="collab-conflict-all-mine">全部保留我的版本</button>
+          <button class="btn btn-primary" id="collab-conflict-all-server">全部使用服务端版本</button>
+        </div>
+      </div>
+    </div>`;
+
+    const overlay = document.createElement('div');
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay.firstElementChild);
+
+    const cleanup = () => {
+      const modal = document.getElementById('collab-conflict-modal');
+      if (modal) modal.remove();
+    };
+
+    // Per-field choices: highlight the selected one
+    document.querySelectorAll('.collab-conflict-choose').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        const item = btn.closest('.collab-conflict-item');
+        item.querySelectorAll('.collab-conflict-choose').forEach((b) => b.classList.remove('btn-primary'));
+        btn.classList.add('btn-primary');
+      };
+    });
+
+    document.getElementById('collab-conflict-all-mine').onclick = () => { cleanup(); resolve('mine'); };
+    document.getElementById('collab-conflict-all-server').onclick = () => { cleanup(); resolve('server'); };
+  });
+}
+
+function formatCollabConflictField(path) {
+  const map = {
+    'meta.title': '文档标题',
+    'meta.domain': '文档标识',
+    'meta.author': '文档作者',
+    'meta.date': '文档日期',
+    'meta.space': '所属空间',
+    'meta.tags': '标签',
+    'meta.revision': '版本号',
+  };
+  if (map[path]) return map[path];
+  // 去掉技术前缀，翻译常见字段
+  return path
+    .replace(/^meta\./, '')
+    .replace(/^roles\[\d+\]\./, '角色 · ')
+    .replace(/^processes\[\d+\]\./, '流程 · ')
+    .replace(/^entities\[\d+\]\./, '实体 · ')
+    .replace(/^stages\[\d+\]\./, '阶段 · ')
+    .replace(/^panorama\./, '全景 · ')
+    .replace(/\./g, ' → ');
+}
+
+function formatCollabConflictValue(value) {
+  if (value === undefined || value === null) return '（空）';
+  if (Array.isArray(value)) return value.length ? value.join('、') : '（空列表）';
+  if (typeof value === 'object') {
+    try { return JSON.stringify(value, null, 2); } catch (e) { return String(value); }
+  }
+  if (value === '') return '（空）';
+  if (value === true) return '是';
+  if (value === false) return '否';
+  return String(value);
+}
+
+function captureScrollSnapshots() {
+  const snap = {};
+  const containers = [
+    '.workbench-scroll',
+    '.process-editor-scroll',
+    '.entity-state-scroll',
+    '.tab-content',
+    '.sidebar-scroll',
+  ];
+  containers.forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (el) snap[sel] = { top: el.scrollTop, left: el.scrollLeft };
+  });
+  // also capture window-level and focused-input
+  snap._window = { x: window.scrollX || 0, y: window.scrollY || 0 };
+  const activeEl = document.activeElement;
+  if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+    snap._focus = { id: activeEl.id, tag: activeEl.tagName, selStart: activeEl.selectionStart, selEnd: activeEl.selectionEnd };
+  }
+  return snap;
+}
+
+function restoreScrollSnapshots(snap) {
+  if (!snap) return;
+  Object.keys(snap).forEach((sel) => {
+    if (sel.startsWith('_')) return;
+    const el = document.querySelector(sel);
+    if (el && snap[sel] != null) {
+      el.scrollTop = snap[sel].top || 0;
+      el.scrollLeft = snap[sel].left || 0;
+    }
+  });
+  if (snap._window) {
+    window.scrollTo(snap._window.x || 0, snap._window.y || 0);
+  }
+  if (snap._focus) {
+    const f = snap._focus;
+    let el = f.id ? document.getElementById(f.id) : null;
+    if (!el && f.tag) {
+      const active = document.activeElement;
+      if (active && active.tagName === f.tag) el = active;
+    }
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+      try { el.setSelectionRange(f.selStart, f.selEnd); } catch (e) { /* ignore */ }
+    }
+  }
 }
 
 function renderCollabConflictBanner() {
