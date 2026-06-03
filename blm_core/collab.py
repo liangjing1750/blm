@@ -32,12 +32,12 @@ def _doc_hash(document: dict) -> str:
 
 
 def _content_hash(document: dict) -> str:
-    """内容哈希（排除自动变化的revision等字段），用于快速路径比较"""
+    """内容哈希（排除自动变化的字段），用于快速路径比较"""
     try:
         doc = deepcopy(document)
         meta = doc.get("meta")
         if isinstance(meta, dict):
-            for field in ("revision", "uid", "document_uid", "schema_version"):
+            for field in ("uid", "document_uid", "schema_version"):
                 meta.pop(field, None)
         text = json.dumps(doc, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     except (TypeError, ValueError):

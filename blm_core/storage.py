@@ -470,12 +470,10 @@ class WorkspaceStorage(DocumentFileStore):
             return saved_document
 
     def save_collaboration_working_copy(self, name: str, document: dict) -> dict:
-        """Persist the live collaboration draft without creating a history snapshot."""
+        """Persist the live collaboration draft (revision不适用于协作流)."""
         with self._write_lock:
             safe_name = self._validate_name(name)
-            current_revision = self._current_document_revision(safe_name)
-            document_to_save = self._with_document_revision(document, current_revision)
-            saved_document = self._save_workspace_document(safe_name, document_to_save)
+            saved_document = self._save_workspace_document(safe_name, document)
             self._remove_legacy_workspace_files(safe_name)
             return saved_document
 
