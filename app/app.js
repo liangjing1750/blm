@@ -691,11 +691,12 @@ function renderWorkspaceFileList(files) {
   const fileList = document.getElementById('file-list');
   if (!fileList) return;
   const summaries = getWorkspaceDocumentSummaries(files);
-  const spaces = Array.from(new Set(summaries.map((item) => item.space))).sort(compareWorkspaceSpaceNames);
+  const spaces = Array.from(new Set(summaries.map((item) => item.space))).filter(Boolean).sort(compareWorkspaceSpaceNames);
+  const hasSummaries = spaces.length > 0;
   if (!S.recovery.activeSpace || !spaces.includes(S.recovery.activeSpace)) {
     S.recovery.activeSpace = spaces.includes('默认空间') ? '默认空间' : (spaces[0] || '');
   }
-  const activeSpace = S.recovery.activeSpace;
+  const activeSpace = hasSummaries ? S.recovery.activeSpace : '';
   const spaceSummaries = activeSpace ? summaries.filter((item) => item.space === activeSpace) : summaries;
   const tags = Array.from(new Set(spaceSummaries.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
   if (S.recovery.activeTag && !tags.includes(S.recovery.activeTag)) {
@@ -730,6 +731,7 @@ function compareWorkspaceSpaceNames(left, right) {
 
 function getWorkspaceDocumentSummaries(files) {
   const summaries = Array.isArray(S.recovery.workspaceSummaries) ? S.recovery.workspaceSummaries : [];
+  const hasLoadedSummaries = summaries.length > 0;
   const summaryByName = new Map(summaries.map((item) => [String(item.name || ''), item]));
   if (S.currentFile && S.doc) {
     const meta = S.doc.meta && typeof S.doc.meta === 'object' ? S.doc.meta : {};
@@ -750,7 +752,8 @@ function getWorkspaceDocumentSummaries(files) {
     return {
       name: fileName,
       title: String(summary.title || fileName).trim() || fileName,
-      space: String(summary.space || '默认空间').trim() || '默认空间',
+      // 摘要未加载时不伪造空间信息，避免短暂全部显示为"默认空间"然后跳变
+      space: hasLoadedSummaries ? String(summary.space || '默认空间').trim() || '默认空间' : '',
       tags: rawTags.map((tag) => String(tag || '').trim()).filter(Boolean),
       author: String(summary.author || '').trim(),
       date: String(summary.date || '').trim(),
