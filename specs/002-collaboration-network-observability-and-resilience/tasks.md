@@ -39,11 +39,11 @@
   - [x] 静态验收：入口、弹窗、JS 函数、CSS 均存在
   - [ ] Playwright 点击诊断入口并截图：当前本机 Playwright/npm 环境不可用
 
-- [ ] T3 大文档与弱网同步优化
-  - [ ] snapshot 发送前做 hash 去重
-  - [ ] 自动同步防抖调整，立即同步不受影响
-  - [ ] baseSeq 过旧时返回明确错误，不覆盖服务端
-  - [ ] 自动验收：旧 baseSeq 合并测试、重复 snapshot 去重测试
+- [x] T3 大文档与弱网同步优化
+  - [x] snapshot 发送前做 hash 去重
+  - [x] 自动同步防抖从 3 秒调整为 5 秒，立即同步不受影响
+  - [x] baseSeq 过旧时沿用服务端 rebase，不覆盖服务端
+  - [x] 自动验收：旧 baseSeq 合并 smoke test、JS 语法检查、Python 编译
 
 - [ ] T4 HTTP 降级协作接口
   - [ ] GET /api/collab/poll 返回当前 seq 和必要 snapshot

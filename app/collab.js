@@ -1,6 +1,6 @@
 'use strict';
 
-const COLLAB_SNAPSHOT_DEBOUNCE_MS = 3000;
+const COLLAB_SNAPSHOT_DEBOUNCE_MS = 5000;
 const COLLAB_RECONNECT_MS = 3000;
 const COLLAB_PING_MS = 10000;
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
@@ -355,6 +355,9 @@ function connectCollabSession(docName) {
   S.collab.syncing = false;
   S.collab.snapshotRevision = 0;
   S.collab.inFlightRevision = 0;
+  S.collab.queuedDocumentHash = '';
+  S.collab.inFlightDocumentHash = '';
+  S.collab.lastSyncedDocumentHash = hashCollabDocument(S.modified ? (S.baseDocument || null) : S.doc);
   S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
   renderCollabStatus();
 
@@ -425,6 +428,9 @@ function disconnectCollabSession(options = {}) {
   S.collab.pingTimer = null;
   S.collab.snapshotRevision = 0;
   S.collab.inFlightRevision = 0;
+  S.collab.queuedDocumentHash = '';
+  S.collab.inFlightDocumentHash = '';
+  S.collab.lastSyncedDocumentHash = '';
   S.collab.pendingRemoteSnapshot = null;
   S.collab.hasConflict = false;
   S.collab.lastAcceptedDocument = null;
@@ -475,6 +481,21 @@ function waitForCollabReady(timeoutMs = 3000) {
 function cloneCollabDocument(value) {
   if (typeof structuredClone === 'function') return structuredClone(value);
   return JSON.parse(JSON.stringify(value || null));
+}
+
+function hashCollabDocument(value) {
+  let text = '';
+  try {
+    text = JSON.stringify(value || null);
+  } catch (_) {
+    return '';
+  }
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 function getCollabItemKey(item) {
@@ -661,6 +682,9 @@ function handleCollabMessage(raw) {
         }
         S.collab.pendingSnapshot = false;
         S.modified = false;
+        S.collab.lastSyncedDocumentHash = hashCollabDocument(S.doc);
+        S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
+        S.collab.inFlightDocumentHash = '';
         S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
         if (S.collab.pendingMergedRender && !hasActiveLocalEditingContext()) {
           S.collab.pendingMergedRender = false;
@@ -690,8 +714,31 @@ function handleCollabMessage(raw) {
 
 function queueCollabSnapshotSync() {
   if (S.readOnly || !S.runtime.supportsCollab || !S.doc) return;
+  const documentHash = hashCollabDocument(S.doc);
+  if (
+    documentHash
+    && documentHash === S.collab.lastSyncedDocumentHash
+    && !hasPendingRemoteCollabSnapshot()
+    && !S.collab.syncing
+  ) {
+    S.collab.pendingSnapshot = false;
+    S.modified = false;
+    renderCollabStatus();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    return;
+  }
+  if (
+    documentHash
+    && documentHash === S.collab.queuedDocumentHash
+    && (S.collab.pendingSnapshot || S.collab.snapshotTimer || S.collab.syncing)
+  ) {
+    renderCollabStatus();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    return;
+  }
   S.collab.snapshotRevision = Number(S.collab.snapshotRevision || 0) + 1;
   S.collab.pendingSnapshot = true;
+  S.collab.queuedDocumentHash = documentHash;
   if (!S.collab?.connected || S.collab?.socket?.readyState !== WebSocket.OPEN) {
     if (S.currentFile && S.collab?.everConnected) S.collab.recovering = true;
     renderCollabStatus();
@@ -710,15 +757,32 @@ function queueCollabSnapshotSync() {
 function flushCollabSnapshotSync() {
   const socket = S.collab?.socket;
   if (S.readOnly || !socket || socket.readyState !== WebSocket.OPEN || !S.collab.connected || !S.doc) return;
+  const documentHash = hashCollabDocument(S.doc);
+  if (
+    documentHash
+    && documentHash === S.collab.lastSyncedDocumentHash
+    && !hasPendingRemoteCollabSnapshot()
+  ) {
+    S.collab.snapshotTimer = null;
+    S.collab.pendingSnapshot = false;
+    S.collab.syncing = false;
+    S.modified = false;
+    renderCollabStatus();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    return;
+  }
   S.collab.snapshotTimer = null;
   S.collab.pendingSnapshot = false;
   S.collab.syncing = true;
   S.collab.inFlightRevision = S.collab.snapshotRevision || 0;
+  S.collab.inFlightDocumentHash = documentHash;
+  S.collab.queuedDocumentHash = documentHash;
   renderCollabStatus();
   if (typeof renderToolbar === 'function') renderToolbar();
   socket.send(JSON.stringify({
     type: 'snapshot',
     baseSeq: S.collab.seq || 0,
+    documentHash,
     document: S.doc,
   }));
 }
@@ -759,6 +823,9 @@ function applyRemoteCollabSnapshot(document) {
   if (!document || typeof document !== 'object') return;
   S.doc = document;
   S.collab.lastAcceptedDocument = cloneCollabDocument(document);
+  S.collab.lastSyncedDocumentHash = hashCollabDocument(document);
+  S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
+  S.collab.inFlightDocumentHash = '';
   S.collab.pendingRemoteSnapshot = null;
   S.collab.hasConflict = false;
   hydrateDocumentForUi(S.doc);
