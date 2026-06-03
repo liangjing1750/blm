@@ -288,20 +288,31 @@ async function maybePromptLocalCollabDraftRecovery(docName = S.currentFile) {
     const currentHash = hashCollabDocument(S.doc);
     const draftHash = draft.contentHash || hashCollabDocument(draft.document);
     if (draftHash && currentHash && draftHash === currentHash) {
+      // 草稿内容与服务端一致，说明已由其他浏览器同步过，自动清除
       await clearLocalCollabDraft(docName);
       return;
     }
     setLocalDraftState(true, draft);
     if (S.collab.promptingLocalDraft) return;
     S.collab.promptingLocalDraft = true;
+    const draftSeq = Number(draft.baseSeq || 0);
+    const serverSeq = Number(S.collab?.seq || 0);
+    const behindInfo = draftSeq < serverSeq
+      ? `\n\n注意：草稿基准版本(seq=${draftSeq})落后于服务端当前版本(seq=${serverSeq})，可能已有其他人在此期间修改了文档。`
+      : '';
     const confirmed = await showAppConfirm(
-      `检测到当前浏览器存在未同步草稿（${formatCollabTime(draft.updatedAt || new Date().toISOString())}）。是否恢复草稿并立即同步？`,
+      `检测到当前浏览器存在未同步草稿（${formatCollabTime(draft.updatedAt || new Date().toISOString())}）。是否恢复草稿并立即同步？${behindInfo}`,
       {
         title: '发现本地草稿',
         confirmLabel: '恢复并同步',
-        cancelLabel: '稍后处理',
+        cancelLabel: draftSeq < serverSeq ? '丢弃草稿（使用最新版）' : '稍后处理',
       },
     );
+    if (!confirmed && draftSeq < serverSeq) {
+      // 用户选择丢弃旧草稿
+      await clearLocalCollabDraft(docName);
+      return;
+    }
     if (confirmed && S.currentFile === docName) {
       S.doc = cloneCollabDocument(draft.document);
       hydrateDocumentForUi(S.doc);
