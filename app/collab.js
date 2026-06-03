@@ -3,6 +3,7 @@
 const COLLAB_SNAPSHOT_DEBOUNCE_MS = 5000;
 const COLLAB_RECONNECT_MS = 3000;
 const COLLAB_PING_MS = 10000;
+const COLLAB_POLL_MS = 10000;
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
 const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
 
@@ -219,6 +220,7 @@ function getCollabDiagnosticsSnapshot() {
     seq: Number(state.seq || 0),
     clientId: state.clientId || '',
     socketReadyState: socket ? readyStateMap[socket.readyState] || String(socket.readyState) : 'NONE',
+    fallbackMode: Boolean(state.fallbackMode),
     pendingSnapshot: Boolean(state.pendingSnapshot || state.snapshotTimer),
     syncing: Boolean(state.syncing),
     pendingRemote: Boolean(state.pendingRemoteSnapshot || state.hasConflict),
@@ -240,6 +242,7 @@ function formatCollabDiagnosticsText(snapshot = getCollabDiagnosticsSnapshot()) 
     `当前用户：${snapshot.currentUser || '-'}`,
     `连接状态：${snapshot.connected ? '已连接' : snapshot.recovering ? '重连中' : '未连接'}`,
     `Socket：${snapshot.socketReadyState}`,
+    `降级轮询：${snapshot.fallbackMode ? '是' : '否'}`,
     `Seq：${snapshot.seq}`,
     `ClientId：${snapshot.clientId || '-'}`,
     `待自动同步：${snapshot.pendingSnapshot ? '是' : '否'}`,
@@ -358,6 +361,7 @@ function connectCollabSession(docName) {
   S.collab.queuedDocumentHash = '';
   S.collab.inFlightDocumentHash = '';
   S.collab.lastSyncedDocumentHash = hashCollabDocument(S.modified ? (S.baseDocument || null) : S.doc);
+  S.collab.fallbackMode = false;
   S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
   renderCollabStatus();
 
@@ -380,6 +384,7 @@ function connectCollabSession(docName) {
       S.collab.syncing = false;
       if (S.collab.everConnected && S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
         S.collab.recovering = true;
+        startCollabPollingFallback();
       }
       renderCollabStatus();
       renderCollabReconnectOverlay();
@@ -392,6 +397,7 @@ function connectCollabSession(docName) {
       S.collab.syncing = false;
       if (S.collab.everConnected && S.collab.shouldReconnect && S.currentFile === docName && !S.readOnly) {
         S.collab.recovering = true;
+        startCollabPollingFallback();
       }
       renderCollabStatus();
       renderCollabReconnectOverlay();
@@ -414,6 +420,9 @@ function disconnectCollabSession(options = {}) {
   if (S.collab?.pingTimer) {
     clearInterval(S.collab.pingTimer);
   }
+  if (S.collab?.pollTimer) {
+    clearInterval(S.collab.pollTimer);
+  }
   if (socket && socket.readyState <= WebSocket.OPEN) {
     socket.close();
   }
@@ -431,6 +440,8 @@ function disconnectCollabSession(options = {}) {
   S.collab.queuedDocumentHash = '';
   S.collab.inFlightDocumentHash = '';
   S.collab.lastSyncedDocumentHash = '';
+  S.collab.fallbackMode = false;
+  S.collab.pollTimer = null;
   S.collab.pendingRemoteSnapshot = null;
   S.collab.hasConflict = false;
   S.collab.lastAcceptedDocument = null;
@@ -469,6 +480,7 @@ function waitForCollabReady(timeoutMs = 3000) {
         return;
       }
       if (Date.now() - start >= timeoutMs) {
+        startCollabPollingFallback();
         resolve(false);
         return;
       }
@@ -476,6 +488,45 @@ function waitForCollabReady(timeoutMs = 3000) {
     };
     tick();
   });
+}
+
+function startCollabPollingFallback() {
+  if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return;
+  S.collab.fallbackMode = true;
+  if (S.collab.pollTimer) {
+    renderCollabStatus();
+    return;
+  }
+  pollCollabOnce();
+  S.collab.pollTimer = window.setInterval(() => {
+    pollCollabOnce();
+  }, COLLAB_POLL_MS);
+  renderCollabStatus();
+}
+
+function stopCollabPollingFallback() {
+  if (S.collab?.pollTimer) {
+    window.clearInterval(S.collab.pollTimer);
+    S.collab.pollTimer = null;
+  }
+  S.collab.fallbackMode = false;
+}
+
+async function pollCollabOnce() {
+  if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly || !api?.collabPoll) return;
+  try {
+    const result = await api.collabPoll(S.currentFile, S.collab?.seq || 0);
+    if (!result || result.error) return;
+    S.collab.seq = Number(result.seq || S.collab.seq || 0);
+    S.collab.users = Array.isArray(result.users) ? result.users : S.collab.users || [];
+    if (result.changed && result.document && typeof result.document === 'object') {
+      receiveRemoteCollabSnapshot(result.document);
+    }
+    renderCollabStatus();
+  } catch (error) {
+    S.collab.lastError = String(error?.message || error || 'poll failed');
+    renderCollabStatus();
+  }
 }
 
 function cloneCollabDocument(value) {
@@ -588,7 +639,8 @@ async function syncCollabImmediatelyFromCommand() {
   if (typeof flushCollabSnapshotSync !== 'function') return false;
   const ready = await waitForCollabReady();
   if (!ready) {
-    showAppToast('协作连接尚未就绪，请稍后再试。');
+    const syncedByHttp = await flushCollabSnapshotHttp();
+    showAppToast(syncedByHttp ? '已通过降级通道完成同步。' : '协作连接尚未就绪，请稍后再试。');
     return true;
   }
   const resolvedRemoteConflict = preserveLocalSnapshotForImmediateSync();
@@ -599,6 +651,58 @@ async function syncCollabImmediatelyFromCommand() {
   flushCollabSnapshotSync();
   showAppToast('已发起立即同步。');
   return true;
+}
+
+async function flushCollabSnapshotHttp() {
+  if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly || !S.doc || !api?.collabSnapshot) return false;
+  const documentHash = hashCollabDocument(S.doc);
+  if (documentHash && documentHash === S.collab.lastSyncedDocumentHash && !hasPendingRemoteCollabSnapshot()) {
+    S.modified = false;
+    S.collab.pendingSnapshot = false;
+    return true;
+  }
+  S.collab.syncing = true;
+  S.collab.pendingSnapshot = false;
+  S.collab.inFlightDocumentHash = documentHash;
+  renderCollabStatus();
+  if (typeof renderToolbar === 'function') renderToolbar();
+  try {
+    const result = await api.collabSnapshot(S.currentFile, S.doc, {
+      baseSeq: S.collab.seq || 0,
+      documentHash,
+      user: getCollabUserProfile(),
+    });
+    if (!result || result.error) {
+      S.collab.pendingSnapshot = true;
+      S.collab.lastError = result?.error || 'HTTP snapshot failed';
+      return false;
+    }
+    S.collab.seq = Number(result.seq || S.collab.seq || 0);
+    if (result.document && typeof result.document === 'object') {
+      S.doc = result.document;
+      hydrateDocumentForUi(S.doc);
+    }
+    S.modified = false;
+    S.collab.pendingSnapshot = false;
+    S.collab.lastSyncedAt = new Date().toISOString();
+    S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
+    S.collab.lastSyncedDocumentHash = hashCollabDocument(S.doc);
+    S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
+    S.collab.inFlightDocumentHash = '';
+    startCollabPollingFallback();
+    if (!hasActiveLocalEditingContext()) render();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    renderCollabStatus();
+    return true;
+  } catch (error) {
+    S.collab.pendingSnapshot = true;
+    S.collab.lastError = String(error?.message || error || 'HTTP snapshot failed');
+    return false;
+  } finally {
+    S.collab.syncing = false;
+    renderCollabStatus();
+    if (typeof renderToolbar === 'function') renderToolbar();
+  }
 }
 
 async function flushAndWaitForCollabSync(timeoutMs = 10000) {
@@ -633,6 +737,7 @@ function handleCollabMessage(raw) {
   if (payload.type === 'joined') {
     S.collab.connected = true;
     S.collab.recovering = false;
+    stopCollabPollingFallback();
     S.collab.everConnected = true;
     S.collab.clientId = String(payload.clientId || '');
     S.collab.seq = Number(payload.seq || 0);

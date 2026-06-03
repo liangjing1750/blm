@@ -45,11 +45,12 @@
   - [x] baseSeq 过旧时沿用服务端 rebase，不覆盖服务端
   - [x] 自动验收：旧 baseSeq 合并 smoke test、JS 语法检查、Python 编译
 
-- [ ] T4 HTTP 降级协作接口
-  - [ ] GET /api/collab/poll 返回当前 seq 和必要 snapshot
-  - [ ] POST /api/collab/snapshot 复用服务端串行合并逻辑
-  - [ ] 前端 WebSocket 不可用时进入 polling fallback
-  - [ ] 自动验收：接口测试、断开 WebSocket 后立即同步测试
+- [x] T4 HTTP 降级协作接口
+  - [x] GET /api/collab/poll 返回当前 seq 和必要 snapshot
+  - [x] POST /api/collab/snapshot 复用服务端串行合并逻辑
+  - [x] 前端 WebSocket 不可用时进入 polling fallback
+  - [x] 自动验收：HTTP snapshot 旧 baseSeq rebase smoke test、JS 语法检查、Python 编译
+  - [ ] 断开 WebSocket 后立即同步 UI 测试：当前本机 Playwright/npm 环境不可用
 
 - [ ] T5 独立管理端
   - [ ] 支持 BLM_ADMIN_PORT 启动只读管理端

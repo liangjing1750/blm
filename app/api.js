@@ -176,4 +176,20 @@ const api = {
   async validateDocument(document) {
     return postJson('/api/document/validate', { document });
   },
+  async collabPoll(name, seq = 0) {
+    const query = new URLSearchParams({
+      name: String(name || ''),
+      seq: String(seq || 0),
+    });
+    return fetch(`/api/collab/poll?${query.toString()}`).then((response) => response.json());
+  },
+  async collabSnapshot(name, document, options = {}) {
+    return postJson('/api/collab/snapshot', {
+      name,
+      document,
+      baseSeq: options.baseSeq || 0,
+      documentHash: options.documentHash || '',
+      user: options.user || {},
+    });
+  },
 };

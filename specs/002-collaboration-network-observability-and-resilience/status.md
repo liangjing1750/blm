@@ -2,25 +2,25 @@
 
 ## 当前状态
 
-T1、T2、T3 已完成并分别提交；当前准备进入 T4“HTTP 降级协作接口”。
+T1、T2、T3、T4 已完成并分别提交；当前准备进入 T5“独立管理端”。
 
 ## 本轮完成
 
-- 自动同步防抖从 3 秒放宽到 5 秒，降低大文档频繁 snapshot 发送概率。
-- 前端为当前文档计算轻量 hash，内容未变化时不再排队或发送 snapshot。
-- ack 和远端 snapshot 会更新已同步 hash，避免后续无意义重复同步。
-- 离线编辑后重连时，已同步 hash 使用 `baseDocument`，避免把本地未同步稿误判为已同步。
+- 后端新增 `GET /api/collab/poll`，可按 seq 拉取最新文档和在线用户。
+- 后端新增 `POST /api/collab/snapshot`，复用 `CollaborationManager` 的串行 baseSeq/rebase 逻辑。
+- 前端在 WebSocket 超时或断开时启动 10 秒轮询降级。
+- 用户点击“立即同步”时，如果 WebSocket 未就绪，会通过 HTTP snapshot 尝试同步。
 
 ## 自动验收
 
-- `node --check app\collab.js` 通过。
+- `node --check app\collab.js`、`node --check app\api.js` 通过。
 - `python -m py_compile blm_core\diagnostics.py blm_core\server.py blm_core\collab.py blm.py` 通过。
-- 旧 `baseSeq` rebase smoke test 通过：本地旧基线提交不会覆盖服务端新增内容。
+- HTTP snapshot 旧 `baseSeq` rebase smoke test 通过：降级通道也不会覆盖服务端新增内容。
 - Playwright 点击验收暂未执行：本机 npm/npx 缓存路径异常，暂无可用浏览器自动化工具。
 
 ## 下一步
 
-进入 T4：补 HTTP poll/snapshot 降级接口，并让“立即同步”在 WebSocket 不可用时仍有可用路径。
+进入 T5：补只读管理端，展示服务状态、协作连接、最近日志，并提供诊断包。
 
 ## 风险与备注
 

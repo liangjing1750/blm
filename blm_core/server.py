@@ -8,7 +8,7 @@ import time
 import uuid
 import webbrowser
 from pathlib import Path
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from blm_core.diagnostics import configure_diagnostics, log_error, log_event, runtime_fields
 from blm_core.document import canonical_document, migrate_document
@@ -94,6 +94,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     )
                 if path == "/api/collab/ws" and collab:
                     return collab.handle_websocket(self)
+                if path == "/api/collab/poll" and collab:
+                    return self._handle_collab_poll()
                 if path == "/api/files":
                     return self._json(storage.list_documents())
                 if path == "/api/files/meta":
@@ -173,6 +175,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_merge_apply(body)
                 if path == "/api/export-docx/start":
                     return self._handle_export_docx_start(body)
+                if path == "/api/collab/snapshot" and collab:
+                    return self._handle_collab_snapshot(body)
 
                 return self._json({"error": "not found"}, 404)
             except Exception as exc:
@@ -211,6 +215,43 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._json({"error": str(exc)}, 400)
             except FileNotFoundError:
                 return self._json({"error": "not found"}, 404)
+
+        def _handle_collab_poll(self):
+            query = parse_qs(urlparse(self.path).query)
+            name = str((query.get("name") or [""])[0]).strip()
+            seq_text = str((query.get("seq") or ["0"])[0]).strip()
+            try:
+                since_seq = int(seq_text or "0")
+            except ValueError:
+                since_seq = 0
+            try:
+                return self._json(collab.poll(name, since_seq))
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+
+        def _handle_collab_snapshot(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            name = str(payload.get("name", "")).strip()
+            if not name:
+                return self._json({"error": "name is required"}, 400)
+            user_profile = payload.get("user")
+            if not isinstance(user_profile, dict):
+                user_profile = {}
+            user_profile = dict(user_profile)
+            user_profile["remoteAddr"] = self.client_address[0] if self.client_address else ""
+            try:
+                result = collab.apply_http_snapshot(name, user_profile, payload)
+                return self._json(result)
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+            except Exception as exc:
+                return self._json({"error": str(exc)}, 409)
 
         def _handle_export(self, path: str):
             name = unquote(path[len("/api/export/"):])

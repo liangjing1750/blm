@@ -182,6 +182,55 @@ class CollaborationManager:
             if client and session:
                 self._leave(session, client.client_id)
 
+    def poll(self, doc_name: str, since_seq: int = 0) -> dict:
+        safe_name = self.storage._validate_name(doc_name)
+        with self._lock:
+            session = self._get_or_create_session(safe_name)
+            seq = int(session.seq or 0)
+            include_document = seq > int(since_seq or 0)
+            return {
+                "ok": True,
+                "doc": session.doc_name,
+                "seq": seq,
+                "changed": include_document,
+                "document": deepcopy(session.document) if include_document else None,
+                "users": self._session_users(session),
+            }
+
+    def apply_http_snapshot(self, doc_name: str, user_profile: dict[str, str], payload: dict) -> dict:
+        safe_name = self.storage._validate_name(doc_name)
+        with self._lock:
+            session = self._get_or_create_session(safe_name)
+            client = CollabClient(
+                client_id=f"http-{secrets.token_hex(8)}",
+                user=user_profile.get("name") or "HTTP",
+                user_id=user_profile.get("id") or user_profile.get("name") or "HTTP",
+                user_name=user_profile.get("name") or "HTTP",
+                session_id=user_profile.get("sessionId") or "",
+                remote_addr=str(user_profile.get("remoteAddr") or ""),
+                handler=None,
+            )
+            record = self._apply_snapshot(session, client, payload)
+            self._broadcast_json(
+                session,
+                {
+                    "type": "snapshot",
+                    "doc": session.doc_name,
+                    "seq": record["seq"],
+                    "user": client.user,
+                    "userId": client.user_id,
+                    "clientId": client.client_id,
+                    "document": session.document,
+                },
+            )
+            return {
+                "ok": True,
+                "doc": session.doc_name,
+                "seq": record["seq"],
+                "rebased": bool(record.get("rebased")),
+                "document": deepcopy(session.document),
+            }
+
     def _is_websocket_request(self, handler) -> bool:
         upgrade = str(handler.headers.get("Upgrade", "")).lower()
         key = str(handler.headers.get("Sec-WebSocket-Key", "")).strip()
@@ -238,16 +287,7 @@ class CollaborationManager:
             raise WebSocketProtocolError("doc is required")
         safe_name = self.storage._validate_name(doc_name)
         with self._lock:
-            session = self._sessions.get(safe_name)
-            if not session:
-                document, seq = self._load_document_with_changelog(safe_name)
-                session = CollabSession(
-                    doc_name=safe_name,
-                    document=document,
-                    seq=seq,
-                )
-                self._remember_snapshot(session)
-                self._sessions[safe_name] = session
+            session = self._get_or_create_session(safe_name)
             client = CollabClient(
                 client_id=f"client-{secrets.token_hex(8)}",
                 user=user_profile["name"],
@@ -271,6 +311,20 @@ class CollaborationManager:
                 connectionCount=len(session.clients),
             )
             return client, session
+
+    def _get_or_create_session(self, safe_name: str) -> CollabSession:
+        session = self._sessions.get(safe_name)
+        if session:
+            return session
+        document, seq = self._load_document_with_changelog(safe_name)
+        session = CollabSession(
+            doc_name=safe_name,
+            document=document,
+            seq=seq,
+        )
+        self._remember_snapshot(session)
+        self._sessions[safe_name] = session
+        return session
 
     def _leave(self, session: CollabSession, client_id: str) -> None:
         with self._lock:
