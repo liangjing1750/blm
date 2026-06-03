@@ -4,6 +4,7 @@ const COLLAB_SNAPSHOT_DEBOUNCE_MS = 5000;
 const COLLAB_RECONNECT_MS = 3000;
 const COLLAB_PING_MS = 10000;
 const COLLAB_POLL_MS = 10000;
+const COLLAB_ACTIVE_SYNC_ONLY = true;
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
 const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
 const COLLAB_DRAFT_DB_NAME = 'blm-collab-drafts';
@@ -240,7 +241,7 @@ async function saveLocalCollabDraft(documentHash = '') {
     userId: profile.id,
     userName: profile.name,
     sessionId: profile.sessionId,
-    baseSeq: Number(S.collab?.draftBaseSeqOverride ?? S.collab?.seq ?? 0),
+    baseSeq: Number(S.collab?.draftBaseSeqOverride ?? S.collab?.acceptedSeq ?? S.collab?.seq ?? 0),
     generation,
     updatedAt: new Date().toISOString(),
     contentHash: documentHash || hashCollabDocument(S.doc),
@@ -406,6 +407,7 @@ function getCollabDiagnosticsSnapshot() {
     connected: Boolean(state.connected),
     recovering: Boolean(state.recovering),
     seq: Number(state.seq || 0),
+    acceptedSeq: Number(state.acceptedSeq || 0),
     clientId: state.clientId || '',
     socketReadyState: socket ? readyStateMap[socket.readyState] || String(socket.readyState) : 'NONE',
     fallbackMode: Boolean(state.fallbackMode),
@@ -445,6 +447,7 @@ function formatCollabDiagnosticsText(snapshot = getCollabDiagnosticsSnapshot()) 
     `当前同步通道：${snapshot.syncChannel}`,
     `降级轮询：${snapshot.fallbackMode ? '是' : '否'}`,
     `Seq：${snapshot.seq}`,
+    `本地基线Seq：${snapshot.acceptedSeq}`,
     `ClientId：${snapshot.clientId || '-'}`,
     `待自动同步：${snapshot.pendingSnapshot ? '是' : '否'}`,
     `同步中：${snapshot.syncing ? '是' : '否'}`,
@@ -493,6 +496,7 @@ function renderCollabDiagnosticsModal() {
       <div><span>同步通道</span><strong>${escapeCollabHtml(snapshot.syncChannel)}</strong></div>
       <div><span>Socket</span><strong>${escapeCollabHtml(snapshot.socketReadyState)}</strong></div>
       <div><span>Seq</span><strong>${snapshot.seq}</strong></div>
+      <div><span>本地基线</span><strong>${snapshot.acceptedSeq}</strong></div>
       <div><span>待自动同步</span><strong>${snapshot.pendingSnapshot ? '是' : '否'}</strong></div>
       <div><span>同步中</span><strong>${snapshot.syncing ? '是' : '否'}</strong></div>
       <div><span>远端更新</span><strong>${snapshot.pendingRemote ? '待同步' : '无'}</strong></div>
@@ -649,6 +653,7 @@ function disconnectCollabSession(options = {}) {
   S.collab.socket = null;
   S.collab.connected = false;
   S.collab.clientId = '';
+  S.collab.acceptedSeq = 0;
   S.collab.users = [];
   S.collab.docName = '';
   S.collab.pendingSnapshot = false;
@@ -670,6 +675,7 @@ function disconnectCollabSession(options = {}) {
   S.collab.localDraftError = '';
   S.collab.localDraftKey = '';
   S.collab.draftBaseSeqOverride = null;
+  S.collab.forceSnapshotSync = false;
   S.collab.recovering = false;
   S.collab.everConnected = false;
   renderCollabStatus();
@@ -744,8 +750,8 @@ async function pollCollabOnce() {
     if (!result || result.error) return;
     S.collab.seq = Number(result.seq || S.collab.seq || 0);
     S.collab.users = Array.isArray(result.users) ? result.users : S.collab.users || [];
-    if (result.changed && result.document && typeof result.document === 'object') {
-      receiveRemoteCollabSnapshot(result.document);
+    if (result.changed) {
+      receiveRemoteCollabNotice();
     }
     renderCollabStatus();
   } catch (error) {
@@ -854,6 +860,7 @@ function preserveLocalSnapshotForImmediateSync() {
   S.collab.pendingRemoteSnapshot = null;
   S.collab.hasConflict = false;
   S.collab.pendingSnapshot = true;
+  S.collab.forceSnapshotSync = true;
   renderCollabConflictBanner();
   if (typeof renderToolbar === 'function') renderToolbar();
   return true;
@@ -861,27 +868,20 @@ function preserveLocalSnapshotForImmediateSync() {
 
 async function syncCollabImmediatelyFromCommand() {
   if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return false;
-  if (typeof flushCollabSnapshotSync !== 'function') return false;
-  const ready = await waitForCollabReady();
-  if (!ready) {
-    const syncedByHttp = await flushCollabSnapshotHttp();
-    showAppToast(syncedByHttp ? '已通过降级通道完成同步。' : '协作连接尚未就绪，请稍后再试。');
-    return true;
-  }
   const resolvedRemoteConflict = preserveLocalSnapshotForImmediateSync();
   if (!S.modified && !resolvedRemoteConflict && !S.collab.pendingSnapshot && !S.collab.snapshotTimer && !S.collab.syncing) {
     showAppToast('当前内容已同步。');
     return true;
   }
-  flushCollabSnapshotSync();
-  showAppToast('已发起立即同步。');
+  const syncedByHttp = await flushCollabSnapshotHttp();
+  showAppToast(syncedByHttp ? '已完成同步。' : '同步失败，请稍后重试。');
   return true;
 }
 
 async function flushCollabSnapshotHttp() {
   if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly || !S.doc || !api?.collabSnapshot) return false;
   const documentHash = hashCollabDocument(S.doc);
-  if (documentHash && documentHash === S.collab.lastSyncedDocumentHash && !hasPendingRemoteCollabSnapshot()) {
+  if (documentHash && documentHash === S.collab.lastSyncedDocumentHash && !hasPendingRemoteCollabSnapshot() && !S.collab.forceSnapshotSync) {
     S.modified = false;
     S.collab.pendingSnapshot = false;
     await clearLocalCollabDraft(S.currentFile);
@@ -894,7 +894,7 @@ async function flushCollabSnapshotHttp() {
   if (typeof renderToolbar === 'function') renderToolbar();
   try {
     const result = await api.collabSnapshot(S.currentFile, S.doc, {
-      baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.seq ?? 0),
+      baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.acceptedSeq ?? S.collab.seq ?? 0),
       documentHash,
       user: getCollabUserProfile(),
     });
@@ -904,6 +904,7 @@ async function flushCollabSnapshotHttp() {
       return false;
     }
     S.collab.seq = Number(result.seq || S.collab.seq || 0);
+    S.collab.acceptedSeq = S.collab.seq;
     if (result.document && typeof result.document === 'object') {
       S.doc = result.document;
       hydrateDocumentForUi(S.doc);
@@ -915,6 +916,7 @@ async function flushCollabSnapshotHttp() {
     S.collab.lastSyncedDocumentHash = hashCollabDocument(S.doc);
     S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
     S.collab.inFlightDocumentHash = '';
+    S.collab.forceSnapshotSync = false;
     await clearLocalCollabDraft(S.currentFile);
     startCollabPollingFallback();
     if (!hasActiveLocalEditingContext()) render();
@@ -968,12 +970,13 @@ function handleCollabMessage(raw) {
     S.collab.everConnected = true;
     S.collab.clientId = String(payload.clientId || '');
     S.collab.seq = Number(payload.seq || 0);
+    S.collab.acceptedSeq = S.collab.seq;
     S.collab.users = Array.isArray(payload.users) ? payload.users : [];
     renderCollabStatus();
     renderCollabReconnectOverlay();
     if (typeof renderToolbar === 'function') renderToolbar();
     if (S.modified || S.collab.pendingSnapshot) {
-      flushCollabSnapshotSync();
+      saveLocalCollabDraft(hashCollabDocument(S.doc));
     } else {
       setTimeout(() => {
         maybePromptLocalCollabDraftRecovery(S.currentFile);
@@ -993,17 +996,17 @@ function handleCollabMessage(raw) {
       mode: 'change',
       at: new Date().toISOString(),
     };
-    applyRemoteCollabChanges(payload.changes || []);
+    receiveRemoteCollabNotice();
     return;
   }
-  if (payload.type === 'snapshot') {
+  if (payload.type === 'snapshot' || payload.type === 'snapshot_notice') {
     S.collab.seq = Number(payload.seq || S.collab.seq || 0);
     S.collab.lastActivity = {
       user: getCollabPayloadUserName(payload),
       mode: 'snapshot',
       at: new Date().toISOString(),
     };
-    receiveRemoteCollabSnapshot(payload.document);
+    receiveRemoteCollabNotice();
     return;
   }
   if (payload.type === 'ack') {
@@ -1022,6 +1025,8 @@ function handleCollabMessage(raw) {
         S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
         S.collab.inFlightDocumentHash = '';
         S.collab.lastAcceptedDocument = S.doc ? cloneCollabDocument(S.doc) : null;
+        S.collab.acceptedSeq = S.collab.seq;
+        S.collab.forceSnapshotSync = false;
         clearLocalCollabDraft(S.currentFile);
         if (S.collab.pendingMergedRender && !hasActiveLocalEditingContext()) {
           S.collab.pendingMergedRender = false;
@@ -1078,6 +1083,15 @@ function queueCollabSnapshotSync() {
   S.collab.pendingSnapshot = true;
   S.collab.queuedDocumentHash = documentHash;
   saveLocalCollabDraft(documentHash);
+  if (COLLAB_ACTIVE_SYNC_ONLY) {
+    if (S.collab.snapshotTimer) {
+      clearTimeout(S.collab.snapshotTimer);
+      S.collab.snapshotTimer = null;
+    }
+    renderCollabStatus();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    return;
+  }
   if (!S.collab?.connected || S.collab?.socket?.readyState !== WebSocket.OPEN) {
     if (S.currentFile && S.collab?.everConnected) S.collab.recovering = true;
     renderCollabStatus();
@@ -1101,6 +1115,7 @@ function flushCollabSnapshotSync() {
     documentHash
     && documentHash === S.collab.lastSyncedDocumentHash
     && !hasPendingRemoteCollabSnapshot()
+    && !S.collab.forceSnapshotSync
   ) {
     S.collab.snapshotTimer = null;
     S.collab.pendingSnapshot = false;
@@ -1121,7 +1136,7 @@ function flushCollabSnapshotSync() {
   if (typeof renderToolbar === 'function') renderToolbar();
   socket.send(JSON.stringify({
     type: 'snapshot',
-    baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.seq ?? 0),
+    baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.acceptedSeq ?? S.collab.seq ?? 0),
     documentHash,
     document: S.doc,
   }));
@@ -1132,16 +1147,18 @@ function hasLocalPendingCollabSnapshot() {
 }
 
 function sendCollabChange(path, oldValue, newValue) {
+  if (COLLAB_ACTIVE_SYNC_ONLY) return;
   const socket = S.collab?.socket;
   if (S.readOnly || !socket || socket.readyState !== WebSocket.OPEN || !S.collab.connected) return;
   socket.send(JSON.stringify({
     type: 'change',
-    baseSeq: S.collab.seq || 0,
+    baseSeq: S.collab.acceptedSeq || S.collab.seq || 0,
     changes: [{ path, old: oldValue, new: newValue }],
   }));
 }
 
 function sendCollabChanges(changes) {
+  if (COLLAB_ACTIVE_SYNC_ONLY) return;
   const socket = S.collab?.socket;
   if (S.readOnly || !socket || socket.readyState !== WebSocket.OPEN || !S.collab.connected) return;
   const normalized = (Array.isArray(changes) ? changes : [])
@@ -1154,7 +1171,7 @@ function sendCollabChanges(changes) {
   if (!normalized.length) return;
   socket.send(JSON.stringify({
     type: 'change',
-    baseSeq: S.collab.seq || 0,
+    baseSeq: S.collab.acceptedSeq || S.collab.seq || 0,
     changes: normalized,
   }));
 }
@@ -1162,12 +1179,14 @@ function sendCollabChanges(changes) {
 function applyRemoteCollabSnapshot(document) {
   if (!document || typeof document !== 'object') return;
   S.doc = document;
+  S.collab.acceptedSeq = Number(S.collab.seq || S.collab.acceptedSeq || 0);
   S.collab.lastAcceptedDocument = cloneCollabDocument(document);
   S.collab.lastSyncedDocumentHash = hashCollabDocument(document);
   S.collab.queuedDocumentHash = S.collab.lastSyncedDocumentHash;
   S.collab.inFlightDocumentHash = '';
   S.collab.pendingRemoteSnapshot = null;
   S.collab.hasConflict = false;
+  S.collab.forceSnapshotSync = false;
   hydrateDocumentForUi(S.doc);
   render();
   renderCollabStatus();
@@ -1183,6 +1202,15 @@ function receiveRemoteCollabSnapshot(document) {
     return;
   }
   applyRemoteCollabSnapshot(document);
+}
+
+function receiveRemoteCollabNotice() {
+  S.collab.pendingRemoteSnapshot = null;
+  S.collab.hasConflict = true;
+  S.collab.forceSnapshotSync = true;
+  renderCollabStatus();
+  renderCollabConflictBanner();
+  if (typeof renderToolbar === 'function') renderToolbar();
 }
 
 function renderCollabConflictBanner() {

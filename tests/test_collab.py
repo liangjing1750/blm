@@ -109,6 +109,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
         thread.start()
         return server, thread
 
+    @unittest.skip("v2: changelog removed, replaced by sync-log")
     def test_join_change_ack_and_changelog(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -152,6 +153,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    @unittest.skip("v2: change events removed")
     def test_change_is_broadcast_to_other_clients(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
@@ -353,6 +355,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    @unittest.skip("v2: changelog replay removed")
     def test_join_replays_changelog_after_session_restarts(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
@@ -374,6 +377,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(seq, 1)
             self.assertEqual(loaded["meta"]["author"], "Replayed")
 
+    @unittest.skip("v2: changelog removed")
     def test_legacy_snapshot_documents_are_compacted_and_not_replayed_over_manifest(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
@@ -584,6 +588,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(versions[0]["id"], version_id)
             self.assertEqual(versions[0]["message"], "评审通过")
 
+    @unittest.skip("v2: changelog removed")
     def test_snapshot_changelog_compacts_after_threshold(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")
@@ -610,6 +615,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertTrue(compacted["compacted"])
             self.assertEqual(compacted["seq"], 104)
 
+    @unittest.skip("v2: changelog removed")
     def test_snapshot_changelog_compacts_after_size_limit(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir) / "workspace")

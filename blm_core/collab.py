@@ -19,8 +19,6 @@ from blm_core.storage import WorkspaceStorage
 
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-CHANGELOG_COMPACT_THRESHOLD = 60
-CHANGELOG_COMPACT_BYTES = 2 * 1024 * 1024
 CLIENT_STALE_SECONDS = 25
 
 
@@ -62,7 +60,6 @@ class CollaborationManager:
         self.storage = storage
         self.autosave_interval = max(0.0, float(autosave_interval))
         self._sessions: dict[str, CollabSession] = {}
-        self._autosave_timers: dict[str, threading.Timer] = {}
         self._lock = threading.RLock()
 
     def handle_websocket(self, handler) -> None:
@@ -97,24 +94,7 @@ class CollaborationManager:
                     )
                     self._broadcast_presence(session)
                 elif event_type == "change":
-                    if not client or not session:
-                        self._send_raw_error(handler, "请先加入协作会话")
-                        continue
-                    record = self._apply_change(session, client, payload)
-                    self._send_json(client, {"type": "ack", "seq": record["seq"]})
-                    self._broadcast_json(
-                        session,
-                        {
-                            "type": "change",
-                            "doc": session.doc_name,
-                            "seq": record["seq"],
-                            "user": client.user,
-                            "userId": client.user_id,
-                            "clientId": client.client_id,
-                            "changes": record["changes"],
-                        },
-                        exclude_client_id=client.client_id,
-                    )
+                    self._send_raw_error(handler, "协议v2不支持增量change，请使用Ctrl+S触发同步")
                 elif event_type == "snapshot":
                     if not client or not session:
                         self._send_raw_error(handler, "请先加入协作会话")
@@ -344,56 +324,6 @@ class CollaborationManager:
                 self._flush_autosave(session.doc_name)
                 self._sessions.pop(session.doc_name, None)
 
-    def _apply_change(self, session: CollabSession, client: CollabClient, payload: dict) -> dict:
-        started_at = datetime.now(timezone.utc).timestamp()
-        changes = payload.get("changes")
-        if not isinstance(changes, list):
-            changes = []
-        normalized_changes = []
-        with self._lock:
-            for change in changes:
-                if not isinstance(change, dict):
-                    continue
-                path = str(change.get("path", "")).strip()
-                if not path:
-                    continue
-                old_value = self._get_path(session.document, path)
-                new_value = deepcopy(change.get("new"))
-                self._set_path(session.document, path, new_value)
-                normalized_changes.append(
-                    {
-                        "path": path,
-                        "old": deepcopy(change.get("old", old_value)),
-                        "new": new_value,
-                    }
-                )
-            session.seq += 1
-            record = {
-                "seq": session.seq,
-                "doc": session.doc_name,
-                "user": client.user,
-                "userId": client.user_id,
-                "clientId": client.client_id,
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "baseSeq": payload.get("baseSeq"),
-                "changes": normalized_changes,
-            }
-            self._append_changelog(session.doc_name, record)
-            self._remember_snapshot(session)
-            session.dirty = True
-            self._schedule_autosave(session)
-            log_event(
-                "blm.collab",
-                "collab.change",
-                doc=session.doc_name,
-                seq=session.seq,
-                clientId=client.client_id,
-                user=client.user_name,
-                changeCount=len(normalized_changes),
-                elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
-            )
-            return record
-
     def _apply_snapshot(self, session: CollabSession, client: CollabClient, payload: dict) -> dict:
         started_at = datetime.now(timezone.utc).timestamp()
         document = payload.get("document")
@@ -539,133 +469,9 @@ class CollaborationManager:
         for seq in sorted(session.snapshots)[:-40]:
             session.snapshots.pop(seq, None)
 
-    def _write_conflict_snapshot(
-        self,
-        session: CollabSession,
-        client: CollabClient,
-        payload: dict,
-        document: dict,
-        *,
-        reason: str,
-    ) -> None:
-        try:
-            conflict_dir = self._collab_dir(session.doc_name) / "conflicts"
-            conflict_dir.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-            file_name = f"{timestamp}__seq{session.seq}__{client.client_id}.json"
-            conflict_path = conflict_dir / file_name
-            conflict_path.write_text(
-                json.dumps(
-                    {
-                        "reason": reason,
-                        "doc": session.doc_name,
-                        "serverSeq": session.seq,
-                        "baseSeq": payload.get("baseSeq"),
-                        "clientId": client.client_id,
-                        "userId": client.user_id,
-                        "user": client.user_name,
-                        "createdAt": datetime.now(timezone.utc).isoformat(),
-                        "document": document,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            log_event(
-                "blm.collab",
-                "collab.conflict_snapshot",
-                doc=session.doc_name,
-                serverSeq=session.seq,
-                baseSeq=payload.get("baseSeq"),
-                clientId=client.client_id,
-                user=client.user_name,
-                reason=reason,
-                path=str(conflict_path),
-            )
-        except OSError:
-            log_error(
-                "blm.collab",
-                "collab.conflict_snapshot.error",
-                doc=session.doc_name,
-                serverSeq=session.seq,
-                baseSeq=payload.get("baseSeq"),
-                clientId=client.client_id,
-                user=client.user_name,
-                reason=reason,
-            )
-
-    def _collab_item_key(self, item: Any) -> str:
-        if not isinstance(item, dict):
-            return ""
-        return str(item.get("uid") or item.get("id") or "").strip()
-
-    def _merge_local_array_changes(self, remote_value: Any, base_value: Any, local_value: Any) -> Any:
-        if not isinstance(remote_value, list) or not isinstance(base_value, list) or not isinstance(local_value, list):
-            return deepcopy(local_value)
-        local_keys = [self._collab_item_key(item) for item in local_value]
-        base_keys = [self._collab_item_key(item) for item in base_value]
-        remote_keys = [self._collab_item_key(item) for item in remote_value]
-        if not all(local_keys) or not all(base_keys) or not all(remote_keys):
-            return deepcopy(remote_value if local_value == base_value else local_value)
-
-        next_value = deepcopy(remote_value)
-        base_map = {self._collab_item_key(item): item for item in base_value}
-        local_map = {self._collab_item_key(item): item for item in local_value}
-
-        for key in base_keys:
-            if key in local_map:
-                continue
-            next_value = [item for item in next_value if self._collab_item_key(item) != key]
-
-        remote_index = {self._collab_item_key(item): index for index, item in enumerate(next_value)}
-        for local_item in local_value:
-            key = self._collab_item_key(local_item)
-            base_item = base_map.get(key)
-            index = remote_index.get(key)
-            if base_item is None:
-                if index is None:
-                    next_value.append(deepcopy(local_item))
-                continue
-            if index is not None:
-                next_value[index] = self._merge_local_document_changes(next_value[index], base_item, local_item)
-        return next_value
-
-    def _merge_local_document_changes(self, remote_value: Any, base_value: Any, local_value: Any) -> Any:
-        if local_value == base_value:
-            return deepcopy(remote_value)
-        if isinstance(local_value, list) or isinstance(base_value, list) or isinstance(remote_value, list):
-            return self._merge_local_array_changes(remote_value, base_value, local_value)
-        if not isinstance(local_value, dict) or not isinstance(base_value, dict) or not isinstance(remote_value, dict):
-            return deepcopy(local_value)
-        next_value = deepcopy(remote_value)
-        for key in set(local_value.keys()) | set(base_value.keys()):
-            if key not in local_value:
-                next_value.pop(key, None)
-                continue
-            next_value[key] = self._merge_local_document_changes(
-                remote_value.get(key),
-                base_value.get(key),
-                local_value.get(key),
-            )
-        return next_value
-
-    def _schedule_autosave(self, session: CollabSession) -> None:
-        existing = self._autosave_timers.pop(session.doc_name, None)
-        if existing:
-            existing.cancel()
-        if self.autosave_interval <= 0:
-            self._flush_autosave(session.doc_name)
-            return
-        timer = threading.Timer(self.autosave_interval, self._flush_autosave, args=(session.doc_name,))
-        timer.daemon = True
-        self._autosave_timers[session.doc_name] = timer
-        timer.start()
-
     def _flush_autosave(self, doc_name: str) -> None:
         started_at = datetime.now(timezone.utc).timestamp()
         with self._lock:
-            self._autosave_timers.pop(doc_name, None)
             session = self._sessions.get(doc_name)
             if not session or not session.dirty:
                 return
@@ -878,82 +684,9 @@ class CollaborationManager:
         collab_dir.mkdir(exist_ok=True)
         return collab_dir
 
-    def _append_changelog(self, doc_name: str, record: dict) -> None:
-        changelog_path = self._collab_dir(doc_name) / "changelog.jsonl"
-        with changelog_path.open("a", encoding="utf-8") as file:
-            file.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-        self._compact_changelog_if_needed(changelog_path, record)
-
-    def _compact_changelog_if_needed(self, changelog_path: Path, record: dict) -> None:
-        if record.get("mode") != "snapshot" or not isinstance(record.get("document"), dict):
-            return
-        try:
-            lines = [line for line in changelog_path.read_text("utf-8").splitlines() if line.strip()]
-        except OSError:
-            return
-        try:
-            size_exceeded = changelog_path.stat().st_size > CHANGELOG_COMPACT_BYTES
-        except OSError:
-            size_exceeded = False
-        if len(lines) <= CHANGELOG_COMPACT_THRESHOLD and not size_exceeded:
-            return
-        compact_record = dict(record)
-        compact_record["compacted"] = True
-        changelog_path.write_text(
-            json.dumps(compact_record, ensure_ascii=False, separators=(",", ":")) + "\n",
-            encoding="utf-8",
-        )
-
     def _load_document_with_changelog(self, doc_name: str) -> tuple[dict, int]:
         document = self.storage.load(doc_name)
-        last_seq = 0
-        for record in self._read_changelog_records(doc_name):
-            last_seq = max(last_seq, int(record.get("seq") or 0))
-            changes = record.get("changes")
-            if isinstance(changes, list):
-                for change in changes:
-                    if not isinstance(change, dict):
-                        continue
-                    path = str(change.get("path", "")).strip()
-                    if path:
-                        self._set_path(document, path, deepcopy(change.get("new")))
-        return document, last_seq
-
-    def _read_changelog_records(self, doc_name: str) -> list[dict]:
-        changelog_path = self._collab_dir(doc_name) / "changelog.jsonl"
-        if not changelog_path.exists():
-            return []
-        records = []
-        needs_compaction = False
-        try:
-            for line in changelog_path.read_text("utf-8").splitlines():
-                if not line.strip():
-                    continue
-                payload = json.loads(line)
-                if isinstance(payload, dict):
-                    if payload.get("mode") == "snapshot" and "document" in payload:
-                        payload = dict(payload)
-                        payload.pop("document", None)
-                        payload["compacted"] = True
-                        needs_compaction = True
-                    records.append(payload)
-        except (OSError, ValueError, json.JSONDecodeError):
-            return records
-        if needs_compaction:
-            self._rewrite_changelog(changelog_path, records)
-        return records
-
-    def _rewrite_changelog(self, changelog_path: Path, records: list[dict]) -> None:
-        try:
-            changelog_path.write_text(
-                "".join(
-                    json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
-                    for record in records
-                ),
-                encoding="utf-8",
-            )
-        except OSError:
-            pass
+        return document, 0
 
     def _get_path(self, document: dict, path: str) -> Any:
         current: Any = document
