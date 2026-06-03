@@ -358,15 +358,14 @@ class CollaborationManager:
                 stats["base_missing"] = True
                 merged, stats = self._merge_collaboration(session.document, document)
 
-            old_json = json.dumps(session.document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            new_json = json.dumps(merged, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            document_changed = old_json != new_json
+            prev_hash = _doc_hash(session.document)
+            new_hash = _doc_hash(merged)
+            document_changed = prev_hash != new_hash
 
             if document_changed:
                 session.document = deepcopy(merged)
                 session.seq += 1
                 self._remember_snapshot(session)
-                session.dirty = True
 
             stats["user"] = client.user_name
             stats["userId"] = client.user_id
@@ -374,7 +373,15 @@ class CollaborationManager:
             self._write_sync_log(session, submit_id, base_seq, stats)
 
             if document_changed:
-                self._flush_autosave(session.doc_name)
+                session.dirty = False
+                saved = self.storage.save_collaboration_working_copy(session.doc_name, session.document)
+                with self._lock:
+                    cur = self._sessions.get(session.doc_name)
+                    if cur and not cur.dirty:
+                        cur.document = saved
+                self.storage._snapshot_document(
+                    session.doc_name, save_message="协作同步", snapshot_document=saved, kind="collab"
+                )
             log_event(
                 "blm.collab",
                 "collab.snapshot",
