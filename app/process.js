@@ -6152,7 +6152,7 @@ function renderUserStepsSection(proc, task) {
           </select>
           ${isCustomStepType(s.type) ? `<input class="step-type-custom" type="text" value="${esc(s.type)}" placeholder="自定义类型"
             oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'type',this.value)">` : ''}
-          <textarea class="step-name" rows="2" placeholder="步骤描述"
+          <textarea class="step-name" rows="1" placeholder="步骤描述"
             oninput="setStep('${esc(proc.id)}','${esc(task.id)}',${i},'name',this.value);this.style.height='auto';this.style.height=this.scrollHeight+'px'"
             >${esc(s.name || '')}</textarea>
           <div class="step-actions">

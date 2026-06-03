@@ -2521,7 +2521,7 @@ function addStateTransition(entityId, afterIndex = null) {
   ensureEntityStateShape(entity);
   const fieldName = getEntityStatusField(entity, S.ui.stateFieldName)?.name || '';
   if (!fieldName) {
-    alert('请先在左侧选择一个主状态字段，才能添加状态流转。');
+    alert('请先为状态字段命名，才能添加状态流转。');
     return;
   }
   if (!getEntityStatusValues(entity, fieldName).length) {

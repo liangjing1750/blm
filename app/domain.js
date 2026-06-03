@@ -1518,8 +1518,9 @@ function renderCapabilityDialog(capability) {
   const ungroupedConstructs = allConstructs.filter((construct) => !isBusinessConstructAssignedToAnyCapability(construct, S.doc));
   return `<div class="business-model-dialog-panel" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
-      <h3>业务组件</h3>
+      <h3>📦 业务组件</h3>
       <div class="business-model-dialog-actions">
+        ${groupedConstructs.length ? `<span class="dialog-progress" title="${groupedConstructs.length} 个构件 · ${allConstructs.filter(c => isBusinessConstructAssignedToCapability(c, capability)).length} 个任务定义">构件 ${groupedConstructs.length}</span>` : ''}
         <button class="btn btn-danger btn-sm" type="button" data-testid="capability-delete-button"
           onclick="removeBusinessComponent('${esc(jsString(capId))}').then((deleted)=>{if(deleted)closeBusinessModelDialog()})">删除</button>
         <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">✕</button>
@@ -1632,8 +1633,9 @@ function renderConstructDialog(construct) {
   }).join('');
   return `<div class="business-model-dialog-panel" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
-      <h3>业务构件</h3>
+      <h3>🧩 业务构件</h3>
       <div class="business-model-dialog-actions">
+        <span class="dialog-progress" title="已关联 ${assignedEntities.length} 个实体 · ${assignedTasks.length} 个任务">实体 ${assignedEntities.length} · 任务 ${assignedTasks.length}</span>
         ${backButton}
         <button class="btn btn-danger btn-sm" type="button" data-testid="construct-delete-button"
           onclick="removeBusinessConstruct('${esc(jsString(constructId))}').then((deleted)=>{if(deleted)${afterDelete}})">删除</button>
@@ -1816,8 +1818,9 @@ function renderTaskDefinitionDialog(task) {
     : '';
   return `<div class="business-model-dialog-panel task-definition-dialog" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
-      <h3>任务定义</h3>
+      <h3>⚙️ 任务定义</h3>
       <div class="business-model-dialog-actions">
+        <span class="dialog-progress" title="入参${parameterSummary.inputCount} / 出参${parameterSummary.outputCount}">参数 ${parameterSummary.inputCount}+${parameterSummary.outputCount}</span>
         ${backButton}
         <button class="btn btn-danger btn-sm" type="button" data-testid="task-definition-delete-button"
           onclick="removeTaskDefinition('${esc(jsString(taskId))}').then((deleted)=>{if(deleted)${afterDelete}})">删除</button>
