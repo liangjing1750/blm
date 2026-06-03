@@ -9,13 +9,16 @@
 - BLM 是本地浏览器应用，由 Python HTTP 服务提供静态页面和 API。
 - 一个工作区文档对应一份 JSON，保存时同步生成 Markdown。
 - 前后端通过 HTTP 通信，前端在浏览器内持有当前编辑态，后端负责加载、保存、导出、合并、历史快照、回收站和附件落盘。
-- 顶部左侧显示产品版本号，当前为 `v1.3`。
+- 顶部左侧显示产品版本号，当前为 `v2.5`。
 - 用户建模时关注业务概念，不需要看到或维护内部 ID。流程、实体、节点、分支、连线等内部标识由系统生成和迁移维护。
 
 ## 3. 模块职责
 
 - `blm.py`：启动入口，读取环境变量并启动本地 HTTP 服务。
 - `blm_core/server.py`：提供浏览器 API，包括工作区文档、附件、保存、合并、恢复和内置文档。
+- `blm_core/collab.py`：负责实时协作会话、WebSocket snapshot 同步、HTTP 降级同步、seq/baseSeq 合并保护和协作 changelog。
+- `blm_core/diagnostics.py`：负责结构化日志、滚动日志和最近日志读取。
+- `blm_core/admin.py`：负责只读管理端，提供服务状态、协作连接、最近日志和诊断包。
 - `blm_core/storage.py`：负责工作区读写、Markdown 导出、附件目录、历史快照、回收站、写锁和 revision 乐观锁。
 - `blm_core/document.py`：负责文档标准化、旧字段迁移、隐藏 uid 补齐、流程图模型归一化。
 - `blm_core/merge.py`：负责三方合并、两文档合并、冲突检测、冲突裁决和合并后一致性校验。
@@ -102,12 +105,55 @@ BLM 的 JSON 不是关系型数据库，但可以借用“表 / 行 / 列”的�
 - uid 不同且语义名称不同：自动合入。
 - 引用缺失、重复关系、非法连线：作为校验问题提示，不静默吞掉。
 
-## 7. 并行编辑与保存
+## 7. 实时协作、自动同步与弱网降级
 
-- 后端保留现有写锁，保证同一时刻只有一个保存过程落盘。
-- 每个文档带有 revision。前端加载时记录 revision，保存时提交该 revision。
-- 如果保存时发现后端 revision 已变化，说明另一个编辑者已经先保存。此时进入 rebase：以后端最新版本作为基线，把当前前端改动接入现有合并能力。
-- rebase 无冲突则保存合并结果；有冲突则返回冲突信息，避免后保存的人覆盖先保存的人。
+### 7.1 协作主链路
+
+当前协作采用“结构化 JSON snapshot + 服务端 seq/baseSeq 串行裁决”的方案，不做完整 CRDT。
+
+- 浏览器打开文档后，通过 WebSocket 加入 `/api/collab/ws`。
+- 服务端为每个文档维护一个 `CollabSession`，包含当前文档、当前 `seq`、在线连接、最近 seq 快照。
+- 前端编辑后进入自动同步队列，默认 5 秒防抖；用户点击“立即同步”时不等待防抖。
+- 每次 snapshot 携带 `baseSeq`。如果 `baseSeq` 等于服务端当前 seq，直接接受；如果落后，则基于最近 seq 快照做轻量三方合并。
+- 服务端是最终裁决者，旧客户端不能直接覆盖服务端新文档。
+
+### 7.2 远端更新体验
+
+- 远端更新不会频繁弹横幅。
+- 如果当前用户正在编辑，远端 snapshot 暂存为“有更新待同步”，等待用户点击“立即同步”。
+- “立即同步”同时承担两件事：推送本地修改，以及拉取/合并他人的修改。
+- 顶栏协作状态可点击打开诊断弹窗，显示连接状态、seq、在线用户、待同步状态和最近活动。
+
+### 7.3 HTTP 降级
+
+WebSocket 不稳定时，前端会进入轮询降级模式：
+
+- `GET /api/collab/poll?name=...&seq=...`：按 seq 拉取最新状态。
+- `POST /api/collab/snapshot`：通过 HTTP 提交 snapshot。
+- HTTP snapshot 复用同一套 `CollaborationManager` 串行合并逻辑，仍然使用 `baseSeq` 防覆盖。
+- 降级模式实时性较低，但能保证“继续编辑 + 立即同步”有可用路径。
+
+### 7.4 changelog 生命周期
+
+`collab/changelog.jsonl` 是协作运行日志，不是业务文档正文：
+
+- 产生：服务端处理 change/snapshot 后追加一行，记录 seq、用户、时间、baseSeq、变更模式等。
+- 使用：服务端运行时主要使用内存 session；重启后先加载 `manifest.json`，再读取 changelog 恢复 seq 和未完全落盘的协作状态。
+- 压缩：旧逻辑写入的完整大 snapshot 会在读取或追加时压缩，避免大文档恢复变慢。
+- 删除影响：删除 changelog 不会让文档主体打不开，但会丢失近期协作重放能力；服务会从当前 `manifest.json` 重新开始协作 seq。
+
+### 7.5 日志与管理端
+
+- 结构化日志默认写入 `workspace/.logs/blm.log`，错误日志写入 `workspace/.logs/errors.log`。
+- 日志记录服务启动、HTTP 请求、WebSocket join/leave/error/ping、snapshot、rebase、autosave 等关键事件。
+- 设置环境变量 `BLM_ADMIN_PORT` 后，会启动独立只读管理端。
+- 管理端提供 `/api/status`、`/api/logs/recent`、`/api/diagnostics.zip`，用于跨网段断线排查。
+
+### 7.6 与传统保存的关系
+
+- 顶栏“立即同步”是当前主操作，不再强调旧式“保存”概念。
+- 自动同步保障当前工作稿落盘；“归档版本”用于需求评审、上线基线等长期稳定快照。
+- 普通历史记录用于近期恢复，不等同于正式版本。
 
 ## 8. 流程图模型
 
