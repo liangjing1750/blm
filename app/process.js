@@ -4940,9 +4940,10 @@ function renderStageFlowNodeGroupEditor(node, pos) {
       onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
       <span>分组</span>
       <input data-testid="stage-flow-node-group-input" data-process-id="${esc(processId)}"
-        aria-label="流程分组" type="text" value="${esc(node.group || '')}" placeholder="未分组" size="20"
+        aria-label="流程分组" type="text" value="${esc(node.group || '')}" placeholder="... " size="4"
+        title="${esc(node.group || '未分组')}"
         onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
-        oninput="setFlowGroupForProcesses('${esc(processId)}',this.value)"
+        oninput="this.title=this.value||'未分组';setFlowGroupForProcesses('${esc(processId)}',this.value)"
         onblur="rerenderStageWorkbench()"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       <button type="button" title="清空分组" aria-label="清空分组"
