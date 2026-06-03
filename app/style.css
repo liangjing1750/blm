@@ -7281,6 +7281,36 @@ body.is-collab-reconnecting * {
   background: #f1f5f9;
   white-space: nowrap;
 }
+.dialog-progress-bar {
+  display: flex;
+  gap: 0;
+  height: 22px;
+  background: #f1f5f9;
+  border-bottom: 1px solid var(--border);
+}
+.dialog-progress-bar .pb-seg {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  min-width: 0;
+}
+.dialog-progress-bar .pb-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  opacity: 0.18;
+  border-radius: 0 2px 2px 0;
+  transition: width .3s ease;
+}
+.dialog-progress-bar .pb-label {
+  position: relative;
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
 .business-model-dialog-body {
   padding: 16px;
   overflow: auto;

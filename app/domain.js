@@ -730,6 +730,20 @@ function getTaskDefinitionParameterSummary(task) {
   };
 }
 
+function renderProgressBar(items) {
+  if (!items || !items.length) return '';
+  const totalMax = items.reduce((s,i) => s + (i.max||1), 0);
+  const segments = items.map((item) => {
+    const pct = Math.round((item.value / Math.max(item.max, 1)) * 100);
+    const width = Math.round((item.max / Math.max(totalMax, 1)) * 100);
+    return `<div class="pb-seg" style="flex:0 0 ${width}%">
+      <div class="pb-fill" style="width:${pct}%;background:${item.color}"></div>
+      <span class="pb-label">${item.label} ${item.value}</span>
+    </div>`;
+  }).join('');
+  return `<div class="dialog-progress-bar">${segments}</div>`;
+}
+
 function contractSummary(draft) {
   const params = cloneTaskDefinitionParameters(draft?.parameters || { inputs: [], outputs: [] });
   const address = String(draft?.address || draft?.target || '');
@@ -1526,6 +1540,9 @@ function renderCapabilityDialog(capability) {
         <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">✕</button>
       </div>
     </div>
+    ${renderProgressBar([
+      {label:'构件', value:groupedConstructs.length, max:Math.max(groupedConstructs.length,1), color:'#3b82f6'},
+    ])}
     <div class="business-model-dialog-body">
       <div class="form-grid">
         <div class="field-group">
@@ -1642,6 +1659,10 @@ function renderConstructDialog(construct) {
         <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">✕</button>
       </div>
     </div>
+    ${renderProgressBar([
+      {label:'实体', value:assignedEntities.length, max:Math.max((S.doc.entities||[]).length,1), color:'#10b981'},
+      {label:'任务', value:assignedTasks.length, max:Math.max((getTaskDefinitionItems(S.doc)||[]).length,1), color:'#f59e0b'},
+    ])}
     <div class="business-model-dialog-body">
       <div class="form-grid">
         <div class="field-group">
@@ -1827,6 +1848,10 @@ function renderTaskDefinitionDialog(task) {
         <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">✕</button>
       </div>
     </div>
+    ${renderProgressBar([
+      {label:'入参', value:parameterSummary.inputCount, max:Math.max(parameterSummary.inputCount+parameterSummary.outputCount,1), color:'#8b5cf6'},
+      {label:'出参', value:parameterSummary.outputCount, max:Math.max(parameterSummary.inputCount+parameterSummary.outputCount,1), color:'#ec4899'},
+    ])}
     <div class="business-model-dialog-body">
       <div class="form-grid">
         <div class="field-group">
