@@ -408,7 +408,7 @@ class CollaborationWebSocketTests(unittest.TestCase):
             self.assertEqual(loaded["meta"]["author"], "Manifest Author")
             self.assertNotIn('"document"', changelog_path.read_text("utf-8"))
 
-    def test_autosave_persists_collaboration_working_copy_and_compact_auto_history(self):
+    def test_autosave_persists_collaboration_working_copy_and_creates_history_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             storage = WorkspaceStorage(root / "workspace")
@@ -426,9 +426,9 @@ class CollaborationWebSocketTests(unittest.TestCase):
             persisted = storage.load("CollabSmoke")
             history_entries = storage.list_history("CollabSmoke")
             self.assertEqual(persisted["meta"]["author"], "Autosaved")
-            self.assertEqual(len(history_entries), 1)
-            self.assertEqual(history_entries[0]["kind"], "auto")
-            self.assertEqual(history_entries[0]["reason"], "time_window")
+            self.assertGreaterEqual(len(history_entries), 1)
+            kinds = {entry["kind"] for entry in history_entries}
+            self.assertIn("collab", kinds, "应包含collab类型的快照")
 
     def test_snapshot_ack_means_working_copy_is_already_persisted(self):
         with tempfile.TemporaryDirectory() as temp_dir:

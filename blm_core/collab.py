@@ -515,7 +515,10 @@ class CollaborationManager:
             session.dirty = False
         try:
             saved_document = self.storage.save_collaboration_working_copy(doc_name, document)
-            self.storage.maybe_snapshot_auto_history(doc_name, saved_document)
+            # 每次Ctrl+S都创建历史快照（不依赖自动throttle逻辑）
+            self.storage._snapshot_document(
+                doc_name, save_message="协作同步", snapshot_document=saved_document, kind="collab"
+            )
             with self._lock:
                 session = self._sessions.get(doc_name)
                 if session and not session.dirty:

@@ -3254,6 +3254,35 @@ const App = {
     });
   },
 
+  async cmdDelete() {
+    if (!S.currentFile) return showAppAlert('请先打开一个文档。');
+    if (S.readOnly) return showAppAlert('当前查看的是只读版本，不能删除。');
+    const name = S.currentFile;
+    const confirmed = await showAppConfirm(
+      `确认删除文档"${name}"？删除后将移入回收站，可在回收站恢复。`,
+      { title: '确认删除', confirmLabel: '删除' },
+    );
+    if (!confirmed) return;
+    try {
+      const result = await api.del(name);
+      if (result.error) return showAppAlert(result.error);
+      if (S.currentFile === name) {
+        S.currentFile = null;
+        S.doc = null;
+        S.documentRevision = 0;
+        S.baseDocument = null;
+        S.modified = false;
+        disconnectCollabSession({ intentional: true });
+      }
+      await loadWorkspaceDocumentNames();
+      render();
+      showAppToast(`已删除文档"${name}"，已移入回收站。`);
+    } catch (err) {
+      console.error('cmdDelete error:', err);
+      showAppAlert('删除文档时发生异常。');
+    }
+  },
+
   async openLatestVersion() {
     if (!S.currentFile) return;
     const name = S.currentFile;

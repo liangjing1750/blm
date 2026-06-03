@@ -1448,11 +1448,13 @@ class WorkspaceStorage(DocumentFileStore):
         reason: str = "",
         content_hash: str = "",
     ) -> None:
-        normalized_kind = "auto" if str(kind or "").strip() == "auto" else "manual"
+        normalized_kind = str(kind or "").strip()
+        if normalized_kind not in ("auto", "manual", "collab"):
+            normalized_kind = "manual"
         normalized_reason = str(reason or "").strip()
         if not normalized_reason:
-            normalized_reason = "manual_message" if normalized_kind == "manual" and str(message or "").strip() else (
-                "manual_save" if normalized_kind == "manual" else "time_window"
+            normalized_reason = "manual_message" if normalized_kind in ("manual", "collab") and str(message or "").strip() else (
+                "manual_save" if normalized_kind in ("manual", "collab") else "time_window"
             )
         payload = {
             "id": snapshot_id,
