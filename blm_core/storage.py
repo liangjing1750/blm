@@ -1419,6 +1419,7 @@ class WorkspaceStorage(DocumentFileStore):
         reason: str = "",
         content_hash: str = "",
         snapshot_id: str = "",
+        skip_canonical: bool = False,
     ) -> None:
         safe_name = self._validate_name(name)
         target_root = self.history_dir / safe_name
@@ -1430,8 +1431,9 @@ class WorkspaceStorage(DocumentFileStore):
         snapshot_document = deepcopy(snapshot_document) if isinstance(snapshot_document, dict) else self.load(safe_name)
         if self._is_package_dir(package_dir):
             self._copy_package_metadata(package_dir, snapshot_dir, safe_name)
+            write_doc = snapshot_document if skip_canonical else canonical_document(snapshot_document)
             self._manifest_path(snapshot_dir).write_text(
-                json.dumps(canonical_document(snapshot_document), ensure_ascii=False, indent=2),
+                json.dumps(write_doc, ensure_ascii=False, indent=2),
                 "utf-8",
             )
             self._package_markdown_path(snapshot_dir, safe_name).write_text(

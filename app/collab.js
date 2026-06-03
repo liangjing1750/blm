@@ -375,7 +375,7 @@ function renderCollabStatus() {
   const suffix = state.syncing
     ? ' · 同步中'
     : hasQueuedSnapshot
-    ? ' · 待自动同步'
+    ? ' · 待同步'
     : hasLocalDraft
     ? ' · 本地草稿待同步'
     : hasRemoteUpdate
@@ -459,7 +459,7 @@ function formatCollabDiagnosticsText(snapshot = getCollabDiagnosticsSnapshot()) 
     `Seq：${snapshot.seq}`,
     `本地基线Seq：${snapshot.acceptedSeq}`,
     `ClientId：${snapshot.clientId || '-'}`,
-    `待自动同步：${snapshot.pendingSnapshot ? '是' : '否'}`,
+    `待同步：${snapshot.pendingSnapshot ? '是' : '否'}`,
     `同步中：${snapshot.syncing ? '是' : '否'}`,
     `远端更新待同步：${snapshot.pendingRemote ? '是' : '否'}`,
     `本地草稿：${snapshot.localDraftPending ? '有' : '无'}`,

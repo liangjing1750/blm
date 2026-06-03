@@ -427,7 +427,8 @@ class CollaborationManager:
                 saved = self.storage.save_collaboration_working_copy(session.doc_name, session.document)
                 session.document = saved
                 self.storage._snapshot_document(
-                    session.doc_name, save_message="协作同步", snapshot_document=saved, kind="collab"
+                    session.doc_name, save_message="协作同步", snapshot_document=saved, kind="collab",
+                    skip_canonical=True,
                 )
 
             log_event(
