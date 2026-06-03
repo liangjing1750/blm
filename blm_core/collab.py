@@ -62,12 +62,14 @@ class CollabSession:
     clients: dict[str, CollabClient] = field(default_factory=dict)
     snapshots: dict[int, dict] = field(default_factory=dict)
     dirty: bool = False
+    _doc_hash_cache: str = ""
 
 
 class CollaborationManager:
-    def __init__(self, storage: WorkspaceStorage, *, autosave_interval: float = 3.0):
+    def __init__(self, storage: WorkspaceStorage, *, autosave_interval: float = 3.0, async_persist: bool = True):
         self.storage = storage
         self.autosave_interval = max(0.0, float(autosave_interval))
+        self.async_persist = bool(async_persist)
         self._sessions: dict[str, CollabSession] = {}
         self._lock = threading.RLock()
 
@@ -351,6 +353,30 @@ class CollaborationManager:
             # 底线：先落盘提交原文
             submit_id = self._save_submit_record(session, client, document, base_seq)
 
+            # 快速路径：base_seq匹配且hash未变 → 跳过合并
+            new_hash = ""
+            fast_path = False
+            if base_seq == session.seq:
+                new_hash = _doc_hash(document)
+                cached = session._doc_hash_cache
+                if cached and cached == new_hash:
+                    fast_path = True  # 无变化，直接返回
+                elif not cached:
+                    session._doc_hash_cache = _doc_hash(session.document)
+
+            if fast_path:
+                record = {
+                    "seq": session.seq, "doc": session.doc_name,
+                    "user": client.user, "userId": client.user_id,
+                    "clientId": client.client_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "baseSeq": base_seq, "mode": "snapshot",
+                    "rebased": False, "submitId": submit_id,
+                    "changed": False, "conflictCount": 0, "conflicts": [],
+                    "document": deepcopy(session.document),
+                }
+                return record
+
             stats: dict = {"merged": True, "conflictCount": 0, "base_missing": False}
             conflict_list = []
             if base_seq == session.seq:
@@ -359,26 +385,19 @@ class CollaborationManager:
                 merged, conflict_list, stats = self._merge_collaboration(base_doc, document, session.document)
             else:
                 stats["base_missing"] = True
-                # 快照缺失，无法做三方比对区分"删除"和"新增"
-                # combine合并保留双方所有项（可能复原已被删除的，但不会误删新增）
-                # 用户提交原文保存在submit-record中，可手动恢复
                 merged, conflict_list, stats = self._merge_collaboration(session.document, document)
 
-            # 有冲突 → 不自动合并，返回冲突信息让用户决策
+            # 有冲突 → 不自动合并
             has_conflicts = stats.get("conflictCount", 0) > 0
             if has_conflicts:
                 record = {
-                    "seq": session.seq,
-                    "doc": session.doc_name,
-                    "user": client.user,
-                    "userId": client.user_id,
+                    "seq": session.seq, "doc": session.doc_name,
+                    "user": client.user, "userId": client.user_id,
                     "clientId": client.client_id,
                     "ts": datetime.now(timezone.utc).isoformat(),
-                    "baseSeq": base_seq,
-                    "mode": "snapshot",
+                    "baseSeq": base_seq, "mode": "snapshot",
                     "rebased": base_seq != session.seq - 1,
-                    "submitId": submit_id,
-                    "changed": False,
+                    "submitId": submit_id, "changed": False,
                     "conflictCount": stats["conflictCount"],
                     "conflicts": conflict_list,
                     "document": deepcopy(session.document),
@@ -389,14 +408,16 @@ class CollaborationManager:
                 self._write_sync_log(session, submit_id, base_seq, stats)
                 return record
 
-            prev_hash = _doc_hash(session.document)
-            new_hash = _doc_hash(merged)
+            prev_hash = session._doc_hash_cache or _doc_hash(session.document)
+            if not new_hash:
+                new_hash = _doc_hash(merged)
             document_changed = prev_hash != new_hash
 
             if document_changed:
                 session.document = deepcopy(merged)
                 session.seq += 1
                 self._remember_snapshot(session)
+                session._doc_hash_cache = new_hash
 
             stats["user"] = client.user_name
             stats["userId"] = client.user_id
@@ -404,45 +425,51 @@ class CollaborationManager:
             self._write_sync_log(session, submit_id, base_seq, stats)
 
             if document_changed:
-                session.dirty = False
-                saved = self.storage.save_collaboration_working_copy(session.doc_name, session.document)
-                # session.document 对齐 canonical 输出（字段名统一为 role_uid/entity_uid 等）
-                session.document = saved
-                with self._lock:
-                    cur = self._sessions.get(session.doc_name)
-                    if cur and not cur.dirty:
-                        cur.document = saved
-                self.storage._snapshot_document(
-                    session.doc_name, save_message="协作同步", snapshot_document=saved, kind="collab"
-                )
+                doc_copy = deepcopy(session.document)
+                doc_name = session.doc_name
+                if self.async_persist:
+                    threading.Thread(
+                        target=self._background_persist,
+                        args=(doc_name, doc_copy),
+                        daemon=True,
+                    ).start()
+                else:
+                    self._background_persist(doc_name, doc_copy)
+                    # 同步模式：对齐 session.document 到 canonical 输出
+                    session.document = self.storage.load(doc_name)
+
             log_event(
-                "blm.collab",
-                "collab.snapshot",
-                doc=session.doc_name,
-                seq=session.seq,
-                baseSeq=base_seq,
-                clientId=client.client_id,
-                user=client.user_name,
+                "blm.collab", "collab.snapshot",
+                doc=session.doc_name, seq=session.seq, baseSeq=base_seq,
+                clientId=client.client_id, user=client.user_name,
                 submitId=submit_id,
                 conflictCount=stats.get("conflictCount", 0),
                 baseMissing=bool(stats.get("base_missing")),
+                fastPath=fast_path,
                 documentBytes=len(json.dumps(merged, ensure_ascii=False)),
                 elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
             )
             record = {
-                "seq": session.seq,
-                "doc": session.doc_name,
-                "user": client.user,
-                "userId": client.user_id,
+                "seq": session.seq, "doc": session.doc_name,
+                "user": client.user, "userId": client.user_id,
                 "clientId": client.client_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
-                "baseSeq": base_seq,
-                "mode": "snapshot",
+                "baseSeq": base_seq, "mode": "snapshot",
                 "rebased": base_seq != session.seq - 1,
                 "submitId": submit_id,
                 "changed": document_changed,
             }
             return record
+
+    def _background_persist(self, doc_name: str, document: dict) -> None:
+        """后台线程：写manifest+snapshot，合并为一次canonical_document"""
+        try:
+            saved = self.storage.save_collaboration_working_copy(doc_name, document)
+            self.storage._snapshot_document(
+                doc_name, save_message="协作同步", snapshot_document=saved, kind="collab"
+            )
+        except OSError:
+            log_error("blm.collab", "collab.background_persist.error", doc=doc_name)
 
     def _save_submit_record(
         self, session: CollabSession, client: CollabClient, document: dict, base_seq: int
