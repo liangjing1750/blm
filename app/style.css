@@ -158,8 +158,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .user-modal-shell {
   width: min(420px, calc(100vw - 48px));
 }
-.collab-diagnostics-modal {
-  width: min(80vw, 1200px);
+.modal.collab-diagnostics-modal {
+  width: min(85vw, 1300px);
   max-height: calc(100vh - 72px);
   overflow: hidden;
   display: flex;
