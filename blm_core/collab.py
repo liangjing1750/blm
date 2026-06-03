@@ -31,6 +31,21 @@ def _doc_hash(document: dict) -> str:
     return d
 
 
+def _content_hash(document: dict) -> str:
+    """内容哈希（排除自动变化的revision等字段），用于快速路径比较"""
+    try:
+        doc = deepcopy(document)
+        meta = doc.get("meta")
+        if isinstance(meta, dict):
+            for field in ("revision", "uid", "document_uid", "schema_version"):
+                meta.pop(field, None)
+        text = json.dumps(doc, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return ""
+    d = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
+    return d
+
+
 class WebSocketProtocolError(RuntimeError):
     pass
 
@@ -352,16 +367,16 @@ class CollaborationManager:
             # 底线：先落盘提交原文
             submit_id = self._save_submit_record(session, client, document, base_seq)
 
-            # 快速路径：base_seq匹配且hash未变 → 跳过合并
+            # 快速路径：base_seq匹配且内容未变 → 跳过合并
             new_hash = ""
             fast_path = False
             if base_seq == session.seq:
-                new_hash = _doc_hash(document)
+                new_hash = _content_hash(document)
                 cached = session._doc_hash_cache
+                if not cached:
+                    session._doc_hash_cache = _content_hash(session.document)
                 if cached and cached == new_hash:
-                    fast_path = True  # 无变化，直接返回
-                elif not cached:
-                    session._doc_hash_cache = _doc_hash(session.document)
+                    fast_path = True
 
             if fast_path:
                 record = {
@@ -407,9 +422,9 @@ class CollaborationManager:
                 self._write_sync_log(session, submit_id, base_seq, stats)
                 return record
 
-            prev_hash = session._doc_hash_cache or _doc_hash(session.document)
+            prev_hash = session._doc_hash_cache or _content_hash(session.document)
             if not new_hash:
-                new_hash = _doc_hash(merged)
+                new_hash = _content_hash(merged)
             document_changed = prev_hash != new_hash
 
             if document_changed:
