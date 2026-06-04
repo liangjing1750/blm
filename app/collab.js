@@ -938,6 +938,7 @@ async function flushCollabSnapshotHttp() {
         render();
         restoreScrollSnapshots(snapMine);
         if (typeof renderToolbar === 'function') renderToolbar();
+        if (S.ui.taskParameterDialog && typeof renderTaskParameterDialog === 'function') renderTaskParameterDialog();
         if (typeof loadWorkspaceDocumentSummaries === 'function') void loadWorkspaceDocumentSummaries();
         return true;
       }
@@ -957,6 +958,7 @@ async function flushCollabSnapshotHttp() {
       const snapServer = captureScrollSnapshots();
       render();
       restoreScrollSnapshots(snapServer);
+      if (S.ui.taskParameterDialog && typeof renderTaskParameterDialog === 'function') renderTaskParameterDialog();
       if (typeof loadWorkspaceDocumentSummaries === 'function') void loadWorkspaceDocumentSummaries();
       return true;
     }
@@ -979,6 +981,7 @@ async function flushCollabSnapshotHttp() {
     render();
     restoreScrollSnapshots(scrollSnap);
     if (typeof renderToolbar === 'function') renderToolbar();
+    if (S.ui.taskParameterDialog && typeof renderTaskParameterDialog === 'function') renderTaskParameterDialog();
     renderCollabStatus();
     if (typeof setSaveProgress === 'function') {
       setSaveProgress(true, 100, hadNewEditsDuringSync ? '同步完成（有新修改待同步）' : '同步完成', '文档已更新到最新版本。');
