@@ -5006,7 +5006,7 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 .diagram-svg { overflow-x: auto; }
 
 /* ─── 模态框 ─────────────────────────────────────────────── */
-#modal-overlay, #open-modal-overlay, #history-modal-overlay, #save-as-modal-overlay, #user-modal-overlay, #collab-diagnostics-modal-overlay, #task-parameter-modal-overlay, #compare-modal-overlay, #merge-modal-overlay, #app-dialog-overlay {
+#modal-overlay, #open-modal-overlay, #history-modal-overlay, #save-as-modal-overlay, #user-modal-overlay, #collab-diagnostics-modal-overlay, #collab-conflict-modal, #task-parameter-modal-overlay, #compare-modal-overlay, #merge-modal-overlay, #app-dialog-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.4);
   display: grid; place-items: center;
   padding: 24px;
