@@ -1888,5 +1888,118 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
                              f"排序应保留为 st-3, st-1, st-2，实际: {order}")
 
 
+class CollaborationSubmitRecoveryTests(unittest.TestCase):
+    """从 submit-record 恢复 + 历史回退 + 3-way 合并"""
+
+    def test_list_submits_returns_records(self):
+        """提交记录可列出"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 触发3次保存，产生3条submit
+            for i in range(3):
+                local = deepcopy(storage.load("CollabSmoke"))
+                local["meta"]["author"] = f"Author{i}"
+                manager.apply_http_snapshot(
+                    "CollabSmoke",
+                    {"id": f"u{i}", "name": f"U{i}", "sessionId": f"s{i}"},
+                    {"baseSeq": i, "document": local},
+                )
+
+            submits = manager.list_submits("CollabSmoke")
+            self.assertEqual(len(submits), 3, "应有3条提交记录")
+            self.assertIn("submitId", submits[0])
+            self.assertIn("seq", submits[0])
+            self.assertIn("baseSeq", submits[0])
+            self.assertIn("createdAt", submits[0])
+
+    def test_load_submit_returns_full_document(self):
+        """加载提交记录返回完整文档"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["meta"]["author"] = "Original"
+            storage.save("CollabSmoke", document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            local = deepcopy(storage.load("CollabSmoke"))
+            local["meta"]["author"] = "Saved"
+            local["roles"] = [{"uid": "r1", "name": "Role1", "desc": "", "group": "G", "subDomains": []}]
+            manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "u0", "name": "U0", "sessionId": "s0"},
+                {"baseSeq": 0, "document": local},
+            )
+
+            submits = manager.list_submits("CollabSmoke")
+            self.assertEqual(len(submits), 1)
+            loaded = manager.load_submit("CollabSmoke", submits[0]["submitId"])
+            self.assertIsInstance(loaded, dict)
+            self.assertEqual(loaded["doc"], "CollabSmoke")
+            self.assertEqual(loaded["document"]["meta"]["author"], "Saved")
+            self.assertEqual(len(loaded["document"]["roles"]), 1)
+            self.assertEqual(loaded["document"]["roles"][0]["name"], "Role1")
+
+    def test_submit_restore_with_3way_merge_preserves_both_changes(self):
+        """恢复旧submit后保存→3-way合并保留双方修改"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["meta"]["author"] = "Base"
+            base_doc["meta"]["date"] = "2026-06-01"
+            base_doc["roles"] = [{"uid": "r1", "name": "BaseRole", "desc": "", "group": "G", "subDomains": []}]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            # 用户A：修改role并保存（seq=1）
+            doc_a = deepcopy(base_doc)
+            doc_a["roles"][0]["name"] = "RoleByA"
+            doc_a["meta"]["author"] = "AuthorA"
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "a", "name": "A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertEqual(r1["seq"], 1)
+
+            # 用户B：修改date并保存（seq=2）
+            doc_b = deepcopy(storage.load("CollabSmoke"))
+            doc_b["meta"]["date"] = "2026-06-15"
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "b", "name": "B", "sessionId": "sb"},
+                {"baseSeq": 1, "document": doc_b},
+            )
+            self.assertEqual(r2["seq"], 2)
+
+            # 用户A发现自己的修改被覆盖了
+            # 从submit记录恢复：找到seq=1的submit
+            submits = manager.list_submits("CollabSmoke")
+            submit_a = next(s for s in submits if s["seq"] == 1)
+            recovered = manager.load_submit("CollabSmoke", submit_a["submitId"])
+            recovered_doc = recovered["document"]
+            recovered_base_seq = recovered["baseSeq"]
+
+            # 用恢复的文档重新提交（baseSeq=0）
+            r3 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "a-recover", "name": "A", "sessionId": "sa"},
+                {"baseSeq": recovered_base_seq, "document": recovered_doc},
+            )
+            self.assertTrue(r3["ok"])
+            self.assertEqual(r3["seq"], 3)
+
+            final = storage.load("CollabSmoke")
+            # A的role修改应保留
+            self.assertEqual(final["roles"][0]["name"], "RoleByA", "A的角色名修改应保留")
+            # A的author修改应保留
+            self.assertEqual(final["meta"]["author"], "AuthorA", "A的作者修改应保留")
+            # B的date修改也应保留（不同字段，自动合并）
+            self.assertEqual(final["meta"]["date"], "2026-06-15", "B的日期修改应保留")
+
+
 if __name__ == "__main__":
     unittest.main()

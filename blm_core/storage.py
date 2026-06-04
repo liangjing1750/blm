@@ -209,6 +209,7 @@ class WorkspaceStorage(DocumentFileStore):
                     "kind": kind,
                     "reason": reason,
                     "content_hash": str(snapshot_meta.get("contentHash", "")).strip(),
+                    "user": str(snapshot_meta.get("user", "")).strip(),
                     "created_at": str(snapshot_meta.get("createdAt", "")).strip(),
                     "timestamp": snapshot_id,
                     "timestamp_label": timestamp_label,
@@ -1418,6 +1419,7 @@ class WorkspaceStorage(DocumentFileStore):
         content_hash: str = "",
         snapshot_id: str = "",
         skip_canonical: bool = False,
+        user: str = "",
     ) -> None:
         safe_name = self._validate_name(name)
         target_root = self.history_dir / safe_name
@@ -1449,6 +1451,7 @@ class WorkspaceStorage(DocumentFileStore):
             kind=kind,
             reason=reason,
             content_hash=content_hash or self._history_content_hash(snapshot_document),
+            user=user,
         )
         self._trim_history(target_root)
 
@@ -1485,6 +1488,7 @@ class WorkspaceStorage(DocumentFileStore):
         kind: str = "manual",
         reason: str = "",
         content_hash: str = "",
+        user: str = "",
     ) -> None:
         normalized_kind = str(kind or "").strip()
         if normalized_kind not in ("auto", "manual", "collab"):
@@ -1503,6 +1507,7 @@ class WorkspaceStorage(DocumentFileStore):
             "createdAt": datetime.now().isoformat(timespec="seconds"),
             "timestamp": snapshot_id,
             "timestampLabel": self._format_timestamp_label(snapshot_id),
+            "user": str(user or "").strip(),
         }
         (snapshot_dir / SNAPSHOT_META_NAME).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),

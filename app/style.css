@@ -6382,6 +6382,7 @@ body.is-collab-reconnecting * {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.recovery-item .btn + .btn { margin-left: 6px; }
 .recovery-item + .recovery-item {
   margin-top: 6px;
 }
@@ -9745,6 +9746,16 @@ body.is-collab-reconnecting * {
   color: #e2e8f0;
 }
 
+/* ─── 历史记录 Tab ─── */
+.history-tab-bar { display: flex; gap: 0; margin: 8px 0 4px; }
+.history-tab {
+  padding: 6px 18px; border: none; background: transparent;
+  font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+}
+.history-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+.history-tab:hover { color: #334155; }
+
 /* ─── 反馈建议 Tab ─── */
 .feedback-layout {
   width: calc(100vw - 24px);
@@ -10432,3 +10443,4 @@ body.is-collab-reconnecting * {
     border-radius: 12px;
   }
 }
+

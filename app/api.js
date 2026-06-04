@@ -212,4 +212,10 @@ const api = {
       user: options.user || {},
     });
   },
+  async collabSubmits(name) {
+    return postJson('/api/collab/submits/list', { name });
+  },
+  async collabSubmitLoad(name, submitId) {
+    return postJson('/api/collab/submits/load', { name, submitId });
+  },
 };

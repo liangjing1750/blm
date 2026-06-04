@@ -149,6 +149,10 @@
 <div id="history-modal-overlay" class="hidden" onclick="App.closeHistoryModal()" data-testid="history-modal">
   <div class="modal history-modal-shell" onclick="event.stopPropagation()">
     <h3>历史记录</h3>
+    <div class="history-tab-bar">
+      <button class="history-tab active" data-tab="remote" onclick="App.switchHistoryTab('remote')">远端历史记录</button>
+      <button class="history-tab" data-tab="local" onclick="App.switchHistoryTab('local')">本地提交记录</button>
+    </div>
     <div id="history-modal-subtitle" class="recovery-subtitle"></div>
     <div id="history-list" class="file-list"></div>
     <div class="modal-footer">

@@ -838,52 +838,78 @@ function renderWorkspaceFileListLegacy(files) {
     : '<div class="file-empty">暂无工作区文档。</div>';
 }
 
-function renderHistoryEntries(docName, entries, versions = []) {
+function renderHistoryEntries(docName, entries, versions = [], submits = [], tab = 'remote') {
   const subtitle = document.getElementById('history-modal-subtitle');
   if (subtitle) {
     subtitle.textContent = docName ? `当前文档：${docName}` : '';
   }
   const list = document.getElementById('history-list');
   if (!list) return;
-  if (!entries.length && !versions.length) {
-    list.innerHTML = '<div class="file-empty">当前文档还没有版本记录。</div>';
-    return;
+
+  const formatTime = (ts) => (ts || '').replace('T', ' ').slice(0, 19);
+  const formatBytes = (b) => b > 1024*1024 ? `${(b/1024/1024).toFixed(1)}MB` : `${(b/1024).toFixed(0)}KB`;
+
+  if (tab === 'local') {
+    // 本地提交记录 tab
+    if (!submits.length) {
+      list.innerHTML = '<div class="file-empty">暂无提交记录。</div>';
+      return;
+    }
+    list.innerHTML = `
+      <div class="recovery-subtitle">每次 Ctrl+S 的提交原文。打开为只读预览；恢复会将此版本设为当前文档，Ctrl+S 后与最新版合并。</div>
+      ${submits.slice(0, 50).map((s) => `
+        <div class="recovery-item">
+          <div class="recovery-item-main">
+            <div class="recovery-item-title">${esc(s.user || '未知用户')} 提交 · 基于 v${s.baseSeq} → v${s.seq}</div>
+            <div class="recovery-item-meta">${esc(formatTime(s.createdAt))} · ${s.documentBytes ? formatBytes(s.documentBytes) : ''}</div>
+          </div>
+          <button class="btn btn-outline btn-sm" type="button"
+            onclick='App.previewSubmit(${JSON.stringify(s.submitId)})'>打开</button>
+          <button class="btn btn-primary btn-sm" type="button"
+            onclick='App.recoverFromSubmit(${JSON.stringify(s.submitId)}, ${s.baseSeq || 0})'>恢复</button>
+        </div>`).join('')}`;
+  } else {
+    // 远端历史记录 tab
+    const hasData = entries.length || versions.length;
+    if (!hasData) {
+      list.innerHTML = '<div class="file-empty">暂无历史记录。</div>';
+      return;
+    }
+    const namedVersionHtml = versions.length ? `
+      <div class="history-section-title">归档版本</div>
+      ${versions.map((entry) => `
+        <div class="recovery-item">
+          <div class="recovery-item-main">
+            <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
+            <div class="recovery-item-meta">稳定只读快照</div>
+          </div>
+          <button class="btn btn-primary btn-sm" type="button"
+            onclick='App.openVersion(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
+        </div>`).join('')}` : '';
+    const groupedHistory = groupHistoryEntriesByDay(entries);
+    const historyHtml = entries.length ? `
+      <div class="history-section-title">协作快照</div>
+      <div class="recovery-subtitle">每次同步自动保存的状态点，含提交人信息。</div>
+      ${groupedHistory.map((group) => `
+        <div class="history-day-group">
+          <div class="history-day-title">${esc(group.label)}</div>
+          ${group.items.map((entry) => {
+            const userLabel = entry.user ? `${entry.user} · ` : '';
+            return `
+            <div class="recovery-item">
+              <div class="recovery-item-main">
+                <div class="recovery-item-title">${esc(userLabel)}协作同步</div>
+                <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')}</div>
+              </div>
+              <button class="btn btn-outline btn-sm" type="button"
+                onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
+              <button class="btn btn-primary btn-sm" type="button"
+                onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>恢复</button>
+            </div>`;
+          }).join('')}
+        </div>`).join('')}` : '';
+    list.innerHTML = namedVersionHtml + historyHtml;
   }
-  const namedVersionHtml = versions.length ? `
-    <div class="history-section-title">归档版本</div>
-    ${versions.map((entry) => `
-      <div class="recovery-item">
-        <div class="recovery-item-main">
-          <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
-          <div class="recovery-item-meta">稳定只读快照，适合放到评审或 Confluence 链接中。</div>
-        </div>
-        <button class="btn btn-outline btn-sm" type="button"
-          onclick='copyVersionLocator(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>复制链接</button>
-        <button class="btn btn-primary btn-sm" type="button"
-          onclick='App.openVersion(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
-      </div>`).join('')}` : '';
-  const groupedHistory = groupHistoryEntriesByDay(entries);
-  const historyHtml = entries.length ? `
-    <div class="history-section-title">近期历史</div>
-    <div class="recovery-subtitle">自动同步会被压缩，只保留关键状态点；正式归档请使用“归档版本”。近期历史仅支持只读打开，避免误恢复覆盖当前工作稿。</div>
-    ${groupedHistory.map((group) => `
-      <div class="history-day-group">
-        <div class="history-day-title">${esc(group.label)}</div>
-        ${group.items.map((entry) => {
-          const kindLabel = entry.kind === 'auto' ? '自动同步' : '手动同步';
-          const reasonLabel = historyReasonLabel(entry.reason, entry.message);
-          return `
-          <div class="recovery-item">
-            <div class="recovery-item-main">
-              <div class="recovery-item-title">${esc(kindLabel)}：${esc(entry.message || reasonLabel)}</div>
-              <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')} · ${esc(reasonLabel)} · 恢复前会先自动保存当前版本快照。</div>
-            </div>
-            <button class="btn btn-primary btn-sm" type="button"
-              onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
-          </div>`;
-        }).join('')}
-      </div>`).join('')}` : '';
-  list.innerHTML = namedVersionHtml + historyHtml;
 }
 
 function historyReasonLabel(reason, message = '') {
@@ -3090,21 +3116,64 @@ const App = {
 
   async openHistoryModal(name) {
     if (!name) return;
-    const [entries, versions] = await Promise.all([api.history(name), api.versions(name)]);
+    const [entries, versions, submits] = await Promise.all([
+      api.history(name),
+      api.versions(name),
+      api.collabSubmits(name).catch(() => ({ submits: [] })),
+    ]);
     if (entries.error) return alert(entries.error);
     if (versions.error) return alert(versions.error);
     S.recovery.historyDocName = name;
     S.recovery.historyEntries = Array.isArray(entries) ? entries : [];
     S.recovery.versionEntries = Array.isArray(versions) ? versions : [];
-    renderHistoryEntries(name, S.recovery.historyEntries, S.recovery.versionEntries);
+    S.recovery.submitEntries = Array.isArray(submits?.submits) ? submits.submits : [];
+    S.recovery.historyTab = 'remote';
+    renderHistoryEntries(name, S.recovery.historyEntries, S.recovery.versionEntries, S.recovery.submitEntries, 'remote');
     openModalById('history-modal-overlay');
+  },
+
+  switchHistoryTab(tab) {
+    S.recovery.historyTab = tab;
+    document.querySelectorAll('.history-tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
+    renderHistoryEntries(
+      S.recovery.historyDocName,
+      S.recovery.historyEntries,
+      S.recovery.versionEntries,
+      S.recovery.submitEntries,
+      tab,
+    );
   },
 
   closeHistoryModal() {
     S.recovery.historyDocName = '';
     S.recovery.historyEntries = [];
     S.recovery.versionEntries = [];
+    S.recovery.submitEntries = [];
     closeModalById('history-modal-overlay');
+  },
+
+  async previewSubmit(submitId) {
+    if (!S.currentFile) return;
+    const record = await api.collabSubmitLoad(S.currentFile, submitId);
+    if (!record?.document) return alert('加载提交记录失败。');
+    App.closeHistoryModal();
+    setActiveDocumentSession(record.document, {
+      fileName: S.currentFile,
+      readOnly: true,
+      preserveUiState: true,
+    });
+  },
+
+  async recoverFromSubmit(submitId, baseSeq) {
+    if (!S.currentFile) return;
+    const record = await api.collabSubmitLoad(S.currentFile, submitId);
+    if (!record?.document) return alert('加载提交记录失败。');
+    S.doc = record.document;
+    hydrateDocumentForUi(S.doc);
+    S.collab.draftBaseSeqOverride = Number(baseSeq || 0);
+    S.modified = true;
+    App.closeHistoryModal();
+    render();
   },
 
   async restoreHistory(name, snapshotId) {

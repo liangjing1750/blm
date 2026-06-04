@@ -191,6 +191,10 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_export_docx_start(body)
                 if path == "/api/collab/snapshot" and collab:
                     return self._handle_collab_snapshot(body)
+                if path == "/api/collab/submits/list" and collab:
+                    return self._handle_collab_submits_list(body)
+                if path == "/api/collab/submits/load" and collab:
+                    return self._handle_collab_submits_load(body)
 
                 return self._json({"error": "not found"}, 404)
             except Exception as exc:
@@ -275,6 +279,35 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._json({"error": "not found"}, 404)
             except Exception as exc:
                 return self._json({"error": str(exc)}, 409)
+
+        def _handle_collab_submits_list(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            name = str(payload.get("name", "")).strip()
+            if not name:
+                return self._json({"error": "name is required"}, 400)
+            try:
+                submits = collab.list_submits(name)
+                return self._json({"submits": submits})
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
+
+        def _handle_collab_submits_load(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            name = str(payload.get("name", "")).strip()
+            submit_id = str(payload.get("submitId", "")).strip()
+            if not name or not submit_id:
+                return self._json({"error": "name and submitId are required"}, 400)
+            try:
+                record = collab.load_submit(name, submit_id)
+                if record is None:
+                    return self._json({"error": "submit not found"}, 404)
+                return self._json(record)
+            except InvalidDocumentNameError as exc:
+                return self._json({"error": str(exc)}, 400)
 
         def _handle_feedback(self, body: bytes):
             payload = self._decode_json(body)

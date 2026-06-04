@@ -440,7 +440,7 @@ class CollaborationManager:
                 session.document = saved
                 self.storage._snapshot_document(
                     session.doc_name, save_message="协作同步", snapshot_document=saved, kind="collab",
-                    skip_canonical=True,
+                    skip_canonical=True, user=client.user_name,
                 )
 
             log_event(
@@ -473,7 +473,7 @@ class CollaborationManager:
         """每次Ctrl+S先落盘提交原文，返回 submit_id"""
         submits_dir = self._collab_dir(session.doc_name) / "submits"
         submits_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         submit_id = f"{ts}__seq{session.seq + 1}__baseSeq{base_seq}__{client.user_name}"
         submit_path = submits_dir / f"{submit_id}.json"
         submit_path.write_text(
@@ -486,7 +486,7 @@ class CollaborationManager:
                     "user": client.user_name,
                     "userId": client.user_id,
                     "clientId": client.client_id,
-                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                    "createdAt": datetime.now().isoformat(),
                     "document": document,
                 },
                 ensure_ascii=False,
@@ -495,6 +495,41 @@ class CollaborationManager:
             encoding="utf-8",
         )
         return submit_id
+
+    def list_submits(self, doc_name: str) -> list[dict]:
+        """列出文档的所有提交记录摘要（不包含完整文档）"""
+        safe_name = self.storage._validate_name(doc_name)
+        submits_dir = self._collab_dir(safe_name) / "submits"
+        if not submits_dir.is_dir():
+            return []
+        records = []
+        for path in sorted(submits_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                data = json.loads(path.read_text("utf-8"))
+                records.append({
+                    "submitId": data.get("submitId", path.stem),
+                    "doc": data.get("doc", safe_name),
+                    "seq": data.get("seq", 0),
+                    "baseSeq": data.get("baseSeq", 0),
+                    "user": data.get("user", ""),
+                    "userId": data.get("userId", ""),
+                    "createdAt": data.get("createdAt", ""),
+                    "documentBytes": len(json.dumps(data.get("document", {}), ensure_ascii=False)),
+                })
+            except (json.JSONDecodeError, OSError):
+                continue
+        return records
+
+    def load_submit(self, doc_name: str, submit_id: str) -> dict | None:
+        """加载指定的提交记录完整内容"""
+        safe_name = self.storage._validate_name(doc_name)
+        submit_path = self._collab_dir(safe_name) / "submits" / f"{submit_id}.json"
+        if not submit_path.is_file():
+            return None
+        try:
+            return json.loads(submit_path.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
 
     def _write_sync_log(
         self, session: CollabSession, submit_id: str, base_seq: int, stats: dict
