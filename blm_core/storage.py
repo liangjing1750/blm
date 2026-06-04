@@ -443,6 +443,7 @@ class WorkspaceStorage(DocumentFileStore):
 
     def _copy_package_metadata(self, source_dir: Path, target_dir: Path, safe_name: str) -> None:
         target_dir.mkdir(parents=True, exist_ok=True)
+        self._manifest_path(target_dir).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(self._manifest_path(source_dir), self._manifest_path(target_dir))
         markdown_path = self._package_markdown_path(source_dir, safe_name)
         if markdown_path.is_file():
@@ -860,10 +861,10 @@ class WorkspaceStorage(DocumentFileStore):
         return self.workspace_dir / self._validate_name(name)
 
     def _manifest_path(self, package_dir: Path) -> Path:
-        return package_dir / PACKAGE_MANIFEST_NAME
+        return package_dir / "manifest" / PACKAGE_MANIFEST_NAME
 
     def _package_markdown_path(self, package_dir: Path, name: str) -> Path:
-        return package_dir / f"{self._validate_name(name)}.md"
+        return package_dir / "manifest" / f"{self._validate_name(name)}.md"
 
     def _remove_stale_package_markdown_files(self, package_dir: Path, name: str) -> None:
         expected_path = self._package_markdown_path(package_dir, name).resolve()
@@ -1290,7 +1291,17 @@ class WorkspaceStorage(DocumentFileStore):
         return normalized
 
     def _is_package_dir(self, path: Path) -> bool:
-        return path.is_dir() and self._manifest_path(path).is_file()
+        if not path.is_dir():
+            return False
+        if self._manifest_path(path).is_file():
+            return True
+        # 过渡期兼容：根目录有 manifest.json（旧格式，迁移脚本会处理）
+        if (path / PACKAGE_MANIFEST_NAME).is_file():
+            return True
+        # 旧 manifest/ 目录（极老格式）
+        if (path / "manifest" / PACKAGE_MANIFEST_NAME).is_file():
+            return True
+        return False
 
     def _workspace_document_exists(self, name: str) -> bool:
         safe_name = self._validate_name(name)
@@ -1641,6 +1652,7 @@ class WorkspaceStorage(DocumentFileStore):
                 )
             process["prototypeFiles"] = prototype_refs
         package_dir.mkdir(parents=True, exist_ok=True)
+        self._manifest_path(package_dir).parent.mkdir(parents=True, exist_ok=True)
         self._manifest_path(package_dir).write_text(
             json.dumps(canonical_document(manifest_document, skip_migrate=True), ensure_ascii=False, indent=2),
             "utf-8",
@@ -1656,7 +1668,10 @@ class WorkspaceStorage(DocumentFileStore):
 
     def _load_package_dir(self, package_dir: Path) -> dict:
         manifest_path = self._manifest_path(package_dir)
-        if not manifest_path.exists():
+        if not manifest_path.is_file():
+            # 过渡期兼容：根目录 manifest.json
+            manifest_path = package_dir / PACKAGE_MANIFEST_NAME
+        if not manifest_path.is_file():
             raise FileNotFoundError(str(package_dir))
         raw_document = json.loads(manifest_path.read_text("utf-8"))
         document = deepcopy(raw_document if isinstance(raw_document, dict) else {})

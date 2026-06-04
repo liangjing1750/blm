@@ -12,7 +12,7 @@
   <div class="toolbar-left">
     <span class="brand-mark">
       <span class="logo">BLM</span>
-      <span class="product-version">v2.8</span>
+      <span class="product-version">v2.9</span>
     </span>
     <span id="file-name" class="file-name" data-testid="current-file-name">-</span>
     <span id="modified-badge" class="modified-badge hidden" data-testid="modified-badge">未保存</span>
@@ -230,20 +230,12 @@
     </div>
     <div class="merge-select-grid compare-select-grid">
       <label class="merge-select-field">
-        <span>新版本来源</span>
-        <select id="compare-left-source" data-testid="compare-left-source" onchange="App.switchCompareSource('left', this.value)"></select>
-      </label>
-      <label class="merge-select-field">
         <span>新版本文档</span>
         <select id="compare-left-select" data-testid="compare-left-select" onchange="App.selectCompareWorkspace('left', this.value)"></select>
       </label>
       <label class="merge-select-field">
         <span>新版本</span>
         <select id="compare-left-version-select" data-testid="compare-left-version-select" onchange="App.selectCompareVersion('left', this.value)"></select>
-      </label>
-      <label class="merge-select-field">
-        <span>旧版本来源</span>
-        <select id="compare-right-source" data-testid="compare-right-source" onchange="App.switchCompareSource('right', this.value)"></select>
       </label>
       <label class="merge-select-field">
         <span>旧版本文档</span>

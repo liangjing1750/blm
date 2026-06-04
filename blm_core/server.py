@@ -48,6 +48,18 @@ DOCS_MANIFEST = [
         "filename": "BLM协作与弱网排障指南.md",
         "summary": "查看实时协作、HTTP 降级、日志格式、管理端和跨网段断线排查步骤。",
     },
+    {
+        "id": "server-directory",
+        "title": "服务端文件夹说明",
+        "filename": "BLM服务端文件夹说明.md",
+        "summary": "workspace/ 目录结构、关键文件作用、文档序列号和升级迁移说明。",
+    },
+    {
+        "id": "collaboration-merge",
+        "title": "多人协作合并比对",
+        "filename": "BLM多人协作合并比对.md",
+        "summary": "3-way 合并规则、冲突处理、旧版本提交、比对功能与历史记录操作。",
+    },
 ]
 DOCS_INDEX = {item["id"]: item for item in DOCS_MANIFEST}
 API_VERSION = 2

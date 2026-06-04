@@ -1093,18 +1093,19 @@ class CollaborationManager:
         return document, seq
 
     def _read_persisted_seq(self, doc_name: str) -> int:
-        """从历史快照目录扫描最新 seq（替代 .seq 文件）。"""
-        safe_name = self.storage._validate_name(doc_name)
+        """从历史快照目录扫描最新 seq。旧快照无 seq 字段时，以快照总数兜底。"""
         history_dir = self.storage._history_dir(doc_name)
         if not history_dir.is_dir():
             return 0
+        snapshot_count = 0
         latest_seq = 0
         for snapshot_dir in history_dir.iterdir():
+            snapshot_count += 1
             meta = self.storage._read_snapshot_meta(snapshot_dir)
             s = int(meta.get("seq", 0) or 0)
             if s > latest_seq:
                 latest_seq = s
-        return latest_seq
+        return latest_seq if latest_seq > 0 else snapshot_count
 
     def _load_snapshot_by_seq(self, doc_name: str, find_seq: int) -> dict | None:
         """从磁盘历史快照中按 seq 查找 base 文档。"""
