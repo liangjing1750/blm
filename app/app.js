@@ -2556,6 +2556,7 @@ async function saveWorkspaceDocument(targetName, document, { currentName = '', a
     showAppToast('已检测到其他人的提交版本，系统已自动处理合并。');
   }
   await loadWorkspaceDocumentNames();
+  await loadWorkspaceDocumentSummaries(); // 刷新空间/标签缓存，避免打开列表显示旧值
   return result;
 }
 
