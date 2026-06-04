@@ -1,10 +1,24 @@
 'use strict';
 
 async function postJson(url, payload) {
+  let body = JSON.stringify(payload || {});
+  const headers = { 'Content-Type': 'application/json' };
+  const bodyBytes = new TextEncoder().encode(body);
+  if (bodyBytes.length > 1024 && typeof CompressionStream !== 'undefined') {
+    try {
+      const cs = new CompressionStream('gzip');
+      const writer = cs.writable.getWriter();
+      writer.write(bodyBytes);
+      writer.close();
+      const compressed = await new Response(cs.readable).arrayBuffer();
+      headers['Content-Encoding'] = 'gzip';
+      body = compressed;
+    } catch (_) { /* fall through to uncompressed */ }
+  }
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload || {}),
+    headers,
+    body,
   }).then((response) => response.json());
 }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import http.server
 import json
 import mimetypes
@@ -144,7 +145,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             self._begin_request()
             try:
                 path = urlparse(self.path).path
-                body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                body = self._read_body()
 
                 if path.startswith("/api/save/"):
                     return self._handle_save(path, body)
@@ -194,6 +195,15 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
 
         def log_message(self, *_):
             pass
+
+        def _read_body(self) -> bytes:
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            if self.headers.get("Content-Encoding", "").lower() == "gzip":
+                try:
+                    return gzip.decompress(raw)
+                except Exception:
+                    pass
+            return raw
 
         def _begin_request(self) -> None:
             self._request_started_at = time.perf_counter()
@@ -721,6 +731,16 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
 
         def _json(self, payload, code: int = 200):
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            accept_encoding = self.headers.get("Accept-Encoding", "").lower()
+            if "gzip" in accept_encoding and len(body) > 1024:
+                compressed = gzip.compress(body)
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", str(len(compressed)))
+                self.end_headers()
+                self.wfile.write(compressed)
+                return
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
