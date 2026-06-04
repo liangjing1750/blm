@@ -95,21 +95,25 @@ const S = {
       left: [],
       right: [],
     },
+    archiveVersions: {
+      left: [],
+      right: [],
+    },
     submitVersions: {
       left: [],
       right: [],
     },
     versionLoaded: {
-      left: { remote: false, submit: false },
-      right: { remote: false, submit: false },
+      left: { remote: false, version: false, submit: false },
+      right: { remote: false, version: false, submit: false },
     },
     versionLoading: {
       left: false,
       right: false,
     },
     versionVisibleCounts: {
-      left: { remote: 10, submit: 10 },
-      right: { remote: 10, submit: 10 },
+      left: { remote: 10, version: 10, submit: 10 },
+      right: { remote: 10, version: 10, submit: 10 },
     },
     labels: {
       left: '',
@@ -139,6 +143,9 @@ const S = {
     openingFileName: '',
     workspacePage: 1,
     trashPage: 1,
+    historyVisibleCount: 20,
+    versionVisibleCount: 20,
+    submitVisibleCount: 20,
     workspaceLoading: false,
     trashLoading: false,
   },
@@ -415,10 +422,11 @@ function resetCompareState() {
   S.compare.versionIds = { left: '', right: '' };
   S.compare.sourceKinds = { left: 'remote', right: 'remote' };
   S.compare.versions = { left: [], right: [] };
+  S.compare.archiveVersions = { left: [], right: [] };
   S.compare.submitVersions = { left: [], right: [] };
-  S.compare.versionLoaded = { left: { remote: false, submit: false }, right: { remote: false, submit: false } };
+  S.compare.versionLoaded = { left: { remote: false, version: false, submit: false }, right: { remote: false, version: false, submit: false } };
   S.compare.versionLoading = { left: false, right: false };
-  S.compare.versionVisibleCounts = { left: { remote: 10, submit: 10 }, right: { remote: 10, submit: 10 } };
+  S.compare.versionVisibleCounts = { left: { remote: 10, version: 10, submit: 10 }, right: { remote: 10, version: 10, submit: 10 } };
   S.compare.labels = { left: '', right: '' };
   S.compare.documents = { left: null, right: null };
   S.compare.result = null;

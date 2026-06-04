@@ -6335,6 +6335,16 @@ body.is-collab-reconnecting * {
   font-size: 13px;
   font-weight: 700;
 }
+.history-load-sentinel {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px dashed #bfdbfe;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+}
 .history-day-group {
   display: grid;
   gap: 8px;

@@ -845,6 +845,25 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
   }
   const list = document.getElementById('history-list');
   if (!list) return;
+  const previousScrollTop = list.scrollTop || 0;
+  const visibleVersions = Math.max(20, Number(S.recovery.versionVisibleCount || 20));
+  const visibleHistory = Math.max(20, Number(S.recovery.historyVisibleCount || 20));
+  const visibleSubmits = Math.max(20, Number(S.recovery.submitVisibleCount || 20));
+  list.onscroll = () => {
+    if (list.scrollTop + list.clientHeight < list.scrollHeight - 80) return;
+    if (tab === 'local' && S.recovery.submitVisibleCount < submits.length) {
+      S.recovery.submitVisibleCount += 20;
+      renderHistoryEntries(docName, entries, versions, submits, tab);
+    } else if (tab !== 'local') {
+      if (S.recovery.versionVisibleCount < versions.length) {
+        S.recovery.versionVisibleCount += 20;
+        renderHistoryEntries(docName, entries, versions, submits, tab);
+      } else if (S.recovery.historyVisibleCount < entries.length) {
+        S.recovery.historyVisibleCount += 20;
+        renderHistoryEntries(docName, entries, versions, submits, tab);
+      }
+    }
+  };
 
   const formatTime = (ts) => (ts || '').replace('T', ' ').slice(0, 19);
   const formatBytes = (b) => b > 1024*1024 ? `${(b/1024/1024).toFixed(1)}MB` : `${(b/1024).toFixed(0)}KB`;
@@ -857,7 +876,7 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
     }
     list.innerHTML = `
       <div class="recovery-subtitle">每次 Ctrl+S 的提交原文。打开为只读预览；恢复会将此版本设为当前文档，Ctrl+S 后与最新版合并。</div>
-      ${submits.slice(0, 50).map((s) => `
+      ${submits.slice(0, visibleSubmits).map((s) => `
         <div class="recovery-item">
           <div class="recovery-item-main">
             <div class="recovery-item-title">${esc(s.user || '未知用户')} 提交 · 基于 v${s.baseSeq} → v${s.seq}</div>
@@ -867,7 +886,8 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
             onclick='App.previewSubmit(${JSON.stringify(s.submitId)})'>打开</button>
           <button class="btn btn-primary btn-sm" type="button"
             onclick='App.recoverFromSubmit(${JSON.stringify(s.submitId)}, ${s.baseSeq || 0})'>恢复</button>
-        </div>`).join('')}`;
+        </div>`).join('')}
+      ${visibleSubmits < submits.length ? '<div class="history-load-sentinel">继续向下滚动加载更多提交记录</div>' : ''}`;
   } else {
     // 远端历史记录 tab
     const hasData = entries.length || versions.length;
@@ -877,7 +897,7 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
     }
     const namedVersionHtml = versions.length ? `
       <div class="history-section-title">归档版本</div>
-      ${versions.map((entry) => `
+      ${versions.slice(0, visibleVersions).map((entry) => `
         <div class="recovery-item">
           <div class="recovery-item-main">
             <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
@@ -885,8 +905,11 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
           </div>
           <button class="btn btn-primary btn-sm" type="button"
             onclick='App.openVersion(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
-        </div>`).join('')}` : '';
-    const groupedHistory = groupHistoryEntriesByDay(entries);
+          <button class="btn btn-outline btn-sm" type="button"
+            onclick='copyVersionLocator(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>复制链接</button>
+        </div>`).join('')}
+      ${visibleVersions < versions.length ? '<div class="history-load-sentinel">继续向下滚动加载更多归档版本</div>' : ''}` : '';
+    const groupedHistory = groupHistoryEntriesByDay(entries.slice(0, visibleHistory));
     const historyHtml = entries.length ? `
       <div class="history-section-title">协作快照</div>
       <div class="recovery-subtitle">每次同步自动保存的状态点，含提交人信息。</div>
@@ -904,13 +927,17 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
               </div>
               <button class="btn btn-outline btn-sm" type="button"
                 onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
+              <button class="btn btn-outline btn-sm" type="button"
+                onclick='App.archiveHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>归档版本</button>
               <button class="btn btn-primary btn-sm" type="button"
                 onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>恢复</button>
             </div>`;
           }).join('')}
-        </div>`).join('')}` : '';
+        </div>`).join('')}
+      ${visibleHistory < entries.length ? '<div class="history-load-sentinel">继续向下滚动加载更多历史记录</div>' : ''}` : '';
     list.innerHTML = namedVersionHtml + historyHtml;
   }
+  list.scrollTop = previousScrollTop;
 }
 
 function historyReasonLabel(reason, message = '') {
@@ -1123,6 +1150,8 @@ function renderCompareWorkspaceList() {
     const isLoading = !!S.compare.versionLoading?.[kind];
     const emptyOption = sourceKind === 'submit'
       ? '<option value="">请选择本地提交记录</option>'
+      : sourceKind === 'version'
+      ? '<option value="">请选择归档版本</option>'
       : '<option value="">当前版本</option>';
     const extraOptions = [];
     if (S.compare.workspaceNames?.[kind]) {
@@ -1131,7 +1160,7 @@ function renderCompareWorkspaceList() {
       } else if (!isLoaded) {
         extraOptions.push('<option value="__load__">加载版本记录...</option>');
       } else if (versions.length > visibleCount) {
-        extraOptions.push(`<option value="__more__">再加载 ${Math.min(10, versions.length - visibleCount)} 条...</option>`);
+        extraOptions.push(`<option value="__scroll_hint__" disabled>继续滚动加载 ${Math.min(10, versions.length - visibleCount)} 条...</option>`);
       }
     }
     versionSelect.innerHTML = [emptyOption]
@@ -1146,6 +1175,11 @@ function renderCompareWorkspaceList() {
       if (S.compare.workspaceNames?.[kind] && !S.compare.versionLoaded?.[kind]?.[currentSourceKind] && !S.compare.versionLoading?.[kind]) {
         App.loadCompareVersionOptions(kind, S.compare.workspaceNames[kind]);
       }
+    };
+    versionSelect.onwheel = () => extendCompareVersionOptionsIfNeeded(kind);
+    versionSelect.onscroll = () => extendCompareVersionOptionsIfNeeded(kind);
+    versionSelect.onkeydown = (event) => {
+      if (['ArrowDown', 'PageDown', 'End'].includes(event.key)) extendCompareVersionOptionsIfNeeded(kind);
     };
   });
 }
@@ -1169,6 +1203,8 @@ function formatCompareSubmitOptionLabel(entry = {}) {
 function getCompareVersionOptions(kind, sourceKind = getCompareSelectedSourceKind(kind)) {
   return sourceKind === 'submit'
     ? (S.compare.submitVersions?.[kind] || [])
+    : sourceKind === 'version'
+    ? (S.compare.archiveVersions?.[kind] || [])
     : (S.compare.versions?.[kind] || []);
 }
 
@@ -1178,7 +1214,19 @@ function getCompareVersionVisibleCount(kind, sourceKind = getCompareSelectedSour
 
 function resetCompareVersionPaging(kind) {
   if (!S.compare.versionVisibleCounts) S.compare.versionVisibleCounts = {};
-  S.compare.versionVisibleCounts[kind] = { remote: 10, submit: 10 };
+  S.compare.versionVisibleCounts[kind] = { remote: 10, version: 10, submit: 10 };
+}
+
+function extendCompareVersionOptionsIfNeeded(kind) {
+  const sourceKind = getCompareSelectedSourceKind(kind);
+  const options = getCompareVersionOptions(kind, sourceKind);
+  const currentCount = getCompareVersionVisibleCount(kind, sourceKind);
+  if (options.length <= currentCount) return;
+  S.compare.versionVisibleCounts[kind][sourceKind] = currentCount + 10;
+  const selectedId = getCompareSelectedVersionId(kind);
+  syncCompareWorkspaceUi();
+  const select = document.getElementById(`compare-${kind}-version-select`);
+  if (select && selectedId) select.value = selectedId;
 }
 
 function syncCompareWorkspaceUi() {
@@ -1199,12 +1247,18 @@ function getCompareSelectedVersionId(kind) {
 function getCompareSelectedSourceKind(kind) {
   const select = document.getElementById(`compare-${kind}-source-select`);
   const value = String(select?.value || S.compare.sourceKinds?.[kind] || 'remote').trim();
-  return value === 'submit' ? 'submit' : 'remote';
+  if (value === 'submit') return 'submit';
+  if (value === 'version') return 'version';
+  return 'remote';
 }
 
 function getCompareVersionLabel(kind, snapshotId) {
   const sourceKind = getCompareSelectedSourceKind(kind);
-  if (!snapshotId) return sourceKind === 'submit' ? '未选择提交记录' : '当前版本';
+  if (!snapshotId) {
+    if (sourceKind === 'submit') return '未选择提交记录';
+    if (sourceKind === 'version') return '未选择归档版本';
+    return '未选择远端历史';
+  }
   const entry = getCompareVersionOptions(kind, sourceKind).find((item) => item.id === snapshotId);
   return entry?.label || snapshotId;
 }
@@ -1221,7 +1275,7 @@ let compareResultRequestSeq = 0;
 function hasCompareSelection() {
   return ['left', 'right'].every((kind) => {
     if (!getCompareSelectedName(kind)) return false;
-    if (getCompareSelectedSourceKind(kind) === 'submit') return Boolean(getCompareSelectedVersionId(kind));
+    if (getCompareSelectedSourceKind(kind) !== 'remote') return Boolean(getCompareSelectedVersionId(kind));
     return true;
   });
 }
@@ -2341,6 +2395,12 @@ async function loadCompareDocument(kind) {
     if (record?.error) return { error: record.error };
     if (!record?.document) return { error: '本地提交记录加载失败。' };
     document = record.document;
+  } else if (sourceKind === 'version') {
+    if (!versionId) return { error: '请选择归档版本。' };
+    const versionIdValue = versionId.startsWith('v__') ? versionId.slice(3) : versionId;
+    const result = await api.loadVersion(name, versionIdValue);
+    if (result.error) return { error: result.error };
+    document = result;
   } else if (versionId) {
     const prefix = versionId.slice(0, 3);
     const id = versionId.slice(3);
@@ -2365,7 +2425,7 @@ async function loadCompareDocument(kind) {
   S.compare.sourceKinds[kind] = sourceKind;
   S.compare.versionIds[kind] = versionId;
   S.compare.documents[kind] = document;
-  const sourceLabel = sourceKind === 'submit' ? '本地提交' : '远端历史';
+  const sourceLabel = sourceKind === 'submit' ? '本地提交' : sourceKind === 'version' ? '归档版本' : '远端历史';
   S.compare.labels[kind] = `${name} / ${sourceLabel} / ${getCompareVersionLabel(kind, versionId)}`;
   return document;
 }
@@ -3212,6 +3272,9 @@ const App = {
     if (subtitle) subtitle.textContent = name ? `当前文档：${name}` : '';
     // 重置 tab 为远端
     S.recovery.historyTab = 'remote';
+    S.recovery.historyVisibleCount = 20;
+    S.recovery.versionVisibleCount = 20;
+    S.recovery.submitVisibleCount = 20;
     document.querySelectorAll('.history-tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === 'remote'));
     openModalById('history-modal-overlay');
 
@@ -3231,6 +3294,11 @@ const App = {
 
   switchHistoryTab(tab) {
     S.recovery.historyTab = tab;
+    if (tab === 'local') S.recovery.submitVisibleCount = 20;
+    else {
+      S.recovery.historyVisibleCount = 20;
+      S.recovery.versionVisibleCount = 20;
+    }
     document.querySelectorAll('.history-tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
     renderHistoryEntries(
       S.recovery.historyDocName,
@@ -3246,6 +3314,9 @@ const App = {
     S.recovery.historyEntries = [];
     S.recovery.versionEntries = [];
     S.recovery.submitEntries = [];
+    S.recovery.historyVisibleCount = 20;
+    S.recovery.versionVisibleCount = 20;
+    S.recovery.submitVisibleCount = 20;
     closeModalById('history-modal-overlay');
   },
 
@@ -3281,6 +3352,30 @@ const App = {
     App.closeHistoryModal();
     App.closeOpenModal();
     setActiveDocumentSession(result.document, { fileName: result.name || name });
+  },
+
+  async archiveHistorySnapshot(name, snapshotId) {
+    const message = await showAppPrompt('给这个归档版本填写说明：', `历史记录 ${snapshotId}`, {
+      title: '归档历史记录',
+      confirmLabel: '归档版本',
+    });
+    if (message === null) return;
+    if (typeof setSaveProgress === 'function') {
+      setSaveProgress(true, 30, '正在归档历史记录...', '正在读取历史快照并保存为稳定只读版本。');
+    }
+    try {
+      const result = await api.loadHistory(name, snapshotId);
+      if (result.error) return alert(result.error);
+      const document = result.document || result;
+      const created = await api.createVersion(name, document, String(message || '').trim());
+      if (created.error) return alert(created.error);
+      const versionId = String(created.version?.id || '').trim();
+      await App.openHistoryModal(name);
+      if (versionId) copyVersionLocator(name, versionId);
+      showAppToast('历史记录已归档为版本。');
+    } finally {
+      if (typeof setSaveProgress === 'function') setSaveProgress(false);
+    }
   },
 
   async openHistorySnapshot(name, snapshotId) {
@@ -3744,6 +3839,8 @@ const App = {
     verSel.innerHTML = '<option value="">加载中...</option>';
     try {
       const sourceKind = getCompareSelectedSourceKind(kind);
+      if (!S.compare.versionLoaded[kind]) S.compare.versionLoaded[kind] = { remote: false, version: false, submit: false };
+      if (!S.compare.archiveVersions) S.compare.archiveVersions = { left: [], right: [] };
       if (sourceKind === 'submit') {
         const submits = await api.collabSubmits(docName).catch(() => ({ submits: [] }));
         const subList = Array.isArray(submits?.submits) ? submits.submits : [];
@@ -3752,21 +3849,18 @@ const App = {
           label: formatCompareSubmitOptionLabel(entry),
           kind: 'submit',
         }));
-      } else {
-        const [versions, history] = await Promise.all([
-          api.versions(docName).catch(() => []),
-          api.history(docName).catch(() => []),
-        ]);
-        const remoteOptions = [];
-        if (Array.isArray(versions)) {
-          versions.forEach((entry) => {
-            remoteOptions.push({
+      } else if (sourceKind === 'version') {
+        const versions = await api.versions(docName).catch(() => []);
+        S.compare.archiveVersions[kind] = Array.isArray(versions)
+          ? versions.map((entry) => ({
               id: `v__${entry.id || ''}`,
               label: `归档版本：${entry.label || entry.id || '未命名版本'}`,
               kind: 'version',
-            });
-          });
-        }
+            }))
+          : [];
+      } else {
+        const history = await api.history(docName).catch(() => []);
+        const remoteOptions = [];
         if (Array.isArray(history)) {
           history.forEach((entry) => {
             remoteOptions.push({
@@ -3789,33 +3883,27 @@ const App = {
   },
 
   selectCompareSource(kind, sourceKind) {
-    S.compare.sourceKinds[kind] = sourceKind === 'submit' ? 'submit' : 'remote';
+    S.compare.sourceKinds[kind] = sourceKind === 'submit' ? 'submit' : sourceKind === 'version' ? 'version' : 'remote';
     S.compare.versionIds[kind] = '';
     S.compare.documents[kind] = null;
     resetCompareVersionPaging(kind);
     S.compare.labels[kind] = S.compare.workspaceNames[kind]
-      ? `${S.compare.workspaceNames[kind]} / ${S.compare.sourceKinds[kind] === 'submit' ? '本地提交' : '远端历史'} / ${getCompareVersionLabel(kind, '')}`
+      ? `${S.compare.workspaceNames[kind]} / ${S.compare.sourceKinds[kind] === 'submit' ? '本地提交' : S.compare.sourceKinds[kind] === 'version' ? '归档版本' : '远端历史'} / ${getCompareVersionLabel(kind, '')}`
       : '';
     markCompareNeedsRun();
     syncCompareWorkspaceUi();
   },
 
   async selectCompareVersion(kind, entryId) {
-    if (entryId === '__loading__') return;
+    if (entryId === '__loading__' || entryId === '__scroll_hint__') return;
     if (entryId === '__load__') {
       await App.loadCompareVersionOptions(kind, S.compare.workspaceNames[kind]);
-      return;
-    }
-    if (entryId === '__more__') {
-      const sourceKind = getCompareSelectedSourceKind(kind);
-      S.compare.versionVisibleCounts[kind][sourceKind] = getCompareVersionVisibleCount(kind, sourceKind) + 10;
-      syncCompareWorkspaceUi();
       return;
     }
     S.compare.versionIds[kind] = String(entryId || '').trim();
     S.compare.documents[kind] = null;
     S.compare.labels[kind] = S.compare.workspaceNames[kind]
-      ? `${S.compare.workspaceNames[kind]} / ${getCompareSelectedSourceKind(kind) === 'submit' ? '本地提交' : '远端历史'} / ${getCompareVersionLabel(kind, S.compare.versionIds[kind])}`
+      ? `${S.compare.workspaceNames[kind]} / ${getCompareSelectedSourceKind(kind) === 'submit' ? '本地提交' : getCompareSelectedSourceKind(kind) === 'version' ? '归档版本' : '远端历史'} / ${getCompareVersionLabel(kind, S.compare.versionIds[kind])}`
       : '';
     markCompareNeedsRun(`${kind === 'left' ? '新' : '旧'}版本选择已变化。`);
     syncCompareWorkspaceUi();
@@ -3840,10 +3928,12 @@ const App = {
     S.compare.versionIds[kind] = '';
     S.compare.sourceKinds[kind] = S.compare.sourceKinds?.[kind] || 'remote';
     S.compare.versions[kind] = [];
+    if (!S.compare.archiveVersions) S.compare.archiveVersions = {};
+    S.compare.archiveVersions[kind] = [];
     S.compare.submitVersions[kind] = [];
     if (!S.compare.versionLoaded) S.compare.versionLoaded = {};
     if (!S.compare.versionLoading) S.compare.versionLoading = {};
-    S.compare.versionLoaded[kind] = { remote: false, submit: false };
+    S.compare.versionLoaded[kind] = { remote: false, version: false, submit: false };
     S.compare.versionLoading[kind] = false;
     resetCompareVersionPaging(kind);
     S.compare.documents[kind] = null;
@@ -3857,12 +3947,12 @@ const App = {
     // 版本下拉框懒加载：聚焦或选择“加载版本记录”时才拉取远端/提交记录。
     const verSel = document.getElementById(`compare-${kind}-version-select`);
     if (verSel) {
-      verSel.innerHTML = '<option value="">当前版本</option><option value="__more__">加载更多版本...</option>';
+      verSel.innerHTML = '<option value="">当前版本</option><option value="__load__">加载版本记录...</option>';
       verSel.dataset.loaded = '';
       verSel.dataset.docName = normalized;
       verSel.onfocus = () => { if (!verSel.dataset.loaded) App.loadCompareVersionOptions(kind, normalized); };
       verSel.onchange = function() {
-        if (this.value === '__more__' && !this.dataset.loaded) { App.loadCompareVersionOptions(kind, normalized); return; }
+        if (this.value === '__load__' && !this.dataset.loaded) { App.loadCompareVersionOptions(kind, normalized); return; }
         App.selectCompareVersion(kind, this.value);
       };
     }

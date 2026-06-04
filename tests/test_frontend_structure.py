@@ -253,7 +253,7 @@ class FrontendStructureTests(unittest.TestCase):
             style_css.find("#toolbar .btn-ghost { background: transparent; color: var(--header-text);"),
         )
 
-    def test_compare_modal_supports_remote_and_submit_sources(self):
+    def test_compare_modal_supports_remote_archive_and_submit_sources(self):
         index_html = (APP_DIR / "index.html").read_text("utf-8")
         app_js = (APP_DIR / "app.js").read_text("utf-8")
         state_js = (APP_DIR / "state.js").read_text("utf-8")
@@ -262,12 +262,17 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn('id="compare-right-source-select"', index_html)
         self.assertIn("App.selectCompareSource('left', this.value)", index_html)
         self.assertIn("App.selectCompareSource('right', this.value)", index_html)
+        self.assertIn('<option value="version">归档版本记录</option>', index_html)
         self.assertIn("sourceKinds", state_js)
+        self.assertIn("archiveVersions", state_js)
         self.assertIn("submitVersions", state_js)
         self.assertIn("function getCompareSelectedSourceKind", app_js)
         self.assertIn("api.collabSubmitLoad(name, submitId)", app_js)
         self.assertIn("api.loadVersion(name, id)", app_js)
         self.assertIn("api.loadHistory(name, id)", app_js)
+        self.assertIn("async archiveHistorySnapshot", app_js)
+        self.assertIn("copyVersionLocator", app_js)
+        self.assertIn("extendCompareVersionOptionsIfNeeded", app_js)
 
     def test_business_ids_are_hidden_from_business_modeling_ui(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
