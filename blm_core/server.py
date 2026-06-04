@@ -15,6 +15,7 @@ from blm_core.admin import create_admin_handler, log_admin_start
 from blm_core.diagnostics import configure_diagnostics, log_error, log_event, runtime_fields
 from blm_core.document import canonical_document, migrate_document
 from blm_core.collab import CollaborationManager
+from blm_core.feedback import FeedbackStore
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.storage import (
     InvalidDocumentNameError,
@@ -65,6 +66,7 @@ def build_attachment_content_disposition(filename: str) -> str:
 
 def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: CollaborationManager | None = None):
     docs_dir = (app_dir.parent / "docs").resolve()
+    feedback_store = FeedbackStore(storage.workspace_dir)
     export_jobs: dict[str, dict] = {}
     export_jobs_lock = threading.RLock()
 
@@ -110,6 +112,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._json(storage.list_document_summaries())
                 if path == "/api/trash":
                     return self._json(storage.list_trash())
+                if path == "/api/feedback":
+                    return self._json(feedback_store.load())
                 if path == "/api/docs":
                     return self._json(DOCS_MANIFEST)
                 if path.startswith("/api/docs/assets/"):
@@ -173,6 +177,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_trash_delete(body)
                 if path == "/api/trash/clear":
                     return self._handle_trash_clear(body)
+                if path == "/api/feedback":
+                    return self._handle_feedback(body)
                 if path == "/api/document/normalize":
                     return self._handle_document_normalize(body)
                 if path == "/api/document/validate":
@@ -269,6 +275,26 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._json({"error": "not found"}, 404)
             except Exception as exc:
                 return self._json({"error": str(exc)}, 409)
+
+        def _handle_feedback(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            user_profile = payload.get("user")
+            if not isinstance(user_profile, dict):
+                user_profile = {}
+            payload = dict(payload)
+            payload["user"] = dict(user_profile)
+            payload["user"]["remoteAddr"] = self.client_address[0] if self.client_address else ""
+            try:
+                result = feedback_store.apply(payload)
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except KeyError as exc:
+                return self._json({"error": str(exc)}, 404)
+            if result.get("error"):
+                return self._json(result, 400)
+            return self._json(result)
 
         def _handle_export(self, path: str):
             name = unquote(path[len("/api/export/"):])

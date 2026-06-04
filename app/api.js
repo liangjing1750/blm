@@ -145,6 +145,12 @@ const api = {
   async trash() {
     return fetch('/api/trash').then((response) => response.json());
   },
+  async feedback() {
+    return fetch('/api/feedback').then((response) => response.json());
+  },
+  async saveFeedback(payload) {
+    return postJson('/api/feedback', payload);
+  },
   async docs() {
     return fetch('/api/docs').then((response) => response.json());
   },

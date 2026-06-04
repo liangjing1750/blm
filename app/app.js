@@ -519,7 +519,7 @@ function getPreservedDocUiState(doc, sourceUi = {}) {
     navHistory: cloneUiNavigationHistory(sourceUi?.navHistory),
   };
 
-  const validTabs = new Set(['domain', 'process', 'data', 'rules', 'preview', 'manual']);
+  const validTabs = new Set(['domain', 'process', 'data', 'rules', 'preview', 'manual', 'feedback']);
   if (!validTabs.has(String(next.tab || ''))) next.tab = base.tab;
 
   if (next.procView === 'card') next.procView = 'flow';
@@ -3462,6 +3462,88 @@ const App = {
   cmdManual() {
     navigate('manual', {});
   },
+
+  async cmdFeedback() {
+    if (typeof ensureUserConfiguredForApp === 'function' && !ensureUserConfiguredForApp()) return;
+    let doc = await api.feedback();
+    if (!doc || doc.error) {
+      alert('加载反馈建议失败: ' + (doc?.error || '未知错误'));
+      return;
+    }
+    doc.items = Array.isArray(doc.items) ? doc.items : [];
+    S.ui.feedbackDoc = doc;
+    S.ui.tab = 'feedback';
+    S.ui.feedbackExpandedIndex = -1;
+    S.ui.feedbackFilterCategory = '';
+    S.ui.feedbackFilterStatus = '';
+    const feedbackUserName = String(S.user?.name || S.collab?.userName || '').trim();
+    S.ui.feedbackOwnerFilter = feedbackUserName === '梁晶' ? 'all' : 'mine';
+    S.ui.feedbackCreating = false;
+    render();
+  },
+
+  async saveFeedbackItem(action, uid, data) {
+    if (typeof ensureUserConfiguredForApp === 'function' && !ensureUserConfiguredForApp()) return false;
+    if (action === 'add') {
+      const title = String(data.title || '').trim();
+      if (!title) {
+        showAppToast('请先填写反馈标题。');
+        return false;
+      }
+      data = {
+        uid: createUiUid('fb'),
+        category: data.category || '问题',
+        title,
+        description: String(data.description || '').trim(),
+      };
+    } else if (action === 'message') {
+      data = { reply: String(data.content || '').trim(), status: data.status || '' };
+      if (!data.reply) {
+        showAppToast('请先填写对话内容。');
+        return false;
+      }
+    } else if (action === 'editMessage') {
+      data = {
+        messageUid: data.messageUid || '',
+        content: String(data.content || '').trim(),
+      };
+      if (!data.messageUid || !data.content) {
+        showAppToast('请先填写对话内容。');
+        return false;
+      }
+    } else if (action === 'update') {
+      data = {
+        category: data.category || '',
+        status: data.status || '',
+      };
+    } else if (action !== 'reply' || !uid) {
+      return false;
+    }
+    const apiAction = action === 'message' ? 'reply' : action;
+    const saved = await api.saveFeedback({
+      action: apiAction,
+      uid,
+      messageUid: data.messageUid || '',
+      data,
+      user: S.user || { name: S.collab?.userName || '匿名' },
+    });
+    if (!saved || saved.error) {
+      showAppToast(`反馈保存失败：${saved?.error || '未知错误'}`);
+      return false;
+    }
+    saved.items = Array.isArray(saved.items) ? saved.items : [];
+    if (action === 'add' && data.uid) {
+      S.ui.feedbackSelectedUid = data.uid;
+      S.ui.feedbackCreating = false;
+      S.ui.feedbackOwnerFilter = 'all';
+    }
+    if (action === 'editMessage') S.ui.feedbackEditingMessageUid = '';
+    S.ui.feedbackDoc = saved;
+    showAppToast(action === 'add' ? '反馈已提交。' : action === 'message' ? '对话已发送。' : action === 'editMessage' ? '对话已更新。' : '反馈已更新。');
+    render();
+    return true;
+  },
+
 
   async cmdCompare() {
     resetCompareState();

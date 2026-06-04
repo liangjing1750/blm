@@ -282,21 +282,29 @@ function _defaultSbCollapse(doc) {
 function render() {
   renderToolbar();
   const manualMode = S.ui.tab === 'manual';
-  document.body.classList.toggle('manual-shell', manualMode);
+  const feedbackMode = S.ui.tab === 'feedback';
+  document.body.classList.toggle('manual-shell', manualMode || feedbackMode);
   if (manualMode) {
     document.getElementById('tab-bar').innerHTML = '';
     if (typeof renderManualTab === 'function') renderManualTab();
     if (typeof bootManualTab === 'function') void bootManualTab();
     return;
   }
+  if (feedbackMode) {
+    document.getElementById('tab-bar').innerHTML = '';
+    if (typeof renderFeedbackTab === 'function') renderFeedbackTab();
+    return;
+  }
   renderTabBar();
-  if(!S.doc){renderNoDoc();return;}
+  if(!S.doc){renderNoDoc();}
+  else {
   renderSidebar();
   const t=S.ui.tab;
   if     (t==='domain') renderDomainTab();
   else if(t==='process') renderProcessTab();
   else if(t==='data')   renderDataTab();
   else if(t==='preview') renderPreviewTab();
+  } // end if(S.doc) else block
   /* 渲染完成后初始化所有 auto-resize textarea 高度 */
   setTimeout(initAutoResize, 0);
 }
@@ -334,6 +342,7 @@ function renderToolbar() {
   document.getElementById('readonly-alert')?.classList.toggle('hidden', !S.readOnly);
   if (typeof renderCollabConflictBanner === 'function') renderCollabConflictBanner();
   document.getElementById('toolbar-manual-button')?.classList.toggle('active', S.ui.tab === 'manual');
+  document.querySelector('[data-testid="toolbar-feedback-button"]')?.classList.toggle('active', S.ui.tab === 'feedback');
   if (typeof syncSavingControls === 'function') syncSavingControls();
   if (typeof refreshSaveDialogText === 'function') {
     refreshSaveDialogText();

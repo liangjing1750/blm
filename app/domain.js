@@ -1264,6 +1264,223 @@ function closeBusinessModelDialog() {
   rerenderBusinessModelDialogContext();
 }
 
+function renderFeedbackTab() {
+  const doc = S.ui.feedbackDoc;
+  const items = Array.isArray(doc?.items) ? doc.items : [];
+  const PAGE_SIZE = 20;
+  const counts = { '缺陷': 0, '建议': 0, '问题': 0 };
+  items.forEach((item) => { if (counts.hasOwnProperty(item.category)) counts[item.category]++; });
+  const statusCounts = { '待处理': 0, '处理中': 0, '已解决': 0, '已关闭': 0 };
+  items.forEach((item) => {
+    const status = item.status || '待处理';
+    if (statusCounts.hasOwnProperty(status)) statusCounts[status]++;
+  });
+  const CATEGORIES = ['缺陷', '建议', '问题'];
+  const STATUSES = ['待处理', '处理中', '已解决', '已关闭'];
+  const filterCategory = S.ui.feedbackFilterCategory || '';
+  const filterStatus = S.ui.feedbackFilterStatus || '';
+  const currentUserName = String(S.user?.name || S.collab?.userName || '').trim();
+  const ownerFilter = S.ui.feedbackOwnerFilter || (currentUserName === '梁晶' ? 'all' : 'mine');
+  S.ui.feedbackOwnerFilter = ownerFilter;
+  const filtered = items.filter((item) =>
+    (!filterCategory || item.category === filterCategory) &&
+    (!filterStatus || item.status === filterStatus) &&
+    (ownerFilter !== 'mine' || !currentUserName || item.author === currentUserName)
+  );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, Number(S.ui.feedbackPage || 1)), totalPages);
+  S.ui.feedbackPage = currentPage;
+  const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const selectedUid = S.ui.feedbackSelectedUid || '';
+  const selectedItem = items.find((item) => item.uid === selectedUid) || null;
+
+  const container = document.getElementById('tab-content');
+  if (!container) return;
+
+  const renderCard = (item) => {
+    const category = item.category || '问题';
+    const status = item.status || '待处理';
+    const uid = item.uid || '';
+    const createdAt = String(item.createdAt || '').replace('T', ' ');
+    const messages = Array.isArray(item.messages) ? item.messages : [];
+    const lastMessage = messages.length ? messages[messages.length - 1] : null;
+    const summary = lastMessage?.content || item.description || '暂无对话内容。';
+    return `<button type="button" class="fb-tile ${selectedUid === uid ? 'fb-tile--active' : ''}" onclick="selectFeedbackItem(decodeURIComponent('${encodeURIComponent(uid)}'))">
+        <div class="fb-card-head">
+          <span class="fb-badge fb-badge--${esc(category)}">${esc(category)}</span>
+          <span class="fb-badge fb-badge--status fb-badge--${esc(status)}">${esc(status)}</span>
+        </div>
+        <h4 class="fb-card-title">${esc(item.title || '(无标题)')}</h4>
+        <p class="fb-card-desc">${esc(String(summary).slice(0, 90))}${String(summary).length > 90 ? '…' : ''}</p>
+        <div class="fb-tile-foot">
+          <span>${esc(item.author || '匿名')}</span>
+          <span>${esc(createdAt || '刚刚')}</span>
+          <span>${messages.length || 0} 楼</span>
+        </div>
+      </button>`;
+  };
+
+  const renderDetail = () => {
+    if (S.ui.feedbackCreating) {
+      return `<aside class="feedback-detail">
+        <div class="fb-detail-head">
+          <div>
+            <p class="feedback-kicker">新建反馈</p>
+            <h3>提交一条反馈建议</h3>
+          </div>
+          <button class="icon-btn" onclick="S.ui.feedbackCreating=false;render()" title="取消">×</button>
+        </div>
+        <section class="fb-create-panel">
+          <label>类型
+            <select id="fb-add-cat"><option value="问题">问题</option><option value="缺陷">缺陷</option><option value="建议">建议</option></select>
+          </label>
+          <label>标题
+            <input id="fb-add-title" placeholder="用一句话说明反馈内容">
+          </label>
+          <label>详细描述
+            <textarea id="fb-add-desc" rows="7" placeholder="补充现象、期望、影响范围或复现步骤"></textarea>
+          </label>
+          <button class="btn btn-primary" onclick="App.saveFeedbackItem('add','',{category:document.getElementById('fb-add-cat').value,title:document.getElementById('fb-add-title').value,description:document.getElementById('fb-add-desc').value})">提交反馈</button>
+        </section>
+      </aside>`;
+    }
+    if (!selectedItem) {
+      return `<aside class="feedback-detail">
+        <div class="fb-detail-empty">
+          <strong>选择一条反馈</strong>
+          <p>点击中间的反馈卡片后，这里会显示类型、状态和对话记录。</p>
+        </div>
+      </aside>`;
+    }
+    const uid = selectedItem.uid || '';
+    const messages = Array.isArray(selectedItem.messages) ? selectedItem.messages : [];
+    return `<aside class="feedback-detail">
+      <div class="fb-detail-head">
+        <div>
+          <p class="feedback-kicker">反馈详情</p>
+          <h3>${esc(selectedItem.title || '(无标题)')}</h3>
+        </div>
+      </div>
+      <section class="fb-detail-section">
+        <label>类型
+          <select onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:this.value,status:document.getElementById('fb-detail-status').value})">
+            ${CATEGORIES.map((c) => `<option value="${c}" ${(selectedItem.category||'问题')===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </label>
+        <label>状态
+          <select id="fb-detail-status" onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:document.querySelector('.feedback-detail select').value,status:this.value})">
+            ${STATUSES.map((s) => `<option value="${s}" ${(selectedItem.status||'待处理')===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </label>
+      </section>
+      <section class="fb-thread">
+        <h4>对话记录</h4>
+        <div class="fb-thread-list">
+          ${messages.length ? messages.map((message, index) => `<article class="fb-thread-item">
+            <div class="fb-thread-meta">
+              <strong>#${message.floor || index + 1}</strong>
+              <span>${esc(message.author || '匿名')}</span>
+              <span>${esc(String(message.createdAt || '').replace('T', ' ') || '-')}</span>
+              ${message.updatedAt ? `<span>已修改 ${esc(String(message.updatedAt).replace('T', ' '))}</span>` : ''}
+            </div>
+            ${S.ui.feedbackEditingMessageUid === message.uid ? `
+              <textarea id="fb-message-${index}" rows="4">${esc(message.content || '')}</textarea>
+            ` : `<div class="fb-thread-content">${esc(message.content || '')}</div>`}
+            <div class="fb-thread-actions">
+              ${S.ui.feedbackEditingMessageUid === message.uid ? `
+                <button class="btn btn-outline btn-sm" onclick="S.ui.feedbackEditingMessageUid='';render()">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="App.saveFeedbackItem('editMessage',decodeURIComponent('${encodeURIComponent(uid)}'),{messageUid:decodeURIComponent('${encodeURIComponent(message.uid || '')}'),content:document.getElementById('fb-message-${index}').value}).then(function(ok){if(ok)S.ui.feedbackEditingMessageUid=''})">保存修改</button>
+              ` : `<button class="btn btn-outline btn-sm" onclick="S.ui.feedbackEditingMessageUid=decodeURIComponent('${encodeURIComponent(message.uid || '')}');render()">修改</button>`}
+            </div>
+          </article>`).join('') : `<div class="fb-empty fb-empty--compact">暂无对话记录。</div>`}
+        </div>
+        <div class="fb-message-composer">
+          <textarea id="fb-new-message" rows="4" placeholder="追加一条对话记录，说明补充信息、处理意见或验证结果"></textarea>
+          <button class="btn btn-primary" onclick="App.saveFeedbackItem('message',decodeURIComponent('${encodeURIComponent(uid)}'),{content:document.getElementById('fb-new-message').value})">发送</button>
+        </div>
+      </section>
+    </aside>`;
+  };
+
+  container.innerHTML = `<div class="feedback-layout">
+    <section class="feedback-hero feedback-hero--wide">
+      <div>
+        <p class="feedback-kicker">产品共建</p>
+        <h2>反馈建议</h2>
+        <p>记录使用中的问题、缺陷和优化想法。中间卡片用于快速浏览，右侧详情用于论坛式盖楼跟进。</p>
+      </div>
+      <div class="feedback-global-stat">
+        <strong>${filtered.length}</strong><span>当前结果</span>
+        <strong>${totalPages}</strong><span>页数</span>
+      </div>
+      <button class="btn btn-primary" onclick="openFeedbackAddForm()">＋ 新建反馈</button>
+    </section>
+    <div class="feedback-workbench feedback-workbench--three">
+      <aside class="feedback-left">
+        <div class="feedback-filter-card">
+          <div class="fb-owner-toggle" role="group" aria-label="筛选反馈归属">
+            <button class="${ownerFilter==='mine'?'active':''}" onclick="S.ui.feedbackOwnerFilter='mine';S.ui.feedbackPage=1;render()">我的反馈</button>
+            <button class="${ownerFilter==='all'?'active':''}" onclick="S.ui.feedbackOwnerFilter='all';S.ui.feedbackPage=1;render()">所有人</button>
+          </div>
+          <div class="feedback-filters feedback-filters--inline">
+            <select class="fb-filter" onchange="S.ui.feedbackFilterCategory=this.value;S.ui.feedbackPage=1;render()" aria-label="筛选反馈类别">
+              <option value="">全部类型</option>
+              ${CATEGORIES.map((c) => `<option value="${c}" ${filterCategory===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+            <select class="fb-filter" onchange="S.ui.feedbackFilterStatus=this.value;S.ui.feedbackPage=1;render()" aria-label="筛选处理状态">
+              <option value="">全部状态</option>
+              ${STATUSES.map((s) => `<option value="${s}" ${filterStatus===s?'selected':''}>${s}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <section class="feedback-summary">
+          <div><strong>${items.length}</strong><span>全部反馈</span></div>
+          ${CATEGORIES.map((c) => `<div><strong>${counts[c] || 0}</strong><span>${c}</span></div>`).join('')}
+          <div><strong>${statusCounts['待处理'] + statusCounts['处理中']}</strong><span>待跟进</span></div>
+        </section>
+      </aside>
+      <main class="feedback-main">
+        <div class="feedback-tile-grid">
+          ${pageItems.length ? pageItems.map(renderCard).join('') : `<div class="fb-empty">
+            <strong>暂无反馈记录</strong>
+            <p>可以先提交一条问题、建议或缺陷，后续处理记录会沉淀在这里。</p>
+            <button class="btn btn-outline btn-sm" onclick="openFeedbackAddForm()">＋ 提交第一条反馈</button>
+          </div>`}
+        </div>
+        <div class="feedback-pagination">
+          <button class="btn btn-outline btn-sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="setFeedbackPage(${currentPage - 1})">上一页</button>
+          <span>第 ${currentPage} / ${totalPages} 页，每页 20 条</span>
+          <button class="btn btn-outline btn-sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="setFeedbackPage(${currentPage + 1})">下一页</button>
+        </div>
+      </main>
+      ${renderDetail()}
+    </div>
+  </div>`;
+}
+
+function openFeedbackAddForm() {
+  S.ui.feedbackCreating = true;
+  S.ui.feedbackSelectedUid = '';
+  render();
+  setTimeout(() => document.getElementById('fb-add-title')?.focus(), 30);
+}
+
+function toggleFeedbackReply(index) {
+  S.ui.feedbackExpandedIndex = S.ui.feedbackExpandedIndex === index ? -1 : index;
+  render();
+}
+
+function selectFeedbackItem(uid) {
+  S.ui.feedbackSelectedUid = uid;
+  S.ui.feedbackCreating = false;
+  render();
+}
+
+function setFeedbackPage(page) {
+  S.ui.feedbackPage = Math.max(1, Number(page || 1));
+  render();
+}
+
 async function removeTaskDefinition(taskDefinitionId) {
   const task = findTaskDefinitionRef(taskDefinitionId);
   if (!task) return false;
