@@ -274,6 +274,20 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("copyVersionLocator", app_js)
         self.assertIn("extendCompareVersionOptionsIfNeeded", app_js)
 
+    def test_history_restore_is_local_and_actions_are_visually_distinct(self):
+        app_js = (APP_DIR / "app.js").read_text("utf-8")
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn(">只读打开</button>", app_js)
+        self.assertIn(">本地恢复</button>", app_js)
+        self.assertIn("btn btn-danger-solid btn-sm", app_js)
+        self.assertIn("onclick='App.archiveHistorySnapshot", app_js)
+        self.assertIn("btn btn-primary btn-sm", app_js)
+        self.assertIn("const result = await api.loadHistory(name, snapshotId);", app_js)
+        self.assertNotIn("const result = await api.restoreHistory(name, snapshotId);", app_js)
+        self.assertIn("点击“立即同步”后才会影响其他人", app_js)
+        self.assertIn(".btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }", style_css)
+
     def test_business_ids_are_hidden_from_business_modeling_ui(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
         process_js = (APP_DIR / "process.js").read_text("utf-8")

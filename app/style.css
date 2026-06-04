@@ -4035,6 +4035,8 @@ select { appearance: auto; }
 .btn-sm { padding: 3px 8px; font-size: 12px; }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover { background: #fee2e2; }
+.btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-danger-solid:hover { background: #dc2626; border-color: #dc2626; }
 .btn-icon {
   background: none; border: none; cursor: pointer; color: var(--text-m);
   padding: 3px 6px; border-radius: 4px; font-size: 13px;

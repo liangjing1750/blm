@@ -883,9 +883,9 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
             <div class="recovery-item-meta">${esc(formatTime(s.createdAt))} · ${s.documentBytes ? formatBytes(s.documentBytes) : ''}</div>
           </div>
           <button class="btn btn-outline btn-sm" type="button"
-            onclick='App.previewSubmit(${JSON.stringify(s.submitId)})'>打开</button>
-          <button class="btn btn-primary btn-sm" type="button"
-            onclick='App.recoverFromSubmit(${JSON.stringify(s.submitId)}, ${s.baseSeq || 0})'>恢复</button>
+            onclick='App.previewSubmit(${JSON.stringify(s.submitId)})'>只读打开</button>
+          <button class="btn btn-danger-solid btn-sm" type="button"
+            onclick='App.recoverFromSubmit(${JSON.stringify(s.submitId)}, ${s.baseSeq || 0})'>本地恢复</button>
         </div>`).join('')}
       ${visibleSubmits < submits.length ? '<div class="history-load-sentinel">继续向下滚动加载更多提交记录</div>' : ''}`;
   } else {
@@ -903,8 +903,8 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
             <div class="recovery-item-title">${esc(entry.label || entry.id || '')}</div>
             <div class="recovery-item-meta">稳定只读快照</div>
           </div>
-          <button class="btn btn-primary btn-sm" type="button"
-            onclick='App.openVersion(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
+          <button class="btn btn-outline btn-sm" type="button"
+            onclick='App.openVersion(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>只读打开</button>
           <button class="btn btn-outline btn-sm" type="button"
             onclick='copyVersionLocator(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>复制链接</button>
         </div>`).join('')}
@@ -926,11 +926,11 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
                 <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')}</div>
               </div>
               <button class="btn btn-outline btn-sm" type="button"
-                onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>打开</button>
-              <button class="btn btn-outline btn-sm" type="button"
-                onclick='App.archiveHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>归档版本</button>
+                onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>只读打开</button>
               <button class="btn btn-primary btn-sm" type="button"
-                onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>恢复</button>
+                onclick='App.archiveHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>归档版本</button>
+              <button class="btn btn-danger-solid btn-sm" type="button"
+                onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>本地恢复</button>
             </div>`;
           }).join('')}
         </div>`).join('')}
@@ -3336,22 +3336,43 @@ const App = {
     if (!S.currentFile) return;
     const record = await api.collabSubmitLoad(S.currentFile, submitId);
     if (!record?.document) return alert('加载提交记录失败。');
-    S.doc = record.document;
-    hydrateDocumentForUi(S.doc);
+    const document = record.document;
+    document.meta = document.meta && typeof document.meta === 'object' ? document.meta : {};
+    document.meta.readonly = false;
+    delete document.meta.version_id;
+    delete document.meta.version_label;
+    setActiveDocumentSession(document, {
+      fileName: S.currentFile,
+      readOnly: false,
+      preserveUiState: true,
+    });
     S.collab.draftBaseSeqOverride = Number(baseSeq || 0);
     S.modified = true;
+    if (typeof saveLocalCollabDraft === 'function') saveLocalCollabDraft();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    if (typeof renderCollabStatus === 'function') renderCollabStatus();
     App.closeHistoryModal();
-    render();
+    showAppToast('已本地恢复提交记录，点击“立即同步”后才会影响其他人。');
   },
 
   async restoreHistory(name, snapshotId) {
-    if (!await confirmDiscardUnsavedChanges('恢复历史版本')) return;
-    const result = await api.restoreHistory(name, snapshotId);
+    if (!await confirmDiscardUnsavedChanges('本地恢复历史版本')) return;
+    const result = await api.loadHistory(name, snapshotId);
     if (result.error) return alert(result.error);
+    const document = result.document || result;
+    document.meta = document.meta && typeof document.meta === 'object' ? document.meta : {};
+    document.meta.readonly = false;
+    delete document.meta.version_id;
+    delete document.meta.version_label;
     resetRecoveryState();
     App.closeHistoryModal();
     App.closeOpenModal();
-    setActiveDocumentSession(result.document, { fileName: result.name || name });
+    setActiveDocumentSession(document, { fileName: name, readOnly: false, preserveUiState: true });
+    S.modified = true;
+    if (typeof saveLocalCollabDraft === 'function') saveLocalCollabDraft();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    if (typeof renderCollabStatus === 'function') renderCollabStatus();
+    showAppToast('已本地恢复历史版本，点击“立即同步”后才会影响其他人。');
   },
 
   async archiveHistorySnapshot(name, snapshotId) {
