@@ -6366,6 +6366,8 @@ body.is-collab-reconnecting * {
                       padding: 2px 6px; border-radius: 4px; opacity: 0; font-size: 13px; }
 .file-list-item:hover .file-list-item-del { opacity: 1; }
 .file-empty { font-size: 13px; color: var(--text-m); font-style: italic; text-align: center; padding: 20px; }
+.file-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 40px 20px; color: #64748b; font-size: 14px; }
+.file-loading .operation-spinner { width: 20px; height: 20px; border-width: 2px; }
 .recovery-subtitle {
   margin: -4px 0 12px;
   color: var(--text-m);
@@ -6375,13 +6377,13 @@ body.is-collab-reconnecting * {
 .recovery-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.recovery-item .btn:first-of-type { margin-left: auto; }
 .recovery-item .btn + .btn { margin-left: 6px; }
 .recovery-item + .recovery-item {
   margin-top: 6px;

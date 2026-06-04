@@ -88,14 +88,10 @@ class WorkspaceStorage(DocumentFileStore):
         super().__init__(exporter=exporter)
         self.workspace_dir = Path(workspace_dir)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
-        self.history_dir = self.workspace_dir / ".history"
-        self.versions_dir = self.workspace_dir / ".versions"
         self.trash_dir = self.workspace_dir / ".trash"
         self.temp_dir = self.workspace_dir / ".tmp"
         self.uploads_dir = self.workspace_dir / ".uploads"
         self.attachments_dir = self.workspace_dir / ATTACHMENTS_DIR_NAME
-        self.history_dir.mkdir(exist_ok=True)
-        self.versions_dir.mkdir(exist_ok=True)
         self.trash_dir.mkdir(exist_ok=True)
         self.temp_dir.mkdir(exist_ok=True)
         self.uploads_dir.mkdir(exist_ok=True)
@@ -180,7 +176,7 @@ class WorkspaceStorage(DocumentFileStore):
 
     def list_history(self, name: str) -> list[dict]:
         safe_name = self._validate_name(name)
-        target_dir = self.history_dir / safe_name
+        target_dir = self._history_dir(name)
         if not target_dir.exists():
             return []
         entries: list[dict] = []
@@ -227,7 +223,7 @@ class WorkspaceStorage(DocumentFileStore):
 
     def list_versions(self, name: str) -> list[dict]:
         safe_name = self._validate_name(name)
-        target_dir = self.versions_dir / safe_name
+        target_dir = self._versions_dir(name)
         if not target_dir.exists():
             return []
         entries: list[dict] = []
@@ -255,7 +251,7 @@ class WorkspaceStorage(DocumentFileStore):
             safe_name = self._validate_name(name)
             source_document = deepcopy(document) if isinstance(document, dict) else self.load(safe_name)
             version_id = self._timestamp()
-            target_root = self.versions_dir / safe_name
+            target_root = self._versions_dir(name)
             version_dir = target_root / version_id
             target_root.mkdir(parents=True, exist_ok=True)
             self._write_package_dir(version_dir, safe_name, source_document, source_package_dir=self._package_dir(safe_name))
@@ -269,7 +265,7 @@ class WorkspaceStorage(DocumentFileStore):
     def load_version(self, name: str, version_id: str) -> dict:
         safe_name = self._validate_name(name)
         safe_version_id = self._sanitize_workspace_entry(version_id)
-        version_dir = self.versions_dir / safe_name / safe_version_id
+        version_dir = self._versions_dir(name) / safe_version_id
         if not self._is_package_dir(version_dir):
             raise FileNotFoundError(version_id)
         document = self._load_package_dir(version_dir)
@@ -486,7 +482,7 @@ class WorkspaceStorage(DocumentFileStore):
                 return {"ok": False, "skipped": True, "reason": "missing_document"}
             source_document = deepcopy(document if isinstance(document, dict) else self.load(safe_name))
             content_hash = self._history_content_hash(source_document)
-            target_root = self.history_dir / safe_name
+            target_root = self._history_dir(name)
             target_root.mkdir(parents=True, exist_ok=True)
             history_entries = self._history_snapshot_entries(target_root)
             last_same_hash = next(
@@ -830,7 +826,19 @@ class WorkspaceStorage(DocumentFileStore):
                 legacy_json_path.stem,
             ):
                 result["documents"] += 1
-        for history_root in sorted(path for path in self.history_dir.iterdir() if path.is_dir()):
+        # 兼容旧 workspace 级 .history 目录和新文档级 history/ 目录
+        old_history = self.workspace_dir / ".history"
+        history_roots: list[Path] = []
+        if old_history.is_dir():
+            history_roots.extend(p for p in old_history.iterdir() if p.is_dir())
+        # 文档级 history/
+        for pkg in self.workspace_dir.iterdir():
+            if not pkg.is_dir() or pkg.name.startswith("."):
+                continue
+            h = pkg / "history"
+            if h.is_dir():
+                history_roots.append(pkg)
+        for history_root in sorted(set(history_roots), key=lambda p: p.name):
             for snapshot_json_path in sorted(history_root.glob("*.json")):
                 if self._migrate_legacy_json_to_package(
                     snapshot_json_path,
@@ -1246,10 +1254,22 @@ class WorkspaceStorage(DocumentFileStore):
         return moment.strftime("%Y-%m-%d %H:%M:%S")
 
     def _history_snapshot_dir(self, name: str, snapshot_id: str) -> Path:
-        return self.history_dir / self._validate_name(name) / self._sanitize_workspace_entry(snapshot_id)
+        return self._history_dir(name) / self._sanitize_workspace_entry(snapshot_id)
 
     def _history_snapshot_json_path(self, name: str, snapshot_id: str) -> Path:
-        return self.history_dir / self._validate_name(name) / f"{self._sanitize_workspace_entry(snapshot_id)}.json"
+        return self._history_dir(name) / f"{self._sanitize_workspace_entry(snapshot_id)}.json"
+
+    def _history_dir(self, name: str) -> Path:
+        """文档级历史快照目录（DOCNAME/history/）。"""
+        d = self._package_dir(self._validate_name(name)) / "history"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _versions_dir(self, name: str) -> Path:
+        """文档级归档版本目录（DOCNAME/versions/）。"""
+        d = self._package_dir(self._validate_name(name)) / "versions"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
 
     def _validate_name(self, name: str) -> str:
         normalized = (name or "").strip()
@@ -1420,9 +1440,10 @@ class WorkspaceStorage(DocumentFileStore):
         snapshot_id: str = "",
         skip_canonical: bool = False,
         user: str = "",
+        seq: int = 0,
     ) -> None:
         safe_name = self._validate_name(name)
-        target_root = self.history_dir / safe_name
+        target_root = self._history_dir(name)
         snapshot_id = self._sanitize_workspace_entry(snapshot_id or self._timestamp())
         snapshot_dir = target_root / snapshot_id
         target_root.mkdir(parents=True, exist_ok=True)
@@ -1452,6 +1473,7 @@ class WorkspaceStorage(DocumentFileStore):
             reason=reason,
             content_hash=content_hash or self._history_content_hash(snapshot_document),
             user=user,
+            seq=int(seq or 0),
         )
         self._trim_history(target_root)
 
@@ -1489,6 +1511,7 @@ class WorkspaceStorage(DocumentFileStore):
         reason: str = "",
         content_hash: str = "",
         user: str = "",
+        seq: int = 0,
     ) -> None:
         normalized_kind = str(kind or "").strip()
         if normalized_kind not in ("auto", "manual", "collab"):
@@ -1508,6 +1531,7 @@ class WorkspaceStorage(DocumentFileStore):
             "timestamp": snapshot_id,
             "timestampLabel": self._format_timestamp_label(snapshot_id),
             "user": str(user or "").strip(),
+            "seq": int(seq or 0),
         }
         (snapshot_dir / SNAPSHOT_META_NAME).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),

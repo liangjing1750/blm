@@ -2001,5 +2001,70 @@ class CollaborationSubmitRecoveryTests(unittest.TestCase):
             self.assertEqual(final["meta"]["date"], "2026-06-15", "B的日期修改应保留")
 
 
+    def test_very_old_baseseq_loads_from_disk_snapshot(self):
+        """Given: 用户A保存50次后服务重启
+           When: 用户B用baseSeq=30(已被内存淘汰)提交
+           Then: 从磁盘历史快照加载base,精确3-way合并"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["meta"]["author"] = "Base"
+            base_doc["meta"]["date"] = "2026-01-01"
+            base_doc["roles"] = [{"uid": "r1", "name": "BaseRole", "desc": "", "group": "G", "subDomains": []}]
+            storage.save("CollabSmoke", base_doc)
+
+            # 模拟服务重启：每次创建新的manager来清空内存snapshots
+            doc_name = "CollabSmoke"
+
+            # 首次manager：做30次保存（seq到30，内存有0-30的snapshots）
+            mgr1 = CollaborationManager(storage, autosave_interval=0)
+            for i in range(30):
+                local = deepcopy(storage.load(doc_name))
+                local["meta"]["author"] = f"Author{i}"
+                mgr1.apply_http_snapshot(doc_name,
+                    {"id": f"u{i}", "name": f"U{i}", "sessionId": f"s{i}"},
+                    {"baseSeq": i, "document": local})
+            # seq=30处修改role名称
+            local30 = deepcopy(storage.load(doc_name))
+            local30["roles"][0]["name"] = "RoleChangedBySeq30"
+            mgr1.apply_http_snapshot(doc_name,
+                {"id": "u30", "name": "U30", "sessionId": "s30"},
+                {"baseSeq": 30, "document": local30})
+            del mgr1  # seq现在=31，内存snapshots清空
+
+            # 用户B后来继续保存了20次（seq到51）
+            mgr2 = CollaborationManager(storage, autosave_interval=0)
+            for i in range(20):
+                local = deepcopy(storage.load(doc_name))
+                local["meta"]["date"] = f"2026-0{i+1}-15"
+                mgr2.apply_http_snapshot(doc_name,
+                    {"id": f"ub{i}", "name": f"UB{i}", "sessionId": f"sb{i}"},
+                    {"baseSeq": i + 31, "document": local})
+
+            # 现在seq=51，内存只有最近的snapshots
+
+            # 用户A用非常旧的baseSeq=30提交
+            old_doc = deepcopy(local30)  # seq=30时的文档
+            old_doc["meta"]["author"] = "VeryOldAuthor"
+            result = mgr2.apply_http_snapshot(doc_name,
+                {"id": "old-a", "name": "OldA", "sessionId": "old-sess"},
+                {"baseSeq": 30, "document": old_doc})
+
+            self.assertTrue(result["ok"])
+            final = storage.load(doc_name)
+
+            # A的author修改应保留（A改了author，B没改）
+            self.assertEqual(final["meta"]["author"], "VeryOldAuthor",
+                             "A的author修改应保留")
+            # B的date修改应保留（B改了date，A没改）
+            self.assertIn("2026-0", final["meta"]["date"],
+                          "B的date修改应保留")
+            # seq=30时的role修改应保留
+            self.assertEqual(final["roles"][0]["name"], "RoleChangedBySeq30",
+                             "role修改应保留")
+            # A的baseSeq太旧但不影响合并正确性
+            self.assertGreater(result["seq"], 31)
+
+
 if __name__ == "__main__":
     unittest.main()

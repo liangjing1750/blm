@@ -390,10 +390,12 @@ class CollaborationManager:
 
             stats: dict = {"merged": True, "conflictCount": 0, "base_missing": False}
             conflict_list = []
+            _bd = None
             if base_seq == session.seq:
                 merged = document
-            elif base_doc := session.snapshots.get(base_seq):
-                merged, conflict_list, stats = self._merge_collaboration(base_doc, document, session.document)
+                _bd = session.snapshots.get(base_seq - 1) if base_seq > 0 else session.snapshots.get(0)
+            elif (_bd := (session.snapshots.get(base_seq) or self._load_snapshot_by_seq(session.doc_name, base_seq))):
+                merged, conflict_list, stats = self._merge_collaboration(_bd, document, session.document)
             else:
                 stats["base_missing"] = True
                 merged, conflict_list, stats = self._merge_collaboration(session.document, document)
@@ -438,9 +440,11 @@ class CollaborationManager:
             if document_changed:
                 saved = self.storage.save_collaboration_working_copy(session.doc_name, session.document)
                 session.document = saved
+                summary = _diff_summary(_bd, saved) if _bd is not None else ""
+                save_msg = f"更新至V{session.seq}" + (f"：{summary}" if summary else "")
                 self.storage._snapshot_document(
-                    session.doc_name, save_message="协作同步", snapshot_document=saved, kind="collab",
-                    skip_canonical=True, user=client.user_name,
+                    session.doc_name, save_message=save_msg, snapshot_document=saved, kind="collab",
+                    skip_canonical=True, user=client.user_name, seq=session.seq,
                 )
 
             log_event(
@@ -1085,7 +1089,72 @@ class CollaborationManager:
 
     def _load_document_with_changelog(self, doc_name: str) -> tuple[dict, int]:
         document = self.storage.load(doc_name)
-        return document, 0
+        seq = self._read_persisted_seq(doc_name)
+        return document, seq
+
+    def _read_persisted_seq(self, doc_name: str) -> int:
+        """从历史快照目录扫描最新 seq（替代 .seq 文件）。"""
+        safe_name = self.storage._validate_name(doc_name)
+        history_dir = self.storage._history_dir(doc_name)
+        if not history_dir.is_dir():
+            return 0
+        latest_seq = 0
+        for snapshot_dir in history_dir.iterdir():
+            meta = self.storage._read_snapshot_meta(snapshot_dir)
+            s = int(meta.get("seq", 0) or 0)
+            if s > latest_seq:
+                latest_seq = s
+        return latest_seq
+
+    def _load_snapshot_by_seq(self, doc_name: str, find_seq: int) -> dict | None:
+        """从磁盘历史快照中按 seq 查找 base 文档。"""
+        history_dir = self.storage._history_dir(doc_name)
+        if not history_dir.is_dir():
+            return None
+        for snapshot_dir in history_dir.iterdir():
+            meta = self.storage._read_snapshot_meta(snapshot_dir)
+            if int(meta.get("seq", -1) or -1) == find_seq:
+                return self.storage.load_history(doc_name, snapshot_dir.name)
+        return None
+
+
+def _diff_summary(base: dict | None, current: dict) -> str:
+    """生成两个文档版本之间的可读变更摘要。"""
+    if not base or not isinstance(base, dict):
+        return ""
+    labels = {"roles": "角色", "stages": "阶段", "processes": "流程", "entities": "实体",
+              "relations": "关系", "rules": "规则", "businessComponents": "组件",
+              "businessConstructs": "构件", "taskDefinitions": "任务"}
+    parts = []
+    # meta 变更
+    meta_names = {"title": "标题", "domain": "标识", "author": "作者", "date": "日期",
+                  "space": "团队空间", "tags": "标签"}
+    meta_changed = []
+    for k, label in meta_names.items():
+        if json.dumps(base.get("meta", {}).get(k), ensure_ascii=False, sort_keys=True) != \
+           json.dumps(current.get("meta", {}).get(k), ensure_ascii=False, sort_keys=True):
+            meta_changed.append(label)
+    if meta_changed:
+        parts.append(f"修改了{'、'.join(meta_changed[:3])}")
+    # 实体变更
+    for field, label in labels.items():
+        base_items = base.get(field, []) if isinstance(base.get(field), list) else []
+        cur_items = current.get(field, []) if isinstance(current.get(field), list) else []
+        base_uids = {str(i.get("uid", "")) for i in base_items if isinstance(i, dict)}
+        cur_uids = {str(i.get("uid", "")) for i in cur_items if isinstance(i, dict)}
+        added = len(cur_uids - base_uids)
+        removed = len(base_uids - cur_uids)
+        changed = 0
+        for item in cur_items:
+            if not isinstance(item, dict): continue
+            uid = str(item.get("uid", ""))
+            base_item = next((b for b in base_items if isinstance(b, dict) and str(b.get("uid","")) == uid), None)
+            if base_item and json.dumps(base_item, ensure_ascii=False, sort_keys=True) != json.dumps(item, ensure_ascii=False, sort_keys=True):
+                changed += 1
+        if added: parts.append(f"新增{added}个{label}")
+        if removed: parts.append(f"删除{removed}个{label}")
+        if changed: parts.append(f"修改了{changed}个{label}")
+    return "，".join(parts[:5])
 
 
 def _handler_remote_addr(handler: Any) -> str:

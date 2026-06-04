@@ -894,11 +894,12 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
         <div class="history-day-group">
           <div class="history-day-title">${esc(group.label)}</div>
           ${group.items.map((entry) => {
-            const userLabel = entry.user ? `${entry.user} · ` : '';
+            const userLabel = entry.user ? `${entry.user} ` : '';
+            const msg = entry.message || '';
             return `
             <div class="recovery-item">
               <div class="recovery-item-main">
-                <div class="recovery-item-title">${esc(userLabel)}协作同步</div>
+                <div class="recovery-item-title">${esc(userLabel)}${esc(msg || '协作同步')}</div>
                 <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')}</div>
               </div>
               <button class="btn btn-outline btn-sm" type="button"
@@ -3116,6 +3117,16 @@ const App = {
 
   async openHistoryModal(name) {
     if (!name) return;
+    // 先显示加载状态
+    const list = document.getElementById('history-list');
+    if (list) list.innerHTML = '<div class="file-loading"><span class="operation-spinner" aria-hidden="true"></span> 正在加载历史记录...</div>';
+    const subtitle = document.getElementById('history-modal-subtitle');
+    if (subtitle) subtitle.textContent = name ? `当前文档：${name}` : '';
+    // 重置 tab 为远端
+    S.recovery.historyTab = 'remote';
+    document.querySelectorAll('.history-tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === 'remote'));
+    openModalById('history-modal-overlay');
+
     const [entries, versions, submits] = await Promise.all([
       api.history(name),
       api.versions(name),
@@ -3127,9 +3138,7 @@ const App = {
     S.recovery.historyEntries = Array.isArray(entries) ? entries : [];
     S.recovery.versionEntries = Array.isArray(versions) ? versions : [];
     S.recovery.submitEntries = Array.isArray(submits?.submits) ? submits.submits : [];
-    S.recovery.historyTab = 'remote';
     renderHistoryEntries(name, S.recovery.historyEntries, S.recovery.versionEntries, S.recovery.submitEntries, 'remote');
-    openModalById('history-modal-overlay');
   },
 
   switchHistoryTab(tab) {
@@ -3624,14 +3633,86 @@ const App = {
       return;
     }
     syncCompareWorkspaceUi();
+    // 初始化来源下拉框
+    const leftSource = document.getElementById('compare-left-source');
+    const rightSource = document.getElementById('compare-right-source');
+    [leftSource, rightSource].forEach((sel) => {
+      if (sel) sel.innerHTML = '<option value=”workspace”>工作区文档</option><option value=”history”>远端历史记录</option><option value=”submit”>本地提交记录</option>';
+    });
     const defaultLeft = (S.currentFile && S.compare.workspaceFiles.includes(S.currentFile))
       ? S.currentFile
       : S.compare.workspaceFiles[0];
     const defaultRight = defaultLeft;
     await App.selectCompareWorkspace('left', defaultLeft, { silent: true });
     await App.selectCompareWorkspace('right', defaultRight, { silent: true });
-    markCompareNeedsRun('默认文档已准备好，点击“开始比对”生成版本报告。');
+    markCompareNeedsRun('默认文档已准备好，点击”开始比对”生成版本报告。');
     openModalById('compare-modal-overlay');
+  },
+
+  async switchCompareSource(kind, source) {
+    S.compare[kind + 'Source'] = source;
+    const docSel = document.getElementById(`compare-${kind}-select`);
+    const verSel = document.getElementById(`compare-${kind}-version-select`);
+    if (!docSel || !verSel) return;
+
+    if (source === 'workspace') {
+      docSel.style.display = '';
+      verSel.style.display = '';
+      syncCompareWorkspaceUi();
+      const files = S.compare.workspaceFiles || [];
+      if (files.length) await App.selectCompareWorkspace(kind, files[0], { silent: true });
+    } else {
+      docSel.style.display = 'none';
+      const docName = S.compare[kind + 'File'] || S.currentFile || '';
+      if (!docName) { verSel.innerHTML = '<option value=””>请先切换到工作区文档选择文档</option>'; return; }
+      const loader = source === 'history' ? api.history : api.collabSubmits;
+      const result = await loader(docName).catch(() => null);
+      const entries = source === 'history'
+        ? (Array.isArray(result) ? result : [])
+        : (Array.isArray(result?.submits) ? result.submits : []);
+      S.compare[kind + 'Entries'] = entries;
+      verSel.innerHTML = '<option value=””>选择版本</option>' + entries.map((e) => {
+        const label = source === 'history'
+          ? (e.user ? `${e.user} V${e.seq || '?'} ${e.timestamp_label || ''}` : (e.message || e.timestamp_label || e.id))
+          : `${e.user || '?'} V${e.seq} ${(e.createdAt||'').replace('T',' ').slice(0,16)}`;
+        return `<option value=”${esc(e.id || e.submitId)}”>${esc(label)}</option>`;
+      }).join('');
+      S.compare[kind + 'File'] = docName;
+      App.selectCompareVersion(kind, '');
+    }
+  },
+
+  async selectCompareVersion(kind, entryId) {
+    if (!entryId) return;
+    const source = S.compare[kind + 'Source'] || 'workspace';
+    const docName = S.compare[kind + 'File'] || S.currentFile || '';
+
+    if (source === 'workspace') {
+      await App.selectCompareWorkspace(kind, entryId);
+      return;
+    }
+
+    // 加载远端历史或提交记录
+    let doc = null;
+    if (source === 'history') {
+      const result = await api.loadHistory(docName, entryId);
+      if (result?.error) return alert('加载历史版本失败: ' + result.error);
+      doc = result;
+    } else {
+      const record = await api.collabSubmitLoad(docName, entryId);
+      if (!record?.document) return alert('加载提交记录失败。');
+      doc = record.document;
+    }
+
+    if (kind === 'left') {
+      S.compare.leftDoc = migrateDocumentIfNeeded(doc);
+      S.compare.leftLabel = `${source === 'history' ? '远端历史' : '本地提交'} · ${docName}`;
+    } else {
+      S.compare.rightDoc = migrateDocumentIfNeeded(doc);
+      S.compare.rightLabel = `${source === 'history' ? '远端历史' : '本地提交'} · ${docName}`;
+    }
+    markCompareNeedsRun(`${kind === 'left' ? '新版本文档' : '旧版本文档'}已就绪，点击”开始比对”。`);
+    syncCompareWorkspaceUi();
   },
 
   closeCompareModal() {
@@ -3650,6 +3731,7 @@ const App = {
       return;
     }
     S.compare.workspaceNames[kind] = normalized;
+    S.compare[kind + 'File'] = normalized;
     S.compare.versionIds[kind] = '';
     S.compare.versions[kind] = [];
     S.compare.documents[kind] = null;
