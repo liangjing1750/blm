@@ -938,6 +938,7 @@ async function flushCollabSnapshotHttp() {
         render();
         restoreScrollSnapshots(snapMine);
         if (typeof renderToolbar === 'function') renderToolbar();
+        if (typeof loadWorkspaceDocumentSummaries === 'function') void loadWorkspaceDocumentSummaries();
         return true;
       }
       // 使用服务端版本
@@ -956,6 +957,7 @@ async function flushCollabSnapshotHttp() {
       const snapServer = captureScrollSnapshots();
       render();
       restoreScrollSnapshots(snapServer);
+      if (typeof loadWorkspaceDocumentSummaries === 'function') void loadWorkspaceDocumentSummaries();
       return true;
     }
     if (result.document && typeof result.document === 'object') {
@@ -984,6 +986,10 @@ async function flushCollabSnapshotHttp() {
     }
     if (hadNewEditsDuringSync) {
       queueCollabSnapshotSync();
+    }
+    // 刷新文件摘要缓存（团队空间/标签可能在本次保存中变更）
+    if (typeof loadWorkspaceDocumentSummaries === 'function') {
+      void loadWorkspaceDocumentSummaries();
     }
     return true;
   } catch (error) {
