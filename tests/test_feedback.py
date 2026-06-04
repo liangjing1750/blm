@@ -17,7 +17,7 @@ class FeedbackStoreTests(unittest.TestCase):
                         "action": "add",
                         "data": {
                             "uid": f"fb-{index}",
-                            "category": "建议",
+                            "category": "体验改进",
                             "title": f"反馈 {index}",
                             "description": "并发提交",
                         },
@@ -41,7 +41,7 @@ class FeedbackStoreTests(unittest.TestCase):
             store.apply(
                 {
                     "action": "add",
-                    "data": {"uid": "fb-one", "category": "问题", "title": "打不开"},
+                    "data": {"uid": "fb-one", "category": "严重问题", "title": "打不开"},
                     "user": {"name": "提交人"},
                 }
             )
@@ -65,7 +65,7 @@ class FeedbackStoreTests(unittest.TestCase):
             store.apply(
                 {
                     "action": "add",
-                    "data": {"uid": "fb-thread", "category": "问题", "title": "需要讨论", "description": "首楼"},
+                    "data": {"uid": "fb-thread", "category": "需求功能", "title": "需要讨论", "description": "首楼"},
                     "user": {"name": "甲"},
                 }
             )
@@ -101,7 +101,7 @@ class FeedbackStoreTests(unittest.TestCase):
             store.apply(
                 {
                     "action": "add",
-                    "data": {"uid": "fb-meta", "category": "问题", "title": "分类调整", "description": "原始内容"},
+                    "data": {"uid": "fb-meta", "category": "体验改进", "title": "分类调整", "description": "原始内容"},
                     "user": {"name": "甲"},
                 }
             )
@@ -109,13 +109,40 @@ class FeedbackStoreTests(unittest.TestCase):
                 {
                     "action": "update",
                     "uid": "fb-meta",
-                    "data": {"category": "缺陷", "status": "处理中"},
+                    "data": {"category": "严重问题", "status": "处理中", "description": "修改后的详细描述"},
                 }
             )
 
-            self.assertEqual(document["items"][0]["category"], "缺陷")
+            self.assertEqual(document["items"][0]["category"], "严重问题")
             self.assertEqual(document["items"][0]["status"], "处理中")
+            self.assertEqual(document["items"][0]["description"], "修改后的详细描述")
             self.assertEqual(document["items"][0]["messages"][0]["content"], "原始内容")
+
+    def test_requirement_category_is_supported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(Path(tmp))
+            document = store.apply(
+                {
+                    "action": "add",
+                    "data": {"uid": "fb-requirement", "category": "需求功能", "title": "新增报表"},
+                    "user": {"name": "甲"},
+                }
+            )
+
+            self.assertEqual(document["items"][0]["category"], "需求功能")
+
+    def test_legacy_categories_are_mapped_to_new_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FeedbackStore(Path(tmp))
+            document = store.apply(
+                {
+                    "action": "add",
+                    "data": {"uid": "fb-legacy", "category": "缺陷", "title": "历史缺陷"},
+                    "user": {"name": "甲"},
+                }
+            )
+
+            self.assertEqual(document["items"][0]["category"], "轻微缺陷")
 
 
 if __name__ == "__main__":

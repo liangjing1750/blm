@@ -234,12 +234,26 @@
         <select id="compare-left-select" data-testid="compare-left-select" onchange="App.selectCompareWorkspace('left', this.value)"></select>
       </label>
       <label class="merge-select-field">
+        <span>新版本来源</span>
+        <select id="compare-left-source-select" data-testid="compare-left-source-select" onchange="App.selectCompareSource('left', this.value)">
+          <option value="remote">远端历史记录</option>
+          <option value="submit">本地提交记录</option>
+        </select>
+      </label>
+      <label class="merge-select-field">
         <span>新版本</span>
         <select id="compare-left-version-select" data-testid="compare-left-version-select" onchange="App.selectCompareVersion('left', this.value)"></select>
       </label>
       <label class="merge-select-field">
         <span>旧版本文档</span>
         <select id="compare-right-select" data-testid="compare-right-select" onchange="App.selectCompareWorkspace('right', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>旧版本来源</span>
+        <select id="compare-right-source-select" data-testid="compare-right-source-select" onchange="App.selectCompareSource('right', this.value)">
+          <option value="remote">远端历史记录</option>
+          <option value="submit">本地提交记录</option>
+        </select>
       </label>
       <label class="merge-select-field">
         <span>旧版本</span>
@@ -316,4 +330,3 @@
 
 </body>
 </html>
-

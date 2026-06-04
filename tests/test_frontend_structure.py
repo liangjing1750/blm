@@ -139,7 +139,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("api.downloadExportJob(job.id)", app_js)
         self.assertIn("if (!response.ok) return []", api_js)
         self.assertIn("catch(() => [])", api_js)
-        self.assertIn("COLLAB_SNAPSHOT_DEBOUNCE_MS = 3000", (APP_DIR / "collab.js").read_text("utf-8"))
+        self.assertIn("COLLAB_SNAPSHOT_DEBOUNCE_MS = 5000", (APP_DIR / "collab.js").read_text("utf-8"))
         collab_js = (APP_DIR / "collab.js").read_text("utf-8")
         self.assertIn("COLLAB_RECONNECT_MS = 3000", collab_js)
         self.assertIn("COLLAB_PING_MS = 10000", collab_js)
@@ -162,7 +162,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("names.unshift(currentProfile.name)", collab_js)
         self.assertIn("ensureUserConfiguredForApp", app_js)
         index_html = (APP_DIR / "index.html").read_text("utf-8")
-        self.assertIn('id="collab-conflict-alert"', index_html)
+        self.assertNotIn('id="collab-conflict-alert"', index_html)
         self.assertIn('data-testid="toolbar-version-button"', index_html)
         self.assertIn('data-testid="toolbar-history-button"', index_html)
         self.assertIn('data-testid="toolbar-version-button">归档版本</button>', index_html)
@@ -252,6 +252,22 @@ class FrontendStructureTests(unittest.TestCase):
             style_css.find(".btn-ghost   { background: #fff; color: var(--text);"),
             style_css.find("#toolbar .btn-ghost { background: transparent; color: var(--header-text);"),
         )
+
+    def test_compare_modal_supports_remote_and_submit_sources(self):
+        index_html = (APP_DIR / "index.html").read_text("utf-8")
+        app_js = (APP_DIR / "app.js").read_text("utf-8")
+        state_js = (APP_DIR / "state.js").read_text("utf-8")
+
+        self.assertIn('id="compare-left-source-select"', index_html)
+        self.assertIn('id="compare-right-source-select"', index_html)
+        self.assertIn("App.selectCompareSource('left', this.value)", index_html)
+        self.assertIn("App.selectCompareSource('right', this.value)", index_html)
+        self.assertIn("sourceKinds", state_js)
+        self.assertIn("submitVersions", state_js)
+        self.assertIn("function getCompareSelectedSourceKind", app_js)
+        self.assertIn("api.collabSubmitLoad(name, submitId)", app_js)
+        self.assertIn("api.loadVersion(name, id)", app_js)
+        self.assertIn("api.loadHistory(name, id)", app_js)
 
     def test_business_ids_are_hidden_from_business_modeling_ui(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")

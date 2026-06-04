@@ -87,9 +87,29 @@ const S = {
       left: '',
       right: '',
     },
+    sourceKinds: {
+      left: 'remote',
+      right: 'remote',
+    },
     versions: {
       left: [],
       right: [],
+    },
+    submitVersions: {
+      left: [],
+      right: [],
+    },
+    versionLoaded: {
+      left: { remote: false, submit: false },
+      right: { remote: false, submit: false },
+    },
+    versionLoading: {
+      left: false,
+      right: false,
+    },
+    versionVisibleCounts: {
+      left: { remote: 10, submit: 10 },
+      right: { remote: 10, submit: 10 },
     },
     labels: {
       left: '',
@@ -393,7 +413,12 @@ function resetCompareState() {
   S.compare.workspaceFiles = [];
   S.compare.workspaceNames = { left: '', right: '' };
   S.compare.versionIds = { left: '', right: '' };
+  S.compare.sourceKinds = { left: 'remote', right: 'remote' };
   S.compare.versions = { left: [], right: [] };
+  S.compare.submitVersions = { left: [], right: [] };
+  S.compare.versionLoaded = { left: { remote: false, submit: false }, right: { remote: false, submit: false } };
+  S.compare.versionLoading = { left: false, right: false };
+  S.compare.versionVisibleCounts = { left: { remote: 10, submit: 10 }, right: { remote: 10, submit: 10 } };
   S.compare.labels = { left: '', right: '' };
   S.compare.documents = { left: null, right: null };
   S.compare.result = null;

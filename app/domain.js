@@ -1268,25 +1268,30 @@ function renderFeedbackTab() {
   const doc = S.ui.feedbackDoc;
   const items = Array.isArray(doc?.items) ? doc.items : [];
   const PAGE_SIZE = 20;
-  const counts = { '缺陷': 0, '建议': 0, '问题': 0 };
+  const CATEGORIES = ['需求功能', '体验改进', '轻微缺陷', '严重问题'];
+  const STATUSES = ['待处理', '处理中', '已解决', '已关闭'];
+  const counts = { '需求功能': 0, '体验改进': 0, '轻微缺陷': 0, '严重问题': 0 };
   items.forEach((item) => { if (counts.hasOwnProperty(item.category)) counts[item.category]++; });
   const statusCounts = { '待处理': 0, '处理中': 0, '已解决': 0, '已关闭': 0 };
   items.forEach((item) => {
     const status = item.status || '待处理';
     if (statusCounts.hasOwnProperty(status)) statusCounts[status]++;
   });
-  const CATEGORIES = ['缺陷', '建议', '问题'];
-  const STATUSES = ['待处理', '处理中', '已解决', '已关闭'];
   const filterCategory = S.ui.feedbackFilterCategory || '';
   const filterStatus = S.ui.feedbackFilterStatus || '';
   const currentUserName = String(S.user?.name || S.collab?.userName || '').trim();
   const ownerFilter = S.ui.feedbackOwnerFilter || (currentUserName === '梁晶' ? 'all' : 'mine');
   S.ui.feedbackOwnerFilter = ownerFilter;
+  const feedbackSortKey = (item) => {
+    const messages = Array.isArray(item.messages) ? item.messages : [];
+    const lastMessage = messages.length ? messages[messages.length - 1] : null;
+    return String(lastMessage?.updatedAt || lastMessage?.createdAt || item.updatedAt || item.createdAt || '');
+  };
   const filtered = items.filter((item) =>
     (!filterCategory || item.category === filterCategory) &&
     (!filterStatus || item.status === filterStatus) &&
     (ownerFilter !== 'mine' || !currentUserName || item.author === currentUserName)
-  );
+  ).slice().sort((left, right) => feedbackSortKey(right).localeCompare(feedbackSortKey(left)));
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(Math.max(1, Number(S.ui.feedbackPage || 1)), totalPages);
   S.ui.feedbackPage = currentPage;
@@ -1298,7 +1303,7 @@ function renderFeedbackTab() {
   if (!container) return;
 
   const renderCard = (item) => {
-    const category = item.category || '问题';
+    const category = item.category || '体验改进';
     const status = item.status || '待处理';
     const uid = item.uid || '';
     const createdAt = String(item.createdAt || '').replace('T', ' ');
@@ -1332,7 +1337,7 @@ function renderFeedbackTab() {
         </div>
         <section class="fb-create-panel">
           <label>类型
-            <select id="fb-add-cat"><option value="问题">问题</option><option value="缺陷">缺陷</option><option value="建议">建议</option></select>
+            <select id="fb-add-cat">${CATEGORIES.map((c) => `<option value="${c}" ${c === '体验改进' ? 'selected' : ''}>${c}</option>`).join('')}</select>
           </label>
           <label>标题
             <input id="fb-add-title" placeholder="用一句话说明反馈内容">
@@ -1354,6 +1359,9 @@ function renderFeedbackTab() {
     }
     const uid = selectedItem.uid || '';
     const messages = Array.isArray(selectedItem.messages) ? selectedItem.messages : [];
+    const descriptionCollapsed = S.ui.feedbackDescriptionCollapsedUid === uid;
+    const editingDescription = S.ui.feedbackEditingDescriptionUid === uid;
+    const detailDescription = String(selectedItem.description || '').trim();
     return `<aside class="feedback-detail">
       <div class="fb-detail-head">
         <div>
@@ -1363,15 +1371,30 @@ function renderFeedbackTab() {
       </div>
       <section class="fb-detail-section">
         <label>类型
-          <select onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:this.value,status:document.getElementById('fb-detail-status').value})">
-            ${CATEGORIES.map((c) => `<option value="${c}" ${(selectedItem.category||'问题')===c?'selected':''}>${c}</option>`).join('')}
+          <select id="fb-detail-category" onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:this.value,status:document.getElementById('fb-detail-status').value})">
+            ${CATEGORIES.map((c) => `<option value="${c}" ${(selectedItem.category||'体验改进')===c?'selected':''}>${c}</option>`).join('')}
           </select>
         </label>
         <label>状态
-          <select id="fb-detail-status" onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:document.querySelector('.feedback-detail select').value,status:this.value})">
+          <select id="fb-detail-status" onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:document.getElementById('fb-detail-category').value,status:this.value})">
             ${STATUSES.map((s) => `<option value="${s}" ${(selectedItem.status||'待处理')===s?'selected':''}>${s}</option>`).join('')}
           </select>
         </label>
+      </section>
+      <section class="fb-description-panel ${descriptionCollapsed ? 'is-collapsed' : ''}">
+        <div class="fb-description-head">
+          <button class="fb-disclosure" type="button" onclick="toggleFeedbackDescription(decodeURIComponent('${encodeURIComponent(uid)}'))" title="${descriptionCollapsed ? '展开' : '收起'}">${descriptionCollapsed ? '▶' : '▼'}</button>
+          <h4>详细描述</h4>
+        </div>
+        ${descriptionCollapsed ? '' : (editingDescription ? `
+          <textarea id="fb-detail-description" rows="6" placeholder="补充现象、期望、影响范围或复现步骤">${esc(detailDescription)}</textarea>
+          <div class="fb-description-actions">
+            <button class="btn btn-outline btn-sm" type="button" onclick="cancelFeedbackDescriptionEdit()">取消</button>
+            <button class="btn btn-primary btn-sm" type="button" onclick="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:document.getElementById('fb-detail-category').value,status:document.getElementById('fb-detail-status').value,description:document.getElementById('fb-detail-description').value}).then(function(ok){if(ok){S.ui.feedbackEditingDescriptionUid='';render();}})">保存描述</button>
+          </div>
+        ` : `
+          <div class="fb-description-content" ondblclick="editFeedbackDescription(decodeURIComponent('${encodeURIComponent(uid)}'))" title="双击修改详细描述">${esc(detailDescription || '暂无详细描述。')}</div>
+        `)}
       </section>
       <section class="fb-thread">
         <h4>对话记录</h4>
@@ -1385,12 +1408,12 @@ function renderFeedbackTab() {
             </div>
             ${S.ui.feedbackEditingMessageUid === message.uid ? `
               <textarea id="fb-message-${index}" rows="4">${esc(message.content || '')}</textarea>
-            ` : `<div class="fb-thread-content">${esc(message.content || '')}</div>`}
+            ` : `<div class="fb-thread-content" ondblclick="S.ui.feedbackEditingMessageUid=decodeURIComponent('${encodeURIComponent(message.uid || '')}');render()" title="双击修改对话内容">${esc(message.content || '')}</div>`}
             <div class="fb-thread-actions">
               ${S.ui.feedbackEditingMessageUid === message.uid ? `
                 <button class="btn btn-outline btn-sm" onclick="S.ui.feedbackEditingMessageUid='';render()">取消</button>
-                <button class="btn btn-primary btn-sm" onclick="App.saveFeedbackItem('editMessage',decodeURIComponent('${encodeURIComponent(uid)}'),{messageUid:decodeURIComponent('${encodeURIComponent(message.uid || '')}'),content:document.getElementById('fb-message-${index}').value}).then(function(ok){if(ok)S.ui.feedbackEditingMessageUid=''})">保存修改</button>
-              ` : `<button class="btn btn-outline btn-sm" onclick="S.ui.feedbackEditingMessageUid=decodeURIComponent('${encodeURIComponent(message.uid || '')}');render()">修改</button>`}
+                <button class="btn btn-primary btn-sm" onclick="App.saveFeedbackItem('editMessage',decodeURIComponent('${encodeURIComponent(uid)}'),{messageUid:decodeURIComponent('${encodeURIComponent(message.uid || '')}'),content:document.getElementById('fb-message-${index}').value}).then(function(ok){if(ok){S.ui.feedbackEditingMessageUid='';render();}})">保存修改</button>
+              ` : ''}
             </div>
           </article>`).join('') : `<div class="fb-empty fb-empty--compact">暂无对话记录。</div>`}
         </div>
@@ -1413,7 +1436,6 @@ function renderFeedbackTab() {
         <strong>${filtered.length}</strong><span>当前结果</span>
         <strong>${totalPages}</strong><span>页数</span>
       </div>
-      <button class="btn btn-primary" onclick="openFeedbackAddForm()">＋ 新建反馈</button>
     </section>
     <div class="feedback-workbench feedback-workbench--three">
       <aside class="feedback-left">
@@ -1432,18 +1454,32 @@ function renderFeedbackTab() {
               ${STATUSES.map((s) => `<option value="${s}" ${filterStatus===s?'selected':''}>${s}</option>`).join('')}
             </select>
           </div>
+          <button class="btn btn-primary feedback-quick-add" onclick="openFeedbackAddForm()">＋ 新建反馈</button>
         </div>
         <section class="feedback-summary">
-          <div><strong>${items.length}</strong><span>全部反馈</span></div>
-          ${CATEGORIES.map((c) => `<div><strong>${counts[c] || 0}</strong><span>${c}</span></div>`).join('')}
-          <div><strong>${statusCounts['待处理'] + statusCounts['处理中']}</strong><span>待跟进</span></div>
+          <div class="feedback-stat-card feedback-stat-card--total"><strong>${items.length}</strong><span>全部反馈</span></div>
+          <div class="feedback-stat-group">
+            <h3>类型统计</h3>
+            <div class="feedback-stat-grid">${CATEGORIES.map((c) => `<div><strong>${counts[c] || 0}</strong><span>${c}</span></div>`).join('')}</div>
+          </div>
+          <div class="feedback-stat-group">
+            <h3>状态统计</h3>
+            <div class="feedback-stat-grid">${STATUSES.map((s) => `<div><strong>${statusCounts[s] || 0}</strong><span>${s}</span></div>`).join('')}</div>
+          </div>
         </section>
       </aside>
       <main class="feedback-main">
+        <div class="feedback-card-toolbar">
+          <div>
+            <strong>反馈卡片</strong>
+            <span>${pageItems.length} / ${filtered.length}</span>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openFeedbackAddForm()">＋ 新建反馈</button>
+        </div>
         <div class="feedback-tile-grid">
           ${pageItems.length ? pageItems.map(renderCard).join('') : `<div class="fb-empty">
             <strong>暂无反馈记录</strong>
-            <p>可以先提交一条问题、建议或缺陷，后续处理记录会沉淀在这里。</p>
+            <p>可以先提交一条需求功能、体验改进、轻微缺陷或严重问题，后续处理记录会沉淀在这里。</p>
             <button class="btn btn-outline btn-sm" onclick="openFeedbackAddForm()">＋ 提交第一条反馈</button>
           </div>`}
         </div>
@@ -1461,6 +1497,7 @@ function renderFeedbackTab() {
 function openFeedbackAddForm() {
   S.ui.feedbackCreating = true;
   S.ui.feedbackSelectedUid = '';
+  S.ui.feedbackEditingDescriptionUid = '';
   render();
   setTimeout(() => document.getElementById('fb-add-title')?.focus(), 30);
 }
@@ -1473,11 +1510,32 @@ function toggleFeedbackReply(index) {
 function selectFeedbackItem(uid) {
   S.ui.feedbackSelectedUid = uid;
   S.ui.feedbackCreating = false;
+  S.ui.feedbackEditingDescriptionUid = '';
   render();
 }
 
 function setFeedbackPage(page) {
   S.ui.feedbackPage = Math.max(1, Number(page || 1));
+  render();
+}
+
+function toggleFeedbackDescription(uid) {
+  const id = String(uid || '');
+  S.ui.feedbackDescriptionCollapsedUid = S.ui.feedbackDescriptionCollapsedUid === id ? '' : id;
+  if (S.ui.feedbackDescriptionCollapsedUid === id) S.ui.feedbackEditingDescriptionUid = '';
+  render();
+}
+
+function editFeedbackDescription(uid) {
+  const id = String(uid || '');
+  S.ui.feedbackDescriptionCollapsedUid = '';
+  S.ui.feedbackEditingDescriptionUid = id;
+  render();
+  setTimeout(() => document.getElementById('fb-detail-description')?.focus(), 30);
+}
+
+function cancelFeedbackDescriptionEdit() {
+  S.ui.feedbackEditingDescriptionUid = '';
   render();
 }
 

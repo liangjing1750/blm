@@ -8,6 +8,16 @@ from copy import deepcopy
 from pathlib import Path
 
 
+FEEDBACK_CATEGORIES = {"需求功能", "体验改进", "轻微缺陷", "严重问题"}
+FEEDBACK_STATUSES = {"待处理", "处理中", "已解决", "已关闭"}
+LEGACY_FEEDBACK_CATEGORY_MAP = {
+    "需求": "需求功能",
+    "建议": "体验改进",
+    "问题": "体验改进",
+    "缺陷": "轻微缺陷",
+}
+
+
 class FeedbackStore:
     """Small hidden store for product feedback.
 
@@ -58,7 +68,7 @@ class FeedbackStore:
             "uid": str(data.get("uid") or f"fb-{uuid.uuid4().hex}"),
             "author": _user_name(user),
             "createdAt": _now(),
-            "category": _choice(data.get("category"), {"缺陷", "建议", "问题"}, "问题"),
+            "category": _choice(data.get("category"), FEEDBACK_CATEGORIES, "体验改进"),
             "title": title,
             "description": str(data.get("description") or "").strip(),
             "status": "待处理",
@@ -93,8 +103,10 @@ class FeedbackStore:
 
     def _update_unlocked(self, document: dict, payload: dict, data: dict) -> None:
         item = self._find_item_unlocked(document, payload, data)
-        item["category"] = _choice(data.get("category"), {"缺陷", "建议", "问题"}, item.get("category") or "问题")
-        item["status"] = _choice(data.get("status"), {"待处理", "处理中", "已解决", "已关闭"}, item.get("status") or "待处理")
+        item["category"] = _choice(data.get("category"), FEEDBACK_CATEGORIES, item.get("category") or "体验改进")
+        item["status"] = _choice(data.get("status"), FEEDBACK_STATUSES, item.get("status") or "待处理")
+        if "description" in data:
+            item["description"] = str(data.get("description") or "").strip()
 
     def _add_message_unlocked(self, document: dict, payload: dict, data: dict, user: dict) -> None:
         item = self._find_item_unlocked(document, payload, data)
@@ -181,10 +193,10 @@ def _normalize_item(item: dict) -> dict:
         "uid": str(item.get("uid") or f"fb-{uuid.uuid4().hex}"),
         "author": str(item.get("author") or "匿名"),
         "createdAt": str(item.get("createdAt") or ""),
-        "category": _choice(item.get("category"), {"缺陷", "建议", "问题"}, "问题"),
+        "category": _choice(item.get("category"), FEEDBACK_CATEGORIES, "体验改进"),
         "title": str(item.get("title") or "(无标题)"),
         "description": str(item.get("description") or ""),
-        "status": _choice(item.get("status"), {"待处理", "处理中", "已解决", "已关闭"}, "待处理"),
+        "status": _choice(item.get("status"), FEEDBACK_STATUSES, "待处理"),
         "reply": str(item.get("reply") or ""),
         "repliedBy": str(item.get("repliedBy") or ""),
         "repliedAt": str(item.get("repliedAt") or ""),
@@ -253,6 +265,7 @@ def _message(*, content: str, user: dict, floor: int) -> dict:
 
 def _choice(value, allowed: set[str], default: str) -> str:
     text = str(value or "").strip()
+    text = LEGACY_FEEDBACK_CATEGORY_MAP.get(text, text)
     return text if text in allowed else default
 
 

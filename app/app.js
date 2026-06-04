@@ -1103,6 +1103,7 @@ function renderCompareWorkspaceList() {
   const files = S.compare.workspaceFiles || [];
   ['left', 'right'].forEach((kind) => {
     const docSelect = document.getElementById(`compare-${kind}-select`);
+    const sourceSelect = document.getElementById(`compare-${kind}-source-select`);
     const versionSelect = document.getElementById(`compare-${kind}-version-select`);
     if (!docSelect || !versionSelect) return;
     docSelect.innerHTML = ['<option value="">请选择文档</option>']
@@ -1110,12 +1111,42 @@ function renderCompareWorkspaceList() {
       .join('');
     docSelect.value = S.compare.workspaceNames?.[kind] || '';
     docSelect.disabled = !!S.compare.isRunning;
-    const versions = S.compare.versions?.[kind] || [];
-    versionSelect.innerHTML = ['<option value="">当前版本</option>']
-      .concat(versions.map((entry) => `<option value="${esc(entry.id || '')}">${esc(formatCompareHistoryOptionLabel(entry))}</option>`))
+    const sourceKind = getCompareSelectedSourceKind(kind);
+    if (sourceSelect) {
+      sourceSelect.value = sourceKind;
+      sourceSelect.disabled = !!S.compare.isRunning || !S.compare.workspaceNames?.[kind];
+    }
+    const versions = getCompareVersionOptions(kind, sourceKind);
+    const visibleCount = getCompareVersionVisibleCount(kind, sourceKind);
+    const visibleVersions = versions.slice(0, visibleCount);
+    const isLoaded = !!S.compare.versionLoaded?.[kind]?.[sourceKind];
+    const isLoading = !!S.compare.versionLoading?.[kind];
+    const emptyOption = sourceKind === 'submit'
+      ? '<option value="">请选择本地提交记录</option>'
+      : '<option value="">当前版本</option>';
+    const extraOptions = [];
+    if (S.compare.workspaceNames?.[kind]) {
+      if (isLoading) {
+        extraOptions.push('<option value="__loading__" disabled>加载中...</option>');
+      } else if (!isLoaded) {
+        extraOptions.push('<option value="__load__">加载版本记录...</option>');
+      } else if (versions.length > visibleCount) {
+        extraOptions.push(`<option value="__more__">再加载 ${Math.min(10, versions.length - visibleCount)} 条...</option>`);
+      }
+    }
+    versionSelect.innerHTML = [emptyOption]
+      .concat(visibleVersions.map((entry) => `<option value="${esc(entry.id || '')}">${esc(entry.label || entry.id || '')}</option>`))
+      .concat(extraOptions)
       .join('');
-    versionSelect.value = S.compare.versionIds?.[kind] || '';
+    const selectedVersionId = S.compare.versionIds?.[kind] || '';
+    versionSelect.value = visibleVersions.some((entry) => entry.id === selectedVersionId) ? selectedVersionId : '';
     versionSelect.disabled = !!S.compare.isRunning || !S.compare.workspaceNames?.[kind];
+    versionSelect.onfocus = () => {
+      const currentSourceKind = getCompareSelectedSourceKind(kind);
+      if (S.compare.workspaceNames?.[kind] && !S.compare.versionLoaded?.[kind]?.[currentSourceKind] && !S.compare.versionLoading?.[kind]) {
+        App.loadCompareVersionOptions(kind, S.compare.workspaceNames[kind]);
+      }
+    };
   });
 }
 
@@ -1126,6 +1157,28 @@ function formatCompareHistoryOptionLabel(entry = {}) {
   const message = String(entry.message || '').trim();
   const title = message || reasonLabel || entry.label || entry.id || '历史版本';
   return timestamp ? `${kindLabel}：${title}（${timestamp}）` : `${kindLabel}：${title}`;
+}
+
+function formatCompareSubmitOptionLabel(entry = {}) {
+  const user = String(entry.user || '未知用户').trim();
+  const seq = entry.seq ? `V${entry.seq}` : '未记录版本';
+  const createdAt = String(entry.createdAt || '').replace('T', ' ').slice(0, 16);
+  return createdAt ? `${user} ${seq}（${createdAt}）` : `${user} ${seq}`;
+}
+
+function getCompareVersionOptions(kind, sourceKind = getCompareSelectedSourceKind(kind)) {
+  return sourceKind === 'submit'
+    ? (S.compare.submitVersions?.[kind] || [])
+    : (S.compare.versions?.[kind] || []);
+}
+
+function getCompareVersionVisibleCount(kind, sourceKind = getCompareSelectedSourceKind(kind)) {
+  return Number(S.compare.versionVisibleCounts?.[kind]?.[sourceKind] || 10);
+}
+
+function resetCompareVersionPaging(kind) {
+  if (!S.compare.versionVisibleCounts) S.compare.versionVisibleCounts = {};
+  S.compare.versionVisibleCounts[kind] = { remote: 10, submit: 10 };
 }
 
 function syncCompareWorkspaceUi() {
@@ -1143,9 +1196,16 @@ function getCompareSelectedVersionId(kind) {
   return String(select?.value || S.compare.versionIds?.[kind] || '').trim();
 }
 
+function getCompareSelectedSourceKind(kind) {
+  const select = document.getElementById(`compare-${kind}-source-select`);
+  const value = String(select?.value || S.compare.sourceKinds?.[kind] || 'remote').trim();
+  return value === 'submit' ? 'submit' : 'remote';
+}
+
 function getCompareVersionLabel(kind, snapshotId) {
-  if (!snapshotId) return '当前版本';
-  const entry = (S.compare.versions?.[kind] || []).find((item) => item.id === snapshotId);
+  const sourceKind = getCompareSelectedSourceKind(kind);
+  if (!snapshotId) return sourceKind === 'submit' ? '未选择提交记录' : '当前版本';
+  const entry = getCompareVersionOptions(kind, sourceKind).find((item) => item.id === snapshotId);
   return entry?.label || snapshotId;
 }
 
@@ -1159,7 +1219,11 @@ function clearCompareResult() {
 let compareResultRequestSeq = 0;
 
 function hasCompareSelection() {
-  return Boolean(getCompareSelectedName('left') && getCompareSelectedName('right'));
+  return ['left', 'right'].every((kind) => {
+    if (!getCompareSelectedName(kind)) return false;
+    if (getCompareSelectedSourceKind(kind) === 'submit') return Boolean(getCompareSelectedVersionId(kind));
+    return true;
+  });
 }
 
 function syncCompareControls() {
@@ -2262,25 +2326,47 @@ function renderCompareResult(result) {
 
 async function loadCompareDocument(kind) {
   const name = getCompareSelectedName(kind);
-  const snapshotId = getCompareSelectedVersionId(kind);
+  const sourceKind = getCompareSelectedSourceKind(kind);
+  const versionId = getCompareSelectedVersionId(kind);
   if (!name) {
     S.compare.documents[kind] = null;
     S.compare.labels[kind] = '';
     return null;
   }
   let document;
-  if (snapshotId) {
-    const result = await api.loadHistory(name, snapshotId);
-    if (result.error) return { error: result.error };
-    document = result.document;
+  if (sourceKind === 'submit') {
+    if (!versionId) return { error: '请选择本地提交记录。' };
+    const submitId = versionId.startsWith('s__') ? versionId.slice(3) : versionId;
+    const record = await api.collabSubmitLoad(name, submitId);
+    if (record?.error) return { error: record.error };
+    if (!record?.document) return { error: '本地提交记录加载失败。' };
+    document = record.document;
+  } else if (versionId) {
+    const prefix = versionId.slice(0, 3);
+    const id = versionId.slice(3);
+    if (prefix === 'v__') {
+      const result = await api.loadVersion(name, id);
+      if (result.error) return { error: result.error };
+      document = result;
+    } else if (prefix === 'h__') {
+      const result = await api.loadHistory(name, id);
+      if (result.error) return { error: result.error };
+      document = result.document;
+    } else {
+      const result = await api.loadHistory(name, versionId);
+      if (result.error) return { error: result.error };
+      document = result.document;
+    }
   } else {
     document = await api.load(name);
     if (document.error) return { error: document.error };
   }
   S.compare.workspaceNames[kind] = name;
-  S.compare.versionIds[kind] = snapshotId;
+  S.compare.sourceKinds[kind] = sourceKind;
+  S.compare.versionIds[kind] = versionId;
   S.compare.documents[kind] = document;
-  S.compare.labels[kind] = `${name} / ${getCompareVersionLabel(kind, snapshotId)}`;
+  const sourceLabel = sourceKind === 'submit' ? '本地提交' : '远端历史';
+  S.compare.labels[kind] = `${name} / ${sourceLabel} / ${getCompareVersionLabel(kind, versionId)}`;
   return document;
 }
 
@@ -2298,6 +2384,7 @@ async function updateCompareResult() {
   S.compare.runMessage = '正在加载左侧版本...';
   renderCompareResult(null);
   syncCompareWorkspaceUi();
+  if (typeof setSaveProgress === 'function') setSaveProgress(true, 30, '正在比对...', '正在加载文档版本并执行比对分析。');
   try {
     const leftLoaded = await loadCompareDocument('left');
     if (requestSeq !== compareResultRequestSeq) return;
@@ -2325,6 +2412,7 @@ async function updateCompareResult() {
       S.compare.runMessage = '';
       syncCompareWorkspaceUi();
     }
+    if (typeof setSaveProgress === 'function') setSaveProgress(false);
   }
 }
 
@@ -3562,28 +3650,29 @@ const App = {
 
   async saveFeedbackItem(action, uid, data) {
     if (typeof ensureUserConfiguredForApp === 'function' && !ensureUserConfiguredForApp()) return false;
+    const rawData = data && typeof data === 'object' ? data : {};
     if (action === 'add') {
-      const title = String(data.title || '').trim();
+      const title = String(rawData.title || '').trim();
       if (!title) {
         showAppToast('请先填写反馈标题。');
         return false;
       }
       data = {
         uid: createUiUid('fb'),
-        category: data.category || '问题',
+        category: rawData.category || '体验改进',
         title,
-        description: String(data.description || '').trim(),
+        description: String(rawData.description || '').trim(),
       };
     } else if (action === 'message') {
-      data = { reply: String(data.content || '').trim(), status: data.status || '' };
+      data = { reply: String(rawData.content || '').trim(), status: rawData.status || '' };
       if (!data.reply) {
         showAppToast('请先填写对话内容。');
         return false;
       }
     } else if (action === 'editMessage') {
       data = {
-        messageUid: data.messageUid || '',
-        content: String(data.content || '').trim(),
+        messageUid: rawData.messageUid || '',
+        content: String(rawData.content || '').trim(),
       };
       if (!data.messageUid || !data.content) {
         showAppToast('请先填写对话内容。');
@@ -3591,9 +3680,12 @@ const App = {
       }
     } else if (action === 'update') {
       data = {
-        category: data.category || '',
-        status: data.status || '',
+        category: rawData.category || '',
+        status: rawData.status || '',
       };
+      if (Object.prototype.hasOwnProperty.call(rawData, 'description')) {
+        data.description = String(rawData.description || '').trim();
+      }
     } else if (action !== 'reply' || !uid) {
       return false;
     }
@@ -3619,6 +3711,12 @@ const App = {
     S.ui.feedbackDoc = saved;
     showAppToast(action === 'add' ? '反馈已提交。' : action === 'message' ? '对话已发送。' : action === 'editMessage' ? '对话已更新。' : '反馈已更新。');
     render();
+    if (action === 'message') {
+      requestAnimationFrame(() => {
+        const threadList = document.querySelector('.feedback-detail .fb-thread-list');
+        if (threadList) threadList.scrollTop = threadList.scrollHeight;
+      });
+    }
     return true;
   },
 
@@ -3633,13 +3731,7 @@ const App = {
       return;
     }
     syncCompareWorkspaceUi();
-    const defaultLeft = (S.currentFile && S.compare.workspaceFiles.includes(S.currentFile))
-      ? S.currentFile
-      : S.compare.workspaceFiles[0];
-    const defaultRight = defaultLeft;
-    await App.selectCompareWorkspace('left', defaultLeft, { silent: true });
-    await App.selectCompareWorkspace('right', defaultRight, { silent: true });
-    markCompareNeedsRun('默认文档已准备好，点击”开始比对”生成版本报告。');
+    S.compare.runMessage = '请选择需要比对的两个文档。';
     openModalById('compare-modal-overlay');
   },
 
@@ -3647,65 +3739,85 @@ const App = {
     if (!docName) return;
     const verSel = document.getElementById(`compare-${kind}-version-select`);
     if (!verSel) return;
-    verSel.innerHTML = '<option value=””>加载中...</option>';
-    const [versions, history, submits] = await Promise.all([
-      api.versions(docName).catch(() => []),
-      api.history(docName).catch(() => []),
-      api.collabSubmits(docName).catch(() => ({ submits: [] })),
-    ]);
-    let html = '<option value=””>当前版本</option>';
-    if (Array.isArray(versions)) {
-      html += '<optgroup label=”归档版本”>' + versions.map((v) =>
-        `<option value=”v__${esc(v.id)}”>${esc(v.label || v.id)}</option>`).join('') + '</optgroup>';
+    S.compare.versionLoading[kind] = true;
+    syncCompareWorkspaceUi();
+    verSel.innerHTML = '<option value="">加载中...</option>';
+    try {
+      const sourceKind = getCompareSelectedSourceKind(kind);
+      if (sourceKind === 'submit') {
+        const submits = await api.collabSubmits(docName).catch(() => ({ submits: [] }));
+        const subList = Array.isArray(submits?.submits) ? submits.submits : [];
+        S.compare.submitVersions[kind] = subList.map((entry) => ({
+          id: `s__${entry.submitId || ''}`,
+          label: formatCompareSubmitOptionLabel(entry),
+          kind: 'submit',
+        }));
+      } else {
+        const [versions, history] = await Promise.all([
+          api.versions(docName).catch(() => []),
+          api.history(docName).catch(() => []),
+        ]);
+        const remoteOptions = [];
+        if (Array.isArray(versions)) {
+          versions.forEach((entry) => {
+            remoteOptions.push({
+              id: `v__${entry.id || ''}`,
+              label: `归档版本：${entry.label || entry.id || '未命名版本'}`,
+              kind: 'version',
+            });
+          });
+        }
+        if (Array.isArray(history)) {
+          history.forEach((entry) => {
+            remoteOptions.push({
+              id: `h__${entry.id || ''}`,
+              label: `远端历史：${formatCompareHistoryOptionLabel(entry)}`,
+              kind: 'history',
+            });
+          });
+        }
+        S.compare.versions[kind] = remoteOptions;
+      }
+      S.compare.versionLoaded[kind][sourceKind] = true;
+      resetCompareVersionPaging(kind);
+    } finally {
+      S.compare.versionLoading[kind] = false;
+      verSel.dataset.loaded = '1';
+      verSel.onfocus = null;
+      syncCompareWorkspaceUi();
     }
-    if (Array.isArray(history)) {
-      html += '<optgroup label=”远端历史记录”>' + history.map((e) => {
-        const label = e.user ? `${e.user} V${e.seq||'?'} ${e.timestamp_label||''}` : (e.message||e.timestamp_label||e.id);
-        return `<option value=”h__${esc(e.id)}”>${esc(label)}</option>`;
-      }).join('') + '</optgroup>';
-    }
-    const subList = Array.isArray(submits?.submits) ? submits.submits : [];
-    if (subList.length) {
-      html += '<optgroup label=”本地提交记录”>' + subList.map((s) =>
-        `<option value=”s__${esc(s.submitId)}”>${esc(s.user||'?')} V${s.seq} ${(s.createdAt||'').replace('T',' ').slice(0,16)}</option>`
-      ).join('') + '</optgroup>';
-    }
-    verSel.innerHTML = html;
+  },
+
+  selectCompareSource(kind, sourceKind) {
+    S.compare.sourceKinds[kind] = sourceKind === 'submit' ? 'submit' : 'remote';
+    S.compare.versionIds[kind] = '';
+    S.compare.documents[kind] = null;
+    resetCompareVersionPaging(kind);
+    S.compare.labels[kind] = S.compare.workspaceNames[kind]
+      ? `${S.compare.workspaceNames[kind]} / ${S.compare.sourceKinds[kind] === 'submit' ? '本地提交' : '远端历史'} / ${getCompareVersionLabel(kind, '')}`
+      : '';
+    markCompareNeedsRun();
+    syncCompareWorkspaceUi();
   },
 
   async selectCompareVersion(kind, entryId) {
-    if (!entryId) { S.compare.documents[kind] = null; syncCompareWorkspaceUi(); return; }
-    const docName = S.compare.workspaceNames[kind] || S.currentFile || '';
-    const prefix = entryId.slice(0, 3);
-    const id = entryId.slice(3);
-
-    if (prefix === 'v__') {
-      // 归档版本
-      const result = await api.loadVersion(docName, id);
-      if (result?.error) return alert(result.error);
-      S.compare.documents[kind] = migrateDocumentIfNeeded(result);
-      S.compare.labels[kind] = `归档版本 · ${docName}`;
-    } else if (prefix === 'h__') {
-      // 远端历史
-      const result = await api.loadHistory(docName, id);
-      if (result?.error) return alert(result.error);
-      S.compare.documents[kind] = migrateDocumentIfNeeded(result);
-      S.compare.labels[kind] = `远端历史 · ${docName}`;
-    } else if (prefix === 's__') {
-      // 本地提交
-      const record = await api.collabSubmitLoad(docName, id);
-      if (!record?.document) return alert('加载失败');
-      S.compare.documents[kind] = migrateDocumentIfNeeded(record.document);
-      S.compare.labels[kind] = `本地提交 · ${docName}`;
-    } else {
-      // 当前版本或旧格式
-      S.compare.versionIds[kind] = entryId;
+    if (entryId === '__loading__') return;
+    if (entryId === '__load__') {
+      await App.loadCompareVersionOptions(kind, S.compare.workspaceNames[kind]);
+      return;
+    }
+    if (entryId === '__more__') {
+      const sourceKind = getCompareSelectedSourceKind(kind);
+      S.compare.versionVisibleCounts[kind][sourceKind] = getCompareVersionVisibleCount(kind, sourceKind) + 10;
       syncCompareWorkspaceUi();
       return;
     }
-    if (kind === 'left') S.compare.leftDoc = S.compare.documents[kind];
-    else S.compare.rightDoc = S.compare.documents[kind];
-    markCompareNeedsRun(`${kind === 'left' ? '新' : '旧'}版本文档已就绪。`);
+    S.compare.versionIds[kind] = String(entryId || '').trim();
+    S.compare.documents[kind] = null;
+    S.compare.labels[kind] = S.compare.workspaceNames[kind]
+      ? `${S.compare.workspaceNames[kind]} / ${getCompareSelectedSourceKind(kind) === 'submit' ? '本地提交' : '远端历史'} / ${getCompareVersionLabel(kind, S.compare.versionIds[kind])}`
+      : '';
+    markCompareNeedsRun(`${kind === 'left' ? '新' : '旧'}版本选择已变化。`);
     syncCompareWorkspaceUi();
   },
 
@@ -3726,7 +3838,14 @@ const App = {
     }
     S.compare.workspaceNames[kind] = normalized;
     S.compare.versionIds[kind] = '';
+    S.compare.sourceKinds[kind] = S.compare.sourceKinds?.[kind] || 'remote';
     S.compare.versions[kind] = [];
+    S.compare.submitVersions[kind] = [];
+    if (!S.compare.versionLoaded) S.compare.versionLoaded = {};
+    if (!S.compare.versionLoading) S.compare.versionLoading = {};
+    S.compare.versionLoaded[kind] = { remote: false, submit: false };
+    S.compare.versionLoading[kind] = false;
+    resetCompareVersionPaging(kind);
     S.compare.documents[kind] = null;
     S.compare.labels[kind] = normalized ? `${normalized} / 当前版本` : '';
     if (!normalized) {
@@ -3734,23 +3853,28 @@ const App = {
       clearCompareResult();
       return;
     }
-    const document = await api.load(normalized);
     if (S.compare.workspaceNames[kind] !== normalized) return;
-    if (document.error) return alert(document.error);
-    S.compare.documents[kind] = document;
-    await App.loadCompareVersionOptions(kind, normalized);
+    // 版本下拉框懒加载：聚焦或选择“加载版本记录”时才拉取远端/提交记录。
+    const verSel = document.getElementById(`compare-${kind}-version-select`);
+    if (verSel) {
+      verSel.innerHTML = '<option value="">当前版本</option><option value="__more__">加载更多版本...</option>';
+      verSel.dataset.loaded = '';
+      verSel.dataset.docName = normalized;
+      verSel.onfocus = () => { if (!verSel.dataset.loaded) App.loadCompareVersionOptions(kind, normalized); };
+      verSel.onchange = function() {
+        if (this.value === '__more__' && !this.dataset.loaded) { App.loadCompareVersionOptions(kind, normalized); return; }
+        App.selectCompareVersion(kind, this.value);
+      };
+    }
     syncCompareWorkspaceUi();
     if (!options.silent) markCompareNeedsRun();
   },
 
-  async selectCompareVersion(kind, snapshotId) {
-    S.compare.versionIds[kind] = String(snapshotId || '').trim();
-    syncCompareWorkspaceUi();
-    markCompareNeedsRun();
-  },
-
   async startCompare() {
     if (S.compare.isRunning) return;
+    if (typeof setSaveProgress === 'function') {
+      setSaveProgress(true, 10, '正在准备比对...', '正在加载选中的文档版本，请稍候。');
+    }
     await updateCompareResult();
   },
 
