@@ -7495,7 +7495,7 @@ body.is-collab-reconnecting * {
   font-weight: 700;
 }
 .task-parameter-modal {
-  width: min(1120px, calc(100vw - 56px));
+  width: min(1320px, calc(100vw - 40px));
 }
 .task-parameter-modal-body {
   display: flex;
@@ -7578,6 +7578,32 @@ body.is-collab-reconnecting * {
   border-radius: 7px;
   padding: 0 8px;
   font: inherit;
+}
+.task-param-row textarea.auto-resize {
+  min-width: 0; width: 100%; box-sizing: border-box;
+  min-height: 28px; max-height: 28px; resize: none; overflow: hidden;
+  font: inherit; font-size: 12px; line-height: 1.5;
+  padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: 7px; background: #fff;
+}
+.task-param-row textarea.auto-resize:focus,
+.task-param-row textarea.auto-resize[style*="height"] { max-height: none; }
+.task-param-children {
+  margin: 4px 0 4px 26px;
+  padding: 8px 10px;
+  border-left: 3px solid #93c5fd;
+  background: #f8fafc;
+  border-radius: 0 6px 6px 0;
+}
+.task-param-children-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 6px;
+}
+.task-param-children-head span {
+  font-size: 11px; color: #475569; font-weight: 600;
+}
+.task-param-child-row {
+  background: #fff;
 }
 .task-param-required {
   display: inline-flex;

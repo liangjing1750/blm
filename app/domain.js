@@ -712,8 +712,10 @@ function cloneTaskDefinitionParameters(parameters = {}) {
     name: String(item?.name || ''),
     type: String(item?.type || ''),
     required: Boolean(item?.required),
+    isList: String(item?.type || '') === 'list' || Boolean(item?.isList),
     description: String(item?.description || item?.note || ''),
     example: String(item?.example || ''),
+    children: normalizeList(item?.children),
   }));
   return {
     inputs: normalizeList(parameters?.inputs),
@@ -811,30 +813,33 @@ function addTaskDefinitionAndOpen(capabilityId = '', constructId = '') {
 }
 
 function openTaskDefinitionDraft(capabilityId = '', constructId = '', returnMode = '', procId = '', taskId = '', afterIdx = null) {
-  const construct = constructId ? findBusinessConstructRef(constructId) : null;
-  const capability = capabilityId ? ensureBusinessComponentRef(capabilityId) : (construct?.businessComponentId ? ensureBusinessComponentRef(construct.businessComponentId) : null);
-  S.ui.businessModelDialog = {
-    mode: 'taskDraft',
-    capabilityId: String(capability?.id || capabilityId || ''),
-    constructId: String(construct?.id || constructId || ''),
-    taskDefinitionId: '',
-    returnMode: String(returnMode || ''),
-    procId: String(procId || ''),
-    taskId: String(taskId || ''),
-    afterIdx: Number.isInteger(afterIdx) ? afterIdx : null,
-    draft: {
-      name: '',
-      type: 'Service',
-      querySourceKind: 'Dictionary',
-      target: '',
-      address: '',
-      parameters: { inputs: [], outputs: [] },
-      note: '',
-      businessComponentId: String(capability?.id || capabilityId || ''),
-      constructId: String(construct?.id || constructId || ''),
-    },
-  };
-  rerenderBusinessModelDialogContext();
+  const task = addTaskDefinition('', capabilityId, constructId, { skipRender: true });
+  if (!task) return;
+  task._isNew = true;
+  openTaskDefinitionEditor(task.id, capabilityId, constructId, returnMode, procId, taskId, afterIdx);
+}
+
+function confirmNewTaskDefinition(taskId) {
+  const task = findTaskDefinitionRef(taskId);
+  if (!task) return;
+  const name = String(task.name || '').trim();
+  if (!name) return alert('请填写任务名称。');
+  if (ensureDocumentArray('taskDefinitions').some((item) => String(item.name || '').trim() === name && item.id !== task.id)) {
+    return alert(`任务定义”${name}”已存在，请换一个名称。`);
+  }
+  delete task._isNew;
+  syncProcessTaskDefinitionFields(task);
+  markModified();
+  const dialog = S.ui.businessModelDialog || {};
+  openTaskDefinitionEditor(taskId, task.businessComponentId || '', task.constructId || '', dialog.returnMode, dialog.procId, dialog.taskId, dialog.afterIdx);
+}
+
+function cancelNewTaskDefinition(taskId) {
+  const task = findTaskDefinitionRef(taskId);
+  if (task && task._isNew) {
+    ensureDocumentArray('taskDefinitions').splice(ensureDocumentArray('taskDefinitions').indexOf(task), 1);
+  }
+  closeBusinessModelDialog();
 }
 
 function saveTaskDefinitionDraft() {
@@ -843,7 +848,7 @@ function saveTaskDefinitionDraft() {
   const name = String(draft.name || '').trim();
   if (!name) return alert('请填写任务名称。');
   if (ensureDocumentArray('taskDefinitions').some((item) => String(item.name || '').trim() === name)) {
-    return alert(`任务定义“${name}”已存在，请换一个名称。`);
+    return alert(`任务定义”${name}”已存在，请换一个名称。`);
   }
   if (!String(draft.constructId || '').trim()) return alert('请先选择所属业务构件。');
   const task = addTaskDefinition('', draft.businessComponentId || dialog.capabilityId || '', draft.constructId || dialog.constructId || '', { skipRender: true });
@@ -966,8 +971,23 @@ function setTaskParameterField(kind, index, key, value) {
   const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
   const draft = getTaskParameterDialogDraft();
   const row = draft.parameters[normalizedKind]?.[index];
-  if (!row || !['name', 'type', 'required', 'description', 'example'].includes(key)) return;
-  row[key] = key === 'required' ? Boolean(value) : String(value || '');
+  if (!row || !['name', 'type', 'required', 'isList', 'description', 'example'].includes(key)) return;
+  row[key] = (key === 'required' || key === 'isList') ? Boolean(value) : String(value || '');
+  if (key === 'type') {
+    row.isList = String(value || '') === 'list';
+    if (!row.isList) row.children = [];
+    renderTaskParameterDialog();
+  }
+}
+
+function setTaskParameterChildField(kind, parentIndex, childIndex, key, value) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  const row = draft.parameters[normalizedKind]?.[parentIndex];
+  if (!row || !Array.isArray(row.children)) return;
+  const child = row.children[childIndex];
+  if (!child || !['name', 'type', 'required', 'description', 'example'].includes(key)) return;
+  child[key] = key === 'required' ? Boolean(value) : String(value || '');
 }
 
 function addTaskParameter(kind) {
@@ -975,11 +995,22 @@ function addTaskParameter(kind) {
   const draft = getTaskParameterDialogDraft();
   draft.parameters[normalizedKind].push({
     uid: createUiUid(normalizedKind === 'inputs' ? 'in' : 'out'),
-    name: '',
-    type: '',
-    required: false,
-    description: '',
-    example: '',
+    name: '', type: '', required: false, isList: false,
+    description: '', example: '', children: [],
+  });
+  renderTaskParameterDialog();
+}
+
+function addTaskParameterChild(kind, parentIndex) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  const row = draft.parameters[normalizedKind]?.[parentIndex];
+  if (!row) return;
+  if (!Array.isArray(row.children)) row.children = [];
+  row.children.push({
+    uid: createUiUid('child'),
+    name: '', type: '', required: false,
+    description: '', example: '',
   });
   renderTaskParameterDialog();
 }
@@ -988,6 +1019,15 @@ function removeTaskParameter(kind, index) {
   const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
   const draft = getTaskParameterDialogDraft();
   draft.parameters[normalizedKind].splice(index, 1);
+  renderTaskParameterDialog();
+}
+
+function removeTaskParameterChild(kind, parentIndex, childIndex) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  const row = draft.parameters[normalizedKind]?.[parentIndex];
+  if (!row || !Array.isArray(row.children)) return;
+  row.children.splice(childIndex, 1);
   renderTaskParameterDialog();
 }
 
@@ -1006,22 +1046,51 @@ function saveTaskParameterDialog() {
 
 function renderTaskParameterRows(kind, rows) {
   const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
-  return rows.length ? rows.map((row, index) => `
-    <div class="task-param-row" data-testid="task-parameter-row">
+  if (!rows.length) return '<p class="task-param-empty">暂未定义参数，可按需补充。</p>';
+
+  const renderOneRow = (row, index, parentIndex, isChild) => {
+    const kindRef = parentIndex != null ? `${normalizedKind}:${parentIndex}` : normalizedKind;
+    const idxRef = parentIndex != null ? index : index;
+    const setterFn = parentIndex != null ? 'setTaskParameterChildField' : 'setTaskParameterField';
+    const removeFn = parentIndex != null
+      ? `removeTaskParameterChild('${normalizedKind}',${parentIndex},${index})`
+      : `removeTaskParameter('${normalizedKind}',${index})`;
+    const cls = isChild ? 'task-param-row task-param-child-row' : 'task-param-row';
+
+    const rowHtml = `<div class="${cls}" data-testid="task-parameter-row">
       <input type="text" value="${esc(row.name || '')}" placeholder="参数名称"
-        oninput="setTaskParameterField('${normalizedKind}',${index},'name',this.value)">
-      <select onchange="setTaskParameterField('${normalizedKind}',${index},'type',this.value)">
+        oninput="${setterFn}('${normalizedKind}',${idxRef},'name',this.value)">
+      <select onchange="${setterFn}('${normalizedKind}',${idxRef},'type',this.value)">
         <option value="" ${!row.type ? 'selected' : ''}>类型</option>
         ${FIELD_TYPES.map((t) => `<option value="${t.value}" ${row.type === t.value ? 'selected' : ''}>${t.label}</option>`).join('')}
       </select>
       <label class="task-param-required"><input type="checkbox" ${row.required ? 'checked' : ''}
-        onchange="setTaskParameterField('${normalizedKind}',${index},'required',this.checked)"> 必填</label>
-      <input type="text" value="${esc(row.description || '')}" placeholder="说明"
-        oninput="setTaskParameterField('${normalizedKind}',${index},'description',this.value)">
-      <input type="text" value="${esc(row.example || '')}" placeholder="示例"
-        oninput="setTaskParameterField('${normalizedKind}',${index},'example',this.value)">
-      <button class="stage-quick-btn danger" type="button" title="删除参数" onclick="removeTaskParameter('${normalizedKind}',${index})">×</button>
-    </div>`).join('') : '<p class="task-param-empty">暂未定义参数，可按需补充。</p>';
+        onchange="${setterFn}('${normalizedKind}',${idxRef},'required',this.checked)"> 必填</label>
+      <textarea class="auto-resize" rows="1" placeholder="说明"
+        oninput="${setterFn}('${normalizedKind}',${idxRef},'description',this.value);autoResize(this)"
+        >${esc(row.description || '')}</textarea>
+      <textarea class="auto-resize" rows="1" placeholder="示例"
+        oninput="${setterFn}('${normalizedKind}',${idxRef},'example',this.value);autoResize(this)"
+        >${esc(row.example || '')}</textarea>
+      <button class="stage-quick-btn danger" type="button" title="删除" onclick="${removeFn}">×</button>
+    </div>`;
+
+    if (row.type === 'list' && Array.isArray(row.children)) {
+      const childrenHtml = row.children.length
+        ? row.children.map((child, ci) => renderOneRow(child, ci, index, true)).join('')
+        : '';
+      return rowHtml + `<div class="task-param-children">
+        <div class="task-param-children-head">
+          <span>子字段（${row.children.length}）</span>
+          <button class="btn btn-outline btn-sm" type="button" onclick="addTaskParameterChild('${normalizedKind}',${index})">＋ 子字段</button>
+        </div>
+        ${childrenHtml || '<p class="task-param-empty">暂未定义子字段。</p>'}
+      </div>`;
+    }
+    return rowHtml;
+  };
+
+  return rows.map((row, index) => renderOneRow(row, index, null, false)).join('');
 }
 
 function renderTaskParameterDialog() {
@@ -1784,6 +1853,7 @@ function renderConstructDraftDialog(draft = {}) {
 
 function renderTaskDefinitionDialog(task) {
   const taskId = String(task.id || task.name || '');
+  const isNew = Boolean(task._isNew);
   const dialog = S.ui.businessModelDialog || {};
   const constructs = getBusinessConstructItems(S.doc);
   const returnToManager = dialog.returnMode === 'tasks';
@@ -1799,8 +1869,8 @@ function renderTaskDefinitionDialog(task) {
     : (parentCapabilityId
       ? `<button class="btn btn-outline btn-sm business-model-back-btn" type="button" data-testid="business-model-dialog-back" onclick="openBusinessModelDialog('capability','${esc(jsString(parentCapabilityId))}')">返回</button>`
       : '');
-  const afterDelete = returnToManager
-    ? 'openTaskDefinitionManager()'
+  const afterDelete = isNew ? 'closeBusinessModelDialog()'
+    : returnToManager ? 'openTaskDefinitionManager()'
     : parentConstructId
     ? `openBusinessModelDialog('construct','${esc(jsString(parentCapabilityId))}','${esc(jsString(parentConstructId))}')`
     : (parentCapabilityId
@@ -1841,13 +1911,17 @@ function renderTaskDefinitionDialog(task) {
     : '';
   return `<div class="business-model-dialog-panel task-definition-dialog" data-testid="business-model-dialog">
     <div class="business-model-dialog-head">
-      <h3>⚙️ 任务定义</h3>
+      <h3>${isNew ? '＋ 新建任务定义' : '⚙️ 任务定义'}</h3>
       <div class="business-model-dialog-actions">
-        <span class="dialog-progress" title="入参${parameterSummary.inputCount} / 出参${parameterSummary.outputCount}">参数 ${parameterSummary.inputCount}+${parameterSummary.outputCount}</span>
-        ${backButton}
-        <button class="btn btn-danger btn-sm" type="button" data-testid="task-definition-delete-button"
-          onclick="removeTaskDefinition('${esc(jsString(taskId))}').then((deleted)=>{if(deleted)${afterDelete}})">删除</button>
-        <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">✕</button>
+        ${isNew
+          ? `<button class="btn btn-outline btn-sm" type="button" data-testid="business-model-dialog-cancel" onclick="cancelNewTaskDefinition('${esc(jsString(taskId))}')">取消</button>
+             <button class="btn btn-primary btn-sm" type="button" data-testid="business-model-draft-save" onclick="confirmNewTaskDefinition('${esc(jsString(taskId))}')">创建</button>`
+          : `<span class="dialog-progress" title="入参${parameterSummary.inputCount} / 出参${parameterSummary.outputCount}">参数 ${parameterSummary.inputCount}+${parameterSummary.outputCount}</span>
+             ${backButton}
+             <button class="btn btn-danger btn-sm" type="button" data-testid="task-definition-delete-button"
+               onclick="removeTaskDefinition('${esc(jsString(taskId))}').then((deleted)=>{if(deleted)${afterDelete}})">删除</button>
+             <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">✕</button>`
+        }
       </div>
     </div>
     ${renderProgressBar([
@@ -1908,97 +1982,6 @@ function renderTaskDefinitionDialog(task) {
             oninput="setTaskDefinition('${esc(jsString(taskId))}','note',this.value);autoResize(this)">${esc(task.note || '')}</textarea>
         </div>
       ${processNodeActions}
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderTaskDefinitionDraftDialog(draft = {}) {
-  const constructs = getBusinessConstructItems(S.doc);
-  const capabilities = getCapabilityItems(S.doc);
-  const activeCapabilityId = String(draft.businessComponentId || '').trim();
-  const activeCapability = capabilities.find((capability) => String(capability.id || capability.name || '') === activeCapabilityId);
-  const activeCapabilityName = String(activeCapability?.name || '').trim();
-  const capabilityOptions = `<option value="">请选择业务组件</option>${capabilities.map((capability) => {
-    const id = String(capability.id || capability.name || '');
-    return `<option value="${esc(id)}" ${id === activeCapabilityId ? 'selected' : ''}>${esc(capability.name || id)}</option>`;
-  }).join('')}`;
-  const constructOptions = `<option value="">请选择业务构件</option>${constructs.filter((construct) => {
-    const constructCapabilityId = String(construct.businessComponentId || construct.capabilityUnitId || '').trim();
-    const constructCapabilityName = String(construct.businessComponent || construct.capabilityUnit || '').trim();
-    return !activeCapabilityId
-      || constructCapabilityId === activeCapabilityId
-      || (activeCapabilityName && constructCapabilityName === activeCapabilityName)
-      || constructCapabilityName === activeCapabilityId;
-  }).map((construct) => {
-    const id = String(construct.id || construct.name || '');
-    const capability = capabilities.find((item) => item.id === construct.businessComponentId || item.name === construct.businessComponent);
-    const prefix = capability ? `${capability.name} / ` : '';
-    return `<option value="${esc(id)}" ${id === draft.constructId ? 'selected' : ''}>${esc(prefix + (construct.name || id))}</option>`;
-  }).join('')}`;
-  const typeValue = draft.type || 'Service';
-  return `<div class="business-model-dialog-panel task-definition-dialog" data-testid="business-model-dialog">
-    <div class="business-model-dialog-head">
-      <h3>新建任务定义</h3>
-      <div class="business-model-dialog-actions">
-        <button class="btn btn-outline btn-sm" type="button" data-testid="business-model-dialog-cancel" onclick="closeBusinessModelDialog()">取消</button>
-        <button class="btn btn-primary btn-sm" type="button" data-testid="business-model-draft-save" onclick="saveTaskDefinitionDraft()">保存</button>
-        <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">×</button>
-      </div>
-    </div>
-    <div class="business-model-dialog-body">
-      <div class="form-grid">
-        <div class="field-group">
-          <label>任务名称</label>
-          <input data-testid="task-definition-name-input" type="text" value="${esc(draft.name || '')}" placeholder="请输入任务名称"
-            oninput="setBusinessModelDraft('name',this.value)">
-        </div>
-        <div class="field-group">
-          <label>所属业务组件</label>
-          <select data-testid="task-definition-capability-select"
-            onchange="setBusinessModelDraft('businessComponentId',this.value);setBusinessModelDraft('constructId','');rerenderBusinessModelDialogContext()">
-            ${capabilityOptions}
-          </select>
-        </div>
-        <div class="field-group">
-          <label>所属业务构件</label>
-          <select data-testid="task-definition-construct-select" onchange="setBusinessModelDraft('constructId',this.value)">
-            ${constructOptions}
-          </select>
-        </div>
-        <div class="field-group">
-          <label>任务类型</label>
-          <select data-testid="task-definition-type-select" onchange="setBusinessModelDraft('type',this.value);rerenderBusinessModelDialogContext()">
-            ${ORCHESTRATION_TYPES.map((option) => `<option value="${option.value}" ${typeValue === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
-          </select>
-        </div>
-        ${typeValue === 'Query' ? `<div class="field-group">
-          <label>查询来源</label>
-          <select data-testid="task-definition-query-source-select" onchange="setBusinessModelDraft('querySourceKind',this.value)">
-            ${QUERY_SOURCE_KINDS.map((option) => `<option value="${option.value}" ${draft.querySourceKind === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
-          </select>
-        </div>` : ''}
-        <div class="field-group field-group-wide task-definition-tech-group">
-          <label>技术承接</label>
-          <input data-testid="task-definition-target-input" type="text" value="${esc(draft.target || '')}" placeholder="目标服务 / 字典 / 枚举"
-            oninput="setBusinessModelDraft('target',this.value)">
-        </div>
-        <div class="field-group field-group-wide">
-          <label>说明</label>
-          <textarea class="auto-resize" data-testid="task-definition-note-input" rows="3"
-            oninput="setBusinessModelDraft('note',this.value);autoResize(this)">${esc(draft.note || '')}</textarea>
-        </div>
-        ${draft._savedId ? `<div class="field-group field-group-wide task-definition-param-summary">
-          <label>任务调用契约</label>
-          <div class="task-definition-param-bar">
-            <span>${esc(contractSummary(draft))}</span>
-            <button class="btn btn-outline btn-sm" type="button"
-              onclick="openTaskParameterDialog('${esc(jsString(draft._savedId))}')">查看/编辑参数</button>
-          </div>
-        </div>` : `<div class="field-group field-group-wide">
-          <label>任务调用契约</label>
-          <p class="field-hint">保存后即可配置任务调用契约（入参/出参/地址等）。</p>
-        </div>`}
       </div>
     </div>
   </div>`;
@@ -2118,8 +2101,6 @@ function renderBusinessModelDialog() {
     ? renderCapabilityDraftDialog(dialog.draft || {})
     : dialog.mode === 'constructDraft'
     ? renderConstructDraftDialog(dialog.draft || {})
-    : dialog.mode === 'taskDraft'
-    ? renderTaskDefinitionDraftDialog(dialog.draft || {})
     : dialog.mode === 'tasks'
     ? renderTaskDefinitionManagerDialog()
     : (dialog.mode === 'task' && task

@@ -263,7 +263,7 @@ const FIELD_TYPES = [
   {value:'decimal', label:'金额'},  {value:'date',    label:'日期'},
   {value:'datetime',label:'日期时间'},{value:'boolean',label:'布尔'},
   {value:'enum',   label:'枚举'},   {value:'text',    label:'长文本'},
-  {value:'id',     label:'标识ID'},
+  {value:'id',     label:'标识ID'},{value:'list',    label:'列表'},
 ];
 const ROLE_GROUPS = [
   '业务参与方',
