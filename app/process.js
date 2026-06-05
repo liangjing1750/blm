@@ -2176,8 +2176,15 @@ let stageDragState = null;
 
 
 /* ── 侧边栏移动：流程（同业务组件内上下移） ── */
-function moveProcInSd(procId, dir, e) {
+function moveProcInSd(procId, dir, e, stageId = '') {
   if(e) e.stopPropagation();
+  const targetStageId = String(stageId || '').trim();
+  if (targetStageId && !isVirtualStageId(targetStageId)) {
+    moveStageProcessRef(targetStageId, procId, dir);
+    renderSidebar();
+    renderProcessTab();
+    return;
+  }
   const procs = S.doc.processes;
   const proc = procs.find(p=>p.id===procId); if(!proc) return;
   const sd = proc.subDomain||'';

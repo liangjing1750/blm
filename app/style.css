@@ -6701,6 +6701,23 @@ body.is-collab-reconnecting * {
 .sb-stage-head {
   padding-left: 26px;
 }
+.sb-flow-group-head {
+  padding-left: 42px;
+  background: #f8fbff;
+  color: #475569;
+}
+.sb-flow-group-head:hover {
+  background: #eef6ff;
+  color: #1e40af;
+}
+.sb-flow-group-head .sb-subgrp-badge {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #3730a3;
+}
+.sb-proc-head.in-flow-group {
+  padding-left: 68px;
+}
 .sb-construct-head {
   padding-left: 30px;
   background: #fff7ed;

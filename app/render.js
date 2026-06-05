@@ -523,6 +523,13 @@ function _renderSbProc(p, options = {}) {
   const procActive=S.ui.tab==='process'&&S.ui.procId===p.id&&!S.ui.taskId;
   const taskCount=getProcNodes(p).length;
   const tags = [];
+  const stageId = String(options.stageId || '').trim();
+  const moveUpArgs = stageId
+    ? `'${esc(p.id)}',-1,event,'${esc(stageId)}'`
+    : `'${esc(p.id)}',-1,event`;
+  const moveDownArgs = stageId
+    ? `'${esc(p.id)}',1,event,'${esc(stageId)}'`
+    : `'${esc(p.id)}',1,event`;
   if (options.showCapability) {
     const capabilityNames = getProcessCapabilityNames(p);
     if (capabilityNames.length) {
@@ -531,7 +538,7 @@ function _renderSbProc(p, options = {}) {
     }
   }
   if (options.showStage) _getProcessStageNames(p).slice(0, 2).forEach((name) => tags.push(`阶段：${name}`));
-  return `<div class="sb-proc-head ${procActive?'active':''}" data-process-id="${esc(p.id)}"
+  return `<div class="sb-proc-head ${procActive?'active':''}${options.inFlowGroup ? ' in-flow-group' : ''}" data-process-id="${esc(p.id)}"
     onclick="navigate('process',{procId:'${p.id}',taskId:null})">
     <span class="sb-proc-kind">流程</span>
     <span class="sb-proc-main">
@@ -540,8 +547,8 @@ function _renderSbProc(p, options = {}) {
     </span>
     ${_renderSbCount(taskCount)}
     <span class="sb-move-btns">
-      <button class="sb-move-btn sb-move-up" onclick="moveProcInSd('${esc(p.id)}',-1,event)" title="\u4e0a\u79fb" aria-label="\u4e0a\u79fb"></button>
-      <button class="sb-move-btn sb-move-down" onclick="moveProcInSd('${esc(p.id)}',1,event)" title="\u4e0b\u79fb" aria-label="\u4e0b\u79fb"></button>
+      <button class="sb-move-btn sb-move-up" onclick="moveProcInSd(${moveUpArgs})" title="\u4e0a\u79fb" aria-label="\u4e0a\u79fb"></button>
+      <button class="sb-move-btn sb-move-down" onclick="moveProcInSd(${moveDownArgs})" title="\u4e0b\u79fb" aria-label="\u4e0b\u79fb"></button>
     </span>
   </div>`;
 }
@@ -556,6 +563,35 @@ function _renderSbStage(stageItem, processes, collapseKey) {
     <span class="sb-subgrp-badge">阶段</span>
     <span class="sb-name" title="${esc(stageItem.name)}">${esc(stageItem.name)}</span>
     ${_renderSbCount(processes.length)}
+  </div>`;
+}
+
+function getSidebarProcessGroups(processes) {
+  const list = Array.isArray(processes) ? processes : [];
+  const hasNamedGroup = list.some((proc) => String(proc?.flowGroup || '').trim());
+  if (!hasNamedGroup) return [{ label: '', key: 'all', processes: list, implicit: true }];
+  const groups = [];
+  const groupIndex = new Map();
+  list.forEach((proc) => {
+    const label = String(proc?.flowGroup || '').trim() || '未分组';
+    if (!groupIndex.has(label)) {
+      groupIndex.set(label, groups.length);
+      groups.push({ label, key: `group-${groups.length}`, processes: [] });
+    }
+    groups[groupIndex.get(label)].processes.push(proc);
+  });
+  return groups;
+}
+
+function _renderSbFlowGroup(group, collapseKey) {
+  const isCollapsed = !!S.ui.sbCollapse[collapseKey];
+  return `<div class="sb-subgrp-head sb-flow-group-head" data-flow-group="${esc(group.label)}"
+    onclick="toggleCollapse('${esc(collapseKey)}')">
+    <button type="button" class="sb-caret ${isCollapsed ? 'is-collapsed' : 'is-expanded'}"
+      onclick="event.stopPropagation();toggleCollapse('${esc(collapseKey)}')"><span class="sb-caret-icon">鈻?/span></button>
+    <span class="sb-subgrp-badge">流程组</span>
+    <span class="sb-name" title="${esc(group.label)}">${esc(group.label)}</span>
+    ${_renderSbCount(group.processes.length)}
   </div>`;
 }
 
@@ -1200,6 +1236,22 @@ function renderSidebar() {
   }
 
   const renderStageDirectory = () => {
+    const renderStageProcessList = (stageItem, stageProcesses) => {
+      const groups = getSidebarProcessGroups(stageProcesses);
+      if (groups.length === 1 && groups[0].implicit) {
+        return stageProcesses.map((p) => _renderSbProc(p, { showCapability: true, stageId: stageItem.id })).join('');
+      }
+      return groups.map((group) => {
+        const groupKey = `stage-flow-group-${stageItem.id}-${group.key}`;
+        let html = _renderSbFlowGroup(group, groupKey);
+        if (!S.ui.sbCollapse[groupKey]) {
+          html += group.processes
+            .map((p) => _renderSbProc(p, { showCapability: true, stageId: stageItem.id, inFlowGroup: true }))
+            .join('');
+        }
+        return html;
+      }).join('');
+    };
     let out = `<div class="sb-directory-block sb-directory-stage">
       <button class="sb-directory-title active" type="button" data-testid="sidebar-browse-stage"
         onclick="document.querySelector('[data-testid=&quot;sidebar-stage-browse&quot;]')?.scrollIntoView({block:'nearest'})">流程目录</button>
@@ -1226,9 +1278,7 @@ function renderSidebar() {
           out += `<div class="sb-empty sb-stage-empty">暂无流程</div>`;
           continue;
         }
-        for (const p of stageProcesses) {
-          out += _renderSbProc(p, { showCapability: true });
-        }
+        out += renderStageProcessList(stageItem, stageProcesses);
       }
     }
     const virtualStageItems = filteredStageItems.filter((stageItem) => stageItem.virtual);
@@ -1239,9 +1289,7 @@ function renderSidebar() {
       const collapseKey = `stage-tree-${stageItem.id}`;
       out += _renderSbStage(stageItem, stageProcesses, collapseKey);
       if (S.ui.sbCollapse[collapseKey]) continue;
-      for (const p of stageProcesses) {
-        out += _renderSbProc(p, { showCapability: true });
-      }
+      out += renderStageProcessList(stageItem, stageProcesses);
     }
     if (!valueStreams.length && !filteredRealStageItems.length && !virtualStageItems.length) {
       out += `<div class="sb-empty">当前业务域暂无阶段</div>`;

@@ -235,6 +235,12 @@ class WorkspaceStorage(DocumentFileStore):
         try:
             if snapshot.is_file():
                 return int(snapshot.stat().st_size)
+            manifest_path = snapshot / "manifest" / PACKAGE_MANIFEST_NAME
+            if manifest_path.is_file():
+                return int(manifest_path.stat().st_size)
+            legacy_manifest_path = snapshot / PACKAGE_MANIFEST_NAME
+            if legacy_manifest_path.is_file():
+                return int(legacy_manifest_path.stat().st_size)
             total = 0
             for child in snapshot.rglob("*"):
                 if child.is_file():

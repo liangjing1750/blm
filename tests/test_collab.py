@@ -2147,6 +2147,48 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
                              f"排序应保留为 st-3, st-1, st-2，实际: {order}")
 
 
+    def test_stage_flow_ref_reorder_preserved_in_3way_merge(self):
+        """Stage process order is stored on stageFlowRefs.order and should survive 3-way merge."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["roles"] = []
+            base_doc["stages"] = [{"uid": "stage-1", "id": "S1", "name": "Stage 1", "subDomain": "", "pos": {}, "processLinks": []}]
+            base_doc["processes"] = [
+                {"uid": "proc-1", "id": "P1", "name": "Process 1", "subDomain": "", "flowGroup": "Group A", "stageId": "S1", "stagePos": {}, "prototypeFiles": [], "nodes": []},
+                {"uid": "proc-2", "id": "P2", "name": "Process 2", "subDomain": "", "flowGroup": "Group A", "stageId": "S1", "stagePos": {}, "prototypeFiles": [], "nodes": []},
+            ]
+            base_doc["stageFlowRefs"] = [
+                {"uid": "ref-1", "id": "SFR1", "stageId": "S1", "processId": "P1", "order": 1, "pos": {}},
+                {"uid": "ref-2", "id": "SFR2", "stageId": "S1", "processId": "P2", "order": 2, "pos": {}},
+            ]
+            base_doc["stageFlowLinks"] = []
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            doc_a = deepcopy(base_doc)
+            doc_a["stageFlowRefs"][0]["order"] = 2
+            doc_a["stageFlowRefs"][1]["order"] = 1
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "User A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+
+            doc_b = deepcopy(base_doc)
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "User B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final = storage.load("CollabSmoke")
+            refs = sorted(final["stageFlowRefs"], key=lambda ref: ref["order"])
+            self.assertEqual([ref["processUid"] for ref in refs], ["proc-2", "proc-1"])
+
+
 class CollaborationSubmitRecoveryTests(unittest.TestCase):
     """从 submit-record 恢复 + 历史回退 + 3-way 合并"""
 

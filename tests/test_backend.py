@@ -760,6 +760,26 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(summaries[0]["tags"], ["担保品", "WPF"])
             self.assertEqual(summaries[0]["author"], "Tester")
 
+    def test_history_list_size_uses_manifest_bytes_not_snapshot_package_total(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+
+            updated = deepcopy(document)
+            updated["meta"]["author"] = "Tester"
+            storage.save("Loans", updated)
+
+            entries = storage.list_history("Loans")
+            self.assertEqual(len(entries), 1)
+            snapshot_dir = workspace / "Loans" / "history" / entries[0]["id"]
+            manifest_size = (snapshot_dir / "manifest" / "manifest.json").stat().st_size
+            package_size = sum(path.stat().st_size for path in snapshot_dir.rglob("*") if path.is_file())
+            self.assertGreater(package_size, manifest_size)
+            self.assertEqual(entries[0]["size"], manifest_size)
+            self.assertEqual(entries[0]["documentBytes"], manifest_size)
+
     def test_admin_status_payload_exposes_relationships(self):
         class FakeCollab:
             def diagnostics(self):

@@ -255,6 +255,22 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("space: normalizeWorkspaceSpace(summary.space)", app_js)
         self.assertIn("renderWorkspaceFileList(S.files)", app_js)
 
+    def test_sidebar_stage_directory_supports_flow_groups_and_stage_order_moves(self):
+        render_js = (APP_DIR / "render.js").read_text("utf-8")
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn("function getSidebarProcessGroups(processes)", render_js)
+        self.assertIn("未分组", render_js)
+        self.assertIn("流程组", render_js)
+        self.assertIn("renderStageProcessList(stageItem, stageProcesses)", render_js)
+        self.assertIn("stageId: stageItem.id", render_js)
+        self.assertIn("inFlowGroup: true", render_js)
+        self.assertIn("function moveProcInSd(procId, dir, e, stageId = '')", process_js)
+        self.assertIn("moveStageProcessRef(targetStageId, procId, dir)", process_js)
+        self.assertIn(".sb-flow-group-head", style_css)
+        self.assertIn(".sb-proc-head.in-flow-group", style_css)
+
     def test_reverse_action_buttons_are_readable_on_light_surfaces(self):
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
