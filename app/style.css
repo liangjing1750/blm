@@ -8768,6 +8768,7 @@ body.is-collab-reconnecting * {
   border: 2px solid; border-radius: 6px;
   padding: 6px 14px; text-align: center;
   display: flex; flex-direction: column; gap: 2px;
+  justify-content: center;
   min-width: 80px; white-space: nowrap;
   user-select: none;
   z-index: 4;

@@ -109,6 +109,23 @@ const EF_COMPONENT_HEADER_H = 28;
 const EF_MIN_ENTITY_X = EF_PAD + EF_GROUP_PAD_X + EF_COMPONENT_PAD_X;
 const EF_MIN_ENTITY_Y = EF_PAD + EF_COMPONENT_HEADER_H + EF_COMPONENT_PAD_Y + EF_GROUP_HEADER_H + EF_GROUP_PAD_Y;
 
+function _efEstimateTextWidth(text) {
+  return Array.from(String(text || '')).reduce((sum, char) => {
+    if (/[\u2e80-\u9fff\uff00-\uffef]/.test(char)) return sum + 14;
+    if (/[A-Z]/.test(char)) return sum + 8;
+    if (/\s/.test(char)) return sum + 4;
+    return sum + 7;
+  }, 0);
+}
+
+function _efGetEntityNodeSize(entity) {
+  const name = String(entity?.name || '未命名实体');
+  return {
+    width: Math.max(EF_NODE_W, Math.ceil(_efEstimateTextWidth(name) + 32)),
+    height: EF_NODE_H,
+  };
+}
+
 function _efGetBoardPoint(containerId, board, event) {
   const scale = ZOOM[containerId] || 1;
   const rect = board.getBoundingClientRect();
@@ -128,10 +145,16 @@ function _efMeasureGroupBlock(groupBlock) {
   const groupEntities = groupBlock.entities || [];
   const colCount = _efGetGroupColumnCount(groupEntities.length);
   const rowCount = Math.max(1, Math.ceil(groupEntities.length / colCount));
-  const contentWidth = colCount * EF_NODE_W + Math.max(0, colCount - 1) * EF_GAP_X;
+  const colWidths = Array.from({ length: colCount }, () => EF_NODE_W);
+  groupEntities.forEach((entity, index) => {
+    const col = index % colCount;
+    colWidths[col] = Math.max(colWidths[col], _efGetEntityNodeSize(entity).width);
+  });
+  const contentWidth = colWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, colCount - 1) * EF_GAP_X;
   const contentHeight = rowCount * EF_NODE_H + Math.max(0, rowCount - 1) * EF_GAP_Y;
   return {
     colCount,
+    colWidths,
     rowCount,
     width: contentWidth + EF_GROUP_PAD_X * 2,
     height: contentHeight + EF_GROUP_HEADER_H + EF_GROUP_PAD_Y * 2,
@@ -157,8 +180,12 @@ function _efComputeDefaultPos(entities, relations) {
   sortedGroups.forEach((groupBlock, index) => {
     const groupEntities = groupBlock.entities || [];
     const colCount = groupBlock.layout.colCount;
+    const colWidths = groupBlock.layout.colWidths || Array.from({ length: colCount }, () => EF_NODE_W);
+    const colOffsets = colWidths.reduce((acc, width, index) => {
+      acc.push(index === 0 ? 0 : acc[index - 1] + colWidths[index - 1] + EF_GAP_X);
+      return acc;
+    }, []);
     const rowGap = EF_NODE_H + EF_GAP_Y;
-    const colGap = EF_NODE_W + EF_GAP_X;
     const rawRow = Math.floor(index / gridCols);
     const rawCol = index % gridCols;
     const itemsInRow = Math.min(gridCols, sortedGroups.length - rawRow * gridCols);
@@ -170,7 +197,7 @@ function _efComputeDefaultPos(entities, relations) {
       const col = index % colCount;
       const row = Math.floor(index / colCount);
       posMap[entity.id] = {
-        x: baseX + EF_GROUP_PAD_X + col * colGap,
+        x: baseX + EF_GROUP_PAD_X + (colOffsets[col] || 0),
         y: baseY + EF_GROUP_HEADER_H + EF_GROUP_PAD_Y + row * rowGap,
       };
     });
@@ -195,10 +222,11 @@ function _efComputeGroupFrames(entities) {
     const group = meta.constructKey;
     const x = entity.pos?.x || EF_PAD;
     const y = entity.pos?.y || EF_PAD;
+    const size = _efGetEntityNodeSize(entity);
     const left = x - EF_GROUP_PAD_X;
     const top = y - EF_GROUP_HEADER_H - EF_GROUP_PAD_Y;
-    const right = x + EF_NODE_W + EF_GROUP_PAD_X;
-    const bottom = y + EF_NODE_H + EF_GROUP_PAD_Y;
+    const right = x + size.width + EF_GROUP_PAD_X;
+    const bottom = y + size.height + EF_GROUP_PAD_Y;
     if(!frames[group]) {
       frames[group] = {
         group,
@@ -428,14 +456,15 @@ function onEfNodeDrag(e) {
   const safeDy = Math.max(dy, EF_MIN_ENTITY_Y - minOrigY);
   let neededW = 0, neededH = 0;
   for(const [eid, info] of efDragState.multiDrag) {
+    const size = _efGetEntityNodeSize(info.entity);
     const newX = Math.max(EF_MIN_ENTITY_X, info.origX + safeDx);
     const newY = Math.max(EF_MIN_ENTITY_Y, info.origY + safeDy);
     info.entity.pos = {x: newX, y: newY};
     const node = document.querySelector(
       `#ef-canvas-${efDragState.containerId} .ef-node[data-id="${eid}"]`);
     if(node) { node.style.left = newX+'px'; node.style.top = newY+'px'; }
-    neededW = Math.max(neededW, newX + EF_NODE_W + 80);
-    neededH = Math.max(neededH, newY + EF_NODE_H + 100);
+    neededW = Math.max(neededW, newX + size.width + 80);
+    neededH = Math.max(neededH, newY + size.height + 100);
   }
   const board = document.getElementById(`ef-board-${efDragState.containerId}`);
   const svgEl = document.getElementById(`ef-svg-${efDragState.containerId}`);
@@ -599,8 +628,9 @@ function renderEntityFlow(containerId, doc, onClickMap) {
   /* 计算画板尺寸（容纳所有节点 + 留出 U 形弯道空间） */
   let boardW = 400, boardH = 200;
   for(const e of entities) {
-    boardW = Math.max(boardW, (e.pos.x||0) + EF_NODE_W + 80);
-    boardH = Math.max(boardH, (e.pos.y||0) + EF_NODE_H + 100);
+    const size = _efGetEntityNodeSize(e);
+    boardW = Math.max(boardW, (e.pos.x||0) + size.width + 80);
+    boardH = Math.max(boardH, (e.pos.y||0) + size.height + 100);
   }
   for(const frame of groupFrames) {
     boardW = Math.max(boardW, frame.right + EF_PAD);
@@ -643,13 +673,14 @@ function renderEntityFlow(containerId, doc, onClickMap) {
     const meta = getEntityModelMeta(e);
     const idx = grpMap[meta.constructKey];
     const c   = ROLE_COLORS[idx];
+    const size = _efGetEntityNodeSize(e);
     const clickable = onClickMap?.[e.id] ? ' ef-clickable' : '';
     const draggable = isDraggable ? ' ef-draggable' : '';
     const focusCls = focusEntityId
       ? (e.id === focusEntityId ? ' ef-focus' : (focusRelatedIds.has(e.id) ? ' ef-neighbor' : ' ef-muted'))
       : '';
     h += `<div class="ef-node${clickable}${draggable}${focusCls}" data-id="${e.id}" data-group="${esc(meta.constructKey)}" data-component="${esc(meta.capabilityKey)}"
-      style="left:${e.pos.x}px;top:${e.pos.y}px;background:${c.fill};border-color:${c.stroke};color:${c.color}">`;
+      style="left:${e.pos.x}px;top:${e.pos.y}px;width:${size.width}px;height:${size.height}px;background:${c.fill};border-color:${c.stroke};color:${c.color}">`;
     h += `<span class="ef-nname">${esc(e.name||'未命名实体')}</span>`;
     h += `</div>`;
   }

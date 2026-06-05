@@ -305,6 +305,17 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn(".modified-badge-row.remote", style_css)
         self.assertIn(".modified-badge-dot", style_css)
 
+    def test_entity_relation_layout_uses_deterministic_entity_node_size(self):
+        entity_js = (APP_DIR / "entity.js").read_text("utf-8")
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn("function _efGetEntityNodeSize(entity)", entity_js)
+        self.assertIn("const size = _efGetEntityNodeSize(entity);", entity_js)
+        self.assertIn("colWidths[col] = Math.max(colWidths[col], _efGetEntityNodeSize(entity).width);", entity_js)
+        self.assertIn("const size = _efGetEntityNodeSize(e);", entity_js)
+        self.assertIn("width:${size.width}px;height:${size.height}px", entity_js)
+        self.assertIn("justify-content: center;", style_css)
+
     def test_business_ids_are_hidden_from_business_modeling_ui(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
         process_js = (APP_DIR / "process.js").read_text("utf-8")

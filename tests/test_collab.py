@@ -1736,6 +1736,41 @@ class CollaborationMetaPreservationTests(unittest.TestCase):
             self.assertEqual(f2_final.get("status_role"), "primary", "状态角色应在合并后保留")
             self.assertEqual(f2_final.get("state_values"), "草稿/审核/完成", "状态值应在合并后保留")
 
+    def test_entity_relation_position_preserved_in_3way_merge(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["entities"] = [{
+                "uid": "e-1", "name": "A Very Long Entity Name", "group": "", "note": "",
+                "pos": {"x": 120, "y": 140},
+                "businessConstructUid": "", "businessConstructUids": [],
+                "fields": [], "state_transitions": [],
+            }]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            doc_a = deepcopy(base_doc)
+            doc_a["entities"][0]["note"] = "server-side business edit"
+            r1 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-a", "name": "User A", "sessionId": "sa"},
+                {"baseSeq": 0, "document": doc_a},
+            )
+            self.assertTrue(r1["ok"])
+
+            doc_b = deepcopy(base_doc)
+            doc_b["entities"][0]["pos"] = {"x": 456, "y": 234}
+            r2 = manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-b", "name": "User B", "sessionId": "sb"},
+                {"baseSeq": 0, "document": doc_b},
+            )
+            self.assertTrue(r2["ok"])
+
+            final_entity = storage.load("CollabSmoke")["entities"][0]
+            self.assertEqual(final_entity["note"], "server-side business edit")
+            self.assertEqual(final_entity["pos"], {"x": 456, "y": 234})
+
     def test_entity_relation_deletion_propagates_in_3way_merge(self):
         """缺陷：实体关系的删除在3way合并中正确传播"""
         with tempfile.TemporaryDirectory() as temp_dir:
