@@ -118,6 +118,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn("S.merge.paths", app_js)
         self.assertNotIn("getPathBasename", app_js)
         self.assertNotIn("path = ''", app_js)
+
         self.assertIn("async runtime()", api_js)
         self.assertIn("fetch('/api/runtime')", api_js)
         self.assertIn("async loadHistory(name, snapshotId)", api_js)
@@ -184,7 +185,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("getWorkspaceDocumentSummaries(files)", app_js)
         self.assertIn("renderOpenSpaceTabs(spaces, summaries)", app_js)
         self.assertIn("compareWorkspaceSpaceNames", app_js)
-        self.assertIn("leftText === '默认空间'", app_js)
+        self.assertIn("leftText === DEFAULT_WORKSPACE_SPACE", app_js)
         self.assertIn("renderOpenTagFilters(tags, activeTag)", app_js)
         self.assertIn("selectOpenSpace(space)", app_js)
         self.assertIn("selectOpenTag(tag)", app_js)
@@ -244,6 +245,15 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("节点任务", preview_js)
         self.assertIn("表单模型", preview_js)
         self.assertIn(".manual-shell #tab-bar", style_css)
+
+    def test_workspace_space_summary_is_not_overwritten_by_current_document(self):
+        app_js = (APP_DIR / "app.js").read_text("utf-8")
+
+        self.assertIn("const DEFAULT_WORKSPACE_SPACE", app_js)
+        self.assertIn("function normalizeWorkspaceSpace", app_js)
+        self.assertIn("if (!summaryByName.has(S.currentFile))", app_js)
+        self.assertIn("space: normalizeWorkspaceSpace(summary.space)", app_js)
+        self.assertIn("renderWorkspaceFileList(S.files)", app_js)
 
     def test_reverse_action_buttons_are_readable_on_light_surfaces(self):
         style_css = (APP_DIR / "style.css").read_text("utf-8")

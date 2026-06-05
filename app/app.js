@@ -5,9 +5,17 @@ const nativeAlert = window.alert.bind(window);
 const nativeConfirm = window.confirm.bind(window);
 const nativePrompt = window.prompt.bind(window);
 const OPEN_PAGE_SIZE = 10;
+const DEFAULT_WORKSPACE_SPACE = '\u9ed8\u8ba4\u7a7a\u95f4';
 
 let activeAppDialog = null;
 let appToastTimer = null;
+
+function normalizeWorkspaceSpace(value) {
+  const text = String(value || '').trim();
+  if (!text) return DEFAULT_WORKSPACE_SPACE;
+  if (text.startsWith('\u699b\u6a3f')) return DEFAULT_WORKSPACE_SPACE;
+  return text;
+}
 
 function getAppDialogElements() {
   return {
@@ -721,10 +729,10 @@ function renderWorkspaceFileList(files) {
 }
 
 function compareWorkspaceSpaceNames(left, right) {
-  const leftText = String(left || '');
-  const rightText = String(right || '');
-  if (leftText === '默认空间' && rightText !== '默认空间') return -1;
-  if (rightText === '默认空间' && leftText !== '默认空间') return 1;
+  const leftText = normalizeWorkspaceSpace(left);
+  const rightText = normalizeWorkspaceSpace(right);
+  if (leftText === DEFAULT_WORKSPACE_SPACE && rightText !== DEFAULT_WORKSPACE_SPACE) return -1;
+  if (rightText === DEFAULT_WORKSPACE_SPACE && leftText !== DEFAULT_WORKSPACE_SPACE) return 1;
   return leftText.localeCompare(rightText, 'zh-Hans-CN', { sensitivity: 'base' });
 }
 
@@ -732,17 +740,18 @@ function getWorkspaceDocumentSummaries(files) {
   const summaries = Array.isArray(S.recovery.workspaceSummaries) ? S.recovery.workspaceSummaries : [];
   const summaryByName = new Map(summaries.map((item) => [String(item.name || ''), item]));
   if (S.currentFile && S.doc) {
-    const meta = S.doc.meta && typeof S.doc.meta === 'object' ? S.doc.meta : {};
-    const rawTags = Array.isArray(meta.tags) ? meta.tags : String(meta.tags || '').replace(/，/g, ',').split(',');
-    summaryByName.set(S.currentFile, {
-      ...(summaryByName.get(S.currentFile) || {}),
-      name: S.currentFile,
-      title: String(meta.domain || meta.title || S.currentFile).trim() || S.currentFile,
-      space: String(meta.space || meta.teamSpace || '默认空间').trim() || '默认空间',
-      tags: rawTags.map((item) => String(item || '').trim()).filter(Boolean),
-      author: String(meta.author || '').trim(),
-      date: String(meta.date || '').trim(),
-    });
+    if (!summaryByName.has(S.currentFile)) {
+      const meta = S.doc.meta && typeof S.doc.meta === 'object' ? S.doc.meta : {};
+      const rawTags = Array.isArray(meta.tags) ? meta.tags : String(meta.tags || '').replace(/，/g, ',').split(',');
+      summaryByName.set(S.currentFile, {
+        name: S.currentFile,
+        title: String(meta.domain || meta.title || S.currentFile).trim() || S.currentFile,
+        space: normalizeWorkspaceSpace(meta.space || meta.teamSpace),
+        tags: rawTags.map((item) => String(item || '').trim()).filter(Boolean),
+        author: String(meta.author || '').trim(),
+        date: String(meta.date || '').trim(),
+      });
+    }
   }
   return files.map((fileName) => {
     const summary = summaryByName.get(fileName) || {};
@@ -750,7 +759,7 @@ function getWorkspaceDocumentSummaries(files) {
     return {
       name: fileName,
       title: String(summary.title || fileName).trim() || fileName,
-      space: String(summary.space || '默认空间').trim() || '默认空间',
+      space: normalizeWorkspaceSpace(summary.space),
       tags: rawTags.map((tag) => String(tag || '').trim()).filter(Boolean),
       author: String(summary.author || '').trim(),
       date: String(summary.date || '').trim(),
@@ -2500,7 +2509,14 @@ async function loadWorkspaceDocumentSummaries() {
     S.recovery.workspaceSummaries = [];
     return S.recovery.workspaceSummaries;
   }
-  S.recovery.workspaceSummaries = Array.isArray(summaries) ? summaries : [];
+  S.recovery.workspaceSummaries = (Array.isArray(summaries) ? summaries : []).map((summary) => ({
+    ...summary,
+    space: normalizeWorkspaceSpace(summary?.space),
+  }));
+  const openModal = document.getElementById('open-modal-overlay');
+  if (openModal && !openModal.classList.contains('hidden') && Array.isArray(S.files) && S.files.length) {
+    renderWorkspaceFileList(S.files);
+  }
   return S.recovery.workspaceSummaries;
 }
 
