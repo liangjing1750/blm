@@ -15,7 +15,7 @@ from pathlib import Path
 
 from copy import deepcopy
 
-from blm_core.collab import CollabClient, CollabSession, CollaborationManager, WebSocketProtocolError
+from blm_core.collab import CollabClient, CollabSession, CollaborationManager, WebSocketProtocolError, _doc_hash
 from blm_core.document import create_empty_document
 from blm_core.server import create_handler
 from blm_core.storage import WorkspaceStorage
@@ -513,6 +513,230 @@ class CollaborationWebSocketTests(unittest.TestCase):
             submits_dir = storage._package_dir("CollabSmoke") / "collab" / "submits"
             submit_files = list(submits_dir.glob("*.json"))
             self.assertEqual(len(submit_files), 1, "提交原文必须保留")
+
+    def test_snapshot_with_current_seq_but_unverified_base_preserves_server_items(self):
+        """旧客户端可能只同步seq，没有同步内容；不能让它用旧稿覆盖服务端。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            server_document = create_empty_document("CollabSmoke")
+            server_document["processes"] = [{"uid": "proc-li", "name": "李龙谱流程", "nodes": []}]
+            storage.save("CollabSmoke", server_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+            session = CollabSession(
+                "CollabSmoke",
+                deepcopy(server_document),
+                seq=6,
+                snapshots={6: deepcopy(server_document)},
+            )
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-old", "旧客户端", handler=None)
+
+            stale_local = create_empty_document("CollabSmoke")
+            stale_local["processes"] = [{"uid": "proc-fan", "name": "樊朝鹏新增流程", "nodes": []}]
+            record = manager._apply_snapshot(session, client, {"baseSeq": 6, "document": stale_local})
+
+            self.assertTrue(record["rebased"])
+            self.assertEqual(record["seq"], 7)
+            self.assertEqual(
+                sorted(process["name"] for process in session.document["processes"]),
+                ["李龙谱流程", "樊朝鹏新增流程"],
+            )
+
+    def test_snapshot_with_verified_current_base_allows_intentional_delete(self):
+        """新客户端带正确基线hash时，baseSeq相同的整稿替换可以表达用户主动删除。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            server_document = create_empty_document("CollabSmoke")
+            server_document["processes"] = [{"uid": "proc-remove", "name": "待删除流程", "nodes": []}]
+            storage.save("CollabSmoke", server_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+            session = CollabSession(
+                "CollabSmoke",
+                deepcopy(server_document),
+                seq=9,
+                snapshots={9: deepcopy(server_document)},
+            )
+            session._doc_hash_cache = _doc_hash(server_document)
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-new", "新客户端", handler=None)
+
+            latest_local = deepcopy(server_document)
+            latest_local["processes"] = []
+            record = manager._apply_snapshot(
+                session,
+                client,
+                {
+                    "baseSeq": 9,
+                    "baseDocumentHash": _doc_hash(server_document),
+                    "document": latest_local,
+                },
+            )
+
+            self.assertFalse(record["rebased"])
+            self.assertEqual(record["seq"], 10)
+            self.assertEqual(session.document["processes"], [])
+
+    def test_stale_snapshot_three_way_keeps_server_and_user_additions(self):
+        """有真实base时，3-way合并要同时保留服务端新增和用户本地新增。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_document = create_empty_document("CollabSmoke")
+            base_document["processes"] = [{"uid": "proc-base", "name": "共同基线流程", "nodes": []}]
+            server_document = deepcopy(base_document)
+            server_document["processes"].append({"uid": "proc-server", "name": "服务端新增流程", "nodes": []})
+            storage.save("CollabSmoke", server_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+            session = CollabSession(
+                "CollabSmoke",
+                deepcopy(server_document),
+                seq=2,
+                snapshots={1: deepcopy(base_document), 2: deepcopy(server_document)},
+            )
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-user", "本地用户", handler=None)
+
+            user_document = deepcopy(base_document)
+            user_document["processes"].append({"uid": "proc-user", "name": "本地新增流程", "nodes": []})
+            record = manager._apply_snapshot(session, client, {"baseSeq": 1, "document": user_document})
+
+            self.assertTrue(record["rebased"])
+            self.assertEqual(record["seq"], 3)
+            self.assertEqual(
+                {process["name"] for process in session.document["processes"]},
+                {"共同基线流程", "本地新增流程", "服务端新增流程"},
+            )
+
+    def test_stale_snapshot_three_way_merges_process_flow_and_form_details(self):
+        """恢复旧提交后再同步时，流程结构、节点表单和另一方新增任务都不能丢。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_document = create_empty_document("CollabSmoke")
+            base_document["processes"] = [
+                {
+                    "uid": "proc-1",
+                    "name": "仓库信息维护",
+                    "nodes": [
+                        {
+                            "uid": "node-1",
+                            "name": "提交仓库信息",
+                            "userSteps": [],
+                            "entity_ops": [],
+                            "orchestrationTasks": [],
+                            "businessRules": [],
+                            "forms": [],
+                        }
+                    ],
+                    "flow": {
+                        "version": 2,
+                        "orientation": "horizontal",
+                        "nodes": [],
+                        "edges": [{"uid": "edge-start", "from": "START", "to": "node-1", "label": ""}],
+                        "layout": {},
+                    },
+                }
+            ]
+            base_document["taskDefinitions"] = []
+            storage.save("CollabSmoke", base_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            server_document = deepcopy(base_document)
+            server_document["taskDefinitions"] = [
+                {"uid": "task-add-warehouse", "name": "新增仓库信息", "type": "Service", "target": "Warehouse.add"},
+                {"uid": "task-edit-warehouse", "name": "修改仓库信息", "type": "Service", "target": "Warehouse.edit"},
+            ]
+            server_document["processes"][0]["nodes"][0]["forms"] = [
+                {
+                    "uid": "form-warehouse",
+                    "name": "仓库信息表单",
+                    "sections": [
+                        {
+                            "uid": "section-basic",
+                            "name": "基本信息",
+                            "fields": [
+                                {"uid": "field-name", "name": "仓库名称", "type": "string"},
+                                {"uid": "field-code", "name": "仓库代码", "type": "string"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+            server_document["processes"][0]["flow"]["edges"].append(
+                {"uid": "edge-end", "from": "node-1", "to": "END", "label": "提交"}
+            )
+            storage.save("CollabSmoke", server_document)
+            session = CollabSession(
+                "CollabSmoke",
+                deepcopy(server_document),
+                seq=2,
+                snapshots={1: deepcopy(base_document), 2: deepcopy(server_document)},
+            )
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-recover", "恢复用户", handler=None)
+
+            recovered_document = deepcopy(base_document)
+            recovered_document["processes"][0]["nodes"][0]["userSteps"] = [
+                {"uid": "step-1", "name": "填写仓库信息", "note": "恢复版本里的用户步骤"}
+            ]
+            recovered_document["processes"][0]["flow"]["nodes"] = [
+                {"uid": "gateway-1", "kind": "gateway", "title": "是否需要复核"}
+            ]
+            recovered_document["processes"][0]["flow"]["edges"].append(
+                {"uid": "edge-gateway", "from": "node-1", "to": "gateway-1", "label": "复核"}
+            )
+
+            record = manager._apply_snapshot(
+                session,
+                client,
+                {"baseSeq": 1, "document": recovered_document, "recoveryMode": True},
+            )
+
+            self.assertTrue(record["rebased"])
+            self.assertEqual(record["seq"], 3)
+            final_process = session.document["processes"][0]
+            self.assertEqual(
+                {task["name"] for task in session.document["taskDefinitions"]},
+                {"新增仓库信息", "修改仓库信息"},
+            )
+            self.assertEqual(final_process["nodes"][0]["userSteps"][0]["name"], "填写仓库信息")
+            self.assertEqual(final_process["nodes"][0]["forms"][0]["sections"][0]["fields"][0]["name"], "仓库名称")
+            self.assertEqual(
+                {edge["uid"] for edge in final_process["flow"]["edges"]},
+                {"edge-start", "edge-end", "edge-gateway"},
+            )
+            self.assertEqual(final_process["flow"]["nodes"][0]["title"], "是否需要复核")
+
+    def test_stale_snapshot_delete_modify_is_preserved_without_blocking(self):
+        """落后提交与服务端删除形成delete_modify时，协作恢复应保留对象并继续提交。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_document = create_empty_document("CollabSmoke")
+            base_document["entities"] = [
+                {"uid": "entity-1", "name": "仓库信息", "fields": [{"uid": "field-1", "name": "仓库名称"}]},
+            ]
+            storage.save("CollabSmoke", base_document)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            server_document = deepcopy(base_document)
+            server_document["entities"] = []
+            session = CollabSession(
+                "CollabSmoke",
+                deepcopy(server_document),
+                seq=2,
+                snapshots={1: deepcopy(base_document), 2: deepcopy(server_document)},
+            )
+            manager._sessions["CollabSmoke"] = session
+            client = CollabClient("client-recover", "恢复用户", handler=None)
+
+            recovered_document = deepcopy(base_document)
+            recovered_document["entities"][0]["fields"][0]["note"] = "恢复版本补充说明"
+            record = manager._apply_snapshot(
+                session,
+                client,
+                {"baseSeq": 1, "document": recovered_document, "recoveryMode": True},
+            )
+
+            self.assertEqual(record["seq"], 3)
+            self.assertEqual(session.document["entities"][0]["fields"][0]["note"], "恢复版本补充说明")
 
     def test_concurrent_http_snapshots_are_serialized_and_rebased(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2022,7 +2246,7 @@ class CollaborationSubmitRecoveryTests(unittest.TestCase):
             r3 = manager.apply_http_snapshot(
                 "CollabSmoke",
                 {"id": "a-recover", "name": "A", "sessionId": "sa"},
-                {"baseSeq": recovered_base_seq, "document": recovered_doc},
+                {"baseSeq": recovered_base_seq, "document": recovered_doc, "recoveryMode": True},
             )
             self.assertTrue(r3["ok"])
             self.assertEqual(r3["seq"], 3)

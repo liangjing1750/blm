@@ -145,5 +145,33 @@ class FeedbackStoreTests(unittest.TestCase):
             self.assertEqual(document["items"][0]["category"], "轻微缺陷")
 
 
+    def test_attachment_is_stored_in_feedback_space(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            store = FeedbackStore(workspace)
+            store.apply(
+                {
+                    "action": "add",
+                    "data": {"uid": "fb-attachment", "category": "体验改进", "title": "upload screenshot"},
+                    "user": {"name": "Alice"},
+                }
+            )
+
+            document = store.add_attachment(
+                "fb-attachment",
+                "../screen shot.png",
+                "image/png",
+                b"fake image bytes",
+                {"name": "Alice"},
+            )
+            attachment = document["items"][0]["attachments"][0]
+            payload, loaded = store.read_attachment("fb-attachment", attachment["uid"])
+
+            self.assertEqual(payload, b"fake image bytes")
+            self.assertEqual(loaded["filename"], "screen shot.png")
+            self.assertEqual(loaded["contentType"], "image/png")
+            self.assertTrue((workspace / ".user_ask" / "attachments" / "fb-attachment" / attachment["storedName"]).is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

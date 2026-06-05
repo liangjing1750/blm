@@ -151,6 +151,12 @@ const api = {
   async saveFeedback(payload) {
     return postJson('/api/feedback', payload);
   },
+  async uploadFeedbackAttachment(payload) {
+    return postJson('/api/feedback/attachment', payload);
+  },
+  feedbackAttachmentUrl(uid, attachmentUid) {
+    return `/api/feedback/attachment/${encodeURIComponent(uid)}/${encodeURIComponent(attachmentUid)}`;
+  },
   async docs() {
     return fetch('/api/docs').then((response) => response.json());
   },
@@ -208,7 +214,9 @@ const api = {
       name,
       document,
       baseSeq: options.baseSeq || 0,
+      baseDocumentHash: options.baseDocumentHash || '',
       documentHash: options.documentHash || '',
+      recoveryMode: Boolean(options.recoveryMode),
       user: options.user || {},
     });
   },

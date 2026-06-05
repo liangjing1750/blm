@@ -10016,6 +10016,12 @@ body.is-collab-reconnecting * {
   font-size: 18px;
   line-height: 1;
 }
+.feedback-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
 
 .feedback-tile-grid {
   display: grid;
@@ -10118,7 +10124,9 @@ body.is-collab-reconnecting * {
   flex-direction: column;
   height: calc(100vh - 170px);
   max-height: calc(100vh - 170px);
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .fb-create-panel {
   flex: 1;
@@ -10232,13 +10240,169 @@ body.is-collab-reconnecting * {
   justify-content: flex-end;
   gap: 8px;
 }
+.fb-attachments-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.fb-attachments-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.fb-attachments-head h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+}
+.fb-attachment-upload {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.fb-attachment-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.fb-attachments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fb-attachment-empty {
+  padding: 8px 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.fb-attachment-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border: 1px dashed #bfdbfe;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #64748b;
+  font-size: 12px;
+}
+.fb-pending-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed #93c5fd;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+.fb-pending-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+}
+.fb-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fb-pending-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+}
+.fb-pending-thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+}
+.fb-pending-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+}
+.fb-pending-size,
+.fb-attachment-hint {
+  color: #64748b;
+  font-size: 12px;
+}
+.fb-attachment-hint {
+  margin: -2px 0 0;
+}
+.fb-pending-remove {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #fecaca;
+  border-radius: 50%;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+  line-height: 18px;
+}
+.fb-pending-remove:hover {
+  background: #fef2f2;
+}
+.fb-attachment-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  color: #1d4ed8;
+  text-decoration: none;
+  font-size: 12px;
+}
+.fb-attachment-item:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.fb-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-attachment-meta {
+  color: #64748b;
+}
 .fb-thread {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .fb-thread h4 {
   margin: 0;
@@ -10249,8 +10413,9 @@ body.is-collab-reconnecting * {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 0;
+  max-height: 320px;
   overflow-y: auto;
   padding-right: 4px;
 }

@@ -1160,7 +1160,7 @@ function renderCompareWorkspaceList() {
       } else if (!isLoaded) {
         extraOptions.push('<option value="__load__">加载版本记录...</option>');
       } else if (versions.length > visibleCount) {
-        extraOptions.push(`<option value="__scroll_hint__" disabled>继续滚动加载 ${Math.min(10, versions.length - visibleCount)} 条...</option>`);
+        extraOptions.push(`<option value="__load_more__">继续加载 ${Math.min(10, versions.length - visibleCount)} 条...</option>`);
       }
     }
     versionSelect.innerHTML = [emptyOption]
@@ -1177,6 +1177,12 @@ function renderCompareWorkspaceList() {
       }
     };
     versionSelect.onwheel = () => extendCompareVersionOptionsIfNeeded(kind);
+    versionSelect.onpointerdown = () => {
+      const currentSourceKind = getCompareSelectedSourceKind(kind);
+      const options = getCompareVersionOptions(kind, currentSourceKind);
+      const visibleCount = getCompareVersionVisibleCount(kind, currentSourceKind);
+      if (options.length > visibleCount) extendCompareVersionOptionsIfNeeded(kind);
+    };
     versionSelect.onscroll = () => extendCompareVersionOptionsIfNeeded(kind);
     versionSelect.onkeydown = (event) => {
       if (['ArrowDown', 'PageDown', 'End'].includes(event.key)) extendCompareVersionOptionsIfNeeded(kind);
@@ -1214,6 +1220,7 @@ function getCompareVersionVisibleCount(kind, sourceKind = getCompareSelectedSour
 
 function resetCompareVersionPaging(kind) {
   if (!S.compare.versionVisibleCounts) S.compare.versionVisibleCounts = {};
+  if (!S.compare.versionVisibleCounts[kind]) S.compare.versionVisibleCounts[kind] = { remote: 10, version: 10, submit: 10 };
   S.compare.versionVisibleCounts[kind] = { remote: 10, version: 10, submit: 10 };
 }
 
@@ -3347,6 +3354,7 @@ const App = {
       preserveUiState: true,
     });
     S.collab.draftBaseSeqOverride = Number(baseSeq || 0);
+    S.collab.recoveryMode = true;
     S.modified = true;
     if (typeof saveLocalCollabDraft === 'function') saveLocalCollabDraft();
     if (typeof renderToolbar === 'function') renderToolbar();
@@ -3368,6 +3376,7 @@ const App = {
     App.closeHistoryModal();
     App.closeOpenModal();
     setActiveDocumentSession(document, { fileName: name, readOnly: false, preserveUiState: true });
+    S.collab.recoveryMode = true;
     S.modified = true;
     if (typeof saveLocalCollabDraft === 'function') saveLocalCollabDraft();
     if (typeof renderToolbar === 'function') renderToolbar();
@@ -3774,7 +3783,7 @@ const App = {
         return false;
       }
       data = {
-        uid: createUiUid('fb'),
+        uid: rawData.uid || createUiUid('fb'),
         category: rawData.category || '体验改进',
         title,
         description: String(rawData.description || '').trim(),
@@ -3833,6 +3842,149 @@ const App = {
         if (threadList) threadList.scrollTop = threadList.scrollHeight;
       });
     }
+    return true;
+  },
+
+  async createFeedbackFromForm() {
+    const category = document.getElementById('fb-add-cat')?.value || '';
+    const title = document.getElementById('fb-add-title')?.value || '';
+    const description = document.getElementById('fb-add-desc')?.value || '';
+    const attachmentInput = document.getElementById('fb-add-attachments');
+    const uid = createUiUid('fb');
+    const newKey = '__new__';
+    const directEntries = attachmentInput?.files?.length
+      ? await this.readFeedbackAttachmentFiles(Array.from(attachmentInput.files))
+      : [];
+    const ok = await this.saveFeedbackItem('add', '', { uid, category, title, description });
+    if (!ok) return false;
+    const pending = S.ui.feedbackPendingAttachments || {};
+    const queuedEntries = Array.isArray(pending[newKey]) ? pending[newKey] : [];
+    const entries = [...queuedEntries, ...directEntries];
+    if (entries.length) {
+      pending[uid] = [...(Array.isArray(pending[uid]) ? pending[uid] : []), ...entries];
+      pending[newKey] = [];
+      S.ui.feedbackPendingAttachments = pending;
+      await this.uploadFeedbackAttachments(uid);
+    }
+    return true;
+  },
+
+  async readFeedbackAttachmentFiles(files) {
+    const maxSize = 20 * 1024 * 1024;
+    const result = [];
+    for (const file of Array.from(files || [])) {
+      if (!file) continue;
+      if (file.size > maxSize) {
+        showAppToast(`附件过大：${file.name || '未命名文件'}，单个附件不能超过 20MB。`);
+        continue;
+      }
+      const dataBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || '');
+        reader.onerror = () => reject(reader.error || new Error('read failed'));
+        reader.readAsDataURL(file);
+      }).catch(() => '');
+      if (!dataBase64) {
+        showAppToast(`附件读取失败：${file.name || '未命名文件'}`);
+        continue;
+      }
+      result.push({
+        uid: createUiUid('fbatt-local'),
+        filename: file.name || 'clipboard-image.png',
+        size: Number(file.size || 0),
+        contentType: file.type || 'application/octet-stream',
+        dataBase64,
+      });
+    }
+    return result;
+  },
+
+  async queueFeedbackAttachments(uid, inputOrFiles) {
+    if (typeof ensureUserConfiguredForApp === 'function' && !ensureUserConfiguredForApp()) return false;
+    const key = String(uid || '__new__').trim() || '__new__';
+    const files = Array.isArray(inputOrFiles) ? inputOrFiles : Array.from(inputOrFiles?.files || []);
+    if (!files.length) return false;
+    const entries = await this.readFeedbackAttachmentFiles(files);
+    if (!entries.length) return false;
+    S.ui.feedbackPendingAttachments = S.ui.feedbackPendingAttachments || {};
+    const current = Array.isArray(S.ui.feedbackPendingAttachments[key]) ? S.ui.feedbackPendingAttachments[key] : [];
+    S.ui.feedbackPendingAttachments[key] = [...current, ...entries];
+    if (inputOrFiles && !Array.isArray(inputOrFiles)) inputOrFiles.value = '';
+    render();
+    showAppToast(entries.length > 1 ? '附件已加入待上传。' : '附件已加入待上传。');
+    return true;
+  },
+
+  removePendingFeedbackAttachment(uid, attachmentUid) {
+    const key = String(uid || '__new__').trim() || '__new__';
+    const pending = S.ui.feedbackPendingAttachments || {};
+    pending[key] = (Array.isArray(pending[key]) ? pending[key] : []).filter((entry) => entry.uid !== attachmentUid);
+    S.ui.feedbackPendingAttachments = pending;
+    render();
+  },
+
+  async pasteFeedbackAttachments(event, uid) {
+    const items = Array.from(event?.clipboardData?.items || []);
+    const files = items
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (!files.length) return false;
+    event.preventDefault();
+    return this.queueFeedbackAttachments(uid || (S.ui.feedbackCreating ? '__new__' : S.ui.feedbackSelectedUid), files);
+  },
+
+  async uploadFeedbackAttachments(uid) {
+    if (typeof ensureUserConfiguredForApp === 'function' && !ensureUserConfiguredForApp()) return false;
+    const itemUid = String(uid || '').trim();
+    const pending = S.ui.feedbackPendingAttachments || {};
+    let entries = Array.isArray(pending[itemUid]) ? pending[itemUid] : [];
+    if (!entries.length) {
+      const selector = `.feedback-detail input[type="file"]`;
+      const input = document.querySelector(selector);
+      if (input?.files?.length) {
+        entries = await this.readFeedbackAttachmentFiles(Array.from(input.files));
+        pending[itemUid] = entries;
+        S.ui.feedbackPendingAttachments = pending;
+      }
+    }
+    if (!itemUid) {
+      showAppToast('请先选择一条反馈。');
+      return false;
+    }
+    if (!entries.length) {
+      showAppToast('请先选择附件，或直接 Ctrl+V 粘贴截图。');
+      return false;
+    }
+    S.ui.feedbackUploadingAttachments = S.ui.feedbackUploadingAttachments || {};
+    S.ui.feedbackUploadingAttachments[itemUid] = true;
+    render();
+    let uploadedCount = 0;
+    try {
+      for (const entry of entries) {
+        const saved = await api.uploadFeedbackAttachment({
+          uid: itemUid,
+          filename: entry.filename || 'attachment',
+          contentType: entry.contentType || 'application/octet-stream',
+          dataBase64: entry.dataBase64 || '',
+          user: S.user || { name: S.collab?.userName || '匿名' },
+        }).catch((error) => ({ error: error?.message || '网络请求失败' }));
+        if (!saved || saved.error) {
+          showAppToast(`附件上传失败：${saved?.error || '未知错误'}`);
+          continue;
+        }
+        saved.items = Array.isArray(saved.items) ? saved.items : [];
+        S.ui.feedbackDoc = saved;
+        S.ui.feedbackSelectedUid = itemUid;
+        uploadedCount += 1;
+      }
+    } finally {
+      S.ui.feedbackUploadingAttachments[itemUid] = false;
+    }
+    if (uploadedCount) pending[itemUid] = [];
+    S.ui.feedbackPendingAttachments = pending;
+    render();
+    showAppToast(uploadedCount > 1 ? '附件上传完成。' : uploadedCount ? '附件已上传。' : '附件上传失败，请稍后重试。');
     return true;
   },
 
@@ -3917,6 +4069,10 @@ const App = {
 
   async selectCompareVersion(kind, entryId) {
     if (entryId === '__loading__' || entryId === '__scroll_hint__') return;
+    if (entryId === '__load_more__') {
+      extendCompareVersionOptionsIfNeeded(kind);
+      return;
+    }
     if (entryId === '__load__') {
       await App.loadCompareVersionOptions(kind, S.compare.workspaceNames[kind]);
       return;

@@ -1325,9 +1325,40 @@ function renderFeedbackTab() {
       </button>`;
   };
 
+  const formatFeedbackAttachmentSize = (size) => {
+    const value = Number(size || 0);
+    if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+    if (value >= 1024) return `${Math.ceil(value / 1024)} KB`;
+    return `${value || 0} B`;
+  };
+  const renderPendingAttachments = (key, options = {}) => {
+    const pendingMap = S.ui.feedbackPendingAttachments || {};
+    const entries = Array.isArray(pendingMap[key]) ? pendingMap[key] : [];
+    if (!entries.length) return '';
+    const uploadingMap = S.ui.feedbackUploadingAttachments || {};
+    const uploading = !!uploadingMap[key];
+    const uploadButton = options.upload && key !== '__new__'
+      ? `<button class="btn btn-primary btn-sm" type="button" ${uploading ? 'disabled' : ''} onclick="App.uploadFeedbackAttachments(decodeURIComponent('${encodeURIComponent(key)}'))">${uploading ? '上传中...' : '上传'}</button>`
+      : '';
+    return `<div class="fb-pending-attachments">
+      <div class="fb-pending-head">
+        <span>待上传附件 ${entries.length}</span>
+        ${uploadButton}
+      </div>
+      <div class="fb-pending-list">
+        ${entries.map((entry) => `<div class="fb-pending-item" title="${esc(entry.filename || 'attachment')}">
+          <span class="fb-pending-thumb">${String(entry.contentType || '').startsWith('image/') ? '图' : '文'}</span>
+          <span class="fb-pending-name">${esc(entry.filename || 'attachment')}</span>
+          <span class="fb-pending-size">${esc(formatFeedbackAttachmentSize(entry.size))}</span>
+          <button type="button" class="fb-pending-remove" title="移除" onclick="App.removePendingFeedbackAttachment(decodeURIComponent('${encodeURIComponent(key)}'),decodeURIComponent('${encodeURIComponent(entry.uid || '')}'))">×</button>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  };
+
   const renderDetail = () => {
     if (S.ui.feedbackCreating) {
-      return `<aside class="feedback-detail">
+      return `<aside class="feedback-detail" onpaste="App.pasteFeedbackAttachments(event,'__new__')">
         <div class="fb-detail-head">
           <div>
             <p class="feedback-kicker">新建反馈</p>
@@ -1345,7 +1376,14 @@ function renderFeedbackTab() {
           <label>详细描述
             <textarea id="fb-add-desc" rows="7" placeholder="补充现象、期望、影响范围或复现步骤"></textarea>
           </label>
-          <button class="btn btn-primary" onclick="App.saveFeedbackItem('add','',{category:document.getElementById('fb-add-cat').value,title:document.getElementById('fb-add-title').value,description:document.getElementById('fb-add-desc').value})">提交反馈</button>
+          <div class="fb-attachment-picker">
+            <label class="btn btn-outline btn-sm fb-attachment-upload">选择附件
+              <input id="fb-add-attachments" type="file" multiple accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" onchange="App.queueFeedbackAttachments('__new__',this)">
+            </label>
+            <span>也可以直接 Ctrl+V 粘贴截图。</span>
+          </div>
+          ${renderPendingAttachments('__new__')}
+          <button class="btn btn-primary" onclick="App.createFeedbackFromForm()">提交反馈</button>
         </section>
       </aside>`;
     }
@@ -1362,7 +1400,20 @@ function renderFeedbackTab() {
     const descriptionCollapsed = S.ui.feedbackDescriptionCollapsedUid === uid;
     const editingDescription = S.ui.feedbackEditingDescriptionUid === uid;
     const detailDescription = String(selectedItem.description || '').trim();
-    return `<aside class="feedback-detail">
+    const attachments = Array.isArray(selectedItem.attachments) ? selectedItem.attachments : [];
+    const renderAttachment = (attachment) => {
+      const attachmentUid = attachment.uid || '';
+      const filename = attachment.filename || 'attachment';
+      const size = Number(attachment.size || 0);
+      const sizeText = size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : size >= 1024 ? `${Math.ceil(size / 1024)} KB` : `${size || 0} B`;
+      const url = api.feedbackAttachmentUrl(uid, attachmentUid);
+      return `<a class="fb-attachment-item" href="${url}" target="_blank" rel="noopener" title="${esc(filename)}">
+        <span class="fb-attachment-icon">附件</span>
+        <span class="fb-attachment-name">${esc(filename)}</span>
+        <span class="fb-attachment-meta">${esc(sizeText)}</span>
+      </a>`;
+    };
+    return `<aside class="feedback-detail" onpaste="App.pasteFeedbackAttachments(event,decodeURIComponent('${encodeURIComponent(uid)}'))">
       <div class="fb-detail-head">
         <div>
           <p class="feedback-kicker">反馈详情</p>
@@ -1395,6 +1446,18 @@ function renderFeedbackTab() {
         ` : `
           <div class="fb-description-content" ondblclick="editFeedbackDescription(decodeURIComponent('${encodeURIComponent(uid)}'))" title="双击修改详细描述">${esc(detailDescription || '暂无详细描述。')}</div>
         `)}
+      </section>
+      <section class="fb-attachments-panel">
+        <div class="fb-attachments-head">
+          <h4>附件截图</h4>
+          <label class="btn btn-outline btn-sm fb-attachment-upload">选择附件
+            <input type="file" multiple accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" onchange="App.queueFeedbackAttachments(decodeURIComponent('${encodeURIComponent(uid)}'),this)">
+          </label>
+        </div>
+        <p class="fb-attachment-hint">选择文件或 Ctrl+V 粘贴截图后，会先进入待上传列表，可删除确认后再上传。</p>
+        ${renderPendingAttachments(uid, { upload: true })}
+        ${attachments.length ? `<div class="fb-attachments-list">${attachments.map(renderAttachment).join('')}</div>` : ''}
+        ${!attachments.length && !((S.ui.feedbackPendingAttachments || {})[uid] || []).length ? `<div class="fb-attachment-empty">暂无附件，可上传截图帮助定位问题。</div>` : ''}
       </section>
       <section class="fb-thread">
         <h4>对话记录</h4>
@@ -1432,9 +1495,12 @@ function renderFeedbackTab() {
         <h2>反馈建议</h2>
         <p>记录使用中的问题、缺陷和优化想法。中间卡片用于快速浏览，右侧详情用于论坛式盖楼跟进。</p>
       </div>
-      <div class="feedback-global-stat">
-        <strong>${filtered.length}</strong><span>当前结果</span>
-        <strong>${totalPages}</strong><span>页数</span>
+      <div class="feedback-hero-actions">
+        <div class="feedback-global-stat">
+          <strong>${filtered.length}</strong><span>当前结果</span>
+          <strong>${totalPages}</strong><span>页数</span>
+        </div>
+        <button type="button" class="btn btn-outline manual-back-button" data-testid="feedback-back-button" onclick="returnFromFeedback()">← 返回编辑</button>
       </div>
     </section>
     <div class="feedback-workbench feedback-workbench--three">
@@ -1492,6 +1558,11 @@ function renderFeedbackTab() {
       ${renderDetail()}
     </div>
   </div>`;
+}
+
+function returnFromFeedback() {
+  if (typeof goBackNavigation === 'function' && goBackNavigation()) return;
+  navigate('domain', {}, { recordHistory: false });
 }
 
 function openFeedbackAddForm() {

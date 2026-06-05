@@ -50,10 +50,17 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "stage_flow_ref": {"scalars": ["stageUid", "processUid", "order", "pos"], "lists": {}},
     "stage_flow_link": {"scalars": ["stageUid", "fromRefUid", "toRefUid"], "lists": {}},
     "process": {
-        "scalars": ["name", "subDomain", "flowGroup", "stageUid", "stagePos", "trigger", "outcome", "pos", "flow", "businessComponentUid", "businessConstructUid"],
+        "scalars": ["name", "subDomain", "flowGroup", "stageUid", "stagePos", "trigger", "outcome", "pos", "businessComponentUid", "businessConstructUid"],
         "set_lists": ["businessComponentUids", "businessConstructUids"],
+        "objects": {"flow": "process_flow"},
         "lists": {"prototypeFiles": "prototype_file", "nodes": "node"},
     },
+    "process_flow": {
+        "scalars": ["version", "orientation", "layout"],
+        "lists": {"nodes": "process_flow_node", "edges": "process_flow_edge"},
+    },
+    "process_flow_node": {"scalars": ["kind", "gatewayType", "title", "role_uid", "nodeUid", "x", "y"], "lists": {}},
+    "process_flow_edge": {"scalars": ["from", "to", "label", "condition", "source", "target"], "lists": {}},
     "prototype_file": {
         "scalars": ["name", "versionUid", "content", "contentType", "uploadedAt"],
         "lists": {"versions": "prototype_version"},
@@ -207,6 +214,8 @@ SEMANTIC_KEY_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "role": [("name",), ("uid",)],
     "language": [("term",)],
     "process": [("name",), ("uid",)],
+    "process_flow_node": [("uid",), ("nodeUid",), ("title",)],
+    "process_flow_edge": [("uid",), ("from", "to", "label"), ("source", "target", "label")],
     "node": [("name",), ("uid",)],
     "user_step": [("name",)],
     "business_rule": [("name",), ("uid",)],

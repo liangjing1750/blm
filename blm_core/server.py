@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import http.server
 import json
+import base64
 import mimetypes
 import threading
 import time
@@ -126,6 +127,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._json(storage.list_trash())
                 if path == "/api/feedback":
                     return self._json(feedback_store.load())
+                if path.startswith("/api/feedback/attachment/"):
+                    return self._handle_feedback_attachment(path)
                 if path == "/api/docs":
                     return self._json(DOCS_MANIFEST)
                 if path.startswith("/api/docs/assets/"):
@@ -191,6 +194,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_trash_clear(body)
                 if path == "/api/feedback":
                     return self._handle_feedback(body)
+                if path == "/api/feedback/attachment":
+                    return self._handle_feedback_attachment_upload(body)
                 if path == "/api/document/normalize":
                     return self._handle_document_normalize(body)
                 if path == "/api/document/validate":
@@ -340,6 +345,47 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             if result.get("error"):
                 return self._json(result, 400)
             return self._json(result)
+
+        def _handle_feedback_attachment_upload(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            user_profile = payload.get("user")
+            if not isinstance(user_profile, dict):
+                user_profile = {}
+            user_profile = dict(user_profile)
+            user_profile["remoteAddr"] = self.client_address[0] if self.client_address else ""
+            item_uid = str(payload.get("uid") or "").strip()
+            filename = str(payload.get("filename") or "").strip()
+            content_type = str(payload.get("contentType") or "application/octet-stream").strip()
+            data_base64 = str(payload.get("dataBase64") or "").strip()
+            if "," in data_base64 and data_base64.lower().startswith("data:"):
+                data_base64 = data_base64.split(",", 1)[1]
+            try:
+                attachment_payload = base64.b64decode(data_base64.encode("ascii"), validate=True)
+                result = feedback_store.add_attachment(item_uid, filename, content_type, attachment_payload, user_profile)
+            except (ValueError, UnicodeEncodeError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            except KeyError as exc:
+                return self._json({"error": str(exc)}, 404)
+            except OSError as exc:
+                return self._json({"error": str(exc)}, 500)
+            return self._json(result)
+
+        def _handle_feedback_attachment(self, path: str):
+            parts = path[len("/api/feedback/attachment/"):].strip("/").split("/")
+            if len(parts) != 2:
+                return self._json({"error": "not found"}, 404)
+            item_uid, attachment_uid = [unquote(part) for part in parts]
+            try:
+                payload, attachment = feedback_store.read_attachment(item_uid, attachment_uid)
+            except KeyError as exc:
+                return self._json({"error": str(exc)}, 404)
+            except FileNotFoundError:
+                return self._json({"error": "not found"}, 404)
+            content_type = str(attachment.get("contentType") or "application/octet-stream")
+            filename = str(attachment.get("filename") or "attachment")
+            return self._binary(payload, content_type, filename=filename)
 
         def _handle_export(self, path: str):
             name = unquote(path[len("/api/export/"):])

@@ -552,10 +552,11 @@ class MergeEngine:
         descriptor = DESCRIPTORS[item_type]
         merged: dict[str, Any] = {}
 
-        left_uid = left_value.get("uid") if isinstance(left_value, dict) else ""
-        right_uid = right_value.get("uid") if isinstance(right_value, dict) else ""
-        base_uid = base_value.get("uid") if isinstance(base_value, dict) else ""
-        merged["uid"] = str(left_uid or right_uid or base_uid or uuid4().hex)
+        if item_type != "process_flow":
+            left_uid = left_value.get("uid") if isinstance(left_value, dict) else ""
+            right_uid = right_value.get("uid") if isinstance(right_value, dict) else ""
+            base_uid = base_value.get("uid") if isinstance(base_value, dict) else ""
+            merged["uid"] = str(left_uid or right_uid or base_uid or uuid4().hex)
 
         if self.mode == "combine" and match_source == "name" and base_value is MISSING:
             if self._needs_object_conflict(item_type, left_value, right_value):
@@ -582,6 +583,30 @@ class MergeEngine:
                 base_value.get(field, []) if isinstance(base_value, dict) and base_value is not MISSING else [],
                 left_value.get(field, []),
                 right_value.get(field, []),
+            )
+
+        for field, child_type in descriptor.get("objects", {}).items():
+            base_child = base_value.get(field) if isinstance(base_value, dict) and base_value is not MISSING else MISSING
+            left_child = left_value.get(field) if isinstance(left_value, dict) else {}
+            right_child = right_value.get(field) if isinstance(right_value, dict) else {}
+            if not isinstance(left_child, dict):
+                left_child = {}
+            if not isinstance(right_child, dict):
+                right_child = {}
+            if base_child is not MISSING and not isinstance(base_child, dict):
+                base_child = {}
+            if base_child is MISSING and not left_child and not right_child:
+                continue
+            merged[field] = self._merge_object(
+                child_type,
+                path + [field],
+                base_child,
+                left_child,
+                right_child,
+                match_source=field,
+                base_trust=base_trust,
+                left_trust=left_trust,
+                right_trust=right_trust,
             )
 
         for field, child_type in descriptor.get("lists", {}).items():

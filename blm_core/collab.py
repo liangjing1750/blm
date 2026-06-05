@@ -15,6 +15,7 @@ from typing import Any
 
 from blm_core.diagnostics import log_error, log_event
 from blm_core.merge import analyze_merge
+from blm_core.model_strategy import DESCRIPTORS, semantic_key
 from blm_core.storage import WorkspaceStorage
 
 
@@ -107,6 +108,7 @@ class CollaborationManager:
                             "type": "joined",
                             "doc": session.doc_name,
                             "seq": session.seq,
+                            "documentHash": session._doc_hash_cache or _doc_hash(session.document),
                             "clientId": client.client_id,
                             "users": self._session_users(session),
                         },
@@ -132,6 +134,7 @@ class CollaborationManager:
                             "mode": "snapshot",
                             "rebased": bool(record.get("rebased")),
                             "document": session.document,
+                            "documentHash": session._doc_hash_cache or _doc_hash(session.document),
                             "changed": changed,
                         },
                     )
@@ -197,6 +200,7 @@ class CollaborationManager:
                 "seq": seq,
                 "changed": changed,
                 "document": None,
+                "documentHash": session._doc_hash_cache or _doc_hash(session.document),
                 "users": self._session_users(session),
             }
 
@@ -238,6 +242,7 @@ class CollaborationManager:
                 "conflictCount": int(record.get("conflictCount", 0)),
                 "conflicts": record.get("conflicts", []),
                 "document": deepcopy(session.document),
+                "documentHash": session._doc_hash_cache or _doc_hash(session.document),
             }
 
     def _is_websocket_request(self, handler) -> bool:
@@ -360,19 +365,24 @@ class CollaborationManager:
             raise WebSocketProtocolError("snapshot document must be object")
         with self._lock:
             base_seq = self._parse_base_seq(payload.get("baseSeq")) or 0
+            base_document_hash = str(payload.get("baseDocumentHash", "") or "").strip()
+            recovery_mode = bool(payload.get("recoveryMode"))
 
             # 底线：先落盘提交原文
             submit_id = self._save_submit_record(session, client, document, base_seq)
 
             # 快速路径：base_seq匹配且内容未变 → 跳过合并
-            new_hash = ""
+            current_hash = session._doc_hash_cache or _doc_hash(session.document)
+            session._doc_hash_cache = current_hash
+            new_hash = _doc_hash(document)
+            verified_current_base = (
+                session.seq == 0
+                or (bool(base_document_hash) and base_document_hash == current_hash)
+                or not self._has_unverified_model_deletions(session.document, document)
+            )
             fast_path = False
             if base_seq == session.seq:
-                new_hash = _doc_hash(document)
-                cached = session._doc_hash_cache
-                if not cached:
-                    session._doc_hash_cache = _doc_hash(session.document)
-                if cached and cached == new_hash:
+                if current_hash and current_hash == new_hash:
                     fast_path = True
 
             if fast_path:
@@ -388,17 +398,25 @@ class CollaborationManager:
                 }
                 return record
 
-            stats: dict = {"merged": True, "conflictCount": 0, "base_missing": False}
+            stats: dict = {"merged": True, "conflictCount": 0, "base_missing": False, "rebased": False}
             conflict_list = []
             _bd = None
-            if base_seq == session.seq:
+            if base_seq == session.seq and verified_current_base:
                 merged = document
-                _bd = session.snapshots.get(base_seq - 1) if base_seq > 0 else session.snapshots.get(0)
+                _bd = session.document
+            elif base_seq == session.seq:
+                _bd = session.document
+                merged, conflict_list, stats = self._merge_collaboration(session.document, document, recovery_mode=recovery_mode)
+                stats["rebased"] = True
+                stats["unverified_current_base"] = True
             elif (_bd := (session.snapshots.get(base_seq) or self._load_snapshot_by_seq(session.doc_name, base_seq))):
-                merged, conflict_list, stats = self._merge_collaboration(_bd, document, session.document)
+                merged, conflict_list, stats = self._merge_collaboration(_bd, document, session.document, recovery_mode=recovery_mode)
+                stats["rebased"] = True
             else:
                 stats["base_missing"] = True
-                merged, conflict_list, stats = self._merge_collaboration(session.document, document)
+                merged, conflict_list, stats = self._merge_collaboration(session.document, document, recovery_mode=recovery_mode)
+                stats["base_missing"] = True
+                stats["rebased"] = True
 
             # 有冲突 → 不自动合并
             has_conflicts = stats.get("conflictCount", 0) > 0
@@ -409,7 +427,7 @@ class CollaborationManager:
                     "clientId": client.client_id,
                     "ts": datetime.now(timezone.utc).isoformat(),
                     "baseSeq": base_seq, "mode": "snapshot",
-                    "rebased": base_seq != session.seq - 1,
+                    "rebased": bool(stats.get("rebased")),
                     "submitId": submit_id, "changed": False,
                     "conflictCount": stats["conflictCount"],
                     "conflicts": conflict_list,
@@ -464,11 +482,58 @@ class CollaborationManager:
                 "clientId": client.client_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "baseSeq": base_seq, "mode": "snapshot",
-                "rebased": base_seq != session.seq - 1,
+                "rebased": bool(stats.get("rebased")),
                 "submitId": submit_id,
                 "changed": document_changed,
             }
             return record
+
+    @staticmethod
+    def _has_unverified_model_deletions(server_document: dict, candidate_document: dict) -> bool:
+        """Return True when a same-seq submit omits model items that exist on the server."""
+        list_fields = [
+            "roles", "language", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
+            "processes", "entities", "relations", "rules",
+            "businessComponents", "businessConstructs", "taskDefinitions", "forms",
+        ]
+
+        def collect_uids(document: dict) -> set[str]:
+            result: set[str] = set()
+            for field in list_fields:
+                values = document.get(field) if isinstance(document, dict) else []
+                if not isinstance(values, list):
+                    continue
+                for item in values:
+                    if not isinstance(item, dict):
+                        continue
+                    uid = str(item.get("uid", "")).strip()
+                    if uid:
+                        result.add(f"{field}:{uid}")
+                    if field == "processes":
+                        flow = item.get("flow") if isinstance(item.get("flow"), dict) else {}
+                        for nested_field in ("nodes", "edges"):
+                            for nested in flow.get(nested_field, []) if isinstance(flow.get(nested_field), list) else []:
+                                if isinstance(nested, dict):
+                                    nested_uid = str(nested.get("uid", "")).strip()
+                                    if nested_uid:
+                                        result.add(f"processes.flow.{nested_field}:{nested_uid}")
+                        for node in item.get("nodes", []) if isinstance(item.get("nodes"), list) else []:
+                            if isinstance(node, dict):
+                                node_uid = str(node.get("uid", "")).strip()
+                                if node_uid:
+                                    result.add(f"processes.nodes:{node_uid}")
+                    if field == "entities":
+                        for nested_field in ("fields", "state_transitions"):
+                            for nested in item.get(nested_field, []) if isinstance(item.get(nested_field), list) else []:
+                                if isinstance(nested, dict):
+                                    nested_uid = str(nested.get("uid", "")).strip()
+                                    if nested_uid:
+                                        result.add(f"entities.{nested_field}:{nested_uid}")
+            return result
+
+        server_uids = collect_uids(server_document)
+        candidate_uids = collect_uids(candidate_document)
+        return bool(server_uids - candidate_uids)
 
 
     def _save_submit_record(
@@ -555,7 +620,7 @@ class CollaborationManager:
             f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
 
     def _merge_collaboration(
-        self, base_doc: dict, user_doc: dict, server_doc: dict | None = None
+        self, base_doc: dict, user_doc: dict, server_doc: dict | None = None, *, recovery_mode: bool = False
     ) -> tuple[dict, list[dict], dict]:
         """协作专用合并入口，内部复用 merge.py 的 analyze_merge"""
         if server_doc is None:
@@ -578,6 +643,12 @@ class CollaborationManager:
         if isinstance(conflicts, list):
             uc = self._clean_deleted_items(merged, base_doc, user_doc, delete_ref)
             delete_conflicts = uc
+        if server_doc is not None and recovery_mode:
+            self._preserve_stale_collaboration_items(merged, user_doc, server_doc)
+            if isinstance(conflicts, list):
+                conflicts = [conflict for conflict in conflicts if not self._is_non_blocking_collab_conflict(conflict, recovery_mode=recovery_mode)]
+        elif server_doc is not None and isinstance(conflicts, list):
+            conflicts = [conflict for conflict in conflicts if not self._is_non_blocking_collab_conflict(conflict, recovery_mode=False)]
 
         stats = {
             "merged": True,
@@ -653,6 +724,71 @@ class CollaborationManager:
 
         # panorama 的删除检测已由 _merge_panorama (3-way) + _clean_deleted_items 正确覆盖
         return merged, conflicts, stats
+
+    @staticmethod
+    def _is_non_blocking_collab_conflict(conflict: dict, *, recovery_mode: bool = False) -> bool:
+        path = str((conflict or {}).get("path", ""))
+        field = str((conflict or {}).get("field", ""))
+        if recovery_mode and str((conflict or {}).get("kind", "")) == "delete_modify":
+            return True
+        layout_fields = {"pos", "stagePos", "panoramaPos", "layout", "labelPos", "markerPos"}
+        return field in layout_fields or any(path.endswith(f".{name}") for name in layout_fields)
+
+    @staticmethod
+    def _preserve_stale_collaboration_items(merged: dict, user_doc: dict, server_doc: dict) -> None:
+        """Preserve both sides for stale collaboration saves; stale absence is not a delete."""
+
+        def item_key(item_type: str, item: dict) -> str:
+            uid = str(item.get("uid", "")).strip()
+            if uid:
+                return f"uid:{uid}"
+            key = semantic_key(item_type, item)
+            return f"name:{key}" if key else ""
+
+        def merge_list_items(item_type: str, target: list, *sources: list) -> list:
+            result = [deepcopy(item) for item in target if isinstance(item, dict)]
+            index = {item_key(item_type, item): item for item in result if item_key(item_type, item)}
+            for source in sources:
+                for item in source if isinstance(source, list) else []:
+                    if not isinstance(item, dict):
+                        continue
+                    key = item_key(item_type, item)
+                    if not key:
+                        result.append(deepcopy(item))
+                        continue
+                    if key not in index:
+                        copied = deepcopy(item)
+                        result.append(copied)
+                        index[key] = copied
+                    else:
+                        merge_nested(item_type, index[key], item)
+            return result
+
+        def merge_nested(item_type: str, target_item: dict, source_item: dict) -> None:
+            descriptor = DESCRIPTORS.get(item_type, {})
+            for field, child_type in descriptor.get("objects", {}).items():
+                source_child = source_item.get(field)
+                if not isinstance(source_child, dict):
+                    continue
+                target_child = target_item.setdefault(field, {})
+                if not isinstance(target_child, dict):
+                    target_item[field] = deepcopy(source_child)
+                    continue
+                merge_nested(child_type, target_child, source_child)
+            for field, child_type in descriptor.get("lists", {}).items():
+                target_list = target_item.get(field)
+                if not isinstance(target_list, list):
+                    target_list = []
+                target_item[field] = merge_list_items(child_type, target_list, source_item.get(field, []))
+
+        for field, item_type in DESCRIPTORS["document"]["lists"].items():
+            target = merged.get(field) if isinstance(merged.get(field), list) else []
+            merged[field] = merge_list_items(
+                item_type,
+                target,
+                user_doc.get(field, []) if isinstance(user_doc, dict) else [],
+                server_doc.get(field, []) if isinstance(server_doc, dict) else [],
+            )
 
     @staticmethod
     def _clean_deleted_items(

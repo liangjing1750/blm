@@ -16,6 +16,7 @@ LEGACY_FEEDBACK_CATEGORY_MAP = {
     "问题": "体验改进",
     "缺陷": "轻微缺陷",
 }
+MAX_FEEDBACK_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
 class FeedbackStore:
@@ -29,6 +30,7 @@ class FeedbackStore:
     def __init__(self, workspace_dir: Path):
         self.workspace_dir = Path(workspace_dir)
         self.root = self.workspace_dir / ".user_ask"
+        self.attachments_root = self.root / "attachments"
         self.path = self.root / "feedback.json"
         self._lock = threading.RLock()
 
@@ -37,6 +39,73 @@ class FeedbackStore:
             document = self._read_unlocked()
             self._write_unlocked(document)
             return deepcopy(document)
+
+    def add_attachment(
+        self,
+        item_uid: str,
+        filename: str,
+        content_type: str,
+        payload: bytes,
+        user: dict | None = None,
+    ) -> dict:
+        if not isinstance(payload, (bytes, bytearray)):
+            raise ValueError("attachment payload is required")
+        data = bytes(payload)
+        if not data:
+            raise ValueError("attachment payload is required")
+        if len(data) > MAX_FEEDBACK_ATTACHMENT_BYTES:
+            raise ValueError("attachment is too large")
+        item_uid = str(item_uid or "").strip()
+        if not item_uid:
+            raise ValueError("feedback uid is required")
+        if "/" in item_uid or "\\" in item_uid or item_uid in {".", ".."}:
+            raise ValueError("invalid feedback uid")
+        safe_filename = _safe_filename(filename)
+        attachment_uid = f"fbatt-{uuid.uuid4().hex}"
+        stored_name = f"{attachment_uid}__{safe_filename}"
+        with self._lock:
+            document = self._read_unlocked()
+            item = self._find_item_unlocked(document, {"uid": item_uid}, {})
+            item_dir = self.attachments_root / item_uid
+            item_dir.mkdir(parents=True, exist_ok=True)
+            (item_dir / stored_name).write_bytes(data)
+            attachments = _attachments(item)
+            attachments.append(
+                {
+                    "uid": attachment_uid,
+                    "filename": safe_filename,
+                    "storedName": stored_name,
+                    "size": len(data),
+                    "contentType": str(content_type or "application/octet-stream").strip() or "application/octet-stream",
+                    "createdAt": _now(),
+                    "author": _user_name(user or {}),
+                }
+            )
+            document["updatedAt"] = _now()
+            self._write_unlocked(document)
+            return deepcopy(document)
+
+    def read_attachment(self, item_uid: str, attachment_uid: str) -> tuple[bytes, dict]:
+        item_uid = str(item_uid or "").strip()
+        attachment_uid = str(attachment_uid or "").strip()
+        if "/" in item_uid or "\\" in item_uid or item_uid in {".", ".."}:
+            raise FileNotFoundError("feedback attachment not found")
+        with self._lock:
+            document = self._read_unlocked()
+            item = self._find_item_unlocked(document, {"uid": item_uid}, {})
+            attachment = next(
+                (entry for entry in _attachments(item) if str(entry.get("uid") or "") == attachment_uid),
+                None,
+            )
+            if attachment is None:
+                raise FileNotFoundError("feedback attachment not found")
+            stored_name = str(attachment.get("storedName") or "").strip()
+            if not stored_name or "/" in stored_name or "\\" in stored_name:
+                raise FileNotFoundError("feedback attachment not found")
+            path = self.attachments_root / item_uid / stored_name
+            if not path.is_file():
+                raise FileNotFoundError("feedback attachment not found")
+            return path.read_bytes(), deepcopy(attachment)
 
     def apply(self, payload: dict) -> dict:
         action = str(payload.get("action") or "").strip()
@@ -76,6 +145,7 @@ class FeedbackStore:
             "repliedBy": "",
             "repliedAt": "",
             "messages": [],
+            "attachments": [],
         }
         if item["description"]:
             item["messages"].append(_message(content=item["description"], user=user, floor=1))
@@ -201,6 +271,7 @@ def _normalize_item(item: dict) -> dict:
         "repliedBy": str(item.get("repliedBy") or ""),
         "repliedAt": str(item.get("repliedAt") or ""),
         "messages": [],
+        "attachments": [],
     }
     raw_messages = item.get("messages") if isinstance(item.get("messages"), list) else []
     for index, raw in enumerate(raw_messages, 1):
@@ -243,7 +314,42 @@ def _normalize_item(item: dict) -> dict:
         )
     for index, message in enumerate(normalized["messages"], 1):
         message["floor"] = index
+    raw_attachments = item.get("attachments") if isinstance(item.get("attachments"), list) else []
+    for raw in raw_attachments:
+        if not isinstance(raw, dict):
+            continue
+        attachment = _normalize_attachment(raw)
+        if attachment:
+            normalized["attachments"].append(attachment)
     return normalized
+
+
+def _attachments(item: dict) -> list[dict]:
+    if not isinstance(item.get("attachments"), list):
+        item["attachments"] = []
+    return item["attachments"]
+
+
+def _normalize_attachment(raw: dict) -> dict | None:
+    uid = str(raw.get("uid") or "").strip()
+    filename = _safe_filename(raw.get("filename") or raw.get("name") or "attachment")
+    stored_name = str(raw.get("storedName") or raw.get("stored_name") or "").strip()
+    if not uid or not stored_name or "/" in stored_name or "\\" in stored_name:
+        return None
+    try:
+        size = int(raw.get("size") or 0)
+    except (TypeError, ValueError):
+        size = 0
+    return {
+        "uid": uid,
+        "filename": filename,
+        "storedName": stored_name,
+        "size": max(0, size),
+        "contentType": str(raw.get("contentType") or raw.get("content_type") or "application/octet-stream").strip()
+        or "application/octet-stream",
+        "createdAt": str(raw.get("createdAt") or ""),
+        "author": str(raw.get("author") or ""),
+    }
 
 
 def _messages(item: dict) -> list[dict]:
@@ -275,3 +381,17 @@ def _user_name(user: dict) -> str:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
+
+
+def _safe_filename(value) -> str:
+    text = str(value or "").replace("\\", "/").split("/")[-1].strip().strip(".")
+    if not text:
+        text = "attachment"
+    cleaned = []
+    for char in text:
+        if ord(char) < 32 or char in {'"', "'", ":", "*", "?", "<", ">", "|"}:
+            cleaned.append("_")
+        else:
+            cleaned.append(char)
+    result = "".join(cleaned).strip(" .")
+    return result[:160] or "attachment"

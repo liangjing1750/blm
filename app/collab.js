@@ -653,6 +653,7 @@ function disconnectCollabSession(options = {}) {
   S.collab.connected = false;
   S.collab.clientId = '';
   S.collab.acceptedSeq = 0;
+  S.collab.serverDocumentHash = '';
   S.collab.users = [];
   S.collab.docName = '';
   S.collab.pendingSnapshot = false;
@@ -674,6 +675,7 @@ function disconnectCollabSession(options = {}) {
   S.collab.localDraftError = '';
   S.collab.localDraftKey = '';
   S.collab.draftBaseSeqOverride = null;
+  S.collab.recoveryMode = false;
   S.collab.forceSnapshotSync = false;
   S.collab.recovering = false;
   S.collab.everConnected = false;
@@ -748,6 +750,7 @@ async function pollCollabOnce() {
     const result = await api.collabPoll(S.currentFile, S.collab?.seq || 0);
     if (!result || result.error) return;
     S.collab.seq = Number(result.seq || S.collab.seq || 0);
+    if (result.documentHash) S.collab.serverDocumentHash = String(result.documentHash || '');
     S.collab.users = Array.isArray(result.users) ? result.users : S.collab.users || [];
     if (result.changed) {
       receiveRemoteCollabNotice();
@@ -903,7 +906,9 @@ async function flushCollabSnapshotHttp() {
   try {
     const result = await api.collabSnapshot(S.currentFile, frozenDoc, {
       baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.acceptedSeq ?? S.collab.seq ?? 0),
+      baseDocumentHash: S.collab.serverDocumentHash || '',
       documentHash: frozenHash,
+      recoveryMode: Boolean(S.collab.recoveryMode),
       user: getCollabUserProfile(),
     });
     if (!result || result.error) {
@@ -916,7 +921,9 @@ async function flushCollabSnapshotHttp() {
     }
     S.collab.seq = Number(result.seq || S.collab.seq || 0);
     S.collab.acceptedSeq = S.collab.seq;
+    if (result.documentHash) S.collab.serverDocumentHash = String(result.documentHash || '');
     S.collab.draftBaseSeqOverride = null;
+    S.collab.recoveryMode = false;
     // 检测同步期间用户是否有新编辑
     const postSyncHash = hashCollabDocument(S.doc);
     const hadNewEditsDuringSync = frozenHash !== postSyncHash;
@@ -1047,6 +1054,7 @@ function handleCollabMessage(raw) {
     S.collab.clientId = String(payload.clientId || '');
     S.collab.seq = Number(payload.seq || 0);
     S.collab.acceptedSeq = S.collab.seq;
+    S.collab.serverDocumentHash = String(payload.documentHash || '');
     S.collab.users = Array.isArray(payload.users) ? payload.users : [];
     renderCollabStatus();
     renderCollabReconnectOverlay();
@@ -1087,6 +1095,7 @@ function handleCollabMessage(raw) {
   }
   if (payload.type === 'ack') {
     S.collab.seq = Number(payload.seq || S.collab.seq || 0);
+    if (payload.documentHash) S.collab.serverDocumentHash = String(payload.documentHash || '');
     if (payload.mode === 'snapshot') {
       S.collab.syncing = false;
       const ackIsLatestSnapshot = (S.collab.inFlightRevision || 0) >= (S.collab.snapshotRevision || 0);
@@ -1213,7 +1222,9 @@ function flushCollabSnapshotSync() {
   socket.send(JSON.stringify({
     type: 'snapshot',
     baseSeq: Number(S.collab.draftBaseSeqOverride ?? S.collab.acceptedSeq ?? S.collab.seq ?? 0),
+    baseDocumentHash: S.collab.serverDocumentHash || '',
     documentHash,
+    recoveryMode: Boolean(S.collab.recoveryMode),
     document: S.doc,
   }));
 }
