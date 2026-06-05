@@ -2260,6 +2260,87 @@ class CollaborationSubmitRecoveryTests(unittest.TestCase):
             self.assertEqual(final["meta"]["date"], "2026-06-15", "B的日期修改应保留")
 
 
+    def test_recovery_merge_keeps_server_only_process_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            base_doc = create_empty_document("CollabSmoke")
+            base_doc["meta"]["date"] = "2026-06-01"
+            base_doc["processes"] = [
+                {
+                    "uid": "process-a",
+                    "name": "Apply",
+                    "nodes": [
+                        {
+                            "uid": "node-a",
+                            "name": "Submit",
+                            "forms": [
+                                {
+                                    "uid": "form-a",
+                                    "name": "ApplyForm",
+                                    "sections": [
+                                        {
+                                            "uid": "section-a",
+                                            "name": "Main",
+                                            "fields": [{"uid": "field-a", "name": "old field", "type": "text"}],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+            storage.save("CollabSmoke", base_doc)
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            server_doc = deepcopy(base_doc)
+            server_doc["meta"]["date"] = "2026-06-04"
+            server_doc["processes"].append(
+                {
+                    "uid": "process-new-warehouse",
+                    "name": "New Warehouse Info",
+                    "nodes": [
+                        {
+                            "uid": "node-new-warehouse",
+                            "name": "Register",
+                            "forms": [
+                                {
+                                    "uid": "form-new-warehouse",
+                                    "name": "Warehouse Form",
+                                    "sections": [
+                                        {
+                                            "uid": "section-new-warehouse",
+                                            "name": "Fields",
+                                            "fields": [
+                                                {"uid": "field-wh-name", "name": "warehouse name", "type": "text"},
+                                                {"uid": "field-wh-code", "name": "warehouse code", "type": "text"},
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+            recovered_doc = deepcopy(base_doc)
+            recovered_doc["meta"]["date"] = "2026-06-05"
+
+            merged, conflicts, _ = manager._merge_collaboration(
+                base_doc, recovered_doc, server_doc, recovery_mode=True
+            )
+            merged_again, conflicts_again, _ = manager._merge_collaboration(
+                base_doc, recovered_doc, merged, recovery_mode=True
+            )
+
+            self.assertEqual(conflicts, [])
+            self.assertEqual(conflicts_again, [])
+            self.assertEqual(_doc_hash(merged), _doc_hash(merged_again))
+            new_process = next((p for p in merged["processes"] if p["uid"] == "process-new-warehouse"), None)
+            self.assertIsNotNone(new_process)
+            fields = new_process["nodes"][0]["forms"][0]["sections"][0]["fields"] if new_process else []
+            self.assertEqual([field["name"] for field in fields], ["warehouse name", "warehouse code"])
+
     def test_very_old_baseseq_loads_from_disk_snapshot(self):
         """Given: 用户A保存50次后服务重启
            When: 用户B用baseSeq=30(已被内存淘汰)提交
@@ -2323,6 +2404,129 @@ class CollaborationSubmitRecoveryTests(unittest.TestCase):
                              "role修改应保留")
             # A的baseSeq太旧但不影响合并正确性
             self.assertGreater(result["seq"], 31)
+
+
+    def test_recovery_mode_dedupes_process_and_preserves_form_field_details(self):
+        """Recovery saves must not let stale duplicated flows wipe current form fields."""
+        base_doc = create_empty_document("CollabSmoke")
+        server_doc = create_empty_document("CollabSmoke")
+        user_doc = create_empty_document("CollabSmoke")
+
+        server_doc["processes"] = [
+            {
+                "uid": "proc-store-add",
+                "name": "新增仓库信息",
+                "nodes": [
+                    {
+                        "uid": "node-store-add",
+                        "name": "新增交割仓库",
+                        "forms": [
+                            {
+                                "uid": "form-store",
+                                "name": "新增/修改仓库表单",
+                                "sections": [
+                                    {
+                                        "uid": "sec-basic",
+                                        "name": "基本信息",
+                                        "fields": [
+                                            {"uid": "field-code", "name": "仓库代码", "entity_field": "仓库代码", "type": "text"},
+                                            {"uid": "field-name", "name": "仓库全称", "entity_field": "仓库全称", "type": "text"},
+                                            {"uid": "field-location", "name": "提货地点维护", "entity_field": "", "type": "text"},
+                                        ],
+                                    },
+                                    {
+                                        "uid": "sec-owner",
+                                        "name": "负责人信息",
+                                        "fields": [
+                                            {"uid": "field-owner", "name": "法人姓名", "entity_field": "法人姓名", "type": "text"},
+                                        ],
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+        user_doc["processes"] = [
+            {
+                "uid": "proc-store-add",
+                "name": "新增仓库信息",
+                "nodes": [
+                    {
+                        "uid": "node-store-add",
+                        "name": "新增交割仓库",
+                        "forms": [
+                            {
+                                "uid": "form-store",
+                                "name": "新增/修改仓库表单",
+                                "sections": [
+                                    {
+                                        "uid": "sec-basic",
+                                        "name": "基本信息",
+                                        "fields": [
+                                            {"uid": "field-code", "name": "", "entity_field": "", "type": ""},
+                                            {"uid": "field-name", "name": "", "entity_field": "", "type": ""},
+                                            {"uid": "field-location", "name": "仓房维护", "entity_field": "", "type": "text"},
+                                        ],
+                                    },
+                                    {"uid": "sec-owner", "name": "负责人信息", "fields": []},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        manager = CollaborationManager(WorkspaceStorage(Path(tempfile.mkdtemp()) / "workspace"), autosave_interval=0)
+        merged, conflicts, _stats = manager._merge_collaboration(base_doc, user_doc, server_doc, recovery_mode=True)
+
+        matched_processes = [p for p in merged["processes"] if p.get("uid") == "proc-store-add"]
+        self.assertEqual(len(matched_processes), 1)
+        fields = []
+        for node in matched_processes[0]["nodes"]:
+            for form in node.get("forms", []):
+                for section in form.get("sections", []):
+                    fields.extend(section.get("fields", []))
+        field_names = {field.get("name") for field in fields}
+        self.assertIn("仓库代码", field_names)
+        self.assertIn("仓库全称", field_names)
+        self.assertIn("法人姓名", field_names)
+        self.assertIn("提货地点维护", field_names)
+        self.assertIn("仓房维护", field_names)
+        self.assertNotIn("", field_names)
+        self.assertEqual(len(conflicts), 0)
+
+    def test_load_snapshot_by_seq_infers_legacy_history_seq_by_time_order(self):
+        """Legacy history snapshots without seq should still be usable as 3-way bases."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            manager = CollaborationManager(storage, autosave_interval=0)
+            doc_name = "LegacyHistory"
+            storage.save(doc_name, create_empty_document(doc_name))
+            history_dir = storage._history_dir(doc_name)
+
+            for index in range(1, 4):
+                snapshot_id = f"20260604-00000{index}-000000"
+                package_dir = history_dir / snapshot_id
+                (package_dir / "manifest").mkdir(parents=True)
+                doc = create_empty_document(doc_name)
+                doc["meta"]["author"] = f"Author{index}"
+                (package_dir / "manifest" / "manifest.json").write_text(
+                    json.dumps(doc, ensure_ascii=False), encoding="utf-8"
+                )
+                (package_dir / "snapshot.json").write_text(
+                    json.dumps({"id": snapshot_id, "kind": "collab", "createdAt": snapshot_id}, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+            loaded = manager._load_snapshot_by_seq(doc_name, 2)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["meta"]["author"], "Author2")
+            history_entries = storage.list_history(doc_name)
+            entry_by_id = {entry["id"]: entry for entry in history_entries}
+            self.assertEqual(entry_by_id["20260604-000002-000000"]["seq"], 2)
 
 
 if __name__ == "__main__":

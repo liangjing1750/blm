@@ -313,6 +313,31 @@ function renderToolbar() {
   const name = getCurrentDocumentLabel();
   document.getElementById('file-name').textContent = name;
   document.getElementById('file-name').title = getCurrentDocumentTitle();
+  const versionBadge = document.getElementById('document-version-badge');
+  if (versionBadge) {
+    const meta = S.doc?.meta || {};
+    const readonlyLabel = meta.version_label || (meta.version_id ? String(meta.version_id).replace(/^history:/, '历史快照 ') : '');
+    const recoverySeq = Number(S.collab?.draftBaseSeqOverride || 0);
+    const seq = Number(S.collab?.seq || S.collab?.acceptedSeq || 0);
+    let label = '';
+    let kind = '';
+    if (S.readOnly && readonlyLabel) {
+      label = readonlyLabel;
+      kind = 'readonly';
+    } else if (S.collab?.recoveryMode) {
+      label = recoverySeq ? `本地恢复 · 基线 v${recoverySeq}` : '本地恢复';
+      kind = 'recovery';
+    } else if (S.currentFile && S.runtime.supportsCollab && seq > 0) {
+      label = `当前 v${seq}`;
+      kind = 'current';
+    }
+    versionBadge.textContent = label;
+    versionBadge.title = label ? `文档版本：${label}` : '';
+    versionBadge.classList.toggle('hidden', !label);
+    versionBadge.classList.toggle('readonly', kind === 'readonly');
+    versionBadge.classList.toggle('recovery', kind === 'recovery');
+    versionBadge.classList.toggle('current', kind === 'current');
+  }
   const isCollabDoc = Boolean(S.currentFile && S.runtime.supportsCollab && !S.readOnly);
   const isCollabConnected = Boolean(isCollabDoc && S.collab?.connected);
   const hasLocalUnsubmitted = isCollabDoc

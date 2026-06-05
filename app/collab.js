@@ -872,6 +872,7 @@ async function syncCollabImmediatelyFromCommand() {
   if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly) return false;
   // 总是走 HTTP 同步，不依赖 WebSocket 状态
   preserveLocalSnapshotForImmediateSync();
+  S.collab.forceSnapshotSync = true;
   const syncedByHttp = await flushCollabSnapshotHttp();
   if (syncedByHttp) {
     S.collab.hasConflict = false;
@@ -885,7 +886,7 @@ async function syncCollabImmediatelyFromCommand() {
 async function flushCollabSnapshotHttp() {
   if (!S.currentFile || !S.runtime.supportsCollab || S.readOnly || !S.doc || !api?.collabSnapshot) return false;
   const documentHash = hashCollabDocument(S.doc);
-  if (documentHash && documentHash === S.collab.lastSyncedDocumentHash && !hasPendingRemoteCollabSnapshot() && !S.collab.forceSnapshotSync) {
+  if (documentHash && documentHash === S.collab.lastSyncedDocumentHash && !hasPendingRemoteCollabSnapshot() && !S.collab.forceSnapshotSync && !S.collab.recoveryMode) {
     S.modified = false;
     S.collab.pendingSnapshot = false;
     await clearLocalCollabDraft(S.currentFile);
@@ -932,6 +933,30 @@ async function flushCollabSnapshotHttp() {
       if (typeof setSaveProgress === 'function') setSaveProgress(false);
       const conflicts = Array.isArray(result.conflicts) ? result.conflicts : [];
       const resolution = await showCollabConflictDialog(conflicts);
+      // 逐项选择模式：按用户的每项选择，合并 frozenDoc 和 result.document
+      if (resolution && typeof resolution === 'object' && resolution.choices) {
+        const mergedDoc = result.document ? JSON.parse(JSON.stringify(result.document)) : frozenDoc;
+        Object.keys(resolution.choices).forEach((idx) => {
+          if (resolution.choices[idx] !== 'mine') return;
+          const conflict = conflicts[parseInt(idx)];
+          if (!conflict) return;
+          const userVal = conflict.user ?? conflict.left_value;
+          _setByPath(mergedDoc, conflict.path || '', userVal);
+        });
+        S.doc = mergedDoc;
+        hydrateDocumentForUi(S.doc);
+        S.modified = true;
+        S.collab.pendingSnapshot = true;
+        S.collab.hasConflict = false;
+        S.collab.acceptedSeq = S.collab.seq;
+        renderCollabConflictBanner();
+        renderCollabStatus();
+        const snapMixed = captureScrollSnapshots();
+        render();
+        restoreScrollSnapshots(snapMixed);
+        if (typeof renderToolbar === 'function') renderToolbar();
+        return true;
+      }
       if (resolution === 'mine') {
         // 用户选择保留自己的版本：恢复冻结文档，标记待同步
         S.doc = frozenDoc;
@@ -1201,6 +1226,7 @@ function flushCollabSnapshotSync() {
     && documentHash === S.collab.lastSyncedDocumentHash
     && !hasPendingRemoteCollabSnapshot()
     && !S.collab.forceSnapshotSync
+    && !S.collab.recoveryMode
   ) {
     S.collab.snapshotTimer = null;
     S.collab.pendingSnapshot = false;
@@ -1329,36 +1355,55 @@ function showCollabConflictDialog(conflicts) {
     const html = `<div class="modal-overlay collab-conflict-overlay" id="collab-conflict-modal">
       <div class="modal collab-conflict-dialog">
         <h3>检测到 ${conflicts.length} 处修改冲突</h3>
-        <p class="field-hint">以下字段被你和其他人同时修改了，请逐项选择保留哪个版本，或使用底部按钮一键处理。</p>
+        <p class="field-hint">以下字段被你和其他人同时修改了。请逐项点击"保留此项"选择每个字段用哪个版本，或使用底部按钮一键处理。</p>
         <div class="collab-conflict-list">${conflictList}</div>
-        <div class="collab-conflict-actions" style="justify-content:flex-end;gap:10px;margin-top:10px">
+        <div class="collab-conflict-actions">
           <button class="btn btn-outline" id="collab-conflict-all-mine">全部保留我的版本</button>
+          <button class="btn btn-outline" id="collab-conflict-apply-choices">按上述选择合并</button>
           <button class="btn btn-primary" id="collab-conflict-all-server">全部使用服务端版本</button>
         </div>
       </div>
     </div>`;
 
-    const overlay = document.createElement('div');
-    overlay.innerHTML = html;
-    document.body.appendChild(overlay.firstElementChild);
+    document.body.insertAdjacentHTML('beforeend', html);
 
     const cleanup = () => {
       const modal = document.getElementById('collab-conflict-modal');
       if (modal) modal.remove();
     };
 
+    const collectChoices = () => {
+      const choices = {};
+      document.querySelectorAll('.collab-conflict-item').forEach((item) => {
+        const idx = item.dataset.conflictIndex;
+        const mineBtn = item.querySelector('[data-choice="mine"]');
+        if (mineBtn && mineBtn.classList.contains('is-selected')) choices[idx] = 'mine';
+        else choices[idx] = 'server';
+      });
+      return choices;
+    };
+
     // Per-field choices: highlight the selected one
     document.querySelectorAll('.collab-conflict-choose').forEach((btn) => {
-      btn.onclick = (e) => {
+      btn.addEventListener('click', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         const item = btn.closest('.collab-conflict-item');
-        item.querySelectorAll('.collab-conflict-choose').forEach((b) => b.classList.remove('btn-primary'));
-        btn.classList.add('btn-primary');
-      };
+        if (!item) return;
+        item.querySelectorAll('.collab-conflict-choose').forEach((b) => {
+          b.classList.remove('btn-primary', 'is-selected');
+          b.classList.add('btn-outline');
+          b.textContent = '保留此项';
+        });
+        btn.classList.remove('btn-outline');
+        btn.classList.add('btn-primary', 'is-selected');
+        btn.textContent = '已选择';
+      });
     });
 
     document.getElementById('collab-conflict-all-mine').onclick = () => { cleanup(); resolve('mine'); };
     document.getElementById('collab-conflict-all-server').onclick = () => { cleanup(); resolve('server'); };
+    document.getElementById('collab-conflict-apply-choices').onclick = () => { cleanup(); resolve({ choices: collectChoices() }); };
   });
 }
 
@@ -1383,6 +1428,37 @@ function formatCollabConflictField(path) {
     .replace(/^panorama\./, '全景 · ')
     .replace(/\./g, ' → ');
 }
+
+function _setByPath(obj, path, value) {
+  // Supports meta.author, roles.0.name and semantic list paths like processes.process:xxx.name.
+  if (!path || obj == null) return;
+  const parts = path.split('.');
+  let cur = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (Array.isArray(cur)) {
+      const token = String(key || '');
+      const label = token.includes(':') ? token.slice(token.indexOf(':') + 1) : token;
+      let next = cur.find((item) => item && (
+        String(item.name || '') === label
+        || String(item.term || '') === label
+        || String(item.uid || '') === label
+        || String(item.id || '') === label
+      ));
+      if (!next) {
+        const numeric = Number.parseInt(token, 10);
+        if (Number.isInteger(numeric)) next = cur[numeric];
+      }
+      if (!next) return;
+      cur = next;
+    } else {
+      if (cur[key] === undefined) cur[key] = {};
+      cur = cur[key];
+    }
+  }
+  if (cur && typeof cur === 'object') cur[parts[parts.length - 1]] = value;
+}
+
 
 function formatCollabConflictValue(value) {
   if (value === undefined || value === null) return '（空）';

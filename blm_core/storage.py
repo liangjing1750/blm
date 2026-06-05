@@ -181,7 +181,20 @@ class WorkspaceStorage(DocumentFileStore):
             return []
         entries: list[dict] = []
         seen_ids: set[str] = set()
-        for snapshot in sorted(target_dir.iterdir(), key=lambda item: item.name, reverse=True):
+        valid_snapshots: list[Path] = []
+        for snapshot in sorted(target_dir.iterdir(), key=lambda item: item.name):
+            if (snapshot.is_dir() and self._is_package_dir(snapshot)) or (snapshot.is_file() and snapshot.suffix == ".json"):
+                valid_snapshots.append(snapshot)
+        inferred_seq_by_id: dict[str, int] = {}
+        for index, snapshot in enumerate(valid_snapshots, start=1):
+            snapshot_id = snapshot.name if snapshot.is_dir() else snapshot.stem
+            snapshot_meta = self._read_snapshot_meta(snapshot)
+            try:
+                seq = int(snapshot_meta.get("seq", 0) or 0)
+            except (TypeError, ValueError):
+                seq = 0
+            inferred_seq_by_id[snapshot_id] = seq if seq > 0 else index
+        for snapshot in sorted(valid_snapshots, key=lambda item: item.name, reverse=True):
             if snapshot.is_dir() and self._is_package_dir(snapshot):
                 snapshot_id = snapshot.name
             elif snapshot.is_file() and snapshot.suffix == ".json":
@@ -196,6 +209,7 @@ class WorkspaceStorage(DocumentFileStore):
             timestamp_label = str(snapshot_meta.get("timestampLabel", "")).strip() or self._format_timestamp_label(snapshot_id)
             kind = str(snapshot_meta.get("kind", "")).strip() or "manual"
             reason = str(snapshot_meta.get("reason", "")).strip() or ("manual_message" if message else "manual_save")
+            size = self._snapshot_size(snapshot)
             entries.append(
                 {
                     "id": snapshot_id,
@@ -207,11 +221,27 @@ class WorkspaceStorage(DocumentFileStore):
                     "content_hash": str(snapshot_meta.get("contentHash", "")).strip(),
                     "user": str(snapshot_meta.get("user", "")).strip(),
                     "created_at": str(snapshot_meta.get("createdAt", "")).strip(),
+                    "seq": inferred_seq_by_id.get(snapshot_id, 0),
+                    "size": size,
+                    "documentBytes": size,
                     "timestamp": snapshot_id,
                     "timestamp_label": timestamp_label,
                 }
             )
         return entries
+
+    @staticmethod
+    def _snapshot_size(snapshot: Path) -> int:
+        try:
+            if snapshot.is_file():
+                return int(snapshot.stat().st_size)
+            total = 0
+            for child in snapshot.rglob("*"):
+                if child.is_file():
+                    total += int(child.stat().st_size)
+            return total
+        except OSError:
+            return 0
 
     def restore_history(self, name: str, snapshot_id: str) -> dict:
         with self._write_lock:

@@ -923,14 +923,14 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
             <div class="recovery-item">
               <div class="recovery-item-main">
                 <div class="recovery-item-title">${esc(userLabel)}${esc(msg || '协作同步')}</div>
-                <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')}</div>
+                <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')}${entry.documentBytes || entry.size ? ` 路 ${formatBytes(Number(entry.documentBytes || entry.size || 0))}` : ''}</div>
               </div>
               <button class="btn btn-outline btn-sm" type="button"
                 onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>只读打开</button>
               <button class="btn btn-primary btn-sm" type="button"
                 onclick='App.archiveHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>归档版本</button>
               <button class="btn btn-danger-solid btn-sm" type="button"
-                onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>本地恢复</button>
+                onclick='App.restoreHistory(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)}, ${Number(entry.seq || 0)})'>本地恢复</button>
             </div>`;
           }).join('')}
         </div>`).join('')}
@@ -3353,8 +3353,9 @@ const App = {
       readOnly: false,
       preserveUiState: true,
     });
-    S.collab.draftBaseSeqOverride = Number(baseSeq || 0);
+    S.collab.draftBaseSeqOverride = Number(result.seq || baseSeq || 0);
     S.collab.recoveryMode = true;
+    S.collab.forceSnapshotSync = true;
     S.modified = true;
     if (typeof saveLocalCollabDraft === 'function') saveLocalCollabDraft();
     if (typeof renderToolbar === 'function') renderToolbar();
@@ -3363,7 +3364,7 @@ const App = {
     showAppToast('已本地恢复提交记录，点击“立即同步”后才会影响其他人。');
   },
 
-  async restoreHistory(name, snapshotId) {
+  async restoreHistory(name, snapshotId, baseSeq = 0) {
     if (!await confirmDiscardUnsavedChanges('本地恢复历史版本')) return;
     const result = await api.loadHistory(name, snapshotId);
     if (result.error) return alert(result.error);
@@ -3376,7 +3377,9 @@ const App = {
     App.closeHistoryModal();
     App.closeOpenModal();
     setActiveDocumentSession(document, { fileName: name, readOnly: false, preserveUiState: true });
+    S.collab.draftBaseSeqOverride = Number(baseSeq || 0);
     S.collab.recoveryMode = true;
+    S.collab.forceSnapshotSync = true;
     S.modified = true;
     if (typeof saveLocalCollabDraft === 'function') saveLocalCollabDraft();
     if (typeof renderToolbar === 'function') renderToolbar();

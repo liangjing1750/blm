@@ -241,7 +241,7 @@ class CollaborationManager:
                 "changed": bool(record.get("changed", True)),
                 "conflictCount": int(record.get("conflictCount", 0)),
                 "conflicts": record.get("conflicts", []),
-                "document": deepcopy(session.document),
+                "document": deepcopy(record.get("document") or session.document),
                 "documentHash": session._doc_hash_cache or _doc_hash(session.document),
             }
 
@@ -431,7 +431,7 @@ class CollaborationManager:
                     "submitId": submit_id, "changed": False,
                     "conflictCount": stats["conflictCount"],
                     "conflicts": conflict_list,
-                    "document": deepcopy(session.document),
+                    "document": deepcopy(merged),
                 }
                 stats["user"] = client.user_name
                 stats["userId"] = client.user_id
@@ -645,7 +645,9 @@ class CollaborationManager:
             delete_conflicts = uc
         if server_doc is not None and recovery_mode:
             self._preserve_stale_collaboration_items(merged, user_doc, server_doc)
+            self._stabilize_recovery_merge_order(merged, server_doc, user_doc)
             if isinstance(conflicts, list):
+                self._apply_recovery_conflict_defaults(merged, conflicts)
                 conflicts = [conflict for conflict in conflicts if not self._is_non_blocking_collab_conflict(conflict, recovery_mode=recovery_mode)]
         elif server_doc is not None and isinstance(conflicts, list):
             conflicts = [conflict for conflict in conflicts if not self._is_non_blocking_collab_conflict(conflict, recovery_mode=False)]
@@ -683,6 +685,9 @@ class CollaborationManager:
                 user_changed = uv != bv
                 server_changed = sv != bv
                 if user_changed and server_changed and uv != sv:
+                    if recovery_mode:
+                        merged_meta[field] = deepcopy(server_value)
+                        continue
                     # 三方都不同 → 冲突！记录冲突，保留user版本
                     if not isinstance(conflicts, list):
                         conflicts = []
@@ -722,6 +727,9 @@ class CollaborationManager:
                                 existing[f] = t[f]
                 entity["state_transitions"] = deduped
 
+        if recovery_mode:
+            self._normalize_recovery_merge_document(merged)
+
         # panorama 的删除检测已由 _merge_panorama (3-way) + _clean_deleted_items 正确覆盖
         return merged, conflicts, stats
 
@@ -731,26 +739,113 @@ class CollaborationManager:
         field = str((conflict or {}).get("field", ""))
         if recovery_mode and str((conflict or {}).get("kind", "")) == "delete_modify":
             return True
+        if recovery_mode:
+            if str((conflict or {}).get("kind", "")) == "field":
+                return True
+            left_value = (conflict or {}).get("user", (conflict or {}).get("left_value"))
+            right_value = (conflict or {}).get("server", (conflict or {}).get("right_value"))
+            if (left_value in (None, "") and right_value not in (None, "")) or (
+                right_value in (None, "") and left_value not in (None, "")
+            ):
+                return True
+            if str((conflict or {}).get("item_type", "")) in {"field", "form_field", "state_node"}:
+                return True
         layout_fields = {"pos", "stagePos", "panoramaPos", "layout", "labelPos", "markerPos"}
         return field in layout_fields or any(path.endswith(f".{name}") for name in layout_fields)
+
+    @staticmethod
+    def _apply_recovery_conflict_defaults(merged: dict, conflicts: list[dict]) -> None:
+        """In recovery mode, scalar conflicts keep the server value to avoid stale overwrites."""
+
+        def set_by_path(obj: Any, path: str, value: Any) -> None:
+            if not path or not isinstance(obj, dict):
+                return
+            parts = path.split(".")
+            cur: Any = obj
+            for part in parts[:-1]:
+                if isinstance(cur, list):
+                    token = str(part or "")
+                    label = token.split(":", 1)[1] if ":" in token else token
+                    next_item = None
+                    for item in cur:
+                        if not isinstance(item, dict):
+                            continue
+                        if label in {
+                            str(item.get("name", "")),
+                            str(item.get("term", "")),
+                            str(item.get("uid", "")),
+                            str(item.get("id", "")),
+                        }:
+                            next_item = item
+                            break
+                    if next_item is None:
+                        try:
+                            next_item = cur[int(token)]
+                        except (ValueError, IndexError):
+                            return
+                    cur = next_item
+                    continue
+                if isinstance(cur, dict):
+                    cur = cur.get(part)
+                else:
+                    return
+                if cur is None:
+                    return
+            if isinstance(cur, list):
+                return
+            if isinstance(cur, dict):
+                cur[parts[-1]] = deepcopy(value)
+
+        for conflict in conflicts:
+            if str((conflict or {}).get("kind", "")) != "field":
+                continue
+            if str((conflict or {}).get("item_type", "")) in {"field", "form_field", "state_node"}:
+                continue
+            right_value = (conflict or {}).get("server", (conflict or {}).get("right_value"))
+            if right_value in (None, "", [], {}):
+                continue
+            set_by_path(merged, str((conflict or {}).get("path", "")), right_value)
 
     @staticmethod
     def _preserve_stale_collaboration_items(merged: dict, user_doc: dict, server_doc: dict) -> None:
         """Preserve both sides for stale collaboration saves; stale absence is not a delete."""
 
         def item_key(item_type: str, item: dict) -> str:
+            semantic_first_types = {"field", "form_field", "state_node"}
+            if item_type in semantic_first_types:
+                key = semantic_key(item_type, item)
+                if key:
+                    return f"name:{key}"
             uid = str(item.get("uid", "")).strip()
             if uid:
                 return f"uid:{uid}"
             key = semantic_key(item_type, item)
             return f"name:{key}" if key else ""
 
+        def is_empty_column_item(item_type: str, item: dict) -> bool:
+            return item_type in {"field", "form_field"} and not str(item.get("name", "")).strip() and not str(item.get("entity_field", "")).strip()
+
         def merge_list_items(item_type: str, target: list, *sources: list) -> list:
-            result = [deepcopy(item) for item in target if isinstance(item, dict)]
-            index = {item_key(item_type, item): item for item in result if item_key(item_type, item)}
+            result: list[dict] = []
+            index: dict[str, dict] = {}
+            for item in target if isinstance(target, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                if is_empty_column_item(item_type, item):
+                    continue
+                key = item_key(item_type, item)
+                if key and key in index:
+                    merge_nested(item_type, index[key], item)
+                    continue
+                copied = deepcopy(item)
+                result.append(copied)
+                if key:
+                    index[key] = copied
             for source in sources:
                 for item in source if isinstance(source, list) else []:
                     if not isinstance(item, dict):
+                        continue
+                    if is_empty_column_item(item_type, item):
                         continue
                     key = item_key(item_type, item)
                     if not key:
@@ -766,6 +861,25 @@ class CollaborationManager:
 
         def merge_nested(item_type: str, target_item: dict, source_item: dict) -> None:
             descriptor = DESCRIPTORS.get(item_type, {})
+            for field in descriptor.get("scalars", []):
+                source_value = source_item.get(field)
+                target_value = target_item.get(field)
+                if target_value in (None, "") and source_value not in (None, ""):
+                    target_item[field] = deepcopy(source_value)
+            for field in descriptor.get("set_lists", []):
+                source_values = source_item.get(field)
+                if not isinstance(source_values, list):
+                    continue
+                target_values = target_item.get(field)
+                if not isinstance(target_values, list):
+                    target_values = []
+                seen = {json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for value in target_values}
+                for value in source_values:
+                    key = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                    if key not in seen:
+                        target_values.append(deepcopy(value))
+                        seen.add(key)
+                target_item[field] = target_values
             for field, child_type in descriptor.get("objects", {}).items():
                 source_child = source_item.get(field)
                 if not isinstance(source_child, dict):
@@ -789,6 +903,121 @@ class CollaborationManager:
                 user_doc.get(field, []) if isinstance(user_doc, dict) else [],
                 server_doc.get(field, []) if isinstance(server_doc, dict) else [],
             )
+
+    @staticmethod
+    def _normalize_recovery_merge_document(document: dict) -> None:
+        """Keep recovery merges idempotent by removing non-semantic nulls and sorting set lists."""
+
+        def normalize_item(item_type: str, item: dict) -> None:
+            descriptor = DESCRIPTORS.get(item_type, {})
+            if item_type == "task_definition" and item.get("usedBy") == []:
+                item.pop("usedBy", None)
+            for field in descriptor.get("scalars", []):
+                if item.get(field) is None:
+                    item.pop(field, None)
+            for field in descriptor.get("set_lists", []):
+                values = item.get(field)
+                if isinstance(values, list):
+                    seen: dict[str, Any] = {}
+                    for value in values:
+                        key = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                        seen[key] = value
+                    item[field] = [deepcopy(seen[key]) for key in sorted(seen)]
+            for field, child_type in descriptor.get("objects", {}).items():
+                child = item.get(field)
+                if isinstance(child, dict):
+                    normalize_item(child_type, child)
+            for field, child_type in descriptor.get("lists", {}).items():
+                items = item.get(field)
+                if isinstance(items, list):
+                    for child in items:
+                        if isinstance(child, dict):
+                            normalize_item(child_type, child)
+
+        normalize_item("document", document)
+
+    @staticmethod
+    def _stabilize_recovery_merge_order(merged: dict, server_doc: dict, user_doc: dict) -> None:
+        """Order recovered lists by current server order, then append user-only items."""
+
+        def item_key(item_type: str, item: Any) -> str:
+            if not isinstance(item, dict):
+                return ""
+            if item_type in {"field", "form_field", "state_node"}:
+                key = semantic_key(item_type, item)
+                if key:
+                    return f"name:{key}"
+            uid = str(item.get("uid", "")).strip()
+            if uid:
+                return f"uid:{uid}"
+            key = semantic_key(item_type, item)
+            return f"name:{key}" if key else ""
+
+        def build_order(item_type: str, *sources: Any) -> dict[str, int]:
+            order: dict[str, int] = {}
+            for source in sources:
+                for item in source if isinstance(source, list) else []:
+                    key = item_key(item_type, item)
+                    if key and key not in order:
+                        order[key] = len(order)
+            return order
+
+        def reorder_list(item_type: str, items: Any, *sources: Any) -> list:
+            if not isinstance(items, list):
+                return []
+            order = build_order(item_type, *sources)
+            indexed = list(enumerate(items))
+            indexed.sort(key=lambda pair: (order.get(item_key(item_type, pair[1]), len(order) + pair[0]), pair[0]))
+            return [item for _, item in indexed]
+
+        def stabilize_item(item_type: str, item: dict, server_item: dict | None, user_item: dict | None) -> None:
+            descriptor = DESCRIPTORS.get(item_type, {})
+            for field, child_type in descriptor.get("objects", {}).items():
+                child = item.get(field)
+                if isinstance(child, dict):
+                    stabilize_item(
+                        child_type,
+                        child,
+                        server_item.get(field) if isinstance(server_item, dict) and isinstance(server_item.get(field), dict) else None,
+                        user_item.get(field) if isinstance(user_item, dict) and isinstance(user_item.get(field), dict) else None,
+                    )
+            for field, child_type in descriptor.get("lists", {}).items():
+                children = item.get(field)
+                server_children = server_item.get(field) if isinstance(server_item, dict) else []
+                user_children = user_item.get(field) if isinstance(user_item, dict) else []
+                if isinstance(children, list):
+                    item[field] = reorder_list(child_type, children, server_children, user_children)
+                    server_by_key = {
+                        item_key(child_type, child): child
+                        for child in server_children if isinstance(child, dict) and item_key(child_type, child)
+                    } if isinstance(server_children, list) else {}
+                    user_by_key = {
+                        item_key(child_type, child): child
+                        for child in user_children if isinstance(child, dict) and item_key(child_type, child)
+                    } if isinstance(user_children, list) else {}
+                    for child in item[field]:
+                        key = item_key(child_type, child)
+                        if isinstance(child, dict):
+                            stabilize_item(child_type, child, server_by_key.get(key), user_by_key.get(key))
+
+        for field, item_type in DESCRIPTORS["document"].get("lists", {}).items():
+            items = merged.get(field)
+            server_items = server_doc.get(field) if isinstance(server_doc, dict) else []
+            user_items = user_doc.get(field) if isinstance(user_doc, dict) else []
+            if isinstance(items, list):
+                merged[field] = reorder_list(item_type, items, server_items, user_items)
+                server_by_key = {
+                    item_key(item_type, item): item
+                    for item in server_items if isinstance(item, dict) and item_key(item_type, item)
+                } if isinstance(server_items, list) else {}
+                user_by_key = {
+                    item_key(item_type, item): item
+                    for item in user_items if isinstance(item, dict) and item_key(item_type, item)
+                } if isinstance(user_items, list) else {}
+                for item in merged[field]:
+                    key = item_key(item_type, item)
+                    if isinstance(item, dict):
+                        stabilize_item(item_type, item, server_by_key.get(key), user_by_key.get(key))
 
     @staticmethod
     def _clean_deleted_items(
@@ -1244,14 +1473,39 @@ class CollaborationManager:
         return latest_seq if latest_seq > 0 else snapshot_count
 
     def _load_snapshot_by_seq(self, doc_name: str, find_seq: int) -> dict | None:
-        """从磁盘历史快照中按 seq 查找 base 文档。"""
+        """从磁盘历史快照中按 seq 查找 base 文档。
+
+        旧快照无 seq 字段时，按时间顺序自动推算（第N个快照=seq N+1）。
+        """
         history_dir = self.storage._history_dir(doc_name)
         if not history_dir.is_dir():
             return None
+        # 第一遍：精确匹配有 seq 的快照
+        ordered: list[tuple[int, Path]] = []
         for snapshot_dir in history_dir.iterdir():
             meta = self.storage._read_snapshot_meta(snapshot_dir)
-            if int(meta.get("seq", -1) or -1) == find_seq:
-                return self.storage.load_history(doc_name, snapshot_dir.name)
+            s = meta.get("seq")
+            if s is not None and int(s) > 0:
+                if int(s) == find_seq:
+                    return self.storage.load_history(doc_name, snapshot_dir.name)
+            ordered.append((int(s) if s else 0, snapshot_dir))
+        # 按时间戳排序（快照ID=时间戳）
+        ordered.sort(key=lambda x: x[1].name)
+        # 为无 seq 的快照推算 seq：从1开始，跳过已有 seq 占用的位置
+        assigned: dict[int, int] = {}
+        existing_seqs = {int(s) for s, _ in ordered if s > 0}
+        next_seq = 1
+        for s, d in ordered:
+            if s > 0:
+                assigned[next_seq] = assigned.get(next_seq)  # placeholder
+                next_seq = s + 1
+            else:
+                while next_seq in existing_seqs:
+                    next_seq += 1
+                assigned[next_seq] = 1  # mark as used
+                if next_seq == find_seq:
+                    return self.storage.load_history(doc_name, d.name)
+                next_seq += 1
         return None
 
 

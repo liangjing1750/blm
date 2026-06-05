@@ -1270,6 +1270,8 @@ class WorkspaceStorageTests(unittest.TestCase):
 
             self.assertEqual(len(history_entries), 1)
             self.assertEqual(history_entries[0]["message"], "")
+            self.assertGreater(history_entries[0]["size"], 0)
+            self.assertEqual(history_entries[0]["documentBytes"], history_entries[0]["size"])
             for marker in ["年", "月", "日", "时", "分", "秒"]:
                 self.assertIn(marker, history_entries[0]["label"])
             self.assertEqual(history_entries[0]["label"], history_entries[0]["timestamp_label"])

@@ -725,11 +725,16 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             snapshot_id = str(payload.get("snapshot_id", "")).strip()
             try:
                 document = storage.load_history(name, snapshot_id)
+                seq = 0
+                for entry in storage.list_history(name):
+                    if str(entry.get("id", "")) == snapshot_id:
+                        seq = int(entry.get("seq", 0) or 0)
+                        break
             except (InvalidDocumentNameError, InvalidWorkspaceEntryError) as exc:
                 return self._json({"error": str(exc)}, 400)
             except FileNotFoundError:
                 return self._json({"error": "not found"}, 404)
-            return self._json({"ok": True, "name": name, "snapshot_id": snapshot_id, "document": document})
+            return self._json({"ok": True, "name": name, "snapshot_id": snapshot_id, "seq": seq, "document": document})
 
         def _handle_trash_restore(self, body: bytes):
             payload = self._decode_json(body)
