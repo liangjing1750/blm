@@ -274,6 +274,18 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn(".sb-flow-group-head", style_css)
         self.assertIn(".sb-proc-head.in-flow-group", style_css)
 
+    def test_frontend_fragment_checker_passes(self):
+        result = subprocess.run(
+            ["python", "tools/check_frontend_fragments.py"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Frontend fragment check passed.", result.stdout)
+
     def test_reverse_action_buttons_are_readable_on_light_surfaces(self):
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
