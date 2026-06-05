@@ -588,8 +588,8 @@ function _renderSbFlowGroup(group, collapseKey) {
   return `<div class="sb-subgrp-head sb-flow-group-head" data-flow-group="${esc(group.label)}"
     onclick="toggleCollapse('${esc(collapseKey)}')">
     <button type="button" class="sb-caret ${isCollapsed ? 'is-collapsed' : 'is-expanded'}"
-      onclick="event.stopPropagation();toggleCollapse('${esc(collapseKey)}')"><span class="sb-caret-icon">鈻?/span></button>
-    <span class="sb-subgrp-badge">流程组</span>
+      onclick="event.stopPropagation();toggleCollapse('${esc(collapseKey)}')"><span class="sb-caret-icon">\u25b6</span></button>
+    <span class="sb-subgrp-badge">\u6d41\u7a0b\u7ec4</span>
     <span class="sb-name" title="${esc(group.label)}">${esc(group.label)}</span>
     ${_renderSbCount(group.processes.length)}
   </div>`;

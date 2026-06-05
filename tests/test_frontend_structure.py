@@ -262,12 +262,15 @@ class FrontendStructureTests(unittest.TestCase):
 
         self.assertIn("function getSidebarProcessGroups(processes)", render_js)
         self.assertIn("未分组", render_js)
-        self.assertIn("流程组", render_js)
         self.assertIn("renderStageProcessList(stageItem, stageProcesses)", render_js)
         self.assertIn("stageId: stageItem.id", render_js)
         self.assertIn("inFlowGroup: true", render_js)
         self.assertIn("function moveProcInSd(procId, dir, e, stageId = '')", process_js)
         self.assertIn("moveStageProcessRef(targetStageId, procId, dir)", process_js)
+        self.assertIn('<span class="sb-caret-icon">\\u25b6</span>', render_js)
+        self.assertIn('<span class="sb-subgrp-badge">\\u6d41\\u7a0b\\u7ec4</span>', render_js)
+        self.assertNotIn("鈻?/span", render_js)
+        self.assertNotIn("流程组/span", render_js)
         self.assertIn(".sb-flow-group-head", style_css)
         self.assertIn(".sb-proc-head.in-flow-group", style_css)
 
