@@ -315,14 +315,30 @@ function renderToolbar() {
   document.getElementById('file-name').title = getCurrentDocumentTitle();
   const isCollabDoc = Boolean(S.currentFile && S.runtime.supportsCollab && !S.readOnly);
   const isCollabConnected = Boolean(isCollabDoc && S.collab?.connected);
-  const hasPendingCollab = Boolean(S.collab?.pendingSnapshot || S.collab?.syncing || S.collab?.snapshotTimer);
-  const hasActionableChange = isCollabConnected ? hasPendingCollab : S.modified;
+  const hasLocalUnsubmitted = isCollabDoc
+    ? Boolean(S.modified || S.collab?.pendingSnapshot || S.collab?.snapshotTimer || S.collab?.syncing || S.collab?.localDraftPending)
+    : Boolean(S.modified);
+  const hasRemoteUnsynced = Boolean(isCollabDoc && (S.collab?.pendingRemoteSnapshot || S.collab?.hasConflict));
+  const hasActionableChange = Boolean(hasLocalUnsubmitted || hasRemoteUnsynced);
   const badge = document.getElementById('modified-badge');
   if (badge) {
     badge.classList.toggle('hidden', !hasActionableChange);
     badge.classList.toggle('syncing', Boolean(S.collab?.syncing));
-    badge.textContent = hasActionableChange
-      ? (isCollabConnected ? (S.collab?.syncing ? '同步中' : '待同步') : '未保存')
+    badge.classList.toggle('has-local', hasLocalUnsubmitted);
+    badge.classList.toggle('has-remote', hasRemoteUnsynced);
+    badge.title = [
+      hasLocalUnsubmitted ? '本地修改尚未提交到服务端' : '',
+      hasRemoteUnsynced ? '远端已有其他人提交，点击立即同步拉取并合并' : '',
+    ].filter(Boolean).join('\n');
+    badge.innerHTML = hasActionableChange
+      ? [
+        hasLocalUnsubmitted
+          ? `<span class="modified-badge-row local"><span class="modified-badge-dot"></span>${S.collab?.syncing ? '同步中' : '本地未提交'}</span>`
+          : '',
+        hasRemoteUnsynced
+          ? '<span class="modified-badge-row remote"><span class="modified-badge-dot"></span>远端未同步</span>'
+          : '',
+      ].filter(Boolean).join('')
       : '';
   }
   const saveButton = document.getElementById('btn-save');

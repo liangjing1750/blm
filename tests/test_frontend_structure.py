@@ -177,7 +177,9 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("formatCompareHistoryOptionLabel", app_js)
         self.assertIn("自动同步", app_js)
         self.assertIn("手动同步", app_js)
-        self.assertIn("const hasActionableChange = isCollabConnected ? hasPendingCollab : S.modified", render_js)
+        self.assertIn("const hasLocalUnsubmitted", render_js)
+        self.assertIn("const hasRemoteUnsynced", render_js)
+        self.assertIn("const hasActionableChange = Boolean(hasLocalUnsubmitted || hasRemoteUnsynced);", render_js)
         self.assertIn("renderWorkspaceFileList(files)", app_js)
         self.assertIn("getWorkspaceDocumentSummaries(files)", app_js)
         self.assertIn("renderOpenSpaceTabs(spaces, summaries)", app_js)
@@ -287,6 +289,21 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn("const result = await api.restoreHistory(name, snapshotId);", app_js)
         self.assertIn("点击“立即同步”后才会影响其他人", app_js)
         self.assertIn(".btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }", style_css)
+
+    def test_collab_toolbar_shows_local_and_remote_sync_states(self):
+        render_js = (APP_DIR / "render.js").read_text("utf-8")
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn("const hasLocalUnsubmitted", render_js)
+        self.assertIn("const hasRemoteUnsynced", render_js)
+        self.assertIn("const hasActionableChange = Boolean(hasLocalUnsubmitted || hasRemoteUnsynced);", render_js)
+        self.assertIn("本地未提交", render_js)
+        self.assertIn("远端未同步", render_js)
+        self.assertIn("modified-badge-row local", render_js)
+        self.assertIn("modified-badge-row remote", render_js)
+        self.assertIn(".modified-badge-row.local", style_css)
+        self.assertIn(".modified-badge-row.remote", style_css)
+        self.assertIn(".modified-badge-dot", style_css)
 
     def test_business_ids_are_hidden_from_business_modeling_ui(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")

@@ -61,20 +61,47 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modified-badge {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #fef3c7;
+  gap: 3px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
   color: #92400e;
-  border: 1px solid #f59e0b;
+  border: 0;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
-.modified-badge.syncing {
+.modified-badge-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  line-height: 1.25;
+}
+.modified-badge-row.local {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+.modified-badge-row.remote {
   background: #dbeafe;
   color: #1d4ed8;
   border-color: #60a5fa;
+}
+.modified-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.24);
+}
+.modified-badge.syncing {
+  color: #1d4ed8;
 }
 .collab-status {
   position: relative;
