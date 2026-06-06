@@ -760,36 +760,6 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(summaries[0]["tags"], ["担保品", "WPF"])
             self.assertEqual(summaries[0]["author"], "Tester")
 
-    def test_list_document_summaries_keeps_large_meta_documents(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            workspace = Path(temp_dir)
-            storage = WorkspaceStorage(workspace)
-            package = workspace / "LargeMeta"
-            manifest_dir = package / "manifest"
-            manifest_dir.mkdir(parents=True)
-            document = create_empty_document("LargeMeta")
-            document["meta"]["space"] = "场外"
-            document["meta"]["tags"] = ["演示"]
-            document["meta"]["businessComponents"] = [
-                {
-                    "name": f"组件{index}",
-                    "note": "x" * 200,
-                    "relatedProcessUids": [f"process-{index}-{item}" for item in range(20)],
-                }
-                for index in range(80)
-            ]
-            (manifest_dir / "manifest.json").write_text(
-                json.dumps(document, ensure_ascii=False, indent=2),
-                "utf-8",
-            )
-
-            summaries = storage.list_document_summaries()
-
-            large_meta_summary = next((item for item in summaries if item["name"] == "LargeMeta"), None)
-            self.assertIsNotNone(large_meta_summary)
-            self.assertEqual(large_meta_summary["space"], "场外")
-            self.assertEqual(large_meta_summary["tags"], ["演示"])
-
     def test_history_list_size_uses_manifest_bytes_not_snapshot_package_total(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)

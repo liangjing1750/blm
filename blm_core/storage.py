@@ -168,20 +168,11 @@ class WorkspaceStorage(DocumentFileStore):
                         end = i + 1
                         break
             if end == 0:
-                return self._load_manifest_meta_full(path)
+                return None
             meta_json = rest[:end]
             return json.loads(meta_json)
         except (json.JSONDecodeError, OSError):
             return None
-
-    def _load_manifest_meta_full(self, path: Path) -> dict | None:
-        """Fallback for old or large manifests whose meta block is bigger than the fast-read window."""
-        try:
-            payload = json.loads(path.read_text("utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return None
-        meta = payload.get("meta") if isinstance(payload, dict) else None
-        return meta if isinstance(meta, dict) else None
 
     def list_history(self, name: str) -> list[dict]:
         safe_name = self._validate_name(name)
