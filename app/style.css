@@ -9912,7 +9912,7 @@ body.is-collab-reconnecting * {
   align-items: start;
 }
 .feedback-workbench--three {
-  grid-template-columns: 260px minmax(920px, 1fr) 430px;
+  grid-template-columns: 260px minmax(0, 1fr) 380px;
   min-height: calc(100vh - 150px);
 }
 .feedback-main {
@@ -10341,8 +10341,11 @@ body.is-collab-reconnecting * {
 }
 .fb-attachments-list {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
+}
+.fb-attachments-list--thread {
+  margin-top: 8px;
 }
 .fb-attachment-empty {
   padding: 8px 10px;
@@ -10444,6 +10447,8 @@ body.is-collab-reconnecting * {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
+  min-width: 180px;
+  max-width: 260px;
   padding: 8px 10px;
   border: 1px solid #dbeafe;
   border-radius: 8px;
@@ -10451,6 +10456,30 @@ body.is-collab-reconnecting * {
   color: #1d4ed8;
   text-decoration: none;
   font-size: 12px;
+}
+.fb-attachment-wrap {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.fb-attachment-delete {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #fecaca;
+  border-radius: 50%;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 16px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, .14);
+}
+.fb-attachment-delete:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
 }
 button.fb-attachment-item {
   width: 100%;
@@ -10490,8 +10519,9 @@ button.fb-attachment-item {
   color: #64748b;
 }
 .feedback-image-preview-modal {
-  width: min(1120px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
+  width: min(90vw, 1440px);
+  height: min(90vh, 960px);
+  max-height: 90vh;
   padding: 0;
   border-radius: 12px;
   background: #fff;
@@ -10525,7 +10555,8 @@ button.fb-attachment-item {
 }
 .feedback-image-preview-body {
   min-height: 220px;
-  max-height: calc(100vh - 132px);
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   background: #0f172a;
   display: grid;
@@ -10534,7 +10565,7 @@ button.fb-attachment-item {
 }
 .feedback-image-preview-body img {
   max-width: 100%;
-  max-height: calc(100vh - 164px);
+  max-height: 100%;
   object-fit: contain;
   border-radius: 6px;
   background: #fff;
@@ -10547,10 +10578,60 @@ button.fb-attachment-item {
   min-height: 0;
   overflow: visible;
 }
+.fb-message-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fb-message-attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fb-message-add-attachment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #2563eb;
+  cursor: pointer;
+  font-weight: 800;
+  overflow: hidden;
+}
+.fb-message-add-attachment input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.fb-message-add-attachment:hover {
+  background: #dbeafe;
+}
+.fb-attachment-uploading {
+  color: #2563eb;
+  font-size: 12px;
+}
+.fb-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .fb-thread h4 {
   margin: 0;
   color: #0f172a;
   font-size: 14px;
+}
+.fb-thread-help {
+  margin: -4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
 }
 .fb-thread-list {
   display: flex;

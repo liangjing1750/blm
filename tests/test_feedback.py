@@ -145,7 +145,7 @@ class FeedbackStoreTests(unittest.TestCase):
             self.assertEqual(document["items"][0]["category"], "轻微缺陷")
 
 
-    def test_attachment_is_stored_in_feedback_space(self):
+    def test_attachment_is_stored_on_first_message_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
             store = FeedbackStore(workspace)
@@ -162,15 +162,66 @@ class FeedbackStoreTests(unittest.TestCase):
                 "../screen shot.png",
                 "image/png",
                 b"fake image bytes",
+                "",
                 {"name": "Alice"},
             )
-            attachment = document["items"][0]["attachments"][0]
+            item = document["items"][0]
+            self.assertEqual(item["attachments"], [])
+            self.assertEqual(item["messages"][0]["content"], "upload screenshot")
+            attachment = item["messages"][0]["attachments"][0]
             payload, loaded = store.read_attachment("fb-attachment", attachment["uid"])
 
             self.assertEqual(payload, b"fake image bytes")
             self.assertEqual(loaded["filename"], "screen shot.png")
             self.assertEqual(loaded["contentType"], "image/png")
             self.assertTrue((workspace / ".user_ask" / "attachments" / "fb-attachment" / attachment["storedName"]).is_file())
+
+    def test_attachment_can_target_and_be_deleted_from_a_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            store = FeedbackStore(workspace)
+            store.apply(
+                {
+                    "action": "add",
+                    "data": {"uid": "fb-thread-attachment", "category": "体验改进", "title": "upload screenshot", "description": "first floor"},
+                    "user": {"name": "Alice"},
+                }
+            )
+            document = store.apply(
+                {
+                    "action": "message",
+                    "uid": "fb-thread-attachment",
+                    "data": {"content": "second floor"},
+                    "user": {"name": "Bob"},
+                }
+            )
+            message_uid = document["items"][0]["messages"][1]["uid"]
+
+            document = store.add_attachment(
+                "fb-thread-attachment",
+                "second.png",
+                "image/png",
+                b"second image",
+                message_uid,
+                {"name": "Bob"},
+            )
+            item = document["items"][0]
+            self.assertEqual(item["messages"][0]["attachments"], [])
+            attachment = item["messages"][1]["attachments"][0]
+            stored_path = workspace / ".user_ask" / "attachments" / "fb-thread-attachment" / attachment["storedName"]
+            self.assertTrue(stored_path.is_file())
+
+            document = store.apply(
+                {
+                    "action": "deleteAttachment",
+                    "uid": "fb-thread-attachment",
+                    "messageUid": message_uid,
+                    "attachmentUid": attachment["uid"],
+                }
+            )
+
+            self.assertEqual(document["items"][0]["messages"][1]["attachments"], [])
+            self.assertFalse(stored_path.exists())
 
 
 if __name__ == "__main__":

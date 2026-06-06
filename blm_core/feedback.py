@@ -46,6 +46,7 @@ class FeedbackStore:
         filename: str,
         content_type: str,
         payload: bytes,
+        message_uid: str = "",
         user: dict | None = None,
     ) -> dict:
         if not isinstance(payload, (bytes, bytearray)):
@@ -66,10 +67,11 @@ class FeedbackStore:
         with self._lock:
             document = self._read_unlocked()
             item = self._find_item_unlocked(document, {"uid": item_uid}, {})
+            message = self._find_message_for_attachment(item, message_uid)
             item_dir = self.attachments_root / item_uid
             item_dir.mkdir(parents=True, exist_ok=True)
             (item_dir / stored_name).write_bytes(data)
-            attachments = _attachments(item)
+            attachments = _attachments(message)
             attachments.append(
                 {
                     "uid": attachment_uid,
@@ -85,6 +87,47 @@ class FeedbackStore:
             self._write_unlocked(document)
             return deepcopy(document)
 
+    def delete_attachment(self, item_uid: str, attachment_uid: str, message_uid: str = "") -> dict:
+        item_uid = str(item_uid or "").strip()
+        attachment_uid = str(attachment_uid or "").strip()
+        message_uid = str(message_uid or "").strip()
+        if not item_uid or not attachment_uid:
+            raise ValueError("feedback attachment is required")
+        if "/" in item_uid or "\\" in item_uid or item_uid in {".", ".."}:
+            raise ValueError("invalid feedback uid")
+        with self._lock:
+            document = self._read_unlocked()
+            item = self._find_item_unlocked(document, {"uid": item_uid}, {})
+            containers = []
+            if message_uid:
+                containers.append(self._find_message_for_attachment(item, message_uid))
+            else:
+                containers.extend(_messages(item))
+                containers.append(item)
+            removed = None
+            for container in containers:
+                attachments = _attachments(container)
+                next_attachments = []
+                for attachment in attachments:
+                    if str(attachment.get("uid") or "") == attachment_uid:
+                        removed = attachment
+                    else:
+                        next_attachments.append(attachment)
+                if removed is not None:
+                    container["attachments"] = next_attachments
+                    break
+            if removed is None:
+                raise FileNotFoundError("feedback attachment not found")
+            stored_name = str(removed.get("storedName") or "").strip()
+            if stored_name and "/" not in stored_name and "\\" not in stored_name:
+                try:
+                    (self.attachments_root / item_uid / stored_name).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            document["updatedAt"] = _now()
+            self._write_unlocked(document)
+            return deepcopy(document)
+
     def read_attachment(self, item_uid: str, attachment_uid: str) -> tuple[bytes, dict]:
         item_uid = str(item_uid or "").strip()
         attachment_uid = str(attachment_uid or "").strip()
@@ -94,7 +137,12 @@ class FeedbackStore:
             document = self._read_unlocked()
             item = self._find_item_unlocked(document, {"uid": item_uid}, {})
             attachment = next(
-                (entry for entry in _attachments(item) if str(entry.get("uid") or "") == attachment_uid),
+                (
+                    entry
+                    for container in [*_messages(item), item]
+                    for entry in _attachments(container)
+                    if str(entry.get("uid") or "") == attachment_uid
+                ),
                 None,
             )
             if attachment is None:
@@ -123,6 +171,8 @@ class FeedbackStore:
                 self._add_message_unlocked(document, payload, data, user)
             elif action == "editMessage":
                 self._edit_message_unlocked(document, payload, data)
+            elif action == "deleteAttachment":
+                self._delete_attachment_unlocked(document, payload, data)
             else:
                 return {"error": "unsupported feedback action"}
             document["updatedAt"] = _now()
@@ -197,6 +247,53 @@ class FeedbackStore:
             raise ValueError("message content is required")
         message["content"] = content
         message["updatedAt"] = _now()
+
+    def _delete_attachment_unlocked(self, document: dict, payload: dict, data: dict) -> None:
+        item = self._find_item_unlocked(document, payload, data)
+        attachment_uid = str(payload.get("attachmentUid") or data.get("attachmentUid") or "").strip()
+        message_uid = str(payload.get("messageUid") or data.get("messageUid") or "").strip()
+        if not attachment_uid:
+            raise ValueError("feedback attachment is required")
+        containers = [self._find_message_for_attachment(item, message_uid)] if message_uid else [*_messages(item), item]
+        removed = None
+        for container in containers:
+            attachments = _attachments(container)
+            next_attachments = []
+            for attachment in attachments:
+                if str(attachment.get("uid") or "") == attachment_uid:
+                    removed = attachment
+                else:
+                    next_attachments.append(attachment)
+            if removed is not None:
+                container["attachments"] = next_attachments
+                break
+        if removed is None:
+            raise FileNotFoundError("feedback attachment not found")
+        stored_name = str(removed.get("storedName") or "").strip()
+        item_uid = str(item.get("uid") or "").strip()
+        if stored_name and item_uid and "/" not in stored_name and "\\" not in stored_name:
+            try:
+                (self.attachments_root / item_uid / stored_name).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _find_message_for_attachment(self, item: dict, message_uid: str) -> dict:
+        messages = _messages(item)
+        target_uid = str(message_uid or "").strip()
+        if target_uid:
+            message = next((entry for entry in messages if str(entry.get("uid") or "") == target_uid), None)
+            if message is None:
+                raise KeyError("feedback message not found")
+            return message
+        if messages:
+            return messages[0]
+        message = _message(
+            content=str(item.get("description") or item.get("title") or "").strip(),
+            user={"name": item.get("author")},
+            floor=1,
+        )
+        messages.append(message)
+        return message
 
     def _find_item_unlocked(self, document: dict, payload: dict, data: dict) -> dict:
         uid = str(payload.get("uid") or data.get("uid") or "").strip()
@@ -288,6 +385,14 @@ def _normalize_item(item: dict) -> dict:
                 "createdAt": str(raw.get("createdAt") or ""),
                 "updatedAt": str(raw.get("updatedAt") or ""),
                 "content": content,
+                "attachments": [
+                    attachment
+                    for attachment in (
+                        _normalize_attachment(entry)
+                        for entry in (raw.get("attachments") if isinstance(raw.get("attachments"), list) else [])
+                    )
+                    if attachment
+                ],
             }
         )
     if not normalized["messages"] and normalized["description"]:
@@ -299,6 +404,7 @@ def _normalize_item(item: dict) -> dict:
                 "createdAt": normalized["createdAt"],
                 "updatedAt": "",
                 "content": normalized["description"],
+                "attachments": [],
             }
         )
     if normalized["reply"] and not any(message["content"] == normalized["reply"] for message in normalized["messages"]):
@@ -310,17 +416,36 @@ def _normalize_item(item: dict) -> dict:
                 "createdAt": normalized["repliedAt"],
                 "updatedAt": "",
                 "content": normalized["reply"],
+                "attachments": [],
             }
         )
     for index, message in enumerate(normalized["messages"], 1):
         message["floor"] = index
     raw_attachments = item.get("attachments") if isinstance(item.get("attachments"), list) else []
+    legacy_attachments = []
     for raw in raw_attachments:
         if not isinstance(raw, dict):
             continue
         attachment = _normalize_attachment(raw)
         if attachment:
-            normalized["attachments"].append(attachment)
+            legacy_attachments.append(attachment)
+    if legacy_attachments:
+        if not normalized["messages"]:
+            normalized["messages"].append(
+                {
+                    "uid": f"msg-{uuid.uuid4().hex}",
+                    "floor": 1,
+                    "author": normalized["author"],
+                    "createdAt": normalized["createdAt"],
+                    "updatedAt": "",
+                    "content": normalized["description"] or normalized["title"],
+                    "attachments": [],
+                }
+            )
+        normalized["messages"][0]["attachments"] = [
+            *normalized["messages"][0].get("attachments", []),
+            *legacy_attachments,
+        ]
     return normalized
 
 
@@ -366,6 +491,7 @@ def _message(*, content: str, user: dict, floor: int) -> dict:
         "createdAt": _now(),
         "updatedAt": "",
         "content": content,
+        "attachments": [],
     }
 
 

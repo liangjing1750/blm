@@ -648,16 +648,14 @@ function openFeedbackImagePreview(url, filename = '附件图片') {
   const overlay = document.getElementById('feedback-image-preview-overlay');
   const image = document.getElementById('feedback-image-preview-img');
   const title = document.getElementById('feedback-image-preview-title');
-  const openLink = document.getElementById('feedback-image-preview-open');
   const downloadLink = document.getElementById('feedback-image-preview-download');
-  if (!overlay || !image || !title || !openLink || !downloadLink) {
+  if (!overlay || !image || !title || !downloadLink) {
     window.open(safeUrl, '_blank', 'noopener');
     return;
   }
   title.textContent = safeName;
   image.src = safeUrl;
   image.alt = safeName;
-  openLink.href = safeUrl;
   downloadLink.href = safeUrl;
   downloadLink.setAttribute('download', safeName);
   openModalById('feedback-image-preview-overlay');
@@ -3900,7 +3898,7 @@ const App = {
         if (threadList) threadList.scrollTop = threadList.scrollHeight;
       });
     }
-    return true;
+    return saved;
   },
 
   async createFeedbackFromForm() {
@@ -3913,16 +3911,17 @@ const App = {
     const directEntries = attachmentInput?.files?.length
       ? await this.readFeedbackAttachmentFiles(Array.from(attachmentInput.files))
       : [];
-    const ok = await this.saveFeedbackItem('add', '', { uid, category, title, description });
-    if (!ok) return false;
+    const saved = await this.saveFeedbackItem('add', '', { uid, category, title, description });
+    if (!saved) return false;
+    const createdItem = (saved.items || []).find((item) => item.uid === uid);
+    const firstMessageUid = createdItem?.messages?.[0]?.uid || '';
     const pending = S.ui.feedbackPendingAttachments || {};
     const queuedEntries = Array.isArray(pending[newKey]) ? pending[newKey] : [];
     const entries = [...queuedEntries, ...directEntries];
     if (entries.length) {
-      pending[uid] = [...(Array.isArray(pending[uid]) ? pending[uid] : []), ...entries];
       pending[newKey] = [];
       S.ui.feedbackPendingAttachments = pending;
-      await this.uploadFeedbackAttachments(uid);
+      await this.uploadFeedbackAttachmentEntries(uid, firstMessageUid, entries);
     }
     return true;
   },
@@ -3957,19 +3956,22 @@ const App = {
     return result;
   },
 
-  async queueFeedbackAttachments(uid, inputOrFiles) {
+  async queueFeedbackAttachments(uid, inputOrFiles, messageUid = '') {
     if (typeof ensureUserConfiguredForApp === 'function' && !ensureUserConfiguredForApp()) return false;
     const key = String(uid || '__new__').trim() || '__new__';
     const files = Array.isArray(inputOrFiles) ? inputOrFiles : Array.from(inputOrFiles?.files || []);
     if (!files.length) return false;
     const entries = await this.readFeedbackAttachmentFiles(files);
     if (!entries.length) return false;
+    if (inputOrFiles && !Array.isArray(inputOrFiles)) inputOrFiles.value = '';
+    if (key !== '__new__' && messageUid) {
+      return this.uploadFeedbackAttachmentEntries(key, messageUid, entries);
+    }
     S.ui.feedbackPendingAttachments = S.ui.feedbackPendingAttachments || {};
     const current = Array.isArray(S.ui.feedbackPendingAttachments[key]) ? S.ui.feedbackPendingAttachments[key] : [];
     S.ui.feedbackPendingAttachments[key] = [...current, ...entries];
-    if (inputOrFiles && !Array.isArray(inputOrFiles)) inputOrFiles.value = '';
     render();
-    showAppToast(entries.length > 1 ? '附件已加入待上传。' : '附件已加入待上传。');
+    showAppToast(entries.length > 1 ? '附件已添加。' : '附件已添加。');
     return true;
   },
 
@@ -3981,7 +3983,7 @@ const App = {
     render();
   },
 
-  async pasteFeedbackAttachments(event, uid) {
+  async pasteFeedbackAttachments(event, uid, messageUid = '') {
     const items = Array.from(event?.clipboardData?.items || []);
     const files = items
       .filter((item) => item.kind === 'file')
@@ -3989,7 +3991,44 @@ const App = {
       .filter(Boolean);
     if (!files.length) return false;
     event.preventDefault();
-    return this.queueFeedbackAttachments(uid || (S.ui.feedbackCreating ? '__new__' : S.ui.feedbackSelectedUid), files);
+    return this.queueFeedbackAttachments(uid || (S.ui.feedbackCreating ? '__new__' : S.ui.feedbackSelectedUid), files, messageUid);
+  },
+
+  async uploadFeedbackAttachmentEntries(uid, messageUid, entries) {
+    const itemUid = String(uid || '').trim();
+    const targetMessageUid = String(messageUid || '').trim();
+    const uploadEntries = Array.isArray(entries) ? entries : [];
+    if (!itemUid || !uploadEntries.length) return false;
+    S.ui.feedbackUploadingAttachments = S.ui.feedbackUploadingAttachments || {};
+    const uploadingKey = targetMessageUid || itemUid;
+    S.ui.feedbackUploadingAttachments[uploadingKey] = true;
+    render();
+    let uploadedCount = 0;
+    try {
+      for (const entry of uploadEntries) {
+        const saved = await api.uploadFeedbackAttachment({
+          uid: itemUid,
+          messageUid: targetMessageUid,
+          filename: entry.filename || 'attachment',
+          contentType: entry.contentType || 'application/octet-stream',
+          dataBase64: entry.dataBase64 || '',
+          user: S.user || { name: S.collab?.userName || '匿名' },
+        }).catch((error) => ({ error: error?.message || '网络请求失败' }));
+        if (!saved || saved.error) {
+          showAppToast(`附件上传失败：${saved?.error || '未知错误'}`);
+          continue;
+        }
+        saved.items = Array.isArray(saved.items) ? saved.items : [];
+        S.ui.feedbackDoc = saved;
+        S.ui.feedbackSelectedUid = itemUid;
+        uploadedCount += 1;
+      }
+    } finally {
+      S.ui.feedbackUploadingAttachments[uploadingKey] = false;
+    }
+    render();
+    showAppToast(uploadedCount ? '附件已上传。' : '附件上传失败，请稍后重试。');
+    return uploadedCount > 0;
   },
 
   async uploadFeedbackAttachments(uid) {
@@ -4043,6 +4082,49 @@ const App = {
     S.ui.feedbackPendingAttachments = pending;
     render();
     showAppToast(uploadedCount > 1 ? '附件上传完成。' : uploadedCount ? '附件已上传。' : '附件上传失败，请稍后重试。');
+    return true;
+  },
+
+  async sendFeedbackMessageWithAttachments(uid) {
+    const textarea = document.getElementById('fb-new-message');
+    const draftKey = `__message__${uid}`;
+    const pending = S.ui.feedbackPendingAttachments || {};
+    const entries = Array.isArray(pending[draftKey]) ? pending[draftKey] : [];
+    const saved = await this.saveFeedbackItem('message', uid, { content: textarea?.value || '' });
+    if (!saved) return false;
+    const item = (saved.items || []).find((entry) => entry.uid === uid);
+    const messages = Array.isArray(item?.messages) ? item.messages : [];
+    const messageUid = messages[messages.length - 1]?.uid || '';
+    if (entries.length && messageUid) {
+      pending[draftKey] = [];
+      S.ui.feedbackPendingAttachments = pending;
+      await this.uploadFeedbackAttachmentEntries(uid, messageUid, entries);
+    }
+    return true;
+  },
+
+  async deleteFeedbackAttachment(uid, messageUid, attachmentUid) {
+    if (!await showAppConfirm('确认删除这个附件吗？', {
+      title: '删除附件',
+      confirmLabel: '删除',
+    })) return false;
+    const saved = await api.saveFeedback({
+      action: 'deleteAttachment',
+      uid,
+      messageUid,
+      attachmentUid,
+      data: { messageUid, attachmentUid },
+      user: S.user || { name: S.collab?.userName || '匿名' },
+    });
+    if (!saved || saved.error) {
+      showAppToast(`附件删除失败：${saved?.error || '未知错误'}`);
+      return false;
+    }
+    saved.items = Array.isArray(saved.items) ? saved.items : [];
+    S.ui.feedbackDoc = saved;
+    S.ui.feedbackSelectedUid = uid;
+    render();
+    showAppToast('附件已删除。');
     return true;
   },
 

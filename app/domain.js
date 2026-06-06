@@ -1335,15 +1335,9 @@ function renderFeedbackTab() {
     const pendingMap = S.ui.feedbackPendingAttachments || {};
     const entries = Array.isArray(pendingMap[key]) ? pendingMap[key] : [];
     if (!entries.length) return '';
-    const uploadingMap = S.ui.feedbackUploadingAttachments || {};
-    const uploading = !!uploadingMap[key];
-    const uploadButton = options.upload && key !== '__new__'
-      ? `<button class="btn btn-primary btn-sm" type="button" ${uploading ? 'disabled' : ''} onclick="App.uploadFeedbackAttachments(decodeURIComponent('${encodeURIComponent(key)}'))">${uploading ? '上传中...' : '上传'}</button>`
-      : '';
     return `<div class="fb-pending-attachments">
       <div class="fb-pending-head">
-        <span>待上传附件 ${entries.length}</span>
-        ${uploadButton}
+        <span>已添加附件 ${entries.length}</span>
       </div>
       <div class="fb-pending-list">
         ${entries.map((entry) => `<div class="fb-pending-item" title="${esc(entry.filename || 'attachment')}">
@@ -1377,10 +1371,11 @@ function renderFeedbackTab() {
             <textarea id="fb-add-desc" rows="7" placeholder="补充现象、期望、影响范围或复现步骤"></textarea>
           </label>
           <div class="fb-attachment-picker">
-            <label class="btn btn-outline btn-sm fb-attachment-upload">选择附件
+            <label class="fb-message-add-attachment" title="添加附件">
+              +
               <input id="fb-add-attachments" type="file" multiple accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" onchange="App.queueFeedbackAttachments('__new__',this)">
             </label>
-            <span>也可以直接 Ctrl+V 粘贴截图。</span>
+            <span>支持上传图片和附件，也可以直接 Ctrl+V 粘贴截图。</span>
           </div>
           ${renderPendingAttachments('__new__')}
           <button class="btn btn-primary" onclick="App.createFeedbackFromForm()">提交反馈</button>
@@ -1397,11 +1392,7 @@ function renderFeedbackTab() {
     }
     const uid = selectedItem.uid || '';
     const messages = Array.isArray(selectedItem.messages) ? selectedItem.messages : [];
-    const descriptionCollapsed = S.ui.feedbackDescriptionCollapsedUid === uid;
-    const editingDescription = S.ui.feedbackEditingDescriptionUid === uid;
-    const detailDescription = String(selectedItem.description || '').trim();
-    const attachments = Array.isArray(selectedItem.attachments) ? selectedItem.attachments : [];
-    const renderAttachment = (attachment) => {
+    const renderAttachment = (messageUid, attachment) => {
       const attachmentUid = attachment.uid || '';
       const filename = attachment.filename || 'attachment';
       const contentType = String(attachment.contentType || '').toLowerCase();
@@ -1410,94 +1401,99 @@ function renderFeedbackTab() {
       const url = api.feedbackAttachmentUrl(uid, attachmentUid);
       const isImage = contentType.startsWith('image/')
         || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename);
+      const deleteButton = `<button class="fb-attachment-delete" type="button" title="\u5220\u9664\u9644\u4ef6" onclick="event.stopPropagation();App.deleteFeedbackAttachment(decodeURIComponent('${encodeURIComponent(uid)}'),decodeURIComponent('${encodeURIComponent(messageUid || '')}'),decodeURIComponent('${encodeURIComponent(attachmentUid)}'))">\u00d7</button>`;
       if (isImage) {
-        return `<button class="fb-attachment-item fb-attachment-image" type="button" title="${esc(filename)}" onclick="openFeedbackImagePreview(decodeURIComponent('${encodeURIComponent(url)}'),decodeURIComponent('${encodeURIComponent(filename)}'))">
-          <span class="fb-attachment-thumb"><img src="${url}" alt=""></span>
+        return `<div class="fb-attachment-wrap">
+          <button class="fb-attachment-item fb-attachment-image" type="button" title="${esc(filename)}" onclick="openFeedbackImagePreview(decodeURIComponent('${encodeURIComponent(url)}'),decodeURIComponent('${encodeURIComponent(filename)}'))">
+            <span class="fb-attachment-thumb"><img src="${url}" alt=""></span>
+            <span class="fb-attachment-name">${esc(filename)}</span>
+            <span class="fb-attachment-meta">${esc(sizeText)}</span>
+          </button>
+          ${deleteButton}
+        </div>`;
+      }
+      return `<div class="fb-attachment-wrap">
+        <a class="fb-attachment-item" href="${url}" download="${esc(filename)}" title="${esc(filename)}">
+          <span class="fb-attachment-icon">\u9644\u4ef6</span>
           <span class="fb-attachment-name">${esc(filename)}</span>
           <span class="fb-attachment-meta">${esc(sizeText)}</span>
-        </button>`;
-      }
-      return `<a class="fb-attachment-item" href="${url}" target="_blank" rel="noopener" title="${esc(filename)}">
-        <span class="fb-attachment-icon">附件</span>
-        <span class="fb-attachment-name">${esc(filename)}</span>
-        <span class="fb-attachment-meta">${esc(sizeText)}</span>
-      </a>`;
+        </a>
+        ${deleteButton}
+      </div>`;
     };
-    return `<aside class="feedback-detail" onpaste="App.pasteFeedbackAttachments(event,decodeURIComponent('${encodeURIComponent(uid)}'))">
+    const renderMessageAttachments = (message) => {
+      const messageUid = message.uid || '';
+      const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+      const uploading = !!(S.ui.feedbackUploadingAttachments || {})[messageUid];
+      return `<div class="fb-message-attachments">
+        <div class="fb-message-attachment-actions">
+          <label class="fb-message-add-attachment" title="\u6dfb\u52a0\u9644\u4ef6">
+            +
+            <input type="file" multiple accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" onchange="App.queueFeedbackAttachments(decodeURIComponent('${encodeURIComponent(uid)}'),this,decodeURIComponent('${encodeURIComponent(messageUid)}'))">
+          </label>
+          ${uploading ? '<span class="fb-attachment-uploading">\u4e0a\u4f20\u4e2d...</span>' : ''}
+        </div>
+        ${attachments.length ? `<div class="fb-attachments-list fb-attachments-list--thread">${attachments.map((attachment) => renderAttachment(messageUid, attachment)).join('')}</div>` : ''}
+      </div>`;
+    };
+    const draftKey = `__message__${uid}`;
+    return `<aside class="feedback-detail">
       <div class="fb-detail-head">
         <div>
-          <p class="feedback-kicker">反馈详情</p>
-          <h3>${esc(selectedItem.title || '(无标题)')}</h3>
+          <p class="feedback-kicker">\u53cd\u9988\u8be6\u60c5</p>
+          <h3>${esc(selectedItem.title || '(\u65e0\u6807\u9898)')}</h3>
         </div>
       </div>
       <section class="fb-detail-section">
-        <label>类型
+        <label>\u7c7b\u578b
           <select id="fb-detail-category" onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:this.value,status:document.getElementById('fb-detail-status').value})">
-            ${CATEGORIES.map((c) => `<option value="${c}" ${(selectedItem.category||'体验改进')===c?'selected':''}>${c}</option>`).join('')}
+            ${CATEGORIES.map((c) => `<option value="${c}" ${(selectedItem.category || CATEGORIES[1])===c?'selected':''}>${c}</option>`).join('')}
           </select>
         </label>
-        <label>状态
+        <label>\u72b6\u6001
           <select id="fb-detail-status" onchange="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:document.getElementById('fb-detail-category').value,status:this.value})">
-            ${STATUSES.map((s) => `<option value="${s}" ${(selectedItem.status||'待处理')===s?'selected':''}>${s}</option>`).join('')}
+            ${STATUSES.map((s) => `<option value="${s}" ${(selectedItem.status || STATUSES[0])===s?'selected':''}>${s}</option>`).join('')}
           </select>
         </label>
-      </section>
-      <section class="fb-description-panel ${descriptionCollapsed ? 'is-collapsed' : ''}">
-        <div class="fb-description-head">
-          <button class="fb-disclosure" type="button" onclick="toggleFeedbackDescription(decodeURIComponent('${encodeURIComponent(uid)}'))" title="${descriptionCollapsed ? '展开' : '收起'}">${descriptionCollapsed ? '▶' : '▼'}</button>
-          <h4>详细描述</h4>
-        </div>
-        ${descriptionCollapsed ? '' : (editingDescription ? `
-          <textarea id="fb-detail-description" rows="6" placeholder="补充现象、期望、影响范围或复现步骤">${esc(detailDescription)}</textarea>
-          <div class="fb-description-actions">
-            <button class="btn btn-outline btn-sm" type="button" onclick="cancelFeedbackDescriptionEdit()">取消</button>
-            <button class="btn btn-primary btn-sm" type="button" onclick="App.saveFeedbackItem('update',decodeURIComponent('${encodeURIComponent(uid)}'),{category:document.getElementById('fb-detail-category').value,status:document.getElementById('fb-detail-status').value,description:document.getElementById('fb-detail-description').value}).then(function(ok){if(ok){S.ui.feedbackEditingDescriptionUid='';render();}})">保存描述</button>
-          </div>
-        ` : `
-          <div class="fb-description-content" ondblclick="editFeedbackDescription(decodeURIComponent('${encodeURIComponent(uid)}'))" title="双击修改详细描述">${esc(detailDescription || '暂无详细描述。')}</div>
-        `)}
-      </section>
-      <section class="fb-attachments-panel">
-        <div class="fb-attachments-head">
-          <h4>附件截图</h4>
-          <label class="btn btn-outline btn-sm fb-attachment-upload">选择附件
-            <input type="file" multiple accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" onchange="App.queueFeedbackAttachments(decodeURIComponent('${encodeURIComponent(uid)}'),this)">
-          </label>
-        </div>
-        <p class="fb-attachment-hint">选择文件或 Ctrl+V 粘贴截图后，会先进入待上传列表，可删除确认后再上传。</p>
-        ${renderPendingAttachments(uid, { upload: true })}
-        ${attachments.length ? `<div class="fb-attachments-list">${attachments.map(renderAttachment).join('')}</div>` : ''}
-        ${!attachments.length && !((S.ui.feedbackPendingAttachments || {})[uid] || []).length ? `<div class="fb-attachment-empty">暂无附件，可上传截图帮助定位问题。</div>` : ''}
       </section>
       <section class="fb-thread">
-        <h4>对话记录</h4>
+        <h4>\u5bf9\u8bdd\u8bb0\u5f55</h4>
+        <p class="fb-thread-help">每条对话都可以附带图片或附件；点击下方“+”选择文件，或在对话区域直接 Ctrl+V 粘贴截图。</p>
         <div class="fb-thread-list">
-          ${messages.length ? messages.map((message, index) => `<article class="fb-thread-item">
+          ${messages.length ? messages.map((message, index) => `<article class="fb-thread-item" onpaste="App.pasteFeedbackAttachments(event,decodeURIComponent('${encodeURIComponent(uid)}'),decodeURIComponent('${encodeURIComponent(message.uid || '')}'))">
             <div class="fb-thread-meta">
               <strong>#${message.floor || index + 1}</strong>
-              <span>${esc(message.author || '匿名')}</span>
+              <span>${esc(message.author || '\u533f\u540d')}</span>
               <span>${esc(String(message.createdAt || '').replace('T', ' ') || '-')}</span>
-              ${message.updatedAt ? `<span>已修改 ${esc(String(message.updatedAt).replace('T', ' '))}</span>` : ''}
+              ${message.updatedAt ? `<span>\u5df2\u4fee\u6539 ${esc(String(message.updatedAt).replace('T', ' '))}</span>` : ''}
             </div>
             ${S.ui.feedbackEditingMessageUid === message.uid ? `
               <textarea id="fb-message-${index}" rows="4">${esc(message.content || '')}</textarea>
-            ` : `<div class="fb-thread-content" ondblclick="S.ui.feedbackEditingMessageUid=decodeURIComponent('${encodeURIComponent(message.uid || '')}');render()" title="双击修改对话内容">${esc(message.content || '')}</div>`}
+            ` : `<div class="fb-thread-content" ondblclick="S.ui.feedbackEditingMessageUid=decodeURIComponent('${encodeURIComponent(message.uid || '')}');render()" title="\u53cc\u51fb\u4fee\u6539\u5bf9\u8bdd\u5185\u5bb9">${esc(message.content || '')}</div>`}
             <div class="fb-thread-actions">
               ${S.ui.feedbackEditingMessageUid === message.uid ? `
-                <button class="btn btn-outline btn-sm" onclick="S.ui.feedbackEditingMessageUid='';render()">取消</button>
-                <button class="btn btn-primary btn-sm" onclick="App.saveFeedbackItem('editMessage',decodeURIComponent('${encodeURIComponent(uid)}'),{messageUid:decodeURIComponent('${encodeURIComponent(message.uid || '')}'),content:document.getElementById('fb-message-${index}').value}).then(function(ok){if(ok){S.ui.feedbackEditingMessageUid='';render();}})">保存修改</button>
+                <button class="btn btn-outline btn-sm" onclick="S.ui.feedbackEditingMessageUid='';render()">\u53d6\u6d88</button>
+                <button class="btn btn-primary btn-sm" onclick="App.saveFeedbackItem('editMessage',decodeURIComponent('${encodeURIComponent(uid)}'),{messageUid:decodeURIComponent('${encodeURIComponent(message.uid || '')}'),content:document.getElementById('fb-message-${index}').value}).then(function(ok){if(ok){S.ui.feedbackEditingMessageUid='';render();}})">\u4fdd\u5b58\u4fee\u6539</button>
               ` : ''}
             </div>
-          </article>`).join('') : `<div class="fb-empty fb-empty--compact">暂无对话记录。</div>`}
+            ${renderMessageAttachments(message)}
+          </article>`).join('') : `<div class="fb-empty fb-empty--compact">\u6682\u65e0\u5bf9\u8bdd\u8bb0\u5f55\u3002</div>`}
         </div>
-        <div class="fb-message-composer">
-          <textarea id="fb-new-message" rows="4" placeholder="追加一条对话记录，说明补充信息、处理意见或验证结果"></textarea>
-          <button class="btn btn-primary" onclick="App.saveFeedbackItem('message',decodeURIComponent('${encodeURIComponent(uid)}'),{content:document.getElementById('fb-new-message').value})">发送</button>
+        <div class="fb-message-composer" onpaste="App.pasteFeedbackAttachments(event,decodeURIComponent('${encodeURIComponent(draftKey)}'))">
+          <textarea id="fb-new-message" rows="4" placeholder="\u8ffd\u52a0\u4e00\u6761\u5bf9\u8bdd\u8bb0\u5f55\uff0c\u8bf4\u660e\u8865\u5145\u4fe1\u606f\u3001\u5904\u7406\u610f\u89c1\u6216\u9a8c\u8bc1\u7ed3\u679c"></textarea>
+          ${renderPendingAttachments(draftKey)}
+          <div class="fb-attachment-hint">回复时也支持点击“+”添加附件，或 Ctrl+V 粘贴截图。</div>
+          <div class="fb-composer-actions">
+            <label class="fb-message-add-attachment" title="\u6dfb\u52a0\u9644\u4ef6">
+              +
+              <input type="file" multiple accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" onchange="App.queueFeedbackAttachments(decodeURIComponent('${encodeURIComponent(draftKey)}'),this)">
+            </label>
+            <button class="btn btn-primary" onclick="App.sendFeedbackMessageWithAttachments(decodeURIComponent('${encodeURIComponent(uid)}'))">\u53d1\u9001</button>
+          </div>
         </div>
       </section>
     </aside>`;
   };
-
   container.innerHTML = `<div class="feedback-layout">
     <section class="feedback-hero feedback-hero--wide">
       <div>

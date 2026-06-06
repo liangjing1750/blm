@@ -342,6 +342,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return self._json({"error": str(exc)}, 400)
             except KeyError as exc:
                 return self._json({"error": str(exc)}, 404)
+            except FileNotFoundError as exc:
+                return self._json({"error": str(exc)}, 404)
             if result.get("error"):
                 return self._json(result, 400)
             return self._json(result)
@@ -356,6 +358,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             user_profile = dict(user_profile)
             user_profile["remoteAddr"] = self.client_address[0] if self.client_address else ""
             item_uid = str(payload.get("uid") or "").strip()
+            message_uid = str(payload.get("messageUid") or "").strip()
             filename = str(payload.get("filename") or "").strip()
             content_type = str(payload.get("contentType") or "application/octet-stream").strip()
             data_base64 = str(payload.get("dataBase64") or "").strip()
@@ -363,7 +366,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 data_base64 = data_base64.split(",", 1)[1]
             try:
                 attachment_payload = base64.b64decode(data_base64.encode("ascii"), validate=True)
-                result = feedback_store.add_attachment(item_uid, filename, content_type, attachment_payload, user_profile)
+                result = feedback_store.add_attachment(item_uid, filename, content_type, attachment_payload, message_uid, user_profile)
             except (ValueError, UnicodeEncodeError) as exc:
                 return self._json({"error": str(exc)}, 400)
             except KeyError as exc:

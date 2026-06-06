@@ -264,13 +264,20 @@ class FrontendStructureTests(unittest.TestCase):
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
         self.assertIn('id="feedback-image-preview-overlay"', index_html)
+        self.assertNotIn('id="feedback-image-preview-open"', index_html)
+        self.assertNotIn("新标签打开", index_html)
         self.assertIn("function openFeedbackImagePreview", app_js)
         self.assertIn("function closeFeedbackImagePreview", app_js)
+        self.assertIn("uploadFeedbackAttachmentEntries", app_js)
+        self.assertIn("deleteFeedbackAttachment", app_js)
         self.assertIn("openFeedbackImagePreview(decodeURIComponent", domain_js)
         self.assertIn("contentType.startsWith('image/')", domain_js)
         self.assertIn("fb-attachment-image", domain_js)
+        self.assertIn("fb-message-add-attachment", domain_js)
+        self.assertIn("download=\"${esc(filename)}\"", domain_js)
         self.assertIn(".feedback-image-preview-modal", style_css)
         self.assertIn(".fb-attachment-thumb img", style_css)
+        self.assertIn(".fb-attachment-delete", style_css)
 
     def test_sidebar_stage_directory_supports_flow_groups_and_stage_order_moves(self):
         render_js = (APP_DIR / "render.js").read_text("utf-8")
