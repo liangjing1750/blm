@@ -2503,20 +2503,28 @@ async function loadWorkspaceDocumentNames() {
 }
 
 async function loadWorkspaceDocumentSummaries() {
+  const previousSummaries = Array.isArray(S.recovery.workspaceSummaries)
+    ? S.recovery.workspaceSummaries.slice()
+    : [];
   const summaries = await api.fileSummaries();
   if (summaries.error) {
     console.warn('文件摘要加载失败，已降级为普通文档列表：', summaries.error);
-    S.recovery.workspaceSummaries = [];
+    S.recovery.workspaceSummaries = previousSummaries;
     return S.recovery.workspaceSummaries;
+  }
+  if (
+    Array.isArray(summaries)
+    && summaries.length === 0
+    && previousSummaries.length
+    && Array.isArray(S.files)
+    && S.files.length
+  ) {
+    return previousSummaries;
   }
   S.recovery.workspaceSummaries = (Array.isArray(summaries) ? summaries : []).map((summary) => ({
     ...summary,
     space: normalizeWorkspaceSpace(summary?.space),
   }));
-  const openModal = document.getElementById('open-modal-overlay');
-  if (openModal && !openModal.classList.contains('hidden') && Array.isArray(S.files) && S.files.length) {
-    renderWorkspaceFileList(S.files);
-  }
   return S.recovery.workspaceSummaries;
 }
 

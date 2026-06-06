@@ -253,7 +253,9 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("function normalizeWorkspaceSpace", app_js)
         self.assertIn("if (!summaryByName.has(S.currentFile))", app_js)
         self.assertIn("space: normalizeWorkspaceSpace(summary.space)", app_js)
-        self.assertIn("renderWorkspaceFileList(S.files)", app_js)
+        self.assertIn("previousSummaries", app_js)
+        self.assertIn("return previousSummaries", app_js)
+        self.assertNotIn("document.getElementById('open-modal-overlay');\n  if (openModal", app_js)
 
     def test_sidebar_stage_directory_supports_flow_groups_and_stage_order_moves(self):
         render_js = (APP_DIR / "render.js").read_text("utf-8")
