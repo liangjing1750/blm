@@ -297,6 +297,22 @@
   </div>
 </div>
 
+<div id="feedback-image-preview-overlay" class="hidden" onclick="closeFeedbackImagePreview()" data-testid="feedback-image-preview">
+  <div class="feedback-image-preview-modal" onclick="event.stopPropagation()">
+    <div class="feedback-image-preview-head">
+      <strong id="feedback-image-preview-title">附件图片</strong>
+      <div class="feedback-image-preview-actions">
+        <a id="feedback-image-preview-open" class="btn btn-outline btn-sm" target="_blank" rel="noopener">新标签打开</a>
+        <a id="feedback-image-preview-download" class="btn btn-primary btn-sm" download>下载</a>
+        <button type="button" class="icon-btn" onclick="closeFeedbackImagePreview()" title="关闭">×</button>
+      </div>
+    </div>
+    <div class="feedback-image-preview-body">
+      <img id="feedback-image-preview-img" alt="反馈附件图片预览">
+    </div>
+  </div>
+</div>
+
 <div id="app-dialog-overlay" class="hidden" data-testid="app-dialog" onclick="closeAppDialogFromBackdrop(event)">
   <div class="modal app-dialog" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title" onclick="event.stopPropagation()">
     <h3 id="app-dialog-title">提示</h3>

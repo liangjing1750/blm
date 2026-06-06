@@ -641,6 +641,37 @@ function openModalById(id) {
   document.getElementById(id)?.classList.remove('hidden');
 }
 
+function openFeedbackImagePreview(url, filename = '附件图片') {
+  const safeUrl = String(url || '').trim();
+  if (!safeUrl) return;
+  const safeName = String(filename || '附件图片').trim() || '附件图片';
+  const overlay = document.getElementById('feedback-image-preview-overlay');
+  const image = document.getElementById('feedback-image-preview-img');
+  const title = document.getElementById('feedback-image-preview-title');
+  const openLink = document.getElementById('feedback-image-preview-open');
+  const downloadLink = document.getElementById('feedback-image-preview-download');
+  if (!overlay || !image || !title || !openLink || !downloadLink) {
+    window.open(safeUrl, '_blank', 'noopener');
+    return;
+  }
+  title.textContent = safeName;
+  image.src = safeUrl;
+  image.alt = safeName;
+  openLink.href = safeUrl;
+  downloadLink.href = safeUrl;
+  downloadLink.setAttribute('download', safeName);
+  openModalById('feedback-image-preview-overlay');
+}
+
+function closeFeedbackImagePreview() {
+  const image = document.getElementById('feedback-image-preview-img');
+  if (image) {
+    image.removeAttribute('src');
+    image.alt = '反馈附件图片预览';
+  }
+  closeModalById('feedback-image-preview-overlay');
+}
+
 function showAppToast(message, timeout = 3600) {
   const toast = document.getElementById('app-toast');
   if (!toast) return;

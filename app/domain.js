@@ -1404,9 +1404,19 @@ function renderFeedbackTab() {
     const renderAttachment = (attachment) => {
       const attachmentUid = attachment.uid || '';
       const filename = attachment.filename || 'attachment';
+      const contentType = String(attachment.contentType || '').toLowerCase();
       const size = Number(attachment.size || 0);
       const sizeText = size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : size >= 1024 ? `${Math.ceil(size / 1024)} KB` : `${size || 0} B`;
       const url = api.feedbackAttachmentUrl(uid, attachmentUid);
+      const isImage = contentType.startsWith('image/')
+        || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename);
+      if (isImage) {
+        return `<button class="fb-attachment-item fb-attachment-image" type="button" title="${esc(filename)}" onclick="openFeedbackImagePreview(decodeURIComponent('${encodeURIComponent(url)}'),decodeURIComponent('${encodeURIComponent(filename)}'))">
+          <span class="fb-attachment-thumb"><img src="${url}" alt=""></span>
+          <span class="fb-attachment-name">${esc(filename)}</span>
+          <span class="fb-attachment-meta">${esc(sizeText)}</span>
+        </button>`;
+      }
       return `<a class="fb-attachment-item" href="${url}" target="_blank" rel="noopener" title="${esc(filename)}">
         <span class="fb-attachment-icon">附件</span>
         <span class="fb-attachment-name">${esc(filename)}</span>

@@ -257,6 +257,21 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("return previousSummaries", app_js)
         self.assertNotIn("document.getElementById('open-modal-overlay');\n  if (openModal", app_js)
 
+    def test_feedback_image_attachments_use_inline_preview(self):
+        index_html = (APP_DIR / "index.html").read_text("utf-8")
+        app_js = (APP_DIR / "app.js").read_text("utf-8")
+        domain_js = (APP_DIR / "domain.js").read_text("utf-8")
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn('id="feedback-image-preview-overlay"', index_html)
+        self.assertIn("function openFeedbackImagePreview", app_js)
+        self.assertIn("function closeFeedbackImagePreview", app_js)
+        self.assertIn("openFeedbackImagePreview(decodeURIComponent", domain_js)
+        self.assertIn("contentType.startsWith('image/')", domain_js)
+        self.assertIn("fb-attachment-image", domain_js)
+        self.assertIn(".feedback-image-preview-modal", style_css)
+        self.assertIn(".fb-attachment-thumb img", style_css)
+
     def test_sidebar_stage_directory_supports_flow_groups_and_stage_order_moves(self):
         render_js = (APP_DIR / "render.js").read_text("utf-8")
         process_js = (APP_DIR / "process.js").read_text("utf-8")
