@@ -4887,7 +4887,7 @@ function endStageNodeDrag(event) {
     const ref = findStageProcessRef(nodeId, S.doc);
     const processId = String(ref?.processId || '').trim();
     const nextGroup = String(group?.dataset?.flowGroup || '').trim();
-    if (processId && nextGroup) {
+    if (processId && group) {
       setFlowGroupForProcesses(processId, nextGroup);
       clearStageFlowGroupDragTarget();
       stageDragState = null;
@@ -5051,26 +5051,20 @@ function getStageFlowDragTargetGroup(event) {
   const board = document.querySelector('.stage-flow-board');
   if (!board) return null;
   const draggedNode = document.querySelector(`.stage-graph-node[data-node-id="${CSS.escape(stageDragState.nodeId)}"]`);
+  const pointer = draggedNode
+    ? (() => {
+      const nodeRect = draggedNode.getBoundingClientRect();
+      return { x: nodeRect.left + nodeRect.width / 2, y: nodeRect.top + nodeRect.height / 2 };
+    })()
+    : { x: event.clientX, y: event.clientY };
   const groups = Array.from(board.querySelectorAll('.stage-flow-group-box[data-flow-group]'));
   for (const group of groups) {
-    const groupName = String(group.dataset.flowGroup || '').trim();
-    if (!groupName) continue;
     const rect = group.getBoundingClientRect();
-    const inRect = event.clientX >= rect.left
-      && event.clientX <= rect.right
-      && event.clientY >= rect.top
-      && event.clientY <= rect.bottom;
+    const inRect = pointer.x >= rect.left
+      && pointer.x <= rect.right
+      && pointer.y >= rect.top
+      && pointer.y <= rect.bottom;
     if (!inRect) continue;
-    if (draggedNode) {
-      const nodeRect = draggedNode.getBoundingClientRect();
-      const sameBox = nodeRect.left >= rect.left
-        && nodeRect.right <= rect.right
-        && nodeRect.top >= rect.top
-        && nodeRect.bottom <= rect.bottom;
-      if (sameBox && String(draggedNode.dataset.processId || '').trim()) {
-        // 允许同组内微调位置，不把它误认为跨组投放。
-      }
-    }
     return group;
   }
   return null;
@@ -5897,6 +5891,7 @@ function renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText = '暂�
                   : `<button class="stage-quick-btn" type="button" data-testid="stage-flow-link-source-button" title="从这里连线" aria-label="从这里连线" onclick="startStageFlowLinkDraft('${esc(stageItem.id)}','${esc(node.id)}')">→</button>`);
               return `<div class="stage-graph-node process-kind stage-flow-node is-editable${isDraftSource ? ' is-link-source' : ''}${isDraftTarget ? ' is-link-target' : ''}" data-node-id="${esc(node.id)}" data-testid="stage-graph-node" data-process-id="${esc(procId)}"
                 onmousedown="startStageNodeDrag('stage-ref','${esc(node.id)}',event)"
+                oncontextmenu="showSidebarProcessContextMenu('${esc(procId)}',event)"
                 style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
                 <textarea class="stage-flow-name-input" data-testid="stage-flow-name-input" data-process-id="${esc(procId)}" aria-label="流程名称" placeholder="新流程"
                   onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
@@ -5911,6 +5906,7 @@ function renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText = '暂�
             }
             return `<div class="stage-graph-node process-kind stage-flow-node" data-node-id="${esc(node.id)}" data-testid="stage-graph-node" data-process-id="${esc(procId)}"
               onmousedown="startStageNodeDrag('stage-ref','${esc(node.id)}',event)"
+              oncontextmenu="showSidebarProcessContextMenu('${esc(procId)}',event)"
               style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
               <span class="stage-flow-node-title">${esc(node.label)}</span>
             </div>`;

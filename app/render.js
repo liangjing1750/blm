@@ -565,6 +565,17 @@ function closeSidebarProcessContextMenuOnEscape(event) {
   if (event.key === 'Escape') closeSidebarProcessContextMenu();
 }
 
+function bindSidebarProcessContextMenu() {
+  const content = document.getElementById('sidebar-content');
+  if (!content || content.dataset.processContextMenuBound === 'true') return;
+  content.dataset.processContextMenuBound = 'true';
+  content.addEventListener('contextmenu', (event) => {
+    const item = event.target?.closest?.('.sb-proc-head[data-process-id]');
+    if (!item || !content.contains(item)) return;
+    showSidebarProcessContextMenu(item.dataset.processId, event);
+  });
+}
+
 function showSidebarProcessContextMenu(procId, event) {
   if (event) {
     event.preventDefault();
@@ -1453,6 +1464,7 @@ function renderSidebar() {
   </div>`;
 
   document.getElementById('sidebar-content').innerHTML=h;
+  bindSidebarProcessContextMenu();
 }
 
 /* ═══════════════════════════════════════════════════════════
