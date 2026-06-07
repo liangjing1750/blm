@@ -2307,7 +2307,7 @@ function duplicateProcess(procId) {
   if (sourceHasId) clone.id = newProcessId;
   else delete clone.id;
   clone.uid = newProcessUid;
-  clone.name = makeUniqueCopyName(source.name || '未命名流程', S.doc.processes || [], '流程');
+  clone.name = makeUniqueCopyName(`${source.name || '未命名流程'}- 副本`, S.doc.processes || [], '流程');
   clone.nodes = clonedNodes;
   delete clone.tasks;
   clone.prototypeFiles = [];
@@ -4809,6 +4809,7 @@ function onStageNodeDrag(event) {
   }
   if (stageDragState.kind === 'stage-ref') {
     updateStageFlowDragLinks(stageDragState.nodeId, graphDx, graphDy);
+    updateStageFlowGroupDragTarget(event);
   }
   if (stageDragState.kind === 'stage') {
     updateStageDragTargetCell(event);
@@ -4824,6 +4825,7 @@ function endStageNodeDrag(event) {
   document.removeEventListener('mouseup', endStageNodeDrag);
   if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
     clearStageDragTargetCell();
+    clearStageFlowGroupDragTarget();
     stageDragState = null;
     if (kind === 'stage') {
       if (S.ui.stageEditorCollapsed === false && event.detail >= 2) {
@@ -4847,6 +4849,7 @@ function endStageNodeDrag(event) {
   // 非编辑模式下拖曳不生效：不调位置、不显示"待保存"
   if (kind === 'stage' && !isStagePanoramaEditing()) {
     clearStageDragTargetCell();
+    clearStageFlowGroupDragTarget();
     stageDragState = null;
     return;
   }
@@ -4870,6 +4873,7 @@ function endStageNodeDrag(event) {
       }
       markModified();
       clearStageDragTargetCell();
+      clearStageFlowGroupDragTarget();
       stageDragState = null;
       rerenderStageWorkbench({
         valueStreamScrollTop: cell.closest('.value-stream-scroll')?.scrollTop || 0,
@@ -4878,7 +4882,21 @@ function endStageNodeDrag(event) {
       return;
     }
   }
+  if (kind === 'stage-ref' && S.ui.procView === 'stage' && S.ui.stageViewMode === 'detail' && S.ui.stageEditorCollapsed === false) {
+    const group = updateStageFlowGroupDragTarget(event);
+    const ref = findStageProcessRef(nodeId, S.doc);
+    const processId = String(ref?.processId || '').trim();
+    const nextGroup = String(group?.dataset?.flowGroup || '').trim();
+    if (processId && nextGroup) {
+      setFlowGroupForProcesses(processId, nextGroup);
+      clearStageFlowGroupDragTarget();
+      stageDragState = null;
+      rerenderStageWorkbench();
+      return;
+    }
+  }
   clearStageDragTargetCell();
+  clearStageFlowGroupDragTarget();
   stageDragState = null;
   const zoom = getStageGraphZoom() || 1;
   setStageNodeOffset(kind, nodeId, {
@@ -5003,7 +5021,9 @@ function setFlowGroupForProcesses(processIdsText, nextValue, sourceEl = null) {
   if (!ids.size) return;
   const normalized = String(nextValue || '').trim();
   (S.doc.processes || []).forEach((proc) => {
-    if (ids.has(String(proc.id || '').trim())) proc.flowGroup = normalized;
+    if (ids.has(getProcessIdentity(proc)) || ids.has(String(proc.id || '').trim()) || ids.has(String(proc.uid || '').trim())) {
+      proc.flowGroup = normalized;
+    }
   });
   if (sourceEl) {
     const editor = sourceEl.closest?.('.stage-flow-group-editor');
@@ -5018,6 +5038,49 @@ function setFlowGroupForProcesses(processIdsText, nextValue, sourceEl = null) {
     }
   }
   markModified();
+}
+
+function clearStageFlowGroupDragTarget() {
+  document.querySelectorAll('.stage-flow-group-box.is-drag-target').forEach((box) => {
+    box.classList.remove('is-drag-target');
+  });
+}
+
+function getStageFlowDragTargetGroup(event) {
+  if (!event || !stageDragState || stageDragState.kind !== 'stage-ref') return null;
+  const board = document.querySelector('.stage-flow-board');
+  if (!board) return null;
+  const draggedNode = document.querySelector(`.stage-graph-node[data-node-id="${CSS.escape(stageDragState.nodeId)}"]`);
+  const groups = Array.from(board.querySelectorAll('.stage-flow-group-box[data-flow-group]'));
+  for (const group of groups) {
+    const groupName = String(group.dataset.flowGroup || '').trim();
+    if (!groupName) continue;
+    const rect = group.getBoundingClientRect();
+    const inRect = event.clientX >= rect.left
+      && event.clientX <= rect.right
+      && event.clientY >= rect.top
+      && event.clientY <= rect.bottom;
+    if (!inRect) continue;
+    if (draggedNode) {
+      const nodeRect = draggedNode.getBoundingClientRect();
+      const sameBox = nodeRect.left >= rect.left
+        && nodeRect.right <= rect.right
+        && nodeRect.top >= rect.top
+        && nodeRect.bottom <= rect.bottom;
+      if (sameBox && String(draggedNode.dataset.processId || '').trim()) {
+        // 允许同组内微调位置，不把它误认为跨组投放。
+      }
+    }
+    return group;
+  }
+  return null;
+}
+
+function updateStageFlowGroupDragTarget(event) {
+  clearStageFlowGroupDragTarget();
+  const group = getStageFlowDragTargetGroup(event);
+  if (group) group.classList.add('is-drag-target');
+  return group;
 }
 
 function clearFlowGroupForProcesses(processIdsText) {
@@ -5796,6 +5859,7 @@ function renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText = '暂�
             onmousedown="event.stopPropagation()" onclick="event.stopPropagation();addStageFlowNode('${esc(stageItem.id)}')">+ 流程</button>` : ''}
           ${graph.groups.map((group) => `<div class="stage-flow-group-box" data-testid="stage-flow-group" aria-label="流程分组"
               data-process-ids="${esc((group.processIds || []).join('|'))}"
+              data-flow-group="${esc(group.label || '')}"
               style="left:${group.x}px;top:${group.y}px;width:${group.w}px;height:${group.h}px">
               <div class="stage-flow-group-title${group.label ? '' : ' is-placeholder'}">${esc(group.label || '未分组')}</div>
             </div>`).join('')}
@@ -7093,24 +7157,25 @@ function getDefaultTaskIdForProc(proc, preferredTaskId = S.ui.taskId) {
 
 function openProcessFlowView(navOptions = {}) {
   const proc = currentProc() || S.doc?.processes?.[0] || null;
+  const procId = getProcessIdentity(proc);
   const taskId = getProcessFlowShowTasks() ? getDefaultTaskIdForProc(proc) : null;
   queueUiNavigationHistoryFor((next) => {
     next.tab = 'process';
     next.procView = 'flow';
-    next.procId = proc?.id || null;
+    next.procId = procId || null;
     next.taskId = taskId;
     return next;
   }, navOptions);
   S.ui.tab = 'process';
   S.ui.procView = 'flow';
-  S.ui.procId = proc?.id || null;
+  S.ui.procId = procId || null;
   S.ui.taskId = taskId;
   render();
 }
 
 function selectProcessFlow(procId) {
-  const proc = (S.doc?.processes || []).find((item) => item.id === procId) || S.doc?.processes?.[0] || null;
-  S.ui.procId = proc?.id || null;
+  const proc = findProcessByIdentity(procId, S.doc) || S.doc?.processes?.[0] || null;
+  S.ui.procId = getProcessIdentity(proc) || null;
   S.ui.taskId = getProcessFlowShowTasks() ? getDefaultTaskIdForProc(proc, null) : null;
   S.ui.procView = 'flow';
   renderProcessTab();
@@ -7118,7 +7183,7 @@ function selectProcessFlow(procId) {
 
 function closeProcessEditor() {
   if (!S.ui.procId && S.doc?.processes?.length) {
-    S.ui.procId = S.doc.processes[0].id;
+    S.ui.procId = getProcessIdentity(S.doc.processes[0]);
   }
   S.ui.procView = 'flow';
   const proc = currentProc() || S.doc?.processes?.[0] || null;
@@ -7306,7 +7371,7 @@ function renderProcessTab() {
     task = currentTask();
   }
   if (view === 'list' && !proc && displayProc) {
-    S.ui.procId = displayProc.id;
+    S.ui.procId = getProcessIdentity(displayProc);
     S.ui.procView = 'flow';
     renderProcessTab();
     return;
@@ -7335,7 +7400,7 @@ function renderProcessTab() {
     (panoramaActive || stageDetailActive) ? (stageEditing
       ? '<button class="btn btn-ghost-sm" type="button" data-testid="stage-editor-hide" onclick="toggleStageEditorDrawer(false)">关闭编辑</button>'
       : '<button class="btn btn-outline btn-sm" type="button" data-testid="stage-editor-open" onclick="toggleStageEditorDrawer(true)">打开编辑</button>') : '',
-    view === 'flow' && displayProc ? `<button class="btn btn-outline btn-sm" type="button" data-testid="process-editor-open" onclick="openProcessEditor('${esc(displayProc.id)}',${task ? `'${esc(task.id)}'` : 'null'})">打开编辑</button>` : '',
+    view === 'flow' && displayProc ? `<button class="btn btn-outline btn-sm" type="button" data-testid="process-editor-open" onclick="openProcessEditor('${esc(getProcessIdentity(displayProc))}',${task ? `'${esc(task.id)}'` : 'null'})">打开编辑</button>` : '',
   ].filter(Boolean).join('');
 
   /* ── 视图切换工具栏 ── */
@@ -7365,7 +7430,7 @@ function renderProcessTab() {
 
   /* ══ 流程视图 ══ */
   if(view==='flow') {
-    if (displayProc && !S.ui.procId) S.ui.procId = displayProc.id;
+    if (displayProc && !S.ui.procId) S.ui.procId = getProcessIdentity(displayProc);
     h+=renderProcessFlowStage(displayProc, { editing: false, task });
     const tabContent = document.getElementById('tab-content');
     tabContent.innerHTML=h;
@@ -7391,13 +7456,13 @@ function renderProcessTab() {
     /* 抽屉头部 */
     h+=`<div class="drawer-head">
       <div class="drawer-crumb">
-        <span class="drawer-crumb-proc" onclick="${task ? `openProcessEditor('${esc(proc.id)}', null)` : ''}"
+        <span class="drawer-crumb-proc" onclick="${task ? `openProcessEditor('${esc(getProcessIdentity(proc))}', null)` : ''}"
           title="回到流程">${esc(proc.name||'未命名流程')}</span>
         ${task?`<span class="dc-sep">›</span>
           <span>节点 ${esc(task.name||'未命名节点')}</span>`:''}
       </div>
       <div class="drawer-actions">
-        ${!task?`<button class="btn btn-outline btn-sm" type="button" data-testid="process-duplicate-button" onclick="duplicateProcess('${esc(proc.id)}')">复制流程</button>`:''}
+        ${!task?`<button class="btn btn-outline btn-sm" type="button" data-testid="process-duplicate-button" onclick="duplicateProcess('${esc(getProcessIdentity(proc))}')">复制流程</button>`:''}
         ${task?`<button class="btn btn-danger btn-sm" onclick="removeTask('${esc(proc.id)}','${esc(task.id)}')">\u5220\u9664\u8282\u70b9</button>`:''}
         <button class="drawer-close" type="button" data-testid="process-editor-close" onclick="closeProcessEditor()" title="关闭编辑">✕</button>
       </div>

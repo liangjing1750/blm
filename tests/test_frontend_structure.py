@@ -407,6 +407,7 @@ class FrontendStructureTests(unittest.TestCase):
 
         self.assertIn("function duplicateProcess", process_js)
         self.assertIn("data-testid=\"process-duplicate-button\"", process_js)
+        self.assertIn("`${source.name || '未命名流程'}- 副本`", process_js)
         self.assertIn("const newProcessUid = createUiUid('process')", process_js)
         self.assertIn("clone.uid = newProcessUid", process_js)
         self.assertIn("node.uid = createUiUid('task')", process_js)
@@ -415,6 +416,22 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("function duplicateEntity", entity_js)
         self.assertIn("entity.uid = createUiUid('entity')", entity_js)
         self.assertIn("data-testid=\"entity-duplicate-button\"", entity_js)
+
+    def test_sidebar_copy_and_stage_group_drop_affordances_are_available(self):
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        render_js = (APP_DIR / "render.js").read_text("utf-8")
+        style_css = (APP_DIR / "style.css").read_text("utf-8")
+
+        self.assertIn("oncontextmenu=\"showSidebarProcessContextMenu", render_js)
+        self.assertIn("function showSidebarProcessContextMenu", render_js)
+        self.assertIn("menu.setAttribute('data-testid', 'sidebar-process-context-menu')", render_js)
+        self.assertIn('data-testid="sidebar-process-copy-action"', render_js)
+        self.assertIn("duplicateProcess(getProcessIdentity(process))", render_js)
+        self.assertIn("function getStageFlowDragTargetGroup", process_js)
+        self.assertIn("function updateStageFlowGroupDragTarget", process_js)
+        self.assertIn("setFlowGroupForProcesses(processId, nextGroup)", process_js)
+        self.assertIn("data-flow-group=\"${esc(group.label || '')}\"", process_js)
+        self.assertIn(".stage-flow-group-box.is-drag-target", style_css)
 
     def test_stage_process_refs_support_uid_only_documents(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")

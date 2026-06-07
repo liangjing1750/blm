@@ -246,7 +246,7 @@ function openProcessHome(navOptions = {}) {
   S.ui.stageViewMode = 'panorama';
   S.ui.taskId = null;
   if(!S.ui.procId && S.doc?.processes?.length) {
-    S.ui.procId = S.doc.processes[0].id;
+    S.ui.procId = getProcessIdentity(S.doc.processes[0]);
   }
   render();
 }
@@ -520,16 +520,17 @@ function getProcessCapabilityNames(proc, doc = S.doc) {
 }
 
 function _renderSbProc(p, options = {}) {
-  const procActive=S.ui.tab==='process'&&S.ui.procId===p.id&&!S.ui.taskId;
+  const procId = getProcessIdentity(p);
+  const procActive=S.ui.tab==='process'&&(S.ui.procId===procId||S.ui.procId===p.id||S.ui.procId===p.uid)&&!S.ui.taskId;
   const taskCount=getProcNodes(p).length;
   const tags = [];
   const stageId = String(options.stageId || '').trim();
   const moveUpArgs = stageId
-    ? `'${esc(p.id)}',-1,event,'${esc(stageId)}'`
-    : `'${esc(p.id)}',-1,event`;
+    ? `'${esc(procId)}',-1,event,'${esc(stageId)}'`
+    : `'${esc(procId)}',-1,event`;
   const moveDownArgs = stageId
-    ? `'${esc(p.id)}',1,event,'${esc(stageId)}'`
-    : `'${esc(p.id)}',1,event`;
+    ? `'${esc(procId)}',1,event,'${esc(stageId)}'`
+    : `'${esc(procId)}',1,event`;
   if (options.showCapability) {
     const capabilityNames = getProcessCapabilityNames(p);
     if (capabilityNames.length) {
@@ -538,8 +539,9 @@ function _renderSbProc(p, options = {}) {
     }
   }
   if (options.showStage) _getProcessStageNames(p).slice(0, 2).forEach((name) => tags.push(`阶段：${name}`));
-  return `<div class="sb-proc-head ${procActive?'active':''}${options.inFlowGroup ? ' in-flow-group' : ''}" data-process-id="${esc(p.id)}"
-    onclick="navigate('process',{procId:'${p.id}',taskId:null})">
+  return `<div class="sb-proc-head ${procActive?'active':''}${options.inFlowGroup ? ' in-flow-group' : ''}" data-process-id="${esc(procId)}"
+    oncontextmenu="showSidebarProcessContextMenu('${esc(procId)}',event)"
+    onclick="navigate('process',{procId:'${esc(procId)}',taskId:null})">
     <span class="sb-proc-kind">流程</span>
     <span class="sb-proc-main">
       <span class="sb-name" title="${esc(p.name||'未命名')}">${esc(p.name||'未命名')}</span>
@@ -552,6 +554,51 @@ function _renderSbProc(p, options = {}) {
     </span>
   </div>`;
 }
+
+function closeSidebarProcessContextMenu() {
+  document.querySelectorAll('.sidebar-process-context-menu').forEach((menu) => menu.remove());
+  document.removeEventListener('click', closeSidebarProcessContextMenu);
+  document.removeEventListener('keydown', closeSidebarProcessContextMenuOnEscape);
+}
+
+function closeSidebarProcessContextMenuOnEscape(event) {
+  if (event.key === 'Escape') closeSidebarProcessContextMenu();
+}
+
+function showSidebarProcessContextMenu(procId, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  closeSidebarProcessContextMenu();
+  const process = findProcessByIdentity(procId, S.doc);
+  if (!process) return;
+  const menu = document.createElement('div');
+  menu.className = 'sidebar-process-context-menu';
+  menu.setAttribute('data-testid', 'sidebar-process-context-menu');
+  menu.style.left = `${Math.max(8, event?.clientX || 8)}px`;
+  menu.style.top = `${Math.max(8, event?.clientY || 8)}px`;
+  menu.innerHTML = `<button type="button" data-testid="sidebar-process-copy-action">复制流程</button>`;
+  menu.querySelector('button')?.addEventListener('click', (clickEvent) => {
+    clickEvent.preventDefault();
+    clickEvent.stopPropagation();
+    closeSidebarProcessContextMenu();
+    duplicateProcess(getProcessIdentity(process));
+  });
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  const nextLeft = Math.min(rect.left, Math.max(8, window.innerWidth - rect.width - 8));
+  const nextTop = Math.min(rect.top, Math.max(8, window.innerHeight - rect.height - 8));
+  menu.style.left = `${nextLeft}px`;
+  menu.style.top = `${nextTop}px`;
+  setTimeout(() => {
+    document.addEventListener('click', closeSidebarProcessContextMenu);
+    document.addEventListener('keydown', closeSidebarProcessContextMenuOnEscape);
+  }, 0);
+}
+
+window.showSidebarProcessContextMenu = showSidebarProcessContextMenu;
+window.closeSidebarProcessContextMenu = closeSidebarProcessContextMenu;
 
 function _renderSbStage(stageItem, processes, collapseKey) {
   const isActive = S.ui.tab === 'process' && S.ui.procView === 'stage' && S.ui.stageId === stageItem.id;

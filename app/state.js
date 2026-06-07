@@ -1278,7 +1278,7 @@ function hydrateDocumentForUi(doc) {
   return doc;
 }
 function currentStage() { return getStageItems(S.doc).find((stage) => stage.id === S.ui.stageId) || null; }
-function currentProc()  { return (S.doc?.processes||[]).find(p=>p.id===S.ui.procId)||null; }
+function currentProc()  { return findProcessByIdentity(S.ui.procId, S.doc); }
 function currentNode()  { return getProcNodes(currentProc()).find(t=>t.id===S.ui.taskId)||null; }
 function currentTask()  { return currentNode(); }
 function currentEntity() { return (S.doc?.entities||[]).find(e=>e.id===S.ui.entityId)||null; }
