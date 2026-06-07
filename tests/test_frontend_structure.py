@@ -235,6 +235,9 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("renderTaskFormsSection", process_js)
         self.assertIn("task-form-section-entity", process_js)
         self.assertIn("getTaskFormEntitySummary", process_js)
+        self.assertIn("function syncFormSectionFieldsFromEntity", process_js)
+        self.assertIn("function duplicateTaskForm", process_js)
+        self.assertIn("data-testid=\"task-form-duplicate\"", process_js)
         self.assertNotIn('data-testid="task-form-entity"', process_js)
         self.assertIn("renderTaskBusinessRulesSection", process_js)
         self.assertIn("businessRules", state_js)
@@ -397,6 +400,36 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn("sb-id editable-id", render_js)
         self.assertIn("renameGatewayId", entity_js)
         self.assertIn("renameFlowEdgeId", entity_js)
+
+    def test_process_form_entity_copy_affordances_are_available(self):
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        entity_js = (APP_DIR / "entity.js").read_text("utf-8")
+
+        self.assertIn("function duplicateProcess", process_js)
+        self.assertIn("data-testid=\"process-duplicate-button\"", process_js)
+        self.assertIn("const newProcessUid = createUiUid('process')", process_js)
+        self.assertIn("clone.uid = newProcessUid", process_js)
+        self.assertIn("node.uid = createUiUid('task')", process_js)
+        self.assertIn("cloneTaskFormForCopy", process_js)
+        self.assertIn("taskIdMap.set(oldTaskId, newTaskId)", process_js)
+        self.assertIn("function duplicateEntity", entity_js)
+        self.assertIn("entity.uid = createUiUid('entity')", entity_js)
+        self.assertIn("data-testid=\"entity-duplicate-button\"", entity_js)
+
+    def test_stage_process_refs_support_uid_only_documents(self):
+        state_js = (APP_DIR / "state.js").read_text("utf-8")
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+
+        self.assertIn("function getProcessIdentity", state_js)
+        self.assertIn("function getStageIdentity", state_js)
+        self.assertIn("function findProcessByIdentity", state_js)
+        self.assertIn("function findStageByIdentity", state_js)
+        self.assertIn("normalized.id || normalized.uid", state_js)
+        self.assertIn("normalized.processId || normalized.processUid", state_js)
+        self.assertIn("return findProcessByIdentity(processId, doc)", state_js)
+        self.assertIn("label: proc ? (proc.name || '未命名流程') : '失效流程引用'", process_js)
+        self.assertIn("const source = findProcessByIdentity(procId, S.doc)", process_js)
+        self.assertIn("addStageProcessRef(ref.stageId, newProcessKey", process_js)
 
     def test_swimlane_tasklevel_view_uses_outer_vertical_scroll(self):
         style_css = (APP_DIR / "style.css").read_text("utf-8")

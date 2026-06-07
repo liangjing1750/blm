@@ -2231,6 +2231,44 @@ function createEntity(constructId = '', values = {}) {
   navigate('data', { entityId: id });
 }
 
+function cloneEntityValue(value) {
+  if (typeof clonePlainObject === 'function') return clonePlainObject(value);
+  if (typeof cloneDocument === 'function') return cloneDocument(value);
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value || null));
+}
+
+function duplicateEntity(entityId) {
+  S.doc.entities = S.doc.entities || [];
+  const source = S.doc.entities.find((item) => item.id === entityId);
+  if (!source) return;
+  ensureEntityStateShape(source);
+  const entity = cloneEntityValue(source);
+  entity.id = nextStableId('E', S.doc.entities, source.name || '实体');
+  entity.uid = createUiUid('entity');
+  entity.name = typeof makeUniqueCopyName === 'function'
+    ? makeUniqueCopyName(source.name || '未命名实体', S.doc.entities, '实体')
+    : `${source.name || '未命名实体'} 副本`;
+  entity.fields = Array.isArray(entity.fields) ? entity.fields.map((field) => cloneEntityValue(field)) : [];
+  entity.state_transitions = Array.isArray(entity.state_transitions)
+    ? entity.state_transitions.map((transition) => ({ ...cloneEntityValue(transition), uid: createUiUid('transition') }))
+    : [];
+  const constructIds = Array.isArray(entity.businessConstructIds)
+    ? entity.businessConstructIds.filter(Boolean)
+    : (entity.businessConstructId ? [entity.businessConstructId] : []);
+  entity.businessConstructIds = [...new Set(constructIds)];
+  entity.businessConstructId = entity.businessConstructIds[0] || '';
+  S.doc.entities.push(entity);
+  ensureDocumentArray('businessConstructs').forEach((construct) => {
+    if (entity.businessConstructIds.includes(construct.id)) {
+      construct.entityIds = [...new Set([...(construct.entityIds || []), entity.id])];
+    }
+  });
+  ensureEntityStateShape(entity);
+  markModified();
+  navigate('data', { entityId: entity.id });
+}
+
 function addEntity(constructId = '') {
   S.ui.entityDraft = {
     name: '',
@@ -3050,6 +3088,7 @@ function renderEntityDrawer(showEntityDrawer, entity, entities, drawerW) {
         <span style="font-weight:600">${esc(entity.name||'未命名')}</span>
       </div>
       <div class="drawer-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="entity-duplicate-button" onclick="duplicateEntity('${esc(entity.id)}')">复制实体</button>
         <button class="btn btn-danger btn-sm" onclick="removeEntity('${esc(entity.id)}')">删除</button>
         <button class="drawer-close" type="button" data-testid="entity-editor-close" onclick="toggleEntityRelationEditor(false)" title="关闭编辑">✕</button>
       </div>

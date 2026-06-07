@@ -2186,10 +2186,11 @@ function moveProcInSd(procId, dir, e, stageId = '') {
     return;
   }
   const procs = S.doc.processes;
-  const proc = procs.find(p=>p.id===procId); if(!proc) return;
+  const proc = findProcessByIdentity(procId, S.doc); if(!proc) return;
+  const processKey = getProcessIdentity(proc);
   const sd = proc.subDomain||'';
   const sdList = procs.filter(p=>(p.subDomain||'')===sd);
-  const idx = sdList.findIndex(p=>p.id===procId);
+  const idx = sdList.findIndex(p=>getProcessIdentity(p)===processKey);
   const nidx = idx + dir;
   if(nidx < 0 || nidx >= sdList.length) return;
   const fi = procs.indexOf(sdList[idx]);
@@ -2222,6 +2223,138 @@ function addProcess(subDomain, stageId = '') {
   if (stage?.id) addStageProcessRef(stage.id, id, { silent: true });
   markModified();
     openProcessEditor(id, null);
+}
+
+function makeUniqueCopyName(baseName, items, fallback = '副本') {
+  const sourceName = String(baseName || '').trim() || fallback;
+  const base = sourceName.endsWith('副本') ? sourceName : `${sourceName} 副本`;
+  const used = new Set((items || []).map((item) => String(item?.name || '').trim()).filter(Boolean));
+  if (!used.has(base)) return base;
+  let index = 2;
+  let candidate = `${base}${index}`;
+  while (used.has(candidate)) {
+    index += 1;
+    candidate = `${base}${index}`;
+  }
+  return candidate;
+}
+
+function clonePlainObject(value) {
+  if (typeof cloneDocument === 'function') return cloneDocument(value);
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value || null));
+}
+
+function cloneTaskFormForCopy(form, existingForms = []) {
+  const clone = clonePlainObject(form || {});
+  const usedForms = [...(existingForms || [])];
+  clone.id = nextId('F', usedForms);
+  usedForms.push({ id: clone.id });
+  clone.name = makeUniqueCopyName(clone.name || '未命名表单', existingForms, '表单');
+  clone.sections = Array.isArray(clone.sections) ? clone.sections : [];
+  const usedSectionIds = [];
+  clone.sections = clone.sections.map((section, sectionIndex) => {
+    const nextSection = clonePlainObject(section || {});
+    nextSection.id = nextId('SEC', usedSectionIds);
+    usedSectionIds.push({ id: nextSection.id });
+    nextSection.name = String(nextSection.name || `分组${sectionIndex + 1}`);
+    nextSection.fields = Array.isArray(nextSection.fields) ? nextSection.fields : [];
+    const usedFieldIds = [];
+    nextSection.fields = nextSection.fields.map((field) => {
+      const nextField = clonePlainObject(field || {});
+      nextField.id = nextId('FLD', usedFieldIds);
+      usedFieldIds.push({ id: nextField.id });
+      return nextField;
+    });
+    return nextSection;
+  });
+  if (!clone.sections.length) {
+    clone.sections.push({ id: 'SEC1', name: '基本信息', note: '', entity_id: '', fields: [] });
+  }
+  return clone;
+}
+
+function duplicateProcess(procId) {
+  const source = findProcessByIdentity(procId, S.doc);
+  if (!source) return;
+  const clone = clonePlainObject(source);
+  const oldProcessId = getProcessIdentity(source);
+  const sourceHasId = !!String(source.id || '').trim();
+  const newProcessUid = createUiUid('process');
+  const newProcessId = sourceHasId ? nextStableId('P', S.doc.processes || [], source.name || '流程') : '';
+  const newProcessKey = newProcessId || newProcessUid;
+  const sourceNodes = getProcNodes(source);
+  const clonedNodes = Array.isArray(clone.nodes) ? clone.nodes : (Array.isArray(clone.tasks) ? clone.tasks : []);
+  const taskIdMap = new Map();
+  const allTaskIds = (S.doc.processes || []).flatMap((item) => getProcNodes(item)).map((node) => ({ id: node.id }));
+
+  clonedNodes.forEach((node, index) => {
+    const oldTaskId = String(sourceNodes[index]?.id || node.id || '').trim();
+    const newTaskId = nextStableId('T', allTaskIds, node.name || oldTaskId || '节点');
+    allTaskIds.push({ id: newTaskId });
+    if (oldTaskId) taskIdMap.set(oldTaskId, newTaskId);
+    node.id = newTaskId;
+    node.uid = createUiUid('task');
+    node.forms = getTaskForms(node).map((form, formIndex, forms) => cloneTaskFormForCopy(form, forms.slice(0, formIndex)));
+    if (Array.isArray(node.businessRules)) {
+      node.businessRules = node.businessRules.map((rule) => {
+        const uid = createUiUid('rule');
+        return { ...rule, id: uid, uid };
+      });
+    }
+  });
+
+  if (sourceHasId) clone.id = newProcessId;
+  else delete clone.id;
+  clone.uid = newProcessUid;
+  clone.name = makeUniqueCopyName(source.name || '未命名流程', S.doc.processes || [], '流程');
+  clone.nodes = clonedNodes;
+  delete clone.tasks;
+  clone.prototypeFiles = [];
+  clone.pos = _nextFreePos(S.doc.processes || [], source.pos || null);
+  clone.stageId = '';
+  clone.stagePos = { x: 0, y: 0 };
+
+  const sourceFlow = normalizeProcessFlow(source);
+  const gatewayIdMap = new Map();
+  const usedGateways = [];
+  const nextFlow = {
+    version: sourceFlow.version || 2,
+    orientation: sourceFlow.orientation || 'horizontal',
+    nodes: [],
+    edges: [],
+    layout: { swimlane: { laneOrder: [...(sourceFlow.layout?.swimlane?.laneOrder || [])], items: {}, labels: {} } },
+  };
+  (sourceFlow.nodes || []).forEach((node) => {
+    if (node.kind !== 'gateway') return;
+    const nextGateway = clonePlainObject(node);
+    const newGatewayId = nextStableId('B', usedGateways, node.title || node.id || '分支');
+    usedGateways.push({ id: newGatewayId });
+    gatewayIdMap.set(node.id, newGatewayId);
+    nextGateway.id = newGatewayId;
+    nextGateway.uid = createUiUid('branch');
+    nextFlow.nodes.push(nextGateway);
+  });
+  const remapEndpoint = (id) => {
+    if (id === 'START' || id === 'END' || !id) return id;
+    return taskIdMap.get(id) || gatewayIdMap.get(id) || '';
+  };
+  (sourceFlow.edges || []).forEach((edge, index) => {
+    const nextEdge = clonePlainObject(edge);
+    nextEdge.id = `L${index + 1}`;
+    nextEdge.uid = createUiUid('edge');
+    nextEdge.from = remapEndpoint(edge.from);
+    nextEdge.to = remapEndpoint(edge.to);
+    if (nextEdge.from && nextEdge.to) nextFlow.edges.push(nextEdge);
+  });
+  clone.flow = nextFlow;
+
+  S.doc.processes.push(clone);
+  getProcessStageRefs(oldProcessId, S.doc).forEach((ref) => addStageProcessRef(ref.stageId, newProcessKey, { silent: true }));
+  hydrateDocumentForUi(S.doc);
+  markModified();
+  renderSidebar();
+  openProcessEditor(newProcessKey, null);
 }
 
 function addStageFlowNode(stageId) {
@@ -2257,18 +2390,25 @@ async function removeProcess(id) {
     title: '删除流程',
     confirmLabel: '删除',
   })) return;
+  const proc = findProcessByIdentity(id, S.doc);
+  const processKeys = new Set([
+    String(id || '').trim(),
+    String(proc?.id || '').trim(),
+    String(proc?.uid || '').trim(),
+  ].filter(Boolean));
   const removedRefIds = new Set(getProcessStageRefs(id, S.doc).map((ref) => ref.id));
-  S.doc.processes = S.doc.processes.filter(p=>p.id!==id);
+  S.doc.processes = S.doc.processes.filter((p) => !processKeys.has(getProcessIdentity(p)));
   getStages(S.doc).forEach((stage) => {
-    stage.processLinks = getStageProcessLinks(stage).filter((link) => link.fromProcessId !== id && link.toProcessId !== id);
+    stage.processLinks = getStageProcessLinks(stage)
+      .filter((link) => !processKeys.has(String(link.fromProcessId || '').trim()) && !processKeys.has(String(link.toProcessId || '').trim()));
   });
-  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => ref.processId !== id);
+  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => !processKeys.has(String(ref.processId || '').trim()));
   S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => !removedRefIds.has(link.fromRefId) && !removedRefIds.has(link.toRefId));
-  if(S.ui.procId===id){S.ui.procId=S.doc.processes[0]?.id||null; S.ui.taskId=null;}
+  if(processKeys.has(String(S.ui.procId || '').trim())){S.ui.procId=getProcessIdentity(S.doc.processes[0])||null; S.ui.taskId=null;}
   markModified(); render();
 }
 function setProc(procId,key,val) {
-  const p=S.doc.processes.find(p=>p.id===procId);
+  const p=findProcessByIdentity(procId, S.doc);
   if(p){p[key]=val; markModified();}
 }
 
@@ -3144,6 +3284,42 @@ function nextTaskFormFieldId(section) {
   return nextId('FLD', section?.fields || []);
 }
 
+function mapEntityFieldTypeToFormFieldType(type) {
+  const normalized = String(type || '').trim().toLowerCase();
+  if (['number', 'int', 'integer', 'decimal', 'float', 'double', 'long'].includes(normalized)) return 'Number';
+  if (['date', 'datetime', 'time', 'timestamp'].includes(normalized)) return 'Date';
+  if (['file', 'upload', 'attachment', 'image'].includes(normalized)) return 'File';
+  if (['enum', 'select', 'option', 'options', 'dict', 'dictionary'].includes(normalized)) return 'Select';
+  return 'Text';
+}
+
+function syncFormSectionFieldsFromEntity(section, form = null) {
+  if (!section) return 0;
+  const entityFields = getEntityFieldsForFormSection(section, form);
+  if (!entityFields.length) return 0;
+  const fields = section.fields || (section.fields = []);
+  const usedEntityFields = new Set(fields.map((field) => String(field.entity_field || '').trim()).filter(Boolean));
+  const usedNames = new Set(fields.map((field) => String(field.name || '').trim()).filter(Boolean));
+  let added = 0;
+  entityFields.forEach((entityField) => {
+    const fieldName = String(entityField?.name || '').trim();
+    if (!fieldName || usedEntityFields.has(fieldName) || usedNames.has(fieldName)) return;
+    const field = {
+      id: nextTaskFormFieldId(section),
+      name: fieldName,
+      type: mapEntityFieldTypeToFormFieldType(entityField.type),
+      required: !!(entityField.required || entityField.is_required || entityField.not_null),
+      entity_field: fieldName,
+      note: String(entityField.note || entityField.description || ''),
+    };
+    fields.push(field);
+    usedEntityFields.add(fieldName);
+    usedNames.add(fieldName);
+    added += 1;
+  });
+  return added;
+}
+
 function addTaskForm(procId, taskId) {
   const { task } = getTaskByIds(procId, taskId);
   if (!task) return;
@@ -3159,6 +3335,21 @@ function addTaskForm(procId, taskId) {
   markModified();
   rerenderProcessEditor({
     focusSelector: `[data-testid="task-form-name"][data-form-id="${form.id}"]`,
+  });
+}
+
+function duplicateTaskForm(procId, taskId, formId) {
+  const { task } = getTaskByIds(procId, taskId);
+  const forms = getTaskForms(task);
+  const form = forms.find((item) => item.id === formId);
+  if (!task || !form) return;
+  const clone = cloneTaskFormForCopy(form, forms);
+  const index = forms.findIndex((item) => item.id === formId);
+  forms.splice(index >= 0 ? index + 1 : forms.length, 0, clone);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-name"][data-form-id="${clone.id}"]`,
+    caretToEnd: true,
   });
 }
 
@@ -3180,13 +3371,20 @@ function setTaskForm(procId, taskId, formId, key, value) {
   const { task } = getTaskByIds(procId, taskId);
   const form = findTaskForm(task, formId);
   if (!form || !['name', 'entity_id', 'purpose'].includes(key)) return;
+  const previousEntityId = String(form.entity_id || '').trim();
   form[key] = value;
   if (key === 'entity_id') {
+    const nextEntityId = String(value || '').trim();
     const availableFields = new Set(getEntityFieldsForForm(form).map((field) => String(field.name || '').trim()).filter(Boolean));
     form.sections.forEach((section) => {
       (section.fields || []).forEach((field) => {
         if (field.entity_field && !availableFields.has(field.entity_field)) field.entity_field = '';
       });
+      const sectionEntityId = String(section.entity_id || '').trim();
+      if (!sectionEntityId || sectionEntityId === previousEntityId || sectionEntityId === nextEntityId) {
+        section.entity_id = nextEntityId;
+        syncFormSectionFieldsFromEntity(section, form);
+      }
     });
   }
   markModified();
@@ -3242,6 +3440,7 @@ function setTaskFormSection(procId, taskId, formId, sectionId, key, value) {
     (section.fields || []).forEach((field) => {
       if (field.entity_field && !availableFields.has(field.entity_field)) field.entity_field = '';
     });
+    syncFormSectionFieldsFromEntity(section, form);
   }
   markModified();
 }
@@ -3817,18 +4016,19 @@ function nextStageFlowLinkId() {
 }
 
 function syncLegacyStageIdForProcess(procId) {
-  const proc = (S.doc.processes || []).find((item) => item.id === procId);
+  const proc = findProcessByIdentity(procId, S.doc);
   if (!proc) return;
-  const refs = getProcessStageRefs(procId, S.doc);
+  const refs = getProcessStageRefs(getProcessIdentity(proc), S.doc);
   proc.stageId = refs[0]?.stageId || '';
   if (!refs.length) proc.stagePos = normalizeGraphOffset(proc.stagePos);
 }
 
 function addStageProcessRef(stageId, procId, options = {}) {
   const normalizedStageId = isVirtualStageId(stageId) ? '' : String(stageId || '').trim();
-  const normalizedProcId = String(procId || '').trim();
+  const proc = findProcessByIdentity(procId, S.doc);
+  const normalizedProcId = getProcessIdentity(proc) || String(procId || '').trim();
   if (!normalizedStageId || !normalizedProcId) return null;
-  const existing = getStageFlowRefs(S.doc).find((ref) => ref.stageId === normalizedStageId && ref.processId === normalizedProcId);
+  const existing = getProcessStageRefs(normalizedProcId, S.doc).find((ref) => ref.stageId === normalizedStageId);
   if (existing) return existing;
   const order = getStageProcessRefs(normalizedStageId, S.doc).length + 1;
   const ref = normalizeStageFlowRefEntry({
@@ -3846,8 +4046,14 @@ function addStageProcessRef(stageId, procId, options = {}) {
 
 function removeStageProcessRef(stageId, procId, options = {}) {
   const normalizedStageId = isVirtualStageId(stageId) ? '' : String(stageId || '').trim();
-  const normalizedProcId = String(procId || '').trim();
-  const removedRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageId === normalizedStageId && ref.processId === normalizedProcId);
+  const proc = findProcessByIdentity(procId, S.doc);
+  const normalizedProcId = getProcessIdentity(proc) || String(procId || '').trim();
+  const processKeys = new Set([
+    normalizedProcId,
+    String(proc?.id || '').trim(),
+    String(proc?.uid || '').trim(),
+  ].filter(Boolean));
+  const removedRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageId === normalizedStageId && processKeys.has(String(ref.processId || '').trim()));
   if (!removedRefs.length) return false;
   const removedRefIds = new Set(removedRefs.map((ref) => ref.id));
   S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => !removedRefIds.has(ref.id));
@@ -3860,7 +4066,13 @@ function removeStageProcessRef(stageId, procId, options = {}) {
 
 function moveStageProcessRef(stageId, procId, dir) {
   const refs = getStageProcessRefs(stageId, S.doc);
-  const index = refs.findIndex((ref) => ref.processId === procId);
+  const proc = findProcessByIdentity(procId, S.doc);
+  const processKeys = new Set([
+    String(procId || '').trim(),
+    String(proc?.id || '').trim(),
+    String(proc?.uid || '').trim(),
+  ].filter(Boolean));
+  const index = refs.findIndex((ref) => processKeys.has(String(ref.processId || '').trim()));
   const targetIndex = index + dir;
   if (index < 0 || targetIndex < 0 || targetIndex >= refs.length) return;
   [refs[index], refs[targetIndex]] = [refs[targetIndex], refs[index]];
@@ -4471,7 +4683,7 @@ function getStageNodeOffset(kind, nodeId) {
   if (kind === 'stage-ref') {
     return normalizeGraphOffset(findStageProcessRef(nodeId, S.doc)?.pos);
   }
-  return normalizeGraphOffset((S.doc.processes || []).find((proc) => proc.id === nodeId)?.stagePos);
+  return normalizeGraphOffset(findProcessByIdentity(nodeId, S.doc)?.stagePos);
 }
 
 function setStageNodeOffset(kind, nodeId, nextOffset) {
@@ -5540,7 +5752,9 @@ function renderStageFlowCanvasTools(stageItem, processRefs) {
     </div>`;
   }
   const allProcesses = S.doc.processes || [];
-  const availableProcesses = allProcesses.filter((proc) => !processRefs.some((item) => item.processId === proc.id));
+  const availableProcesses = allProcesses.filter((proc) => (
+    !getProcessStageRefs(getProcessIdentity(proc), S.doc).some((ref) => ref.stageId === stage.id)
+  ));
   const businessDomain = getStageBusinessDomainLabel(stage);
   return `<div class="stage-flow-canvas-tools" data-testid="stage-flow-canvas-tools">
     <div class="stage-flow-domain-readonly" data-testid="stage-business-domain-readonly">
@@ -5550,7 +5764,7 @@ function renderStageFlowCanvasTools(stageItem, processRefs) {
     <div class="stage-flow-tool-group stage-flow-node-tools">
       <select data-testid="stage-process-select" id="stage-process-select" onchange="addProcessToStage('${esc(stage.id)}',this.value);this.value=''">
         <option value="">选择已有流程加入当前阶段...</option>
-        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.name || '未命名流程')}</option>`).join('')}
+        ${availableProcesses.map((proc) => `<option value="${esc(getProcessIdentity(proc))}">${esc(proc.name || '未命名流程')}</option>`).join('')}
       </select>
     </div>
   </div>`;
@@ -5724,11 +5938,11 @@ function buildStageDetailGraphData(stageId) {
       const proc = getStageRefProcess(ref, S.doc);
     return {
       id: ref.id,
-      label: proc?.name || proc?.id || ref.processId,
+      label: proc ? (proc.name || '未命名流程') : '失效流程引用',
       name: proc?.name || '',
       meta: '',
       group: proc?.flowGroup || '',
-      processId: proc?.id || ref.processId,
+      processId: getProcessIdentity(proc) || ref.processId,
     };
   });
   const links = getStageFlowLinks(S.doc)
@@ -5795,14 +6009,14 @@ function renderStageProcessLinkEditor(stage, processRefs) {
         <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','fromRefId',this.value)">
           ${processRefs.map((ref) => {
             const proc = getStageRefProcess(ref, S.doc);
-            return `<option value="${esc(ref.id)}" ${link.fromRefId===ref.id?'selected':''}>${esc(proc?.name || proc?.id || ref.processId)}</option>`;
+            return `<option value="${esc(ref.id)}" ${link.fromRefId===ref.id?'selected':''}>${esc(proc ? (proc.name || '未命名流程') : '失效流程引用')}</option>`;
           }).join('')}
         </select>
         <span class="stage-link-arrow">→</span>
         <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','toRefId',this.value)">
           ${processRefs.map((ref) => {
             const proc = getStageRefProcess(ref, S.doc);
-            return `<option value="${esc(ref.id)}" ${link.toRefId===ref.id?'selected':''}>${esc(proc?.name || proc?.id || ref.processId)}</option>`;
+            return `<option value="${esc(ref.id)}" ${link.toRefId===ref.id?'selected':''}>${esc(proc ? (proc.name || '未命名流程') : '失效流程引用')}</option>`;
           }).join('')}
         </select>
         <div class="row-actions">
@@ -5820,7 +6034,7 @@ function renderStageProcessMembership(stageItem, processRefs) {
   const processes = processRefs.map((ref) => getStageRefProcess(ref, S.doc)).filter(Boolean);
   const allProcesses = S.doc.processes || [];
   const availableProcesses = allProcesses.filter((proc) => {
-    if (processRefs.some((item) => item.processId === proc.id)) return false;
+    if (getProcessStageRefs(getProcessIdentity(proc), S.doc).some((ref) => ref.stageId === stageItem.id)) return false;
     if (stageItem.virtual) return false;
     return true;
   });
@@ -5832,14 +6046,16 @@ function renderStageProcessMembership(stageItem, processRefs) {
     ${processes.length ? `<div class="stage-member-list">
       ${processRefs.map((ref, index) => {
         const proc = getStageRefProcess(ref, S.doc);
+        if (!proc) return '';
+        const procId = getProcessIdentity(proc);
         return `<div class="stage-member-chip" data-testid="stage-member-chip">
         <span class="stage-member-label">${esc(proc.name || '未命名流程')}</span>
         <div class="stage-member-actions">
-          <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="stage-member-view-button" onclick="navigate('process',{procId:'${esc(proc.id)}',taskId:null})">查看</button>
-          <button class="stage-quick-btn" type="button" data-testid="stage-member-move-up" onclick="moveProcInStage('${esc(stageItem.id)}','${esc(proc.id)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
-          <button class="stage-quick-btn" type="button" data-testid="stage-member-move-down" onclick="moveProcInStage('${esc(stageItem.id)}','${esc(proc.id)}',1)" ${index === processRefs.length - 1 ? 'disabled' : ''}>↓</button>
-          ${!stageItem.virtual ? `<button class="stage-quick-btn danger stage-quick-btn-text" type="button" data-testid="stage-member-remove-button" onclick="removeProcessFromStage('${esc(stageItem.id)}','${esc(proc.id)}')">移出</button>` : ''}
-          ${!stageItem.virtual ? `<button class="stage-quick-btn danger stage-quick-btn-text" type="button" data-testid="stage-member-delete-button" onclick="removeProcess('${esc(proc.id)}')">删除</button>` : ''}
+          <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="stage-member-view-button" onclick="navigate('process',{procId:'${esc(procId)}',taskId:null})">查看</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-member-move-up" onclick="moveProcInStage('${esc(stageItem.id)}','${esc(procId)}',-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button class="stage-quick-btn" type="button" data-testid="stage-member-move-down" onclick="moveProcInStage('${esc(stageItem.id)}','${esc(procId)}',1)" ${index === processRefs.length - 1 ? 'disabled' : ''}>↓</button>
+          ${!stageItem.virtual ? `<button class="stage-quick-btn danger stage-quick-btn-text" type="button" data-testid="stage-member-remove-button" onclick="removeProcessFromStage('${esc(stageItem.id)}','${esc(procId)}')">移出</button>` : ''}
+          ${!stageItem.virtual ? `<button class="stage-quick-btn danger stage-quick-btn-text" type="button" data-testid="stage-member-delete-button" onclick="removeProcess('${esc(procId)}')">删除</button>` : ''}
         </div>
       </div>`;
       }).join('')}
@@ -5847,7 +6063,7 @@ function renderStageProcessMembership(stageItem, processRefs) {
     ${!stageItem.virtual ? `<div class="stage-inline-row">
       <select data-testid="stage-process-select" id="stage-process-select">
         <option value="">选择已有流程加入当前阶段...</option>
-        ${availableProcesses.map((proc) => `<option value="${esc(proc.id)}">${esc(proc.name || '未命名流程')}</option>`).join('')}
+        ${availableProcesses.map((proc) => `<option value="${esc(getProcessIdentity(proc))}">${esc(proc.name || '未命名流程')}</option>`).join('')}
       </select>
       <button class="btn btn-outline btn-sm" type="button" data-testid="stage-member-join-button" onclick="addProcessToStage('${esc(stageItem.id)}',document.getElementById('stage-process-select').value)">加入</button>
     </div>` : '<p class="stage-tip">这些流程尚未归入真实业务阶段，可新建阶段后逐步迁移。</p>'}
@@ -6471,6 +6687,8 @@ function renderTaskFormCard(proc, task, form, index) {
         value="${esc(form.name || '')}" placeholder="表单名称，如：仓库管理列表"
         oninput="setTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','name',this.value)">
       <span class="task-form-entity-summary" data-testid="task-form-entity-summary">${esc(getTaskFormEntitySummary(form))}</span>
+      <button class="step-action" type="button" data-testid="task-form-duplicate" title="复制表单"
+        onclick="duplicateTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">⧉</button>
       <button class="step-del" type="button" data-testid="task-form-delete" title="删除表单"
         onclick="removeTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">✕</button>
     </div>
@@ -7179,6 +7397,7 @@ function renderProcessTab() {
           <span>节点 ${esc(task.name||'未命名节点')}</span>`:''}
       </div>
       <div class="drawer-actions">
+        ${!task?`<button class="btn btn-outline btn-sm" type="button" data-testid="process-duplicate-button" onclick="duplicateProcess('${esc(proc.id)}')">复制流程</button>`:''}
         ${task?`<button class="btn btn-danger btn-sm" onclick="removeTask('${esc(proc.id)}','${esc(task.id)}')">\u5220\u9664\u8282\u70b9</button>`:''}
         <button class="drawer-close" type="button" data-testid="process-editor-close" onclick="closeProcessEditor()" title="关闭编辑">✕</button>
       </div>
