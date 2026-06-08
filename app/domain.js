@@ -1050,8 +1050,10 @@ function renderTaskParameterRows(kind, rows) {
 
   const renderOneRow = (row, index, parentIndex, isChild) => {
     const kindRef = parentIndex != null ? `${normalizedKind}:${parentIndex}` : normalizedKind;
-    const idxRef = parentIndex != null ? index : index;
     const setterFn = parentIndex != null ? 'setTaskParameterChildField' : 'setTaskParameterField';
+    const setterArgs = parentIndex != null
+      ? `'${normalizedKind}',${parentIndex},${index}`   // child: kind, parentIndex, childIndex
+      : `'${normalizedKind}',${index}`;                   // parent: kind, index
     const removeFn = parentIndex != null
       ? `removeTaskParameterChild('${normalizedKind}',${parentIndex},${index})`
       : `removeTaskParameter('${normalizedKind}',${index})`;
@@ -1059,18 +1061,18 @@ function renderTaskParameterRows(kind, rows) {
 
     const rowHtml = `<div class="${cls}" data-testid="task-parameter-row">
       <input type="text" value="${esc(row.name || '')}" placeholder="参数名称"
-        oninput="${setterFn}('${normalizedKind}',${idxRef},'name',this.value)">
-      <select onchange="${setterFn}('${normalizedKind}',${idxRef},'type',this.value)">
+        oninput="${setterFn}(${setterArgs},'name',this.value)">
+      <select onchange="${setterFn}(${setterArgs},'type',this.value)">
         <option value="" ${!row.type ? 'selected' : ''}>类型</option>
-        ${FIELD_TYPES.map((t) => `<option value="${t.value}" ${row.type === t.value ? 'selected' : ''}>${t.label}</option>`).join('')}
+        ${FIELD_TYPES.filter(t => !isChild || t.value !== 'list').map((t) => `<option value="${t.value}" ${row.type === t.value ? 'selected' : ''}>${t.label}</option>`).join('')}
       </select>
       <label class="task-param-required"><input type="checkbox" ${row.required ? 'checked' : ''}
-        onchange="${setterFn}('${normalizedKind}',${idxRef},'required',this.checked)"> 必填</label>
+        onchange="${setterFn}(${setterArgs},'required',this.checked)"> 必填</label>
       <textarea class="auto-resize" rows="1" placeholder="说明"
-        oninput="${setterFn}('${normalizedKind}',${idxRef},'description',this.value);autoResize(this)"
+        oninput="${setterFn}(${setterArgs},'description',this.value);autoResize(this)"
         >${esc(row.description || '')}</textarea>
       <textarea class="auto-resize" rows="1" placeholder="示例"
-        oninput="${setterFn}('${normalizedKind}',${idxRef},'example',this.value);autoResize(this)"
+        oninput="${setterFn}(${setterArgs},'example',this.value);autoResize(this)"
         >${esc(row.example || '')}</textarea>
       <button class="stage-quick-btn danger" type="button" title="删除" onclick="${removeFn}">×</button>
     </div>`;
