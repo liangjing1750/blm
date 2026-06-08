@@ -271,7 +271,7 @@ function _defaultSbCollapse(doc) {
   getValueStreamItems(doc).forEach((stream) => { c[`vs-${stream.id}`] = true; });
   getStageItems(doc).forEach((stageItem) => { c[`stage-tree-${stageItem.id}`] = true; });
   getCapabilityItems(doc).forEach((capability) => { c[`cap-${capability.id || capability.name}`] = true; });
-  getBusinessConstructItems(doc).forEach((construct) => { c[`construct-${construct.id || construct.name}`] = true; });
+  getBusinessConstructItems(doc).forEach((construct) => { c[`construct-${construct.uid || construct.name}`] = true; });
   [...new Set((doc.entities||[]).map(e => e.group || '').filter(Boolean))]
     .forEach((grp) => { c[`grp-${grp}`] = true; });
   processes.forEach(p => { c[`proc-${p.id}`] = true; });
@@ -438,13 +438,13 @@ function _getProcessStageNames(proc, doc = S.doc) {
   if (!proc || !doc) return [];
   const names = [];
   const stageIds = new Set([
-    proc.stageId,
+    proc.stageUid,
     proc.primaryStageId,
-    ...(Array.isArray(proc.stageIds) ? proc.stageIds : []),
+    ...(Array.isArray(proc.stageUids) ? proc.stageUids : []),
   ].filter(Boolean));
-  const refs = getStageFlowRefs(doc).filter((ref) => ref.processId === proc.id || ref.flowId === proc.id);
+  const refs = getStageFlowRefs(doc).filter((ref) => ref.processUid === proc.id || ref.flowId === proc.id);
   refs.forEach((ref) => {
-    if (ref.stageId) stageIds.add(ref.stageId);
+    if (ref.stageUid) stageIds.add(ref.stageUid);
   });
   stageIds.forEach((stageId) => {
     const stage = getStageItems(doc).find((item) => item.id === stageId);
@@ -465,7 +465,7 @@ function getProcessCapabilityNames(proc, doc = S.doc) {
   }));
   const constructById = new Map(constructItems.flatMap((construct) => {
     const entries = [];
-    [construct.id, construct.name].filter(Boolean).forEach((key) => entries.push([String(key), construct]));
+    [construct.uid, construct.id, construct.name].filter(Boolean).forEach((key) => entries.push([String(key), construct]));
     return entries;
   }));
   const taskById = new Map(taskItems.flatMap((task) => {
@@ -483,36 +483,36 @@ function getProcessCapabilityNames(proc, doc = S.doc) {
   const addConstruct = (idOrName) => {
     const construct = constructById.get(String(idOrName || '').trim());
     if (!construct) return;
-    addCapability(construct.businessComponentId || construct.businessComponent);
+    addCapability(construct.businessComponentUid || construct.businessComponent);
   };
   const addTaskDefinition = (idOrName) => {
     const task = taskById.get(String(idOrName || '').trim());
     if (!task) return;
-    addCapability(task.businessComponentId || task.businessComponent);
-    addConstruct(task.constructId || task.constructName);
+    addCapability(task.businessComponentUid || task.businessComponent);
+    addConstruct(task.constructUid || task.constructName);
   };
 
-  (Array.isArray(proc.businessComponentIds) ? proc.businessComponentIds : []).forEach(addCapability);
-  (Array.isArray(proc.businessConstructIds) ? proc.businessConstructIds : []).forEach(addConstruct);
-  addConstruct(proc.businessConstructId);
+  (Array.isArray(proc.businessComponentUids) ? proc.businessComponentUids : []).forEach(addCapability);
+  (Array.isArray(proc.businessConstructUids) ? proc.businessConstructUids : []).forEach(addConstruct);
+  addConstruct(proc.businessConstructUid);
   getProcNodes(proc).forEach((node) => {
-    addCapability(node.businessComponentId || node.businessComponent);
-    addConstruct(node.constructId || node.businessConstructId || node.constructName);
-    addTaskDefinition(node.taskDefinitionId || node.taskDefinitionName);
+    addCapability(node.businessComponentUid || node.businessComponent);
+    addConstruct(node.constructUid || node.businessConstructUid || node.constructName);
+    addTaskDefinition(node.taskDefinitionUid || node.taskDefinitionName);
     getNodeOrchestrationTasks(node).forEach((task) => {
-      addCapability(task.businessComponentId || task.businessComponent);
-      addConstruct(task.constructId || task.businessConstructId || task.constructName);
-      addTaskDefinition(task.taskDefinitionId || task.taskDefinitionName);
+      addCapability(task.businessComponentUid || task.businessComponent);
+      addConstruct(task.constructUid || task.businessConstructUid || task.constructName);
+      addTaskDefinition(task.taskDefinitionUid || task.taskDefinitionName);
     });
     (Array.isArray(node.entity_ops) ? node.entity_ops : []).forEach((op) => {
       const entity = (doc.entities || []).find((item) => item.id === op.entity_id || item.name === op.entity_id);
-      addConstruct(entity?.businessConstructId);
-      (Array.isArray(entity?.businessConstructIds) ? entity.businessConstructIds : []).forEach(addConstruct);
+      addConstruct(entity?.businessConstructUid);
+      (Array.isArray(entity?.businessConstructUids) ? entity.businessConstructUids : []).forEach(addConstruct);
     });
     (Array.isArray(node.forms) ? node.forms : []).forEach((form) => {
       const entity = (doc.entities || []).find((item) => item.id === form.entity_id || item.name === form.entity_id);
-      addConstruct(entity?.businessConstructId);
-      (Array.isArray(entity?.businessConstructIds) ? entity.businessConstructIds : []).forEach(addConstruct);
+      addConstruct(entity?.businessConstructUid);
+      (Array.isArray(entity?.businessConstructUids) ? entity.businessConstructUids : []).forEach(addConstruct);
     });
   });
   if (!names.size && proc.subDomain) addCapability(proc.subDomain);
@@ -835,9 +835,9 @@ function getCapabilityItems(doc = S.doc) {
     id: capability.id || capability.name,
     name: capability.name || capability.id || '未命名能力',
     kind: capability.kind === 'core' ? 'core' : 'generic',
-    entityIds: Array.isArray(capability.entityIds) ? capability.entityIds : [],
-    taskDefinitionIds: Array.isArray(capability.taskDefinitionIds) ? capability.taskDefinitionIds : [],
-    constructIds: Array.isArray(capability.constructIds) ? capability.constructIds : [],
+    entityIds: Array.isArray(capability.entityUids) ? capability.entityUids : [],
+    taskDefinitionIds: Array.isArray(capability.taskDefinitionUids) ? capability.taskDefinitionUids : [],
+    constructIds: Array.isArray(capability.constructUids) ? capability.constructUids : [],
   }));
 }
 
@@ -845,10 +845,10 @@ function getBusinessConstructItems(doc = S.doc) {
   const explicit = Array.isArray(doc?.businessConstructs) ? doc.businessConstructs : [];
   return explicit.map((construct) => ({
     ...construct,
-    id: construct.id || construct.name,
+    id: construct.uid || construct.id,
     name: construct.name || construct.id || '未命名业务构件',
-    entityIds: Array.isArray(construct.entityIds) ? construct.entityIds : [],
-    taskDefinitionIds: Array.isArray(construct.taskDefinitionIds) ? construct.taskDefinitionIds : [],
+    entityIds: Array.isArray(construct.entityUids) ? construct.entityUids : [],
+    taskDefinitionIds: Array.isArray(construct.taskDefinitionUids) ? construct.taskDefinitionUids : [],
     relatedProcessIds: Array.isArray(construct.relatedProcessIds) ? construct.relatedProcessIds : [],
   }));
 }
@@ -859,17 +859,17 @@ function getTaskDefinitionItems(doc = S.doc) {
     ...task,
     id: task.id || task.name,
     name: task.name || task.id || '未命名任务定义',
-    entityIds: Array.isArray(task.entityIds) ? task.entityIds : [],
+    entityIds: Array.isArray(task.entityUids) ? task.entityUids : [],
     processIds: Array.isArray(task.processIds) ? task.processIds : [],
     usedBy: Array.isArray(task.usedBy) ? task.usedBy : [],
   }));
 }
 
 function getCapabilityConstructs(capability, doc = S.doc) {
-  const constructIds = new Set(Array.isArray(capability?.constructIds) ? capability.constructIds : []);
+  const capId = capability?.id || '';
+  if (!capId) return [];
   return getBusinessConstructItems(doc).filter((construct) => (
-    constructIds.has(construct.id)
-    || construct.businessComponentId === capability?.id
+    construct.businessComponentUid === capId
     || construct.businessComponent === capability?.name
   ));
 }
@@ -880,30 +880,31 @@ function getConstructProcesses(construct, doc = S.doc) {
     ...(Array.isArray(construct?.processIds) ? construct.processIds : []),
   ].filter(Boolean));
   const taskIds = new Set(getConstructTaskDefinitions(construct, doc).map((task) => task.id));
+  const cid2 = construct.uid || '';
   return (doc?.processes || []).filter((proc) => (
     relatedIds.has(proc.id)
-    || (Array.isArray(proc.businessConstructIds) && proc.businessConstructIds.includes(construct.id))
-    || proc.businessConstructId === construct.id
+    || (Array.isArray(proc.businessConstructUids) && proc.businessConstructUids.some((u) => u === cid2))
+    || proc.businessConstructUid === cid2
     || getProcNodes(proc).some((node) => getNodeOrchestrationTasks(node)
-      .some((task) => taskIds.has(task.taskDefinitionId)))
+      .some((task) => taskIds.has(task.taskDefinitionUid)))
   ));
 }
 
 function getConstructEntities(construct, doc = S.doc) {
-  const entityIds = new Set(Array.isArray(construct?.entityIds) ? construct.entityIds : []);
+  const cid = construct?.uid || '';
+  if (!cid) return [];
   return (doc?.entities || []).filter((entity) => (
-    entityIds.has(entity.id)
-    || entity.businessConstructId === construct?.id
-    || (Array.isArray(entity.businessConstructIds) && entity.businessConstructIds.includes(construct?.id))
+    (entity.businessConstructUid && entity.businessConstructUid === cid)
+    || (Array.isArray(entity.businessConstructUids) && entity.businessConstructUids.some((u) => u === cid))
   ));
 }
 
 function getConstructTaskDefinitions(construct, doc = S.doc) {
-  const taskIds = new Set(Array.isArray(construct?.taskDefinitionIds) ? construct.taskDefinitionIds : []);
+  const constructUid = construct?.uid || '';
+  if (!constructUid) return [];
   return getTaskDefinitionItems(doc).filter((task) => (
-    taskIds.has(task.id)
-    || task.constructId === construct?.id
-    || (Array.isArray(task.constructIds) && task.constructIds.includes(construct?.id))
+    (task.constructUid && task.constructUid === constructUid)
+    || (Array.isArray(task.constructUids) && task.constructUids.includes(constructUid))
   ));
 }
 
@@ -921,7 +922,7 @@ function getTaskDefinitionSources(taskDefinition, doc = S.doc) {
   processes.forEach((proc) => {
     getProcNodes(proc).forEach((node) => {
       getNodeOrchestrationTasks(node).forEach((item, index) => {
-        if (item.taskDefinitionId !== taskDefinition?.id) return;
+        if (item.taskDefinitionUid !== taskDefinition?.id) return;
         pushSource({
           procId: proc.id,
           procName: proc.name || '',
@@ -987,11 +988,11 @@ function getCapabilityProcesses(capability, doc = S.doc) {
     ...(Array.isArray(capability?.processIds) ? capability.processIds : []),
   ].filter(Boolean));
   const taskProcessIds = new Set();
-  const explicitTaskIds = new Set(Array.isArray(capability?.taskDefinitionIds) ? capability.taskDefinitionIds : []);
+  const explicitTaskIds = new Set(Array.isArray(capability.taskDefinitionUids) ? capability.taskDefinitionUids : []);
   getTaskDefinitionItems(doc)
     .filter((task) => (
       explicitTaskIds.has(task.id)
-      || task.businessComponentId === capability?.id
+      || task.businessComponentUid === capability?.id
       || task.businessComponent === capability?.name
     ))
     .forEach((task) => {
@@ -1001,7 +1002,7 @@ function getCapabilityProcesses(capability, doc = S.doc) {
     });
   const matchedProcesses = (doc?.processes || []).filter((proc) => (
     relatedIds.has(proc.id)
-    || (Array.isArray(proc.businessComponentIds) && proc.businessComponentIds.includes(capability.id))
+    || (Array.isArray(proc.businessComponentUids) && proc.businessComponentUids.includes(capability.id))
     || taskProcessIds.has(proc.id)
   ));
   const domainValues = _itemBusinessDomainValues(capability);
@@ -1010,7 +1011,7 @@ function getCapabilityProcesses(capability, doc = S.doc) {
 }
 
 function getCapabilityEntities(capability, doc = S.doc) {
-  const entityIds = new Set(Array.isArray(capability?.entityIds) ? capability.entityIds : []);
+  const entityIds = new Set(Array.isArray(capability.entityUids) ? capability.entityUids : []);
   const entityNames = new Set(Array.isArray(capability?.entities) ? capability.entities : []);
   getCapabilityConstructs(capability, doc).forEach((construct) => {
     getConstructEntities(construct, doc).forEach((entity) => entityIds.add(entity.id));
@@ -1025,16 +1026,16 @@ function getCapabilityServices(capability, doc = S.doc) {
   const explicitNames = Array.isArray(capability?.taskNames) ? capability.taskNames : [];
   const serviceNames = Array.isArray(capability?.services) ? capability.services : [];
   const fromDoc = (doc?.domainServices || [])
-    .filter((service) => service.businessComponentId === capability.id || service.businessComponent === capability.name)
+    .filter((service) => service.businessComponentUid === capability.id || service.businessComponent === capability.name)
     .map((service) => service.name || service.id);
   return [...new Set([...explicitNames, ...serviceNames, ...fromDoc].filter(Boolean))];
 }
 
 function getCapabilityTaskAssets(capability, doc = S.doc, processScope = null) {
-  const explicitTaskIds = new Set(Array.isArray(capability?.taskDefinitionIds) ? capability.taskDefinitionIds : []);
+  const explicitTaskIds = new Set(Array.isArray(capability.taskDefinitionUids) ? capability.taskDefinitionUids : []);
   const taskDefinitions = getTaskDefinitionItems(doc).filter((task) => (
     explicitTaskIds.has(task.id)
-    || task.businessComponentId === capability?.id
+    || task.businessComponentUid === capability?.id
     || task.businessComponent === capability?.name
   ));
   if (taskDefinitions.length) {
@@ -1166,22 +1167,22 @@ function getSidebarBusinessModelStats(selectedBusinessDomain, filteredProcs, fil
   const constructItems = getBusinessConstructItems(S.doc).filter((construct) => {
     if (selectedBusinessDomain === 'all') return true;
     return itemMatchesBusinessDomain(construct, selectedBusinessDomain, S.doc)
-      || capabilityKeys.has(String(construct.businessComponentId || ''))
+      || capabilityKeys.has(String(construct.businessComponentUid || ''))
       || capabilityKeys.has(String(construct.businessComponent || ''));
   });
-  const constructIds = new Set(constructItems.map((construct) => construct.id).filter(Boolean));
+  const constructIds = new Set(constructItems.map((c) => c.uid || c.id).filter(Boolean));
   const filteredProcIds = new Set(filteredProcs.map((proc) => proc.id));
   const entityItems = (S.doc.entities || []).filter((entity) => {
     if (selectedBusinessDomain === 'all') return true;
     return itemMatchesBusinessDomain(entity, selectedBusinessDomain, S.doc)
-      || constructIds.has(entity.businessConstructId)
-      || (Array.isArray(entity.businessConstructIds) && entity.businessConstructIds.some((id) => constructIds.has(id)));
+      || constructIds.has(entity.businessConstructUid)
+      || (Array.isArray(entity.businessConstructUids) && entity.businessConstructUids.some((id) => constructIds.has(id)));
   });
   const taskItems = getTaskDefinitionItems(S.doc).filter((task) => {
     if (selectedBusinessDomain === 'all') return true;
     if (itemMatchesBusinessDomain(task, selectedBusinessDomain, S.doc)) return true;
-    if (capabilityKeys.has(String(task.businessComponentId || '')) || capabilityKeys.has(String(task.businessComponent || ''))) return true;
-    if (constructIds.has(task.constructId)) return true;
+    if (capabilityKeys.has(String(task.businessComponentUid || '')) || capabilityKeys.has(String(task.businessComponent || ''))) return true;
+    if (constructIds.has(task.constructUid)) return true;
     return getTaskDefinitionSources(task, S.doc).some((source) => filteredProcIds.has(source.procId));
   });
 
@@ -1409,7 +1410,7 @@ function renderSidebar() {
             .filter((proc) => itemMatchesBusinessDomain(proc, selectedBusinessDomain, S.doc));
           const constructEntities = getConstructEntities(construct, S.doc);
           const constructTasks = getConstructTaskAssets(construct, S.doc, constructProcesses);
-          const constructKey = `construct-${construct.id || construct.name}`;
+          const constructKey = `construct-${construct.uid || construct.name}`;
           const constructCollapsed = Object.prototype.hasOwnProperty.call(S.ui.sbCollapse, constructKey)
             ? !!S.ui.sbCollapse[constructKey]
             : true;

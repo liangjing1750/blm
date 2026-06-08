@@ -2283,7 +2283,7 @@ function openMigrateProcessDialog(procId) {
   const stages = getStages(S.doc);
   const cells = pano.cells || [];
 
-  const currentStage = findStage(proc.stageUid || proc.stageId || '', S.doc);
+  const currentStage = findStage(proc.stageUid || '', S.doc);
   const currentColumnUid = currentStage?.panoramaColumnUid || '';
   const currentLaneUid = currentStage?.panoramaLaneUid || '';
 
@@ -2401,7 +2401,7 @@ function confirmMigrateProcess(procId) {
 
   // Update stage flow refs: remove old, add new
   const refs = getStageFlowRefs(S.doc);
-  const oldRefs = refs.filter((r) => r.processUid === procId || r.processId === procId || r.processUid === proc.uid || r.processId === proc.uid);
+  const oldRefs = refs.filter((r) => r.processUid === procId || r.processUid === proc.uid);
   oldRefs.forEach((r) => {
     const idx = refs.indexOf(r);
     if (idx >= 0) refs.splice(idx, 1);
@@ -2457,7 +2457,7 @@ function duplicateProcess(procId) {
   delete clone.tasks;
   clone.prototypeFiles = [];
   clone.pos = _nextFreePos(S.doc.processes || [], source.pos || null);
-  clone.stageId = '';
+  clone.stageUid = '';
   clone.stagePos = { x: 0, y: 0 };
 
   const sourceFlow = normalizeProcessFlow(source);
@@ -2495,7 +2495,7 @@ function duplicateProcess(procId) {
   clone.flow = nextFlow;
 
   S.doc.processes.push(clone);
-  getProcessStageRefs(oldProcessId, S.doc).forEach((ref) => addStageProcessRef(ref.stageId, newProcessKey, { silent: true }));
+  getProcessStageRefs(oldProcessId, S.doc).forEach((ref) => addStageProcessRef(ref.stageUid, newProcessKey, { silent: true }));
   hydrateDocumentForUi(S.doc);
   markModified();
   renderSidebar();
@@ -2548,10 +2548,10 @@ async function removeProcess(id) {
   S.doc.processes = S.doc.processes.filter((p) => !processKeys.has(getProcessIdentity(p)));
   getStages(S.doc).forEach((stage) => {
     stage.processLinks = getStageProcessLinks(stage)
-      .filter((link) => !processKeys.has(String(link.fromProcessId || '').trim()) && !processKeys.has(String(link.toProcessId || '').trim()));
+      .filter((link) => !processKeys.has(String(link.fromProcessUid || '').trim()) && !processKeys.has(String(link.toProcessUid || '').trim()));
   });
-  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => !processKeys.has(String(ref.processId || '').trim()));
-  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => !removedRefIds.has(link.fromRefId) && !removedRefIds.has(link.toRefId));
+  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => !processKeys.has(String(ref.processUid || '').trim()));
+  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => !removedRefIds.has(link.fromRefUid) && !removedRefIds.has(link.toRefUid));
   if(processKeys.has(String(S.ui.procId || '').trim())){S.ui.procId=getProcessIdentity(S.doc.processes[0])||null; S.ui.taskId=null;}
   markModified(); render();
 }
@@ -2889,7 +2889,7 @@ function downloadProcessPrototypeFile(procId, prototypeUid, versionUid = '') {
 ═══════════════════════════════════════════════════════════ */
 function applyTaskDefinitionToNodeTask(item, definition) {
   if (!item || !definition) return;
-  item.taskDefinitionId = definition.id || item.taskDefinitionId || '';
+  item.taskDefinitionUid = definition.id || item.taskDefinitionUid || '';
   item.name = definition.name || item.name || '';
   item.type = definition.type || item.type || 'Service';
   item.querySourceKind = item.type === 'Query' ? (definition.querySourceKind || item.querySourceKind || 'Dictionary') : '';
@@ -2899,42 +2899,42 @@ function applyTaskDefinitionToNodeTask(item, definition) {
     ? cloneTaskDefinitionParameters(definition.parameters)
     : { inputs: [], outputs: [] };
   item.note = definition.note || '';
-  item.constructId = definition.constructId || '';
-  item.businessConstructId = definition.constructId || '';
+  item.constructUid = definition.constructUid || '';
+  item.businessConstructUid = definition.constructUid || '';
   item.constructName = definition.constructName || '';
-  item.businessComponentId = definition.businessComponentId || '';
+  item.businessComponentUid = definition.businessComponentUid || '';
   item.businessComponent = definition.businessComponent || '';
 }
 
 function applyConstructToNodeTask(item, constructId) {
   if (!item) return;
   const construct = constructId ? findBusinessConstructRef(constructId) : null;
-  item.constructId = construct?.id || '';
-  item.businessConstructId = construct?.id || '';
+  item.constructUid = construct?.id || '';
+  item.businessConstructUid = construct?.id || '';
   item.constructName = construct?.name || '';
-  item.businessComponentId = construct?.businessComponentId || '';
+  item.businessComponentUid = construct?.businessComponentUid || '';
   item.businessComponent = construct?.businessComponent || '';
 }
 
 function applyCapabilityToNodeTask(item, capabilityId) {
   if (!item) return;
   const capability = capabilityId ? ensureBusinessComponentRef(capabilityId) : null;
-  item.businessComponentId = capability?.id || '';
+  item.businessComponentUid = capability?.id || '';
   item.businessComponent = capability?.name || '';
-  const construct = item.constructId || item.businessConstructId
-    ? findBusinessConstructRef(item.constructId || item.businessConstructId)
+  const construct = item.constructUid || item.businessConstructUid
+    ? findBusinessConstructRef(item.constructUid || item.businessConstructUid)
     : null;
-  if (construct && capability && String(construct.businessComponentId || '') !== String(capability.id || '')) {
-    item.constructId = '';
-    item.businessConstructId = '';
+  if (construct && capability && String(construct.businessComponentUid || '') !== String(capability.id || '')) {
+    item.constructUid = '';
+    item.businessConstructUid = '';
     item.constructName = '';
   }
 }
 
 function ensureTaskDefinitionForNodeTask(item) {
   if (!item) return null;
-  if (item.taskDefinitionId) {
-    const existing = findTaskDefinitionRef(item.taskDefinitionId);
+  if (item.taskDefinitionUid) {
+    const existing = findTaskDefinitionRef(item.taskDefinitionUid);
     if (existing) {
       applyTaskDefinitionToNodeTask(item, existing);
       return existing;
@@ -2958,7 +2958,7 @@ function ensureTaskDefinitionForNodeTask(item) {
     processIds: [],
     usedBy: [],
   };
-  const constructId = item.constructId || item.businessConstructId || '';
+  const constructId = item.constructUid || item.businessConstructUid || '';
   if (constructId) syncTaskDefinitionConstruct(definition, findBusinessConstructRef(constructId));
   defs.push(definition);
   applyTaskDefinitionToNodeTask(item, definition);
@@ -2981,7 +2981,7 @@ function setProcessTaskName(procId, taskId, value) {
 function setProcessTaskConstruct(procId, taskId, constructId) {
   const task = getProcNodes(S.doc.processes.find((p) => p.id === procId)).find((item) => item.id === taskId);
   if (!task) return;
-  task.businessConstructId = constructId || '';
+  task.businessConstructUid = constructId || '';
   markModified();
   renderSidebar();
   rerenderProcessEditor();
@@ -2990,7 +2990,7 @@ function setProcessTaskConstruct(procId, taskId, constructId) {
 function renderTaskConstructOptions(selectedConstructId = '') {
   const constructs = getBusinessConstructItems(S.doc);
   return `<option value="">未归属构件</option>${constructs.map((construct) => {
-    const id = String(construct.id || construct.name || '');
+    const id = String(construct.uid || construct.name || '');
     return `<option value="${esc(id)}" ${id === selectedConstructId ? 'selected' : ''}>${esc(construct.name || id)}</option>`;
   }).join('')}`;
 }
@@ -3006,9 +3006,9 @@ function renderTaskCapabilityOptions(selectedCapabilityId = '') {
 function renderTaskConstructOptionsForCapability(selectedConstructId = '', capabilityId = '') {
   const selectedCapabilityId = String(capabilityId || '').trim();
   const constructs = getBusinessConstructItems(S.doc)
-    .filter((construct) => !selectedCapabilityId || String(construct.businessComponentId || '') === selectedCapabilityId);
+    .filter((construct) => !selectedCapabilityId || String(construct.businessComponentUid || '') === selectedCapabilityId);
   return `<option value="">未归属构件</option>${constructs.map((construct) => {
-    const id = String(construct.id || construct.name || '');
+    const id = String(construct.uid || construct.name || '');
     const capabilityName = String(construct.businessComponent || '').trim();
     const label = selectedCapabilityId || !capabilityName
       ? (construct.name || id)
@@ -3722,16 +3722,16 @@ function getOrchestrationReuseFilter(procId, taskId) {
   const current = S.ui.orchestrationReuseFilters[key] || {};
   return {
     capabilityId: String(current.capabilityId || ''),
-    constructId: String(current.constructId || ''),
+    constructUid: String(current.constructUid || ''),
     query: String(current.query || ''),
   };
 }
 
 function setOrchestrationReuseFilter(procId, taskId, key, value) {
-  if (!['capabilityId', 'constructId', 'query'].includes(key)) return;
+  if (!['capabilityId', 'constructUid', 'query'].includes(key)) return;
   const stateKey = getOrchestrationReuseStateKey(procId, taskId);
   const next = { ...getOrchestrationReuseFilter(procId, taskId), [key]: String(value || '') };
-  if (key === 'capabilityId') next.constructId = '';
+  if (key === 'capabilityId') next.constructUid = '';
   S.ui.orchestrationReuseFilters[stateKey] = next;
   const focusSelector = key === 'query'
     ? '[data-testid="orchestration-reuse-search"]'
@@ -3748,7 +3748,7 @@ function getReferencedTaskDefinitionIds(doc = S.doc) {
   (doc?.processes || []).forEach((proc) => {
     getProcNodes(proc).forEach((node) => {
       getNodeOrchestrationTasks(node).forEach((item) => {
-        const id = String(item?.taskDefinitionId || '').trim();
+        const id = String(item?.taskDefinitionUid || '').trim();
         if (id) refs.add(id);
       });
     });
@@ -3761,7 +3761,7 @@ function isEmptyGeneratedTaskDefinition(taskDefinition) {
   return /^新任务定义\d*$/.test(name)
     && !String(taskDefinition?.target || '').trim()
     && !String(taskDefinition?.note || '').trim()
-    && !String(taskDefinition?.constructId || taskDefinition?.businessConstructId || '').trim();
+    && !String(taskDefinition?.constructUid || taskDefinition?.businessConstructUid || '').trim();
 }
 
 function cleanupUnusedGeneratedTaskDefinitions() {
@@ -3778,8 +3778,8 @@ function cleanupUnusedGeneratedTaskDefinitions() {
   });
   if (!removedIds.size) return;
   ensureDocumentArray('businessComponents').forEach((capability) => {
-    if (Array.isArray(capability.taskDefinitionIds)) {
-      capability.taskDefinitionIds = capability.taskDefinitionIds.filter((id) => !removedIds.has(id));
+    if (Array.isArray(capability.taskDefinitionUids)) {
+      capability.taskDefinitionUids = capability.taskDefinitionUids.filter((id) => !removedIds.has(id));
     }
   });
   ensureDocumentArray('businessConstructs').forEach((construct) => {
@@ -3796,12 +3796,12 @@ function getReusableOrchestrationTaskItems(currentProcId, currentTaskId, filters
   const capabilityById = new Map(capabilities.map((capability) => [String(capability.id || capability.name || ''), capability]));
   const capabilityByName = new Map(capabilities.map((capability) => [String(capability.name || capability.id || ''), capability]));
   const constructs = typeof getBusinessConstructItems === 'function' ? getBusinessConstructItems(S.doc) : [];
-  const constructById = new Map(constructs.map((construct) => [String(construct.id || construct.name || ''), construct]));
+  const constructById = new Map(constructs.map((construct) => [String(construct.uid || construct.name || ''), construct]));
   const hasTaskDefinitions = Array.isArray(S.doc?.taskDefinitions) && S.doc.taskDefinitions.length;
   const addItem = (item) => {
     const queryText = normalizeReuseSearchText(filters.query);
     if (filters.capabilityId && item.capabilityId !== filters.capabilityId) return;
-    if (filters.constructId && item.constructId !== filters.constructId) return;
+    if (filters.constructUid && item.constructUid !== filters.constructUid) return;
     if (queryText && !normalizeReuseSearchText(item.searchText).includes(queryText)) return;
     result.push(item);
   };
@@ -3811,22 +3811,22 @@ function getReusableOrchestrationTaskItems(currentProcId, currentTaskId, filters
       const name = String(taskDefinition?.name || taskDefinition?.target || '').trim();
       if (!name) return;
       const usedBy = Array.isArray(taskDefinition.usedBy) ? taskDefinition.usedBy : [];
-      if (usedBy.length && usedBy.every((usage) => usage.processId === currentProcId && usage.nodeId === currentTaskId)) {
+      if (usedBy.length && usedBy.every((usage) => usage.processUid === currentProcId && usage.nodeId === currentTaskId)) {
         return;
       }
-      const capability = capabilityById.get(String(taskDefinition.businessComponentId || ''))
+      const capability = capabilityById.get(String(taskDefinition.businessComponentUid || ''))
         || capabilityByName.get(String(taskDefinition.businessComponent || ''));
-      const construct = constructById.get(String(taskDefinition.constructId || ''));
-      const capabilityId = String(capability?.id || taskDefinition.businessComponentId || taskDefinition.businessComponent || '__ungrouped_capability__');
-      const capabilityName = String(capability?.name || taskDefinition.businessComponent || taskDefinition.businessComponentId || '未归属组件');
-      const constructId = String(construct?.id || taskDefinition.constructId || '__ungrouped_construct__');
-      const constructName = String(construct?.name || taskDefinition.constructName || taskDefinition.constructId || '未归属构件');
+      const construct = constructById.get(String(taskDefinition.constructUid || ''));
+      const capabilityId = String(capability?.id || taskDefinition.businessComponentUid || taskDefinition.businessComponent || '__ungrouped_capability__');
+      const capabilityName = String(capability?.name || taskDefinition.businessComponent || taskDefinition.businessComponentUid || '未归属组件');
+      const constructId = String(construct?.id || taskDefinition.constructUid || '__ungrouped_construct__');
+      const constructName = String(construct?.name || taskDefinition.constructName || taskDefinition.constructUid || '未归属构件');
       addItem({
         key: encodeReuseTaskDefinitionKey(taskDefinition.id),
         label: `${name} · ${constructName} / ${capabilityName}`,
         capabilityId,
         capabilityName,
-        constructId,
+        constructUid: constructId,
         constructName,
         task: taskDefinition,
         sourceKind: 'definition',
@@ -3854,7 +3854,7 @@ function findReusableOrchestrationTask(key) {
     const taskDefinition = (S.doc?.taskDefinitions || []).find((item) => item.id === taskDefinitionId);
     if (!taskDefinition) return null;
     return {
-      taskDefinitionId: taskDefinition.id,
+      taskDefinitionUid: taskDefinition.id,
       name: taskDefinition.name || '',
       type: taskDefinition.type === 'Process' ? 'Service' : (taskDefinition.type || 'Query'),
       querySourceKind: taskDefinition.type === 'Query' ? (taskDefinition.querySourceKind || 'Dictionary') : '',
@@ -3864,10 +3864,10 @@ function findReusableOrchestrationTask(key) {
         ? cloneTaskDefinitionParameters(taskDefinition.parameters)
         : { inputs: [], outputs: [] },
       note: taskDefinition.note || '',
-      constructId: taskDefinition.constructId || '',
-      businessConstructId: taskDefinition.constructId || '',
+      constructUid: taskDefinition.constructUid || '',
+      businessConstructUid: taskDefinition.constructUid || '',
       constructName: taskDefinition.constructName || '',
-      businessComponentId: taskDefinition.businessComponentId || '',
+      businessComponentUid: taskDefinition.businessComponentUid || '',
       businessComponent: taskDefinition.businessComponent || '',
     };
   }
@@ -3882,7 +3882,7 @@ function cloneReusableOrchestrationTask(item) {
   const clone = JSON.parse(JSON.stringify(item || {}));
   delete clone.id;
   return {
-    taskDefinitionId: clone.taskDefinitionId || '',
+    taskDefinitionUid: clone.taskDefinitionUid || '',
     name: clone.name || '',
     type: clone.type || 'Query',
     querySourceKind: clone.type === 'Query' ? (clone.querySourceKind || 'Dictionary') : (clone.querySourceKind || ''),
@@ -3892,10 +3892,10 @@ function cloneReusableOrchestrationTask(item) {
       ? cloneTaskDefinitionParameters(clone.parameters)
       : { inputs: [], outputs: [] },
     note: clone.note || '',
-    constructId: clone.constructId || clone.businessConstructId || '',
-    businessConstructId: clone.constructId || clone.businessConstructId || '',
+    constructUid: clone.constructUid || clone.businessConstructUid || '',
+    businessConstructUid: clone.constructUid || clone.businessConstructUid || '',
     constructName: clone.constructName || '',
-    businessComponentId: clone.businessComponentId || '',
+    businessComponentUid: clone.businessComponentUid || '',
     businessComponent: clone.businessComponent || '',
   };
 }
@@ -3930,8 +3930,8 @@ function defineTaskDefinitionForNode(procId, taskId, afterIdx = null) {
   const capabilityFilteredTasks = capabilityId
     ? allReusableTasks.filter((item) => item.capabilityId === capabilityId)
     : allReusableTasks;
-  const constructOptions = Array.from(new Map(capabilityFilteredTasks.map((item) => [item.constructId, item.constructName])).entries());
-  const constructId = constructOptions.some(([id]) => id === reuseFilter.constructId) ? reuseFilter.constructId : '';
+  const constructOptions = Array.from(new Map(capabilityFilteredTasks.map((item) => [item.constructUid, item.constructName])).entries());
+  const constructId = constructOptions.some(([id]) => id === reuseFilter.constructUid) ? reuseFilter.constructUid : '';
   openTaskDefinitionDraft(
     capabilityId,
     constructId,
@@ -3947,11 +3947,11 @@ function validateTaskDefinitionForNode(taskDefinition) {
     alert('请先填写任务名称。');
     return false;
   }
-  if (!String(taskDefinition?.businessComponentId || taskDefinition?.businessComponent || '').trim()) {
+  if (!String(taskDefinition?.businessComponentUid || taskDefinition?.businessComponent || '').trim()) {
     alert('请先选择所属业务组件。');
     return false;
   }
-  if (!String(taskDefinition?.constructId || taskDefinition?.businessConstructId || '').trim()) {
+  if (!String(taskDefinition?.constructUid || taskDefinition?.businessConstructUid || '').trim()) {
     alert('请先选择所属业务构件。');
     return false;
   }
@@ -3981,7 +3981,7 @@ function reuseOrchestrationTask(procId, taskId, key, afterIdx) {
   const orchestrationTasks = getNodeOrchestrationTasks(node);
   const insertIndex = Number.isInteger(afterIdx) ? afterIdx + 1 : orchestrationTasks.length;
   const item = cloneReusableOrchestrationTask(source);
-  if (!item.taskDefinitionId) ensureTaskDefinitionForNodeTask(item);
+  if (!item.taskDefinitionUid) ensureTaskDefinitionForNodeTask(item);
   orchestrationTasks.splice(insertIndex, 0, item);
   markModified();
   renderSidebar();
@@ -4002,16 +4002,16 @@ function setOrchestrationTask(procId, taskId, idx, key, val) {
   const item = getNodeOrchestrationTasks(node)[idx];
   if (!item) return;
   const normalizedKey = key === 'businessConstructId' ? 'constructId' : key;
-  const definition = item.taskDefinitionId ? findTaskDefinitionRef(item.taskDefinitionId) : null;
+  const definition = item.taskDefinitionUid ? findTaskDefinitionRef(item.taskDefinitionUid) : null;
   if (definition && ['name', 'type', 'querySourceKind', 'target', 'address', 'note', 'constructId', 'businessComponentId'].includes(normalizedKey)) {
     const updated = setTaskDefinition(definition.id, normalizedKey, val);
     if (!updated) return;
     applyTaskDefinitionToNodeTask(item, findTaskDefinitionRef(definition.id));
     if (normalizedKey === 'businessComponentId') {
-      const construct = item.constructId || item.businessConstructId
-        ? findBusinessConstructRef(item.constructId || item.businessConstructId)
+      const construct = item.constructUid || item.businessConstructUid
+        ? findBusinessConstructRef(item.constructUid || item.businessConstructUid)
         : null;
-      if (construct && String(construct.businessComponentId || '') !== String(val || '')) {
+      if (construct && String(construct.businessComponentUid || '') !== String(val || '')) {
         setTaskDefinition(definition.id, 'constructId', '');
         applyTaskDefinitionToNodeTask(item, findTaskDefinitionRef(definition.id));
       }
@@ -4167,7 +4167,7 @@ function syncLegacyStageIdForProcess(procId) {
   const proc = findProcessByIdentity(procId, S.doc);
   if (!proc) return;
   const refs = getProcessStageRefs(getProcessIdentity(proc), S.doc);
-  proc.stageId = refs[0]?.stageId || '';
+  proc.stageUid = refs[0]?.stageUid || '';
   if (!refs.length) proc.stagePos = normalizeGraphOffset(proc.stagePos);
 }
 
@@ -4176,13 +4176,13 @@ function addStageProcessRef(stageId, procId, options = {}) {
   const proc = findProcessByIdentity(procId, S.doc);
   const normalizedProcId = getProcessIdentity(proc) || String(procId || '').trim();
   if (!normalizedStageId || !normalizedProcId) return null;
-  const existing = getProcessStageRefs(normalizedProcId, S.doc).find((ref) => ref.stageId === normalizedStageId);
+  const existing = getProcessStageRefs(normalizedProcId, S.doc).find((ref) => ref.stageUid === normalizedStageId);
   if (existing) return existing;
   const order = getStageProcessRefs(normalizedStageId, S.doc).length + 1;
   const ref = normalizeStageFlowRefEntry({
     id: nextStageFlowRefId(),
-    stageId: normalizedStageId,
-    processId: normalizedProcId,
+    stageUid: normalizedStageId,
+    processUid: normalizedProcId,
     order,
     pos: { x: 0, y: 0 },
   }, getStageFlowRefs(S.doc).length + 1);
@@ -4201,11 +4201,11 @@ function removeStageProcessRef(stageId, procId, options = {}) {
     String(proc?.id || '').trim(),
     String(proc?.uid || '').trim(),
   ].filter(Boolean));
-  const removedRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageId === normalizedStageId && processKeys.has(String(ref.processId || '').trim()));
+  const removedRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageUid === normalizedStageId && processKeys.has(String(ref.processUid || '').trim()));
   if (!removedRefs.length) return false;
   const removedRefIds = new Set(removedRefs.map((ref) => ref.id));
   S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => !removedRefIds.has(ref.id));
-  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => !removedRefIds.has(link.fromRefId) && !removedRefIds.has(link.toRefId));
+  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => !removedRefIds.has(link.fromRefUid) && !removedRefIds.has(link.toRefUid));
   getStageProcessRefs(normalizedStageId, S.doc).forEach((ref, index) => { ref.order = index + 1; });
   syncLegacyStageIdForProcess(normalizedProcId);
   if (!options.silent) markModified();
@@ -4220,7 +4220,7 @@ function moveStageProcessRef(stageId, procId, dir) {
     String(proc?.id || '').trim(),
     String(proc?.uid || '').trim(),
   ].filter(Boolean));
-  const index = refs.findIndex((ref) => processKeys.has(String(ref.processId || '').trim()));
+  const index = refs.findIndex((ref) => processKeys.has(String(ref.processUid || '').trim()));
   const targetIndex = index + dir;
   if (index < 0 || targetIndex < 0 || targetIndex >= refs.length) return;
   [refs[index], refs[targetIndex]] = [refs[targetIndex], refs[index]];
@@ -4276,11 +4276,11 @@ async function removeStage(stageId) {
   })) return;
   if (String(S.ui.stageNameEditId || '') === String(stageId || '')) S.ui.stageNameEditId = '';
   S.doc.stages = getStages(S.doc).filter((item) => item.id !== stageId);
-  S.doc.stageLinks = getStageLinks(S.doc).filter((link) => link.fromStageId !== stageId && link.toStageId !== stageId);
+  S.doc.stageLinks = getStageLinks(S.doc).filter((link) => link.fromStageUid !== stageId && link.toStageUid !== stageId);
   const removedRefIds = new Set(getStageProcessRefs(stageId, S.doc).map((ref) => ref.id));
-  const removedProcIds = new Set(getStageProcessRefs(stageId, S.doc).map((ref) => ref.processId));
-  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageId !== stageId);
-  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => link.stageId !== stageId && !removedRefIds.has(link.fromRefId) && !removedRefIds.has(link.toRefId));
+  const removedProcIds = new Set(getStageProcessRefs(stageId, S.doc).map((ref) => ref.processUid));
+  S.doc.stageFlowRefs = getStageFlowRefs(S.doc).filter((ref) => ref.stageUid !== stageId);
+  S.doc.stageFlowLinks = getStageFlowLinks(S.doc).filter((link) => link.stageUid !== stageId && !removedRefIds.has(link.fromRefUid) && !removedRefIds.has(link.toRefUid));
   removedProcIds.forEach((procId) => syncLegacyStageIdForProcess(procId));
   if (S.ui.stageLinkFocusId === stageId) S.ui.stageLinkFocusId = '';
   ensureStageSelection();
@@ -4298,17 +4298,17 @@ function renameStageId(stageId, nextStageId) {
   const previousId = stage.id;
   stage.id = normalizedId;
   (S.doc.processes || []).forEach((proc) => {
-    if (String(proc.stageId || '').trim() === previousId) proc.stageId = normalizedId;
+    if (String(proc.stageUid || '').trim() === previousId) proc.stageUid = normalizedId;
   });
   getStageFlowRefs(S.doc).forEach((ref) => {
-    if (ref.stageId === previousId) ref.stageId = normalizedId;
+    if (ref.stageUid === previousId) ref.stageUid = normalizedId;
   });
   getStageFlowLinks(S.doc).forEach((link) => {
-    if (link.stageId === previousId) link.stageId = normalizedId;
+    if (link.stageUid === previousId) link.stageUid = normalizedId;
   });
   getStageLinks(S.doc).forEach((link) => {
-    if (link.fromStageId === previousId) link.fromStageId = normalizedId;
-    if (link.toStageId === previousId) link.toStageId = normalizedId;
+    if (link.fromStageUid === previousId) link.fromStageUid = normalizedId;
+    if (link.toStageUid === previousId) link.toStageUid = normalizedId;
   });
   if (S.ui.stageId === previousId) S.ui.stageId = normalizedId;
   markModified();
@@ -4655,17 +4655,17 @@ function addStageProcessLink(stageId, afterUid = '') {
   const refs = getStageProcessRefs(stageId, S.doc);
   if (refs.length < 2) return;
   const linkId = nextStageFlowLinkId();
-  const links = getStageFlowLinks(S.doc).filter((link) => link.stageId === stageId);
+  const links = getStageFlowLinks(S.doc).filter((link) => link.stageUid === stageId);
   const row = normalizeStageFlowLinkEntry({
     id: linkId,
-    stageId,
-    fromRefId: refs[0].id,
-    toRefId: refs[Math.min(1, refs.length - 1)].id,
+    stageUid: stageId,
+    fromRefUid: refs[0].id,
+    toRefUid: refs[Math.min(1, refs.length - 1)].id,
   }, getStageFlowLinks(S.doc).length + 1);
   const insertIndex = links.findIndex((link) => link.id === afterUid);
   if (insertIndex >= 0) links.splice(insertIndex + 1, 0, row);
   else links.push(row);
-  const others = getStageFlowLinks(S.doc).filter((link) => link.stageId !== stageId);
+  const others = getStageFlowLinks(S.doc).filter((link) => link.stageUid !== stageId);
   S.doc.stageFlowLinks = [...others, ...links];
   markModified();
   rerenderStageWorkbench();
@@ -4682,16 +4682,16 @@ function addStageProcessLinkBetweenRefs(stageId, fromRefId, toRefId) {
   const linkId = nextStageFlowLinkId();
   const links = getStageFlowLinks(S.doc);
   const duplicate = links.some((link) => (
-    link.stageId === stageId
-    && link.fromRefId === normalizedFrom
-    && link.toRefId === normalizedTo
+    link.stageUid === stageId
+    && link.fromRefUid === normalizedFrom
+    && link.toRefUid === normalizedTo
   ));
   if (duplicate) return;
   links.push(normalizeStageFlowLinkEntry({
     id: linkId,
-    stageId,
-    fromRefId: normalizedFrom,
-    toRefId: normalizedTo,
+    stageUid: stageId,
+    fromRefUid: normalizedFrom,
+    toRefUid: normalizedTo,
   }, links.length + 1));
   markModified();
   rerenderStageWorkbench();
@@ -4715,7 +4715,7 @@ function clearStageFlowLinkDraft() {
 }
 
 function setStageProcessLink(stageId, linkUid, key, value) {
-  const link = getStageFlowLinks(S.doc).find((item) => item.stageId === stageId && item.id === linkUid);
+  const link = getStageFlowLinks(S.doc).find((item) => item.stageUid === stageId && item.id === linkUid);
   if (!link) return;
   link[key] = String(value || '').trim();
   markModified();
@@ -4723,17 +4723,17 @@ function setStageProcessLink(stageId, linkUid, key, value) {
 
 function removeStageProcessLink(stageId, linkUid) {
   const links = getStageFlowLinks(S.doc);
-  const removedLink = links.find((item) => item.stageId === stageId && item.id === linkUid);
-  const nextLinks = links.filter((item) => !(item.stageId === stageId && item.id === linkUid));
+  const removedLink = links.find((item) => item.stageUid === stageId && item.id === linkUid);
+  const nextLinks = links.filter((item) => !(item.stageUid === stageId && item.id === linkUid));
   if (nextLinks.length === links.length) return;
   S.doc.stageFlowLinks = nextLinks;
   if (removedLink) {
-    const fromRef = findStageProcessRef(removedLink.fromRefId, S.doc);
-    const toRef = findStageProcessRef(removedLink.toRefId, S.doc);
+    const fromRef = findStageProcessRef(removedLink.fromRefUid, S.doc);
+    const toRef = findStageProcessRef(removedLink.toRefUid, S.doc);
     const stage = findStage(stageId, S.doc);
-    if (stage && fromRef?.processId && toRef?.processId) {
+    if (stage && fromRef?.processUid && toRef?.processUid) {
       stage.processLinks = getStageProcessLinks(stage).filter((link) => (
-        !(link.fromProcessId === fromRef.processId && link.toProcessId === toRef.processId)
+        !(link.fromProcessUid === fromRef.processUid && link.toProcessUid === toRef.processUid)
       ));
     }
   }
@@ -4742,12 +4742,12 @@ function removeStageProcessLink(stageId, linkUid) {
 }
 
 function moveStageProcessLink(stageId, linkUid, dir) {
-  const links = getStageFlowLinks(S.doc).filter((item) => item.stageId === stageId);
+  const links = getStageFlowLinks(S.doc).filter((item) => item.stageUid === stageId);
   const index = links.findIndex((item) => item.id === linkUid);
   const targetIndex = index + dir;
   if (index < 0 || targetIndex < 0 || targetIndex >= links.length) return;
   [links[index], links[targetIndex]] = [links[targetIndex], links[index]];
-  const others = getStageFlowLinks(S.doc).filter((item) => item.stageId !== stageId);
+  const others = getStageFlowLinks(S.doc).filter((item) => item.stageUid !== stageId);
   S.doc.stageFlowLinks = [...others, ...links];
   markModified();
   rerenderStageWorkbench();
@@ -4990,7 +4990,7 @@ function endStageNodeDrag(event) {
       const ref = findStageProcessRef(nodeId, S.doc);
       const currentStage = getCurrentStageItem();
       if (S.ui.procView === 'stage' && S.ui.stageViewMode === 'detail' && S.ui.stageEditorCollapsed === false && currentStage && !currentStage.virtual) return;
-      if (ref?.processId) navigate('process', { procId: ref.processId, taskId: null });
+      if (ref?.processUid) navigate('process', { procId: ref.processUid, taskId: null });
     } else navigate('process', { procId: nodeId, taskId: null });
     return;
   }
@@ -5033,7 +5033,7 @@ function endStageNodeDrag(event) {
   if (kind === 'stage-ref' && S.ui.procView === 'stage' && S.ui.stageEditorCollapsed === false) {
     const group = updateStageFlowGroupDragTarget(event);
     const ref = findStageProcessRef(nodeId, S.doc);
-    const processId = String(ref?.processId || '').trim();
+    const processId = String(ref?.processUid || '').trim();
     const nextGroup = String(group?.dataset?.flowGroup || '').trim();
     if (processId && group) {
       setFlowGroupForProcesses(processId, nextGroup);
@@ -5383,7 +5383,7 @@ function buildStageFlowGroupBoxes(rows, nodes, links, positions, options = {}) {
       boxes.push({
         id: `group-${rowIndex}-${boxes.length}`,
         label,
-        processIds: segment.map((id) => nodeById.get(id)?.processId || '').filter(Boolean),
+        processIds: segment.map((id) => nodeById.get(id)?.processUid || '').filter(Boolean),
         x: Math.max(6, minX - 14),
         y: Math.max(6, minY - 28),
         w: Math.max(92, maxX - minX + 28),
@@ -5403,7 +5403,7 @@ function buildStageFlowGroupBoxes(rows, nodes, links, positions, options = {}) {
 }
 
 function renderStageFlowNodeGroupEditor(node, pos) {
-  const processId = String(node?.processId || '').trim();
+  const processId = String(node?.processUid || '').trim();
   if (!processId || !pos) return '';
   const editorW = 104;
   const left = Math.max(4, Math.round(pos.x + pos.w / 2 - editorW / 2));
@@ -5958,7 +5958,7 @@ function renderStageFlowCanvasTools(stageItem, processRefs) {
   }
   const allProcesses = S.doc.processes || [];
   const availableProcesses = allProcesses.filter((proc) => (
-    !getProcessStageRefs(getProcessIdentity(proc), S.doc).some((ref) => ref.stageId === stage.id)
+    !getProcessStageRefs(getProcessIdentity(proc), S.doc).some((ref) => ref.stageUid === stage.id)
   ));
   const businessDomain = getStageBusinessDomainLabel(stage);
   return `<div class="stage-flow-canvas-tools" data-testid="stage-flow-canvas-tools">
@@ -6028,7 +6028,7 @@ function renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText = '暂�
           }).join('') : ''}
           ${nodes.map((node) => {
             const pos = graph.positions[node.id];
-            const procId = node.processId || '';
+            const procId = node.processUid || '';
             if (canEditStage) {
               const isDraftSource = draftFromRefId === node.id;
               const isDraftTarget = draftFromRefId && draftFromRefId !== node.id;
@@ -6134,8 +6134,8 @@ function buildStagePanoramaGraphData() {
   });
   const stageIdSet = new Set(stageItems.map((stage) => stage.id));
   const links = getStageLinks(S.doc)
-    .filter((link) => stageIdSet.has(link.fromStageId) && stageIdSet.has(link.toStageId))
-    .map((link) => ({ from: link.fromStageId, to: link.toStageId }));
+    .filter((link) => stageIdSet.has(link.fromStageUid) && stageIdSet.has(link.toStageUid))
+    .map((link) => ({ from: link.fromStageUid, to: link.toStageUid }));
   return { nodes, links };
 }
 
@@ -6150,12 +6150,12 @@ function buildStageDetailGraphData(stageId) {
       name: proc?.name || '',
       meta: '',
       group: proc?.flowGroup || '',
-      processId: getProcessIdentity(proc) || ref.processId,
+      processId: getProcessIdentity(proc) || ref.processUid,
     };
   });
   const links = getStageFlowLinks(S.doc)
-    .filter((link) => link.stageId === stageId)
-    .map((link) => ({ id: link.id, from: link.fromRefId, to: link.toRefId }));
+    .filter((link) => link.stageUid === stageId)
+    .map((link) => ({ id: link.id, from: link.fromRefUid, to: link.toRefUid }));
   return { nodes, links, processes, processRefs };
 }
 
@@ -6164,7 +6164,7 @@ function renderStageLinkEditor(stageItems) {
   const links = getStageLinks(S.doc);
   const focusedStage = realStages.find((stage) => stage.id === S.ui.stageLinkFocusId) || null;
   const visibleLinks = focusedStage
-    ? links.filter((link) => link.fromStageId === focusedStage.id || link.toStageId === focusedStage.id)
+    ? links.filter((link) => link.fromStageUid === focusedStage.id || link.toStageUid === focusedStage.id)
     : links;
   const selectionNote = focusedStage
     ? `<div class="stage-link-focus-note" data-testid="stage-link-focus-note">
@@ -6181,14 +6181,14 @@ function renderStageLinkEditor(stageItems) {
     ${visibleLinks.length ? `<div class="stage-link-list">
       ${visibleLinks.map((link) => {
         const linkIndex = links.findIndex((item) => item.uid === link.uid);
-        const related = focusedStage && (link.fromStageId === focusedStage.id || link.toStageId === focusedStage.id);
+        const related = focusedStage && (link.fromStageUid === focusedStage.id || link.toStageUid === focusedStage.id);
         return `<div class="stage-link-row${related ? ' is-related' : ''}" data-testid="stage-link-row">
         <select onchange="setStageLink('${esc(link.uid)}','fromStageId',this.value)">
-          ${realStages.map((stage) => `<option value="${esc(stage.id)}" ${link.fromStageId===stage.id?'selected':''}>${esc(stage.name || stage.id)}</option>`).join('')}
+          ${realStages.map((stage) => `<option value="${esc(stage.id)}" ${link.fromStageUid===stage.id?'selected':''}>${esc(stage.name || stage.id)}</option>`).join('')}
         </select>
         <span class="stage-link-arrow">→</span>
         <select onchange="setStageLink('${esc(link.uid)}','toStageId',this.value)">
-          ${realStages.map((stage) => `<option value="${esc(stage.id)}" ${link.toStageId===stage.id?'selected':''}>${esc(stage.name || stage.id)}</option>`).join('')}
+          ${realStages.map((stage) => `<option value="${esc(stage.id)}" ${link.toStageUid===stage.id?'selected':''}>${esc(stage.name || stage.id)}</option>`).join('')}
         </select>
         <div class="row-actions">
           <button class="stage-quick-btn" type="button" data-testid="stage-link-add-button" onclick="addStageLink('${esc(link.uid)}','${esc(focusedStage?.id || '')}')">＋</button>
@@ -6203,7 +6203,7 @@ function renderStageLinkEditor(stageItems) {
 }
 
 function renderStageProcessLinkEditor(stage, processRefs) {
-  const links = stage ? getStageFlowLinks(S.doc).filter((link) => link.stageId === stage.id) : [];
+  const links = stage ? getStageFlowLinks(S.doc).filter((link) => link.stageUid === stage.id) : [];
   if (!stage) {
     return `<div class="stage-editor-section"><h5>阶段内流程连线</h5><p class="no-refs">未设置业务阶段只用于承接旧流程，不在这里维护流程连线。</p></div>`;
   }
@@ -6214,17 +6214,17 @@ function renderStageProcessLinkEditor(stage, processRefs) {
     </div>
     ${links.length ? `<div class="stage-link-list">
       ${links.map((link) => `<div class="stage-link-row" data-testid="stage-process-link-row">
-        <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','fromRefId',this.value)">
+        <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','fromRefUid',this.value)">
           ${processRefs.map((ref) => {
             const proc = getStageRefProcess(ref, S.doc);
-            return `<option value="${esc(ref.id)}" ${link.fromRefId===ref.id?'selected':''}>${esc(proc ? (proc.name || '未命名流程') : '失效流程引用')}</option>`;
+            return `<option value="${esc(ref.id)}" ${link.fromRefUid===ref.id?'selected':''}>${esc(proc ? (proc.name || '未命名流程') : '失效流程引用')}</option>`;
           }).join('')}
         </select>
         <span class="stage-link-arrow">→</span>
-        <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','toRefId',this.value)">
+        <select onchange="setStageProcessLink('${esc(stage.id)}','${esc(link.id)}','toRefUid',this.value)">
           ${processRefs.map((ref) => {
             const proc = getStageRefProcess(ref, S.doc);
-            return `<option value="${esc(ref.id)}" ${link.toRefId===ref.id?'selected':''}>${esc(proc ? (proc.name || '未命名流程') : '失效流程引用')}</option>`;
+            return `<option value="${esc(ref.id)}" ${link.toRefUid===ref.id?'selected':''}>${esc(proc ? (proc.name || '未命名流程') : '失效流程引用')}</option>`;
           }).join('')}
         </select>
         <div class="row-actions">
@@ -6242,7 +6242,7 @@ function renderStageProcessMembership(stageItem, processRefs) {
   const processes = processRefs.map((ref) => getStageRefProcess(ref, S.doc)).filter(Boolean);
   const allProcesses = S.doc.processes || [];
   const availableProcesses = allProcesses.filter((proc) => {
-    if (getProcessStageRefs(getProcessIdentity(proc), S.doc).some((ref) => ref.stageId === stageItem.id)) return false;
+    if (getProcessStageRefs(getProcessIdentity(proc), S.doc).some((ref) => ref.stageUid === stageItem.id)) return false;
     if (stageItem.virtual) return false;
     return true;
   });
@@ -6692,12 +6692,12 @@ function renderOrchestrationSection(proc, task) {
   const capabilityFilteredTasks = reuseFilter.capabilityId
     ? allReusableTasks.filter((item) => item.capabilityId === reuseFilter.capabilityId)
     : allReusableTasks;
-  const constructOptions = Array.from(new Map(capabilityFilteredTasks.map((item) => [item.constructId, item.constructName])).entries())
+  const constructOptions = Array.from(new Map(capabilityFilteredTasks.map((item) => [item.constructUid, item.constructName])).entries())
     .sort((left, right) => left[1].localeCompare(right[1], 'zh-CN'));
-  const activeConstructId = constructOptions.some(([id]) => id === reuseFilter.constructId) ? reuseFilter.constructId : '';
+  const activeConstructId = constructOptions.some(([id]) => id === reuseFilter.constructUid) ? reuseFilter.constructUid : '';
   const reusableTasks = getReusableOrchestrationTaskItems(proc.id, task.id, {
     capabilityId: reuseFilter.capabilityId,
-    constructId: activeConstructId,
+    constructUid: activeConstructId,
     query: reuseFilter.query,
   });
   const reuseSelectId = `orch-reuse-${String(task.id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
@@ -6725,7 +6725,7 @@ function renderOrchestrationSection(proc, task) {
           ${capabilityOptions.map(([id, name]) => `<option value="${esc(id)}" ${reuseFilter.capabilityId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
         </select>
         <select data-testid="orchestration-reuse-construct-select" aria-label="选择业务构件"
-          onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','constructId',this.value)" ${capabilityFilteredTasks.length ? '' : 'disabled'}>
+          onchange="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','constructUid',this.value)" ${capabilityFilteredTasks.length ? '' : 'disabled'}>
           <option value="">全部业务构件</option>
           ${constructOptions.map(([id, name]) => `<option value="${esc(id)}" ${activeConstructId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
         </select>
@@ -6757,11 +6757,11 @@ function renderOrchestrationSection(proc, task) {
           </select>
           <select data-testid="orchestration-task-capability-select"
             onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'businessComponentId',this.value);rerenderProcessEditor({ focusSelector: '.orch-card[data-orch-index=&quot;${index}&quot;] [data-testid=&quot;orchestration-task-capability-select&quot;]', selectText: false })">
-            ${renderTaskCapabilityOptions(item.businessComponentId || '')}
+            ${renderTaskCapabilityOptions(item.businessComponentUid || '')}
           </select>
           <select data-testid="orchestration-task-construct-select"
-            onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'constructId',this.value);rerenderProcessEditor({ focusSelector: '.orch-card[data-orch-index=&quot;${index}&quot;] [data-testid=&quot;orchestration-task-construct-select&quot;]', selectText: false })">
-            ${renderTaskConstructOptionsForCapability(item.constructId || item.businessConstructId || '', item.businessComponentId || '')}
+            onchange="setOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',${index},'constructUid',this.value);rerenderProcessEditor({ focusSelector: '.orch-card[data-orch-index=&quot;${index}&quot;] [data-testid=&quot;orchestration-task-construct-select&quot;]', selectText: false })">
+            ${renderTaskConstructOptionsForCapability(item.constructUid || item.businessConstructUid || '', item.businessComponentUid || '')}
           </select>
           <div class="step-actions orch-actions">
             <button class="step-action" type="button" title="在下方定义并加入任务" onclick="defineTaskDefinitionForNode('${esc(proc.id)}','${esc(task.id)}',${index})">+</button>
@@ -7003,7 +7003,7 @@ function getProcessPanoramaContexts(proc, doc = S.doc) {
   const contexts = [];
 
   for (const ref of stageRefs) {
-    const stageEntry = stageById.get(String(ref.stageId || '').trim());
+    const stageEntry = stageById.get(String(ref.stageUid || '').trim());
     if (!stageEntry?.stage || stageEntry.stage.id === UNASSIGNED_STAGE_ID) continue;
     const stage = stageEntry.stage;
     const columnEntry = columnById.get(String(stage.panoramaColumnUid || '').trim());
@@ -7683,8 +7683,8 @@ function renderProcessTab() {
       const processStageRefs = getProcessStageRefs(proc.id, S.doc);
       const processStageRefChips = processStageRefs
         .map((ref) => {
-          const stageName = getStageDisplayName(ref.stageId, S.doc);
-          return `<button class="proc-stage-ref-chip" type="button" data-testid="proc-stage-ref-chip" onclick="openStageDetail('${esc(ref.stageId)}')">${esc(stageName)}</button>`;
+          const stageName = getStageDisplayName(ref.stageUid, S.doc);
+          return `<button class="proc-stage-ref-chip" type="button" data-testid="proc-stage-ref-chip" onclick="openStageDetail('${esc(ref.stageUid)}')">${esc(stageName)}</button>`;
         })
         .join('');
       h+=`<div class="form-grid">

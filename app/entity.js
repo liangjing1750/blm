@@ -1,10 +1,10 @@
 'use strict';
 
 function getEntityBusinessConstructId(entity) {
-  const explicitId = String(entity?.businessConstructId || '').trim();
+  const explicitId = String(entity?.businessConstructUid || '').trim();
   if (explicitId) return explicitId;
-  const firstId = Array.isArray(entity?.businessConstructIds)
-    ? entity.businessConstructIds.map((id) => String(id || '').trim()).find(Boolean)
+  const firstId = Array.isArray(entity?.businessConstructUids)
+    ? entity.businessConstructUids.map((id) => String(id || '').trim()).find(Boolean)
     : '';
   return firstId || '';
 }
@@ -14,7 +14,7 @@ function getEntityModelMeta(entity, doc = S.doc) {
   const construct = constructId
     ? getBusinessConstructItems(doc).find((item) => item.id === constructId || item.name === constructId)
     : null;
-  const capabilityId = String(construct?.businessComponentId || construct?.businessComponent || '').trim();
+  const capabilityId = String(construct?.businessComponentUid || construct?.businessComponent || '').trim();
   const capability = capabilityId
     ? getCapabilityItems(doc).find((item) => item.id === capabilityId || item.name === capabilityId)
     : null;
@@ -30,8 +30,8 @@ function getEntityModelMeta(entity, doc = S.doc) {
 
 function renderBusinessConstructOptions(selectedConstructId = '') {
   return `<option value="">未归属构件</option>${getBusinessConstructItems(S.doc).map((construct) => {
-    const id = String(construct.id || construct.name || '');
-    const capability = getCapabilityItems(S.doc).find((item) => item.id === construct.businessComponentId || item.name === construct.businessComponent);
+    const id = String(construct.uid || construct.name || '');
+    const capability = getCapabilityItems(S.doc).find((item) => item.id === construct.businessComponentUid || item.name === construct.businessComponent);
     const prefix = capability ? `${capability.name} / ` : '';
     return `<option value="${esc(id)}" ${id === selectedConstructId ? 'selected' : ''}>${esc(prefix + (construct.name || id))}</option>`;
   }).join('')}`;
@@ -2216,15 +2216,15 @@ function createEntity(constructId = '', values = {}) {
     id,
     name: String(values.name || '').trim() || '新实体',
     note: String(values.note || ''),
-    businessConstructId: constructId || '',
-    businessConstructIds: constructId ? [constructId] : [],
+    businessConstructUid: constructId || '',
+    businessConstructUids: constructId ? [constructId] : [],
     fields: [],
     state_transitions: [],
   };
   S.doc.entities.push(entity);
   if (constructId && typeof addEntityToConstruct === 'function') {
     const construct = findBusinessConstructRef(constructId);
-    if (construct) construct.entityIds = [...new Set([...(construct.entityIds || []), id])];
+    if (construct) construct.entityUids = [...new Set([...(construct.entityUids || []), id])];
   }
   S.ui.entityRelationEditorCollapsed = false;
   markModified();
@@ -2255,17 +2255,17 @@ function duplicateEntity(entityId) {
     : [];
   const constructUids = Array.isArray(entity.businessConstructUids)
     ? entity.businessConstructUids.filter(Boolean)
-    : Array.isArray(entity.businessConstructIds)
-    ? entity.businessConstructIds.filter(Boolean)
-    : (entity.businessConstructUid || entity.businessConstructId ? [entity.businessConstructUid || entity.businessConstructId] : []);
+    : Array.isArray(entity.businessConstructUids)
+    ? entity.businessConstructUids.filter(Boolean)
+    : (entity.businessConstructUid || entity.businessConstructUid ? [entity.businessConstructUid || entity.businessConstructUid] : []);
   entity.businessConstructUids = [...new Set(constructUids)];
   entity.businessConstructUid = entity.businessConstructUids[0] || '';
-  entity.businessConstructIds = [...entity.businessConstructUids];
-  entity.businessConstructId = entity.businessConstructUid;
+  entity.businessConstructUids = [...entity.businessConstructUids];
+  entity.businessConstructUid = entity.businessConstructUid;
   S.doc.entities.push(entity);
   // 复制构件归属
   ensureDocumentArray('businessConstructs').forEach((construct) => {
-    const cid = construct.uid || construct.id || '';
+    const cid = construct.uid || construct.uid || '';
     if (entity.businessConstructUids.includes(cid)) {
       construct.entityUids = [...new Set([...(construct.entityUids || []), entity.uid])];
     }
@@ -2328,8 +2328,8 @@ async function removeEntity(id) {
   })) return;
   S.doc.entities=S.doc.entities.filter(e=>e.id!==id);
   ensureDocumentArray('businessConstructs').forEach((construct) => {
-    if (Array.isArray(construct.entityIds)) {
-      construct.entityIds = construct.entityIds.filter((entityId) => entityId !== id);
+    if (Array.isArray(construct.entityUids)) {
+      construct.entityUids = construct.entityUids.filter((entityId) => entityId !== id);
     }
   });
   S.doc.relations=(S.doc.relations||[]).filter(r=>r.from!==id&&r.to!==id);
@@ -2365,20 +2365,20 @@ function setEntityBusinessConstruct(entityId, constructId) {
   if (!entity) return;
   ensureEntityStateShape(entity);
   ensureDocumentArray('businessConstructs').forEach((construct) => {
-    if (Array.isArray(construct.entityIds)) {
-      construct.entityIds = construct.entityIds.filter((id) => id !== entity.id);
+    if (Array.isArray(construct.entityUids)) {
+      construct.entityUids = construct.entityUids.filter((id) => id !== entity.id);
     }
   });
   if (constructId) {
     const construct = findBusinessConstructRef(constructId);
     if (construct) {
-      entity.businessConstructId = construct.id;
-      entity.businessConstructIds = [construct.id];
-      construct.entityIds = [...new Set([...(construct.entityIds || []), entity.id])];
+      entity.businessConstructUid = construct.uid;
+      entity.businessConstructUids = [construct.uid];
+      construct.entityUids = [...new Set([...(construct.entityUids || []), entity.id])];
     }
   } else {
-    entity.businessConstructId = '';
-    entity.businessConstructIds = [];
+    entity.businessConstructUid = '';
+    entity.businessConstructUids = [];
   }
   markModified();
   renderSidebar();

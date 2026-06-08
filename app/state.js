@@ -891,27 +891,27 @@ function normalizeStageProcessLinkEntry(link) {
   const normalized = link && typeof link === 'object' ? link : {};
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stageproc'),
-    fromProcessId: String(normalized.fromProcessId || '').trim(),
-    toProcessId: String(normalized.toProcessId || '').trim(),
+    fromProcessUid: String(normalized.fromProcessUid || normalized.fromProcessId || '').trim(),
+    toProcessUid: String(normalized.toProcessUid || normalized.toProcessId || '').trim(),
   };
 }
 function normalizeStageLinkEntry(link) {
   const normalized = link && typeof link === 'object' ? link : {};
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stagelink'),
-    fromStageId: String(normalized.fromStageId || '').trim(),
-    toStageId: String(normalized.toStageId || '').trim(),
+    fromStageUid: String(normalized.fromStageUid || normalized.fromStageId || '').trim(),
+    toStageUid: String(normalized.toStageUid || normalized.toStageId || '').trim(),
   };
 }
 function normalizeStageFlowRefEntry(ref, index = 1) {
   const normalized = ref && typeof ref === 'object' ? ref : {};
-  const stageId = String(normalized.stageId || normalized.stageUid || normalized.stage_id || '').trim();
-  const processId = String(normalized.processId || normalized.processUid || normalized.process_id || '').trim();
+  const stageUid = String(normalized.stageUid || normalized.stageId || normalized.stage_id || '').trim();
+  const processUid = String(normalized.processUid || normalized.processId || normalized.process_id || '').trim();
   return {
-    uid: String(normalized.uid || '').trim() || (stageId && processId ? createDeterministicUiUid('stage-flow-ref', stageId, processId) : createUiUid('stageref')),
+    uid: String(normalized.uid || '').trim() || (stageUid && processUid ? createDeterministicUiUid('stage-flow-ref', stageUid, processUid) : createUiUid('stageref')),
     id: String(normalized.id || '').trim() || `SFR${index}`,
-    stageId,
-    processId,
+    stageUid,
+    processUid,
     order: Math.max(1, Math.round(Number(normalized.order || index) || index)),
     pos: normalizeGraphOffset(normalized.pos),
   };
@@ -921,22 +921,22 @@ function normalizeStageFlowLinkEntry(link, index = 1) {
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stagereflink'),
     id: String(normalized.id || '').trim() || `SFL${index}`,
-    stageId: String(normalized.stageId || normalized.stageUid || normalized.stage_id || '').trim(),
-    fromRefId: String(normalized.fromRefId || normalized.fromRefUid || normalized.from_ref_id || '').trim(),
-    toRefId: String(normalized.toRefId || normalized.toRefUid || normalized.to_ref_id || '').trim(),
+    stageUid: String(normalized.stageUid || normalized.stageId || normalized.stage_id || '').trim(),
+    fromRefUid: String(normalized.fromRefUid || normalized.fromRefId || normalized.from_ref_id || '').trim(),
+    toRefUid: String(normalized.toRefUid || normalized.toRefId || normalized.to_ref_id || '').trim(),
   };
 }
 function normalizeStageEntry(stage, index = 1, processes = [], stageFlowRefs = []) {
   const normalized = stage && typeof stage === 'object' ? stage : {};
   let subDomain = String(normalized.subDomain || '').trim();
   if (!subDomain) {
-    const stageId = String(normalized.id || normalized.uid || '').trim();
+    const stageUid = String(normalized.id || normalized.uid || '').trim();
     const refMembers = (Array.isArray(stageFlowRefs) ? stageFlowRefs : [])
-      .filter((ref) => String(ref?.stageId || '').trim() === stageId)
-      .map((ref) => findProcessByIdentity(ref?.processId, { processes }))
+      .filter((ref) => String(ref?.stageUid || ref?.stageId || '').trim() === stageUid)
+      .map((ref) => findProcessByIdentity(ref?.processUid, { processes }))
       .filter(Boolean);
     const legacyMember = (processes || [])
-      .find((proc) => String(proc?.stageId || '').trim() === stageId && String(proc?.subDomain || '').trim());
+      .find((proc) => String(proc?.stageUid || proc?.stageId || '').trim() === stageUid && String(proc?.subDomain || '').trim());
     const member = refMembers.find((proc) => String(proc?.subDomain || '').trim()) || legacyMember;
     subDomain = String(member?.subDomain || '').trim();
   }
@@ -972,25 +972,25 @@ function getStageFlowRefs(doc = S.doc) {
   if (!Array.isArray(doc.stageFlowRefs)) doc.stageFlowRefs = [];
   let refs = doc.stageFlowRefs
     .map((ref, index) => normalizeStageFlowRefEntry(ref, index + 1))
-    .filter((ref) => ref.stageId && ref.processId);
+    .filter((ref) => ref.stageUid && ref.processUid);
   const existingPairs = new Set(
     refs
-      .filter((ref) => ref.stageId && ref.processId)
-      .map((ref) => `${ref.stageId}::${ref.processId}`),
+      .filter((ref) => ref.stageUid && ref.processUid)
+      .map((ref) => `${ref.stageUid}::${ref.processUid}`),
   );
   const usedIds = new Set(refs.map((ref) => ref.id));
   const stageOrderMap = {};
   refs.forEach((ref) => {
-    if (!ref.stageId) return;
-    stageOrderMap[ref.stageId] = Math.max(stageOrderMap[ref.stageId] || 0, ref.order || 1);
+    if (!ref.stageUid) return;
+    stageOrderMap[ref.stageUid] = Math.max(stageOrderMap[ref.stageUid] || 0, ref.order || 1);
   });
   (Array.isArray(doc.processes) ? doc.processes : []).forEach((proc) => {
-    const stageId = String(proc?.stageId || '').trim();
-    const processId = getProcessIdentity(proc);
-    if (!stageId || !processId) return;
-    const pairKey = `${stageId}::${processId}`;
+    const stageUid = String(proc?.stageUid || proc?.stageId || '').trim();
+    const processUid = getProcessIdentity(proc);
+    if (!stageUid || !processUid) return;
+    const pairKey = `${stageUid}::${processUid}`;
     if (existingPairs.has(pairKey)) return;
-    stageOrderMap[stageId] = (stageOrderMap[stageId] || 0) + 1;
+    stageOrderMap[stageUid] = (stageOrderMap[stageUid] || 0) + 1;
     let nextIndex = refs.length + 1;
     let nextId = `SFR${nextIndex}`;
     while (usedIds.has(nextId)) {
@@ -999,17 +999,17 @@ function getStageFlowRefs(doc = S.doc) {
     }
     usedIds.add(nextId);
     refs.push({
-      uid: createDeterministicUiUid('stage-flow-ref', stageId, processId),
+      uid: createDeterministicUiUid('stage-flow-ref', stageUid, processUid),
       id: nextId,
-      stageId,
-      processId,
-      order: stageOrderMap[stageId],
+      stageUid,
+      processUid,
+      order: stageOrderMap[stageUid],
       pos: normalizeGraphOffset(proc.stagePos),
     });
     existingPairs.add(pairKey);
   });
   refs.sort((left, right) => {
-    if (left.stageId !== right.stageId) return left.stageId.localeCompare(right.stageId);
+    if (left.stageUid !== right.stageUid) return left.stageUid.localeCompare(right.stageUid);
     if ((left.order || 0) !== (right.order || 0)) return (left.order || 0) - (right.order || 0);
     return left.id.localeCompare(right.id);
   });
@@ -1021,28 +1021,28 @@ function getStageFlowLinks(doc = S.doc) {
   if (!Array.isArray(doc.stageFlowLinks)) doc.stageFlowLinks = [];
   let links = doc.stageFlowLinks
     .map((link, index) => normalizeStageFlowLinkEntry(link, index + 1))
-    .filter((link) => link.stageId && link.fromRefId && link.toRefId);
+    .filter((link) => link.stageUid && link.fromRefUid && link.toRefUid);
   if (!links.length) {
     const refs = getStageFlowRefs(doc);
     const refByStageProcess = new Map();
     refs.forEach((ref) => {
       const proc = getStageRefProcess(ref, doc);
-      [ref.processId, proc?.id, proc?.uid].forEach((processKey) => {
+      [ref.processUid, proc?.id, proc?.uid].forEach((processKey) => {
         const normalizedProcessKey = String(processKey || '').trim();
-        if (normalizedProcessKey) refByStageProcess.set(`${ref.stageId}::${normalizedProcessKey}`, ref.id);
+        if (normalizedProcessKey) refByStageProcess.set(`${ref.stageUid}::${normalizedProcessKey}`, ref.id);
       });
     });
     const generated = [];
     getStages(doc).forEach((stage) => {
       getStageProcessLinks(stage).forEach((link, index) => {
-        const fromRefId = refByStageProcess.get(`${stage.id}::${link.fromProcessId}`) || '';
-        const toRefId = refByStageProcess.get(`${stage.id}::${link.toProcessId}`) || '';
-        if (!fromRefId || !toRefId) return;
+        const fromRefUid = refByStageProcess.get(`${stage.id}::${link.fromProcessUid}`) || '';
+        const toRefUid = refByStageProcess.get(`${stage.id}::${link.toProcessUid}`) || '';
+        if (!fromRefUid || !toRefUid) return;
         generated.push(normalizeStageFlowLinkEntry({
           id: `SFL${generated.length + 1}`,
-          stageId: stage.id,
-          fromRefId,
-          toRefId,
+          stageUid: stage.id,
+          fromRefUid,
+          toRefUid,
         }, generated.length + 1));
       });
     });
@@ -1069,14 +1069,14 @@ function getStageProcessRefs(stageId, doc = S.doc) {
   const targetStageId = String(stageId || '').trim();
   const refs = getStageFlowRefs(doc);
   if (isVirtualStageId(targetStageId)) {
-    const referencedProcessIds = new Set(refs.map((ref) => ref.processId));
+    const referencedProcessUids = new Set(refs.map((ref) => ref.processUid));
     return (Array.isArray(doc?.processes) ? doc.processes : [])
-      .filter((proc) => !referencedProcessIds.has(getProcessIdentity(proc)))
+      .filter((proc) => !referencedProcessUids.has(getProcessIdentity(proc)))
       .map((proc, index) => ({
         uid: `virtual-ref-${getProcessIdentity(proc)}`,
         id: `virtual-ref-${getProcessIdentity(proc)}`,
-        stageId: UNASSIGNED_STAGE_ID,
-        processId: getProcessIdentity(proc),
+        stageUid: UNASSIGNED_STAGE_ID,
+        processUid: getProcessIdentity(proc),
         order: index + 1,
         pos: normalizeGraphOffset(proc.stagePos),
         virtual: true,
@@ -1089,7 +1089,7 @@ function getStageProcessRefs(stageId, doc = S.doc) {
     String(stage?.uid || '').trim(),
   ].filter(Boolean));
   return refs
-    .filter((ref) => stageKeys.has(String(ref.stageId || '').trim()))
+    .filter((ref) => stageKeys.has(String(ref.stageUid || ref.stageId || '').trim()))
     .sort((left, right) => (left.order - right.order) || left.id.localeCompare(right.id));
 }
 function findStageProcessRef(refId, doc = S.doc) {
@@ -1106,12 +1106,12 @@ function getProcessStageRefs(processId, doc = S.doc) {
     String(targetProcess?.uid || '').trim(),
   ].filter(Boolean));
   return getStageFlowRefs(doc)
-    .filter((ref) => processKeys.has(String(ref.processId || '').trim()))
-    .sort((left, right) => left.stageId.localeCompare(right.stageId) || left.order - right.order);
+    .filter((ref) => processKeys.has(String(ref.processUid || '').trim()))
+    .sort((left, right) => left.stageUid.localeCompare(right.stageUid) || left.order - right.order);
 }
 function getStageRefProcess(ref, doc = S.doc) {
-  const processId = String(ref?.processId || '').trim();
-  return findProcessByIdentity(processId, doc);
+  const processUid = String(ref?.processUid || '').trim();
+  return findProcessByIdentity(processUid, doc);
 }
 function getStageProcesses(stageId, doc = S.doc) {
   return getStageProcessRefs(stageId, doc)
@@ -1219,9 +1219,9 @@ function normalizeLegacyBusinessComponentKeys(value) {
     capabilityUnits: 'businessComponents',
   };
   const fieldRenames = {
-    capabilityUnitId: 'businessComponentId',
+    capabilityUnitId: 'businessComponentUid',
     capabilityUnit: 'businessComponent',
-    capabilityUnitIds: 'businessComponentIds',
+    capabilityUnitIds: 'businessComponentUids',
   };
 
   Object.entries(collectionRenames).forEach(([legacyKey, currentKey]) => {
@@ -1260,7 +1260,7 @@ function hydrateDocumentForUi(doc) {
     if (!Array.isArray(proc.nodes)) proc.nodes = [];
     defineUiAlias(proc, 'tasks', 'nodes');
     proc.flowGroup = String(proc.flowGroup || '');
-    proc.stageId = String(proc.stageId || proc.stageUid || '').trim();
+    proc.stageUid = String(proc.stageUid || proc.stageId || '').trim();
     proc.stagePos = normalizeGraphOffset(proc.stagePos);
     getProcPrototypeFiles(proc);
     normalizeProcessFlow(proc);
@@ -1283,7 +1283,7 @@ function hydrateDocumentForUi(doc) {
       if (p.uid) validIds.add(p.uid);
     });
     doc.stageFlowRefs = doc.stageFlowRefs.filter((ref) => {
-      const puid = ref.processUid || ref.processId || '';
+      const puid = ref.processUid || '';
       return !puid || validIds.has(puid);
     });
   }

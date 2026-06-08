@@ -366,15 +366,15 @@ function buildPreviewStageDetailData(doc, stageItem) {
       const proc = getStageRefProcess(ref, doc);
       return {
         id: ref.id,
-        label: proc?.name || proc?.id || ref.processId,
+        label: proc?.name || proc?.id || ref.processUid,
         meta: '',
         group: proc?.flowGroup || '',
-        processId: proc?.id || ref.processId,
+        processId: proc?.id || ref.processUid,
       };
     }),
     links: getStageFlowLinks(doc)
-      .filter((link) => link.stageId === stageItem.id)
-      .map((link) => ({ id: link.id, from: link.fromRefId, to: link.toRefId })),
+      .filter((link) => link.stageUid === stageItem.id)
+      .map((link) => ({ id: link.id, from: link.fromRefUid, to: link.toRefUid })),
   };
 }
 
@@ -475,7 +475,7 @@ function formatPrototypeSummary(prototypeFiles) {
 function formatProcessStageSummary(proc, doc = S.doc) {
   const refs = getProcessStageRefs(proc?.id, doc);
   const names = refs
-    .map((ref) => getStageDisplayName(ref.stageId, doc))
+    .map((ref) => getStageDisplayName(ref.stageUid, doc))
     .filter(Boolean)
     .filter((name, index, list) => list.indexOf(name) === index);
   return names.join('、');
@@ -531,10 +531,10 @@ function renderPreviewTaskBusinessRulesHtml(node) {
 }
 
 function getPreviewNodeTaskConstructName(item) {
-  const definition = item?.taskDefinitionId && typeof findTaskDefinitionRef === 'function'
-    ? findTaskDefinitionRef(item.taskDefinitionId)
+  const definition = item?.taskDefinitionUid && typeof findTaskDefinitionRef === 'function'
+    ? findTaskDefinitionRef(item.taskDefinitionUid)
     : null;
-  const constructId = String(item?.constructId || item?.businessConstructId || definition?.constructId || '').trim();
+  const constructId = String(item?.constructUid || item?.businessConstructUid || definition?.constructUid || '').trim();
   if (!constructId) return '未归属构件';
   const construct = typeof getBusinessConstructItems === 'function'
     ? getBusinessConstructItems(S.doc).find((candidate) => candidate.id === constructId || candidate.name === constructId)

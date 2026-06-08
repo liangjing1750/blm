@@ -3003,7 +3003,7 @@ function getMergeValidationFix(issue) {
   if (/^stages\.[^.]+\.processLinks\./.test(path)) {
     return { group: 'auto', title: '阶段内流程连线失效', recommendation: '删除这条阶段内失效连线。', actionLabel: '删除连线', kind: 'stage_process_link' };
   }
-  if (/^processes\.[^.]+\.stageId$/.test(path)) {
+  if (/^processes\.[^.]+\.stageUid$/.test(path)) {
     return { group: 'auto', title: '流程阶段失效', recommendation: '清空阶段归属，后续可重新放入正确阶段。', actionLabel: '清空阶段', kind: 'process_stage' };
   }
   if (/\.role_ids\.\d+$/.test(path)) {
@@ -3065,7 +3065,7 @@ function applyMergeValidationFixToDocument(document, issue, action, value = '') 
   if (fix.kind === 'process_stage') {
     const process = findMergeItemByToken(document.processes || [], parts[1]);
     if (!process) return false;
-    process.stageId = '';
+    process.stageUid = '';
     return true;
   }
   if (fix.kind === 'node_role') {
