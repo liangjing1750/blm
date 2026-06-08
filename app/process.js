@@ -4889,7 +4889,7 @@ function endStageNodeDrag(event) {
       return;
     }
   }
-  if (kind === 'stage-ref' && S.ui.procView === 'stage' && S.ui.stageViewMode === 'detail' && S.ui.stageEditorCollapsed === false) {
+  if (kind === 'stage-ref' && S.ui.procView === 'stage' && S.ui.stageEditorCollapsed === false) {
     const group = updateStageFlowGroupDragTarget(event);
     const ref = findStageProcessRef(nodeId, S.doc);
     const processId = String(ref?.processId || '').trim();
