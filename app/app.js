@@ -4641,6 +4641,10 @@ function getCurrentLocatorActions() {
       label: '复制当前实体链接',
       url: buildLocatorUrl({ tab: 'data', entity: S.ui.entityId }),
     });
+    actions.push({
+      label: '复制实体',
+      action: 'duplicateEntity',
+    });
   }
   if (S.readOnly && S.doc?.meta?.version_id) {
     actions.push({
@@ -4721,7 +4725,11 @@ function showLocatorMenu(event) {
       const index = Number(button.dataset.locatorAction || -1);
       const action = actions[index];
       if (!action) return;
-      copyLocatorUrl(action.url, action.label.replace(/^复制/, ''));
+      if (action.action === 'duplicateEntity' && typeof duplicateEntity === 'function') {
+        duplicateEntity(S.ui.entityId);
+      } else {
+        copyLocatorUrl(action.url, action.label.replace(/^复制/, ''));
+      }
       hideLocatorMenu();
     });
   });

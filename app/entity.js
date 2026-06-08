@@ -2347,7 +2347,7 @@ async function removeEntity(id) {
           }
         });
       }
-  if(S.ui.entityId===id) S.ui.entityId=null;
+  if(S.ui.entityId===id) { S.ui.entityId=null; S.ui.entityRelationEditorCollapsed = true; }
   markModified(); render();
 }
 
