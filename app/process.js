@@ -2277,6 +2277,10 @@ function cloneTaskFormForCopy(form, existingForms = []) {
 function duplicateProcess(procId) {
   const source = findProcessByIdentity(procId, S.doc);
   if (!source) return;
+  // 防止重复点击
+  if (S._duplicatingProcess) return;
+  S._duplicatingProcess = true;
+  try {
   const clone = clonePlainObject(source);
   const oldProcessId = getProcessIdentity(source);
   const sourceHasId = !!String(source.id || '').trim();
@@ -2354,7 +2358,10 @@ function duplicateProcess(procId) {
   hydrateDocumentForUi(S.doc);
   markModified();
   renderSidebar();
-  openProcessEditor(newProcessKey, null);
+  // 阶段视图下不跳转，保持原地
+  if (S.ui.procView !== 'stage') openProcessEditor(newProcessKey, null);
+  else renderProcessTab();
+  } finally { S._duplicatingProcess = false; }
 }
 
 function addStageFlowNode(stageId) {

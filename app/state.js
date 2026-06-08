@@ -1275,6 +1275,18 @@ function hydrateDocumentForUi(doc) {
     });
   });
   defineModelUidAliasDeep(doc);
+  // 清理无效的 stageFlowRefs（指向不存在流程的遗留引用）
+  if (Array.isArray(doc.stageFlowRefs) && Array.isArray(doc.processes)) {
+    const validIds = new Set();
+    doc.processes.forEach((p) => {
+      if (p.id) validIds.add(p.id);
+      if (p.uid) validIds.add(p.uid);
+    });
+    doc.stageFlowRefs = doc.stageFlowRefs.filter((ref) => {
+      const puid = ref.processUid || ref.processId || '';
+      return !puid || validIds.has(puid);
+    });
+  }
   return doc;
 }
 function currentStage() { return getStageItems(S.doc).find((stage) => stage.id === S.ui.stageId) || null; }
