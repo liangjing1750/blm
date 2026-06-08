@@ -2253,15 +2253,27 @@ function duplicateEntity(entityId) {
   entity.state_transitions = Array.isArray(entity.state_transitions)
     ? entity.state_transitions.map((transition) => ({ ...cloneEntityValue(transition), uid: createUiUid('transition') }))
     : [];
-  const constructIds = Array.isArray(entity.businessConstructIds)
-    ? entity.businessConstructIds.filter(Boolean)
-    : (entity.businessConstructId ? [entity.businessConstructId] : []);
-  entity.businessConstructIds = [...new Set(constructIds)];
-  entity.businessConstructId = entity.businessConstructIds[0] || '';
+  const constructUids = Array.isArray(entity.businessConstructUids)
+    ? entity.businessConstructUids.filter(Boolean)
+    : (entity.businessConstructUid ? [entity.businessConstructUid] : []);
+  entity.businessConstructUids = [...new Set(constructUids)];
+  entity.businessConstructUid = entity.businessConstructUids[0] || '';
   S.doc.entities.push(entity);
+  // 复制关系连线：原实体的所有关系也复制一份指向新实体
+  ensureDocumentArray('relations').forEach((rel) => {
+    const fromMatch = rel.from === source.id || rel.from === source.uid;
+    const toMatch = rel.to === source.id || rel.to === source.uid;
+    if (fromMatch || toMatch) {
+      const copy = cloneEntityValue(rel);
+      copy.uid = createUiUid('relation');
+      if (fromMatch) copy.from = entity.id;
+      if (toMatch) copy.to = entity.id;
+      S.doc.relations.push(copy);
+    }
+  });
   ensureDocumentArray('businessConstructs').forEach((construct) => {
-    if (entity.businessConstructIds.includes(construct.id)) {
-      construct.entityIds = [...new Set([...(construct.entityIds || []), entity.id])];
+    if (entity.businessConstructUids.includes(construct.uid || '')) {
+      construct.entityUids = [...new Set([...(construct.entityUids || []), entity.uid])];
     }
   });
   ensureEntityStateShape(entity);
