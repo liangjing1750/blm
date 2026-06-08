@@ -3231,7 +3231,8 @@ function renderDataTab() {
     : '';
 
   let h='';
-  h+=`<div class="live-diagram-wrap entity-diag-full ${relationEditorOffset ? 'entity-drawer-shift' : ''}" id="diagram-wrap" style="${relationEditorOffset ? `margin-right:${relationEditorOffset}px` : ''}">
+  h+=`<div class="live-diagram-wrap entity-diag-full ${relationEditorOffset ? 'entity-drawer-shift' : ''}" id="diagram-wrap" style="${relationEditorOffset ? `margin-right:${relationEditorOffset}px` : ''}"
+      onclick="var t=event.target;if(!t.closest('.ef-node')&&!t.closest('button')&&!t.closest('select')&&!t.closest('input')){S.ui.entityId=null;render();}">
     <div class="live-diagram-toolbar data-toolbar ${dataView==='state' ? 'state-mode' : ''}">
       <div class="data-view-switch" role="tablist" aria-label="数据视图切换">
         <button class="seg-btn ${dataView==='relation'?'active':''}" data-testid="data-switch-relation" onclick="setDataView('relation')">关系图</button>
