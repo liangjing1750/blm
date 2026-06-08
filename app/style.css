@@ -5091,7 +5091,7 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 .diagram-svg { overflow-x: auto; }
 
 /* ─── 模态框 ─────────────────────────────────────────────── */
-#modal-overlay, #open-modal-overlay, #history-modal-overlay, #save-as-modal-overlay, #user-modal-overlay, #collab-diagnostics-modal-overlay, #collab-conflict-modal, #task-parameter-modal-overlay, #compare-modal-overlay, #merge-modal-overlay, #feedback-image-preview-overlay, #app-dialog-overlay {
+#modal-overlay, #open-modal-overlay, #history-modal-overlay, #save-as-modal-overlay, #user-modal-overlay, #collab-diagnostics-modal-overlay, #collab-conflict-modal, #task-parameter-modal-overlay, #compare-modal-overlay, #merge-modal-overlay, #feedback-image-preview-overlay, #app-dialog-overlay, #migrate-process-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.4);
   display: grid; place-items: center;
   padding: 24px;
@@ -10806,6 +10806,11 @@ button.fb-attachment-item {
 .fb-badge--轻微缺陷 { background: #fffbeb; color: #d97706; }
 .fb-badge--严重问题 { background: #fef2f2; color: #dc2626; }
 .fb-badge--status { font-weight: 600; }
+.migrate-badge {
+  display: inline-block; padding: 2px 12px; border-radius: 99px;
+  font-size: 12px; font-weight: 700;
+  background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe;
+}
 .fb-badge--待处理 { background: #fef3c7; color: #b45309; }
 .fb-badge--处理中 { background: #dbeafe; color: #2563eb; }
 .fb-badge--已解决 { background: #dcfce7; color: #15803d; }

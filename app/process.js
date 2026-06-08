@@ -2274,6 +2274,147 @@ function cloneTaskFormForCopy(form, existingForms = []) {
   return clone;
 }
 
+function openMigrateProcessDialog(procId) {
+  const proc = findProcessByIdentity(procId, S.doc);
+  if (!proc) return;
+  const pano = getPanoramaModel(S.doc);
+  const columns = pano.columns || [];
+  const lanes = pano.lanes || [];
+  const stages = getStages(S.doc);
+  const cells = pano.cells || [];
+
+  const currentStage = findStage(proc.stageUid || proc.stageId || '', S.doc);
+  const currentColumnUid = currentStage?.panoramaColumnUid || '';
+  const currentLaneUid = currentStage?.panoramaLaneUid || '';
+
+  // Build the dialog HTML
+  const colOptions = columns.map((c) => {
+    const isCurrent = c.uid === currentColumnUid;
+    return `<option value="${esc(c.uid)}" ${isCurrent ? 'selected' : ''}${isCurrent ? ' style="color:#3b82f6;font-weight:700"' : ''}>${isCurrent ? '● ' : ''}${esc(c.name || c.uid)}${isCurrent ? ' — 当前' : ''}</option>`;
+  }).join('');
+
+  const curColName = (columns.find((c) => c.uid === currentColumnUid) || {}).name || currentColumnUid || '未知';
+  const curLaneName = (lanes.find((l) => l.uid === currentLaneUid) || {}).name || currentLaneUid || '未知';
+  const curStageName = currentStage?.name || '未知';
+
+  const html = `<div class="modal-overlay" id="migrate-process-overlay" onclick="if(event.target===this)closeMigrateDialog()">
+    <div class="modal" style="width:480px" onclick="event.stopPropagation()">
+      <h3>迁移流程：${esc(proc.name || procId)}</h3>
+      <p class="field-hint">当前归属：<span class="migrate-badge">${esc(curColName)}</span> → <span class="migrate-badge">${esc(curLaneName)}</span> → <span class="migrate-badge">${esc(curStageName)}</span></p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label>价值流环节
+          <select id="migrate-column" onchange="updateMigrateLanes()">${colOptions}</select>
+        </label>
+        <label>业务域
+          <select id="migrate-lane" onchange="updateMigrateStages()"><option value="">请先选择价值流环节</option></select>
+        </label>
+        <label>阶段
+          <select id="migrate-stage"><option value="">请先选择业务域</option></select>
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button class="btn btn-outline btn-sm" onclick="closeMigrateDialog()">取消</button>
+        <button class="btn btn-primary btn-sm" id="migrate-submit-btn" disabled
+          onclick="confirmMigrateProcess('${esc(procId)}')">确认迁移</button>
+      </div>
+    </div>
+  </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+
+  // Store data for cascading updates
+  window._migrateData = { columns, lanes, stages, cells, currentColumnUid, currentLaneUid, proc, currentStage };
+  updateMigrateLanes();
+}
+
+function updateMigrateLanes() {
+  const d = window._migrateData;
+  if (!d) return;
+  const colUid = document.getElementById('migrate-column')?.value || '';
+  const relevantLaneUids = new Set(d.cells.filter((c) => c.columnUid === colUid).map((c) => c.laneUid));
+  const laneOptions = d.lanes
+    .filter((l) => relevantLaneUids.has(l.uid))
+    .map((l) => {
+      const isCurrent = l.uid === d.currentLaneUid;
+      return `<option value="${esc(l.uid)}" ${isCurrent ? 'selected' : ''}${isCurrent ? ' style="color:#3b82f6;font-weight:700"' : ''}>${isCurrent ? '● ' : ''}${esc(l.name || l.uid)}${isCurrent ? ' — 当前' : ''}</option>`;
+    }).join('');
+  const sel = document.getElementById('migrate-lane');
+  if (sel) { sel.innerHTML = laneOptions || '<option value="">该环节下无业务域</option>'; updateMigrateStages(); }
+}
+
+function updateMigrateStages() {
+  const d = window._migrateData;
+  if (!d) return;
+  const laneUid = document.getElementById('migrate-lane')?.value || '';
+  const colUid = document.getElementById('migrate-column')?.value || '';
+  const stageOptions = d.stages
+    .filter((s) => (s.panoramaLaneUid || s.panoramaLaneId || '') === laneUid
+      && (s.panoramaColumnUid || s.panoramaColumnId || '') === colUid)
+    .map((s) => {
+      const isCurrent = d.currentStage && (s.uid === d.currentStage.uid || s.id === d.currentStage.id);
+      return `<option value="${esc(s.uid || s.id)}" ${isCurrent ? 'selected' : ''}${isCurrent ? ' style="color:#3b82f6;font-weight:700"' : ''}>${isCurrent ? '● ' : ''}${esc(s.name || s.uid)}${isCurrent ? ' — 当前' : ''}</option>`;
+    }).join('');
+  const sel = document.getElementById('migrate-stage');
+  if (sel) sel.innerHTML = stageOptions || '<option value="">该业务域下无阶段</option>';
+  updateMigrateSubmitState();
+}
+
+function updateMigrateSubmitState() {
+  const d = window._migrateData;
+  const colUid = document.getElementById('migrate-column')?.value || '';
+  const laneUid = document.getElementById('migrate-lane')?.value || '';
+  const stageUid = document.getElementById('migrate-stage')?.value || '';
+  const btn = document.getElementById('migrate-submit-btn');
+  if (!btn || !d) return;
+
+  const sameCol = colUid === d.currentColumnUid;
+  const sameLane = laneUid === d.currentLaneUid;
+  const sameStage = d.currentStage && (stageUid === d.currentStage.uid || stageUid === d.currentStage.id);
+
+  if (sameCol && sameLane && sameStage) {
+    btn.disabled = true;
+    btn.title = '流程的归属阶段没有变化';
+  } else if (stageUid) {
+    btn.disabled = false;
+    btn.title = '';
+  } else {
+    btn.disabled = true;
+    btn.title = '请先完成三个阶段的选择';
+  }
+}
+
+function closeMigrateDialog() {
+  document.getElementById('migrate-process-overlay')?.remove();
+  window._migrateData = null;
+}
+
+function confirmMigrateProcess(procId) {
+  const proc = findProcessByIdentity(procId, S.doc);
+  if (!proc) return;
+  const stageUid = document.getElementById('migrate-stage')?.value || '';
+
+  if (!stageUid) return;
+
+  // Update process stage
+  proc.stageUid = stageUid;
+  delete proc.stageId;
+
+  // Update stage flow refs: remove old, add new
+  const refs = getStageFlowRefs(S.doc);
+  const oldRefs = refs.filter((r) => r.processUid === procId || r.processId === procId || r.processUid === proc.uid || r.processId === proc.uid);
+  oldRefs.forEach((r) => {
+    const idx = refs.indexOf(r);
+    if (idx >= 0) refs.splice(idx, 1);
+  });
+
+  addStageProcessRef(stageUid, procId, { silent: true });
+
+  closeMigrateDialog();
+  markModified();
+  renderSidebar();
+  rerenderStageWorkbench();
+}
+
 function duplicateProcess(procId) {
   const source = findProcessByIdentity(procId, S.doc);
   if (!source) return;

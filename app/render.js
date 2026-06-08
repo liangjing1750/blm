@@ -589,12 +589,18 @@ function showSidebarProcessContextMenu(procId, event) {
   menu.setAttribute('data-testid', 'sidebar-process-context-menu');
   menu.style.left = `${Math.max(8, event?.clientX || 8)}px`;
   menu.style.top = `${Math.max(8, event?.clientY || 8)}px`;
-  menu.innerHTML = `<button type="button" data-testid="sidebar-process-copy-action">复制流程</button>`;
-  menu.querySelector('button')?.addEventListener('click', (clickEvent) => {
-    clickEvent.preventDefault();
-    clickEvent.stopPropagation();
+  menu.innerHTML = `<button type="button" data-testid="sidebar-process-copy-action">复制流程</button>
+    <button type="button" data-testid="sidebar-process-migrate-action">迁移至其它阶段</button>`;
+  const buttons = menu.querySelectorAll('button');
+  buttons[0]?.addEventListener('click', (clickEvent) => {
+    clickEvent.preventDefault(); clickEvent.stopPropagation();
     closeSidebarProcessContextMenu();
     duplicateProcess(getProcessIdentity(process));
+  });
+  buttons[1]?.addEventListener('click', (clickEvent) => {
+    clickEvent.preventDefault(); clickEvent.stopPropagation();
+    closeSidebarProcessContextMenu();
+    openMigrateProcessDialog(getProcessIdentity(process));
   });
   document.body.appendChild(menu);
   const rect = menu.getBoundingClientRect();
