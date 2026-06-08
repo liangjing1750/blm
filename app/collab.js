@@ -305,7 +305,7 @@ async function maybePromptLocalCollabDraftRecovery(docName = S.currentFile) {
       `检测到当前浏览器存在未同步草稿（${formatCollabTime(draft.updatedAt || new Date().toISOString())}）。是否恢复草稿并立即同步？${behindInfo}`,
       {
         title: '发现本地草稿',
-        confirmLabel: '恢复并同步',
+        confirmLabel: '恢复草稿',
         cancelLabel: '丢弃草稿（使用最新版）',
       },
     );
@@ -321,7 +321,7 @@ async function maybePromptLocalCollabDraftRecovery(docName = S.currentFile) {
       S.collab.pendingSnapshot = true;
       render();
       queueCollabSnapshotSync();
-      showAppToast('已恢复本地草稿，正在同步。');
+      showAppToast('已恢复本地草稿。');
     }
   } finally {
     S.collab.checkingLocalDraft = false;
