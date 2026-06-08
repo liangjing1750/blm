@@ -1233,14 +1233,20 @@ function _renderCapabilityAssetSection(title, assets, options = {}) {
         : '尚未绑定到流程节点';
       const canOpenNode = !!(source?.procId && source?.taskId);
       const canOpenProcess = !!(source?.procId && !source?.taskId);
-      const canOpen = canOpenNode || canOpenProcess;
-      const onclick = canOpenNode
-        ? ` onclick="openBusinessAsset('${esc(asset.kind)}','${esc(source.procId)}','${esc(source.taskId)}','${esc(source.index ?? '')}','${esc(source.formId || '')}','${esc(source.sectionId || '')}')"`
-        : canOpenProcess
-          ? ` onclick="navigate('process',{procId:'${esc(source.procId)}'})"`
-        : '';
+      const isTaskDef = asset.kind === 'task';
+      const canOpenTaskDef = isTaskDef && Boolean(asset.id);
+      const canOpen = canOpenNode || canOpenProcess || canOpenTaskDef;
+      let onclick = '';
+      if (canOpenTaskDef) {
+        onclick = ` onclick="openTaskDefinitionEditor('${esc(asset.id)}')"`;
+      } else if (canOpenNode) {
+        onclick = ` onclick="openBusinessAsset('${esc(asset.kind)}','${esc(source.procId)}','${esc(source.taskId)}','${esc(source.index ?? '')}','${esc(source.formId || '')}','${esc(source.sectionId || '')}')"`;
+      } else if (canOpenProcess) {
+        onclick = ` onclick="navigate('process',{procId:'${esc(source.procId)}'})"`;
+      }
+      const titleText = isTaskDef ? `打开任务定义：${esc(asset.name)}` : sourceTitle;
       return `<button type="button" class="sb-asset-item sb-asset-link ${canOpen ? '' : 'disabled'}"
-        data-testid="${esc(testId)}" title="${esc(sourceTitle)}"${onclick} ${canOpen ? '' : 'disabled'}>
+        data-testid="${esc(testId)}" title="${esc(titleText)}"${onclick} ${canOpen ? '' : 'disabled'}>
         <span>${esc(asset.name)}</span>
         ${asset.sources?.length > 1 ? `<small>${asset.sources.length}</small>` : ''}
       </button>`;

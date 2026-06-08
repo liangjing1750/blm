@@ -1204,6 +1204,7 @@ function openBusinessModelDialog(mode, capabilityId = '', constructId = '') {
 }
 
 function openTaskDefinitionEditor(taskDefinitionId, capabilityId = '', constructId = '', returnMode = '', procId = '', taskId = '', afterIdx = null) {
+  S.ui.tab = 'domain';
   S.ui.businessModelDialog = {
     mode: 'task',
     capabilityId: String(capabilityId || '').trim(),
@@ -1214,7 +1215,7 @@ function openTaskDefinitionEditor(taskDefinitionId, capabilityId = '', construct
     taskId: String(taskId || '').trim(),
     afterIdx: Number.isInteger(afterIdx) ? afterIdx : null,
   };
-  rerenderBusinessModelDialogContext();
+  if (typeof render === 'function') render();
 }
 
 function openTaskDefinitionManager() {
