@@ -1421,8 +1421,8 @@ function renderSidebar() {
             ${_renderSbConstructCounts(constructEntities.length, constructTasks.length)}
           </div>`;
           if (constructCollapsed) continue;
-          out += _renderCapabilitySection('实体', constructEntities, { entity: true });
-          out += _renderCapabilityAssetSection('任务定义', constructTasks, { testId: 'construct-task-asset', limit: Infinity });
+          out += _renderCapabilitySection('实体', constructEntities, { entity: true, limit: Infinity });
+          out += _renderCapabilityAssetSection('任务', constructTasks, { testId: 'construct-task-asset', limit: Infinity });
           out += `<div class="sb-asset-section sb-related-processes">
             <div class="sb-asset-head">关联流程 <span>${constructProcesses.length}</span></div>`;
           if (!constructProcesses.length) {
@@ -1437,7 +1437,7 @@ function renderSidebar() {
         continue;
       }
 
-      out += _renderCapabilitySection('实体', capEntities, { entity: true });
+      out += _renderCapabilitySection('实体', capEntities, { entity: true, limit: Infinity });
       out += _renderCapabilityAssetSection('任务', capTasks, { testId: 'capability-task-asset', limit: Infinity });
 
       out += `<div class="sb-asset-section sb-related-processes">
