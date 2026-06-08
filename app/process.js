@@ -7606,7 +7606,6 @@ function renderProcessTab() {
           <span>节点 ${esc(task.name||'未命名节点')}</span>`:''}
       </div>
       <div class="drawer-actions">
-        ${!task?`<button class="btn btn-outline btn-sm" type="button" data-testid="process-duplicate-button" onclick="duplicateProcess('${esc(getProcessIdentity(proc))}')">复制流程</button>`:''}
         ${task?`<button class="btn btn-danger btn-sm" onclick="removeTask('${esc(proc.id)}','${esc(task.id)}')">\u5220\u9664\u8282\u70b9</button>`:''}
         <button class="drawer-close" type="button" data-testid="process-editor-close" onclick="closeProcessEditor()" title="关闭编辑">✕</button>
       </div>
