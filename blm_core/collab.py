@@ -81,7 +81,14 @@ class CollaborationManager:
         self.storage = storage
         self.autosave_interval = max(0.0, float(autosave_interval))
         self._sessions: dict[str, CollabSession] = {}
-        self._lock = threading.RLock()
+        self._sessions_lock = threading.Lock()
+        self._doc_locks: dict[str, threading.RLock] = {}
+
+    def _get_doc_lock(self, safe_name: str) -> threading.RLock:
+        with self._sessions_lock:
+            if safe_name not in self._doc_locks:
+                self._doc_locks[safe_name] = threading.RLock()
+            return self._doc_locks[safe_name]
 
     def handle_websocket(self, handler) -> None:
         if not self._is_websocket_request(handler):
@@ -190,7 +197,7 @@ class CollaborationManager:
 
     def poll(self, doc_name: str, since_seq: int = 0) -> dict:
         safe_name = self.storage._validate_name(doc_name)
-        with self._lock:
+        with self._get_doc_lock(safe_name):
             session = self._get_or_create_session(safe_name)
             seq = int(session.seq or 0)
             include_document = False
@@ -207,7 +214,7 @@ class CollaborationManager:
 
     def apply_http_snapshot(self, doc_name: str, user_profile: dict[str, str], payload: dict) -> dict:
         safe_name = self.storage._validate_name(doc_name)
-        with self._lock:
+        with self._get_doc_lock(safe_name):
             session = self._get_or_create_session(safe_name)
             client = CollabClient(
                 client_id=f"http-{secrets.token_hex(8)}",
@@ -301,7 +308,7 @@ class CollaborationManager:
         if not doc_name:
             raise WebSocketProtocolError("doc is required")
         safe_name = self.storage._validate_name(doc_name)
-        with self._lock:
+        with self._get_doc_lock(safe_name):
             session = self._get_or_create_session(safe_name)
             client = CollabClient(
                 client_id=f"client-{secrets.token_hex(8)}",
@@ -342,7 +349,8 @@ class CollaborationManager:
         return session
 
     def _leave(self, session: CollabSession, client_id: str) -> None:
-        with self._lock:
+        safe_name = self.storage._validate_name(session.doc_name)
+        with self._get_doc_lock(safe_name):
             client = session.clients.pop(client_id, None)
             log_event(
                 "blm.collab",
@@ -364,7 +372,8 @@ class CollaborationManager:
         document = payload.get("document")
         if not isinstance(document, dict):
             raise WebSocketProtocolError("snapshot document must be object")
-        with self._lock:
+        safe_name = self.storage._validate_name(session.doc_name)
+        with self._get_doc_lock(safe_name):
             base_seq = self._parse_base_seq(payload.get("baseSeq")) or 0
             base_document_hash = str(payload.get("baseDocumentHash", "") or "").strip()
             recovery_mode = bool(payload.get("recoveryMode"))
@@ -1283,7 +1292,8 @@ class CollaborationManager:
 
     def _flush_autosave(self, doc_name: str) -> None:
         started_at = datetime.now(timezone.utc).timestamp()
-        with self._lock:
+        safe_name = self.storage._validate_name(doc_name)
+        with self._get_doc_lock(safe_name):
             session = self._sessions.get(doc_name)
             if not session or not session.dirty:
                 return
@@ -1295,7 +1305,7 @@ class CollaborationManager:
             self.storage._snapshot_document(
                 doc_name, save_message="协作同步", snapshot_document=saved_document, kind="collab"
             )
-            with self._lock:
+            with self._get_doc_lock(safe_name):
                 session = self._sessions.get(doc_name)
                 if session and not session.dirty:
                     session.document = saved_document
@@ -1307,7 +1317,7 @@ class CollaborationManager:
                 elapsedMs=int((datetime.now(timezone.utc).timestamp() - started_at) * 1000),
             )
         except OSError:
-            with self._lock:
+            with self._get_doc_lock(safe_name):
                 session = self._sessions.get(doc_name)
                 if session:
                     session.dirty = True
@@ -1343,7 +1353,7 @@ class CollaborationManager:
         return sorted(grouped.values(), key=lambda item: str(item["name"]))
 
     def diagnostics(self) -> dict:
-        with self._lock:
+        with self._sessions_lock:
             sessions = []
             for session in self._sessions.values():
                 sessions.append(

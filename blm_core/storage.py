@@ -101,7 +101,15 @@ class WorkspaceStorage(DocumentFileStore):
         self.auto_history_daily_days = AUTO_HISTORY_DAILY_DAYS
         self.manual_history_keep_count = MANUAL_HISTORY_KEEP_COUNT
         self.manual_history_keep_days = MANUAL_HISTORY_KEEP_DAYS
-        self._write_lock = threading.RLock()
+        self._write_locks = {}
+        self._write_locks_lock = threading.Lock()
+        self._shared_write_lock = threading.RLock()
+
+    def _get_write_lock(self, safe_name: str):
+        with self._write_locks_lock:
+            if safe_name not in self._write_locks:
+                self._write_locks[safe_name] = threading.RLock()
+            return self._write_locks[safe_name]
 
     def list_documents(self) -> list[str]:
         names: set[str] = set()
@@ -282,8 +290,9 @@ class WorkspaceStorage(DocumentFileStore):
             return 0
 
     def restore_history(self, name: str, snapshot_id: str) -> dict:
-        with self._write_lock:
-            document = self._load_history_snapshot(self._validate_name(name), snapshot_id)
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
+            document = self._load_history_snapshot(safe_name, snapshot_id)
             return self.save(name, document)
 
     def load_history(self, name: str, snapshot_id: str) -> dict:
@@ -346,8 +355,8 @@ class WorkspaceStorage(DocumentFileStore):
         return entries
 
     def create_named_version(self, name: str, document: dict | None = None, *, message: str = "") -> dict:
-        with self._write_lock:
-            safe_name = self._validate_name(name)
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
             source_document = deepcopy(document) if isinstance(document, dict) else self.load(safe_name)
             version_id = self._timestamp()
             target_root = self._versions_dir(name)
@@ -401,7 +410,7 @@ class WorkspaceStorage(DocumentFileStore):
         return entries
 
     def restore_trash(self, entry_id: str) -> tuple[str, dict]:
-        with self._write_lock:
+        with self._shared_write_lock:
             safe_entry_id = self._sanitize_workspace_entry(entry_id)
             entry_path = self.trash_dir / safe_entry_id
             original_name, _ = self._parse_trash_entry_name(safe_entry_id)
@@ -419,7 +428,7 @@ class WorkspaceStorage(DocumentFileStore):
             raise FileNotFoundError(safe_entry_id)
 
     def delete_trash(self, entry_ids: list[str]) -> dict:
-        with self._write_lock:
+        with self._shared_write_lock:
             deleted = 0
             for entry_id in entry_ids:
                 safe_entry_id = self._sanitize_workspace_entry(str(entry_id or "").strip())
@@ -433,7 +442,7 @@ class WorkspaceStorage(DocumentFileStore):
             return {"ok": True, "deleted": deleted}
 
     def clear_trash(self) -> dict:
-        with self._write_lock:
+        with self._shared_write_lock:
             deleted = 0
             for entry in list(self.trash_dir.iterdir()) if self.trash_dir.exists() else []:
                 if entry.is_dir() or entry.is_file():
@@ -554,8 +563,8 @@ class WorkspaceStorage(DocumentFileStore):
             shutil.copy2(attachments_index, target_index)
 
     def save(self, name: str, document: dict, *, save_message: str = "") -> dict:
-        with self._write_lock:
-            safe_name = self._validate_name(name)
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
             if self._workspace_document_exists(safe_name):
                 current_document = self.load(safe_name)
                 if self._should_snapshot_manual_history(current_document, document, save_message):
@@ -568,16 +577,16 @@ class WorkspaceStorage(DocumentFileStore):
 
     def save_collaboration_working_copy(self, name: str, document: dict) -> dict:
         """Persist the live collaboration draft (revision不适用于协作流)."""
-        with self._write_lock:
-            safe_name = self._validate_name(name)
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
             saved_document = self._save_workspace_document(safe_name, document)
             self._remove_legacy_workspace_files(safe_name)
             return saved_document
 
     def maybe_snapshot_auto_history(self, name: str, document: dict) -> dict:
         """Create or update a compact auto-sync history point when the state is worth keeping."""
-        with self._write_lock:
-            safe_name = self._validate_name(name)
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
             if not self._workspace_document_exists(safe_name):
                 return {"ok": False, "skipped": True, "reason": "missing_document"}
             source_document = deepcopy(document if isinstance(document, dict) else self.load(safe_name))
@@ -632,8 +641,8 @@ class WorkspaceStorage(DocumentFileStore):
         rebase: bool = False,
         save_message: str = "",
     ) -> dict:
-        with self._write_lock:
-            safe_name = self._validate_name(name)
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
             exists = self._workspace_document_exists(safe_name)
             current_document = self.load(safe_name) if exists else None
             current_revision = self._document_revision(current_document) if current_document else 0
@@ -695,7 +704,7 @@ class WorkspaceStorage(DocumentFileStore):
         overwrite: bool = False,
         save_message: str = "",
     ) -> tuple[str, dict]:
-        with self._write_lock:
+        with self._shared_write_lock:
             old_safe_name = self._validate_name(old_name)
             new_safe_name = self._validate_name(new_name)
             if old_safe_name == new_safe_name:
@@ -711,7 +720,7 @@ class WorkspaceStorage(DocumentFileStore):
             return new_safe_name, saved_document
 
     def copy_document(self, source_name: str, target_name: str) -> dict:
-        with self._write_lock:
+        with self._shared_write_lock:
             source_safe_name = self._validate_name(source_name)
             target_safe_name = self._validate_name(target_name)
             if self._workspace_document_exists(target_safe_name):
@@ -751,14 +760,14 @@ class WorkspaceStorage(DocumentFileStore):
                     shutil.rmtree(temp_dir, ignore_errors=True)
 
     def create(self, name: str) -> dict:
-        with self._write_lock:
-            safe_name = self._validate_name(name)
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
             if self._workspace_document_exists(safe_name):
                 raise FileExistsError(name)
             return self._save_workspace_document(safe_name, create_empty_document(safe_name))
 
     def delete(self, name: str) -> None:
-        with self._write_lock:
+        with self._shared_write_lock:
             self._move_workspace_document_to_trash(self._validate_name(name), self._timestamp())
 
     def export_markdown(self, name: str) -> str:

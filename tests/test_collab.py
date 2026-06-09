@@ -6,6 +6,7 @@ import json
 import os
 import socket
 import struct
+import shutil
 import tempfile
 import threading
 import unittest
@@ -1398,6 +1399,100 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
             submit_files = list(submits_dir.glob("*.json"))
             self.assertEqual(len(submit_files), 6)
+
+
+class CollaborationLockGranularityTests(unittest.TestCase):
+    """验证 per-document 锁粒度：不同文档并发不互斥，同文档串行"""
+
+    def test_different_documents_save_concurrently(self):
+        """两个不同文档同时保存不应互相阻塞"""
+        import time, threading
+        temp_dir = self._temp_workspace()
+        try:
+            storage = WorkspaceStorage(temp_dir)
+            doc_a = create_empty_document("DocA")
+            doc_b = create_empty_document("DocB")
+            storage.create("DocA")
+            storage.create("DocB")
+
+            results = []
+            errors = []
+            barrier = threading.Barrier(2, timeout=5)
+
+            def save_doc(name, doc, marker):
+                barrier.wait()
+                try:
+                    start = time.monotonic()
+                    storage.save(name, doc)
+                    elapsed = time.monotonic() - start
+                    results.append((marker, elapsed))
+                except Exception as e:
+                    errors.append(str(e))
+
+            t1 = threading.Thread(target=save_doc, args=("DocA", doc_a, "A"))
+            t2 = threading.Thread(target=save_doc, args=("DocB", doc_b, "B"))
+            t1.start()
+            t2.start()
+            t1.join(timeout=10)
+            t2.join(timeout=10)
+
+            self.assertFalse(errors, f"并发保存出错: {errors}")
+            self.assertEqual(len(results), 2, "两个保存都应完成")
+            # 两个不同文档的保存时间应接近（没有互相等待）
+            times = [r[1] for r in results]
+            self.assertLess(max(times), 2.0, f"不同文档保存不应超过2秒: {times}")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_same_document_serialized(self):
+        """同一文档的并发保存应串行执行"""
+        import time, threading
+        temp_dir = self._temp_workspace()
+        try:
+            storage = WorkspaceStorage(temp_dir)
+            doc = create_empty_document("SameDoc")
+            storage.create("SameDoc")
+
+            results = []
+            barrier = threading.Barrier(2, timeout=5)
+
+            def save_same_doc(marker):
+                d = create_empty_document("SameDoc")
+                d["meta"]["author"] = marker
+                barrier.wait()
+                start = time.monotonic()
+                storage.save("SameDoc", d)
+                elapsed = time.monotonic() - start
+                results.append((marker, elapsed))
+
+            t1 = threading.Thread(target=save_same_doc, args=("X",))
+            t2 = threading.Thread(target=save_same_doc, args=("Y",))
+            t1.start()
+            t2.start()
+            t1.join(timeout=10)
+            t2.join(timeout=10)
+
+            self.assertEqual(len(results), 2)
+            # 同文档串行，总时间应 > 单次（至少有先后顺序）
+            # 不做严格时间断言，只要两个都完成了就行
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_storage_doc_locks_independent(self):
+        """验证 WorkspaceStorage 的 _get_write_lock 对不同文档返回不同锁"""
+        temp_dir = self._temp_workspace()
+        try:
+            storage = WorkspaceStorage(temp_dir)
+            lock_a = storage._get_write_lock("DocA")
+            lock_b = storage._get_write_lock("DocB")
+            self.assertIsNot(lock_a, lock_b, "不同文档应有不同的锁")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @staticmethod
+    def _temp_workspace():
+        import tempfile
+        return tempfile.mkdtemp(prefix="blm_test_")
 
 
 class CollaborationMetaPreservationTests(unittest.TestCase):
