@@ -989,6 +989,55 @@ function removeTaskParameterChild(kind, parentIndex, childIndex) {
   renderTaskParameterDialog();
 }
 
+function insertTaskParameter(kind, afterIndex) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  draft.parameters[normalizedKind].splice(afterIndex + 1, 0, {
+    uid: createUiUid(normalizedKind === 'inputs' ? 'in' : 'out'),
+    name: '', type: '', required: false, isList: false,
+    description: '', example: '', children: [],
+  });
+  renderTaskParameterDialog();
+}
+
+function moveTaskParameter(kind, index, direction) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  const list = draft.parameters[normalizedKind];
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= list.length) return;
+  const [item] = list.splice(index, 1);
+  list.splice(targetIndex, 0, item);
+  renderTaskParameterDialog();
+}
+
+function insertTaskParameterChild(kind, parentIndex, afterIndex) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  const row = draft.parameters[normalizedKind]?.[parentIndex];
+  if (!row) return;
+  if (!Array.isArray(row.children)) row.children = [];
+  row.children.splice(afterIndex + 1, 0, {
+    uid: createUiUid('child'),
+    name: '', type: '', required: false,
+    description: '', example: '',
+  });
+  renderTaskParameterDialog();
+}
+
+function moveTaskParameterChild(kind, parentIndex, childIndex, direction) {
+  const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
+  const draft = getTaskParameterDialogDraft();
+  const row = draft.parameters[normalizedKind]?.[parentIndex];
+  if (!row || !Array.isArray(row.children)) return;
+  const list = row.children;
+  const targetIndex = childIndex + direction;
+  if (targetIndex < 0 || targetIndex >= list.length) return;
+  const [item] = list.splice(childIndex, 1);
+  list.splice(targetIndex, 0, item);
+  renderTaskParameterDialog();
+}
+
 function saveTaskParameterDialog() {
   const dialog = S.ui.taskParameterDialog || {};
   const task = findTaskDefinitionRef(dialog.taskDefinitionId);
@@ -1006,7 +1055,8 @@ function renderTaskParameterRows(kind, rows) {
   const normalizedKind = kind === 'outputs' ? 'outputs' : 'inputs';
   if (!rows.length) return '<p class="task-param-empty">暂未定义参数，可按需补充。</p>';
 
-  const renderOneRow = (row, index, parentIndex, isChild) => {
+  const renderOneRow = (row, index, parentIndex, isChild, totalInGroup) => {
+    const isLast = index >= totalInGroup - 1;
     const kindRef = parentIndex != null ? `${normalizedKind}:${parentIndex}` : normalizedKind;
     const setterFn = parentIndex != null ? 'setTaskParameterChildField' : 'setTaskParameterField';
     const setterArgs = parentIndex != null
@@ -1015,6 +1065,12 @@ function renderTaskParameterRows(kind, rows) {
     const removeFn = parentIndex != null
       ? `removeTaskParameterChild('${normalizedKind}',${parentIndex},${index})`
       : `removeTaskParameter('${normalizedKind}',${index})`;
+    const insertFn = parentIndex != null
+      ? `insertTaskParameterChild('${normalizedKind}',${parentIndex},${index})`
+      : `insertTaskParameter('${normalizedKind}',${index})`;
+    const moveFn = parentIndex != null
+      ? `moveTaskParameterChild('${normalizedKind}',${parentIndex},${index},`
+      : `moveTaskParameter('${normalizedKind}',${index},`;
     const cls = isChild ? 'task-param-row task-param-child-row' : 'task-param-row';
 
     const rowHtml = `<div class="${cls}" data-testid="task-parameter-row">
@@ -1032,12 +1088,17 @@ function renderTaskParameterRows(kind, rows) {
       <textarea class="auto-resize" rows="1" placeholder="说明/示例"
         oninput="${setterFn}(${setterArgs},'example',this.value);autoResize(this)"
         >${esc(row.example || '')}</textarea>
-      <button class="stage-quick-btn danger" type="button" title="删除" onclick="${removeFn}">×</button>
+      <span class="task-param-actions">
+        <button class="stage-quick-btn stage-quick-btn-text" type="button" title="在此下方插入" onclick="${insertFn}">＋</button>
+        <button class="stage-quick-btn stage-quick-btn-text" type="button" title="上移" onclick="${moveFn}-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button class="stage-quick-btn stage-quick-btn-text" type="button" title="下移" onclick="${moveFn}1)" ${isLast ? 'disabled' : ''}>↓</button>
+        <button class="stage-quick-btn danger" type="button" title="删除" onclick="${removeFn}">×</button>
+      </span>
     </div>`;
 
     if (row.type === 'list' && Array.isArray(row.children)) {
       const childrenHtml = row.children.length
-        ? row.children.map((child, ci) => renderOneRow(child, ci, index, true)).join('')
+        ? row.children.map((child, ci) => renderOneRow(child, ci, index, true, row.children.length)).join('')
         : '';
       return rowHtml + `<div class="task-param-children">
         <div class="task-param-children-head">
@@ -1050,7 +1111,8 @@ function renderTaskParameterRows(kind, rows) {
     return rowHtml;
   };
 
-  return rows.map((row, index) => renderOneRow(row, index, null, false)).join('');
+  const total = rows.length;
+  return rows.map((row, index) => renderOneRow(row, index, null, false, total)).join('');
 }
 
 function renderTaskParameterDialog() {
@@ -1073,7 +1135,7 @@ function renderTaskParameterDialog() {
           <h4>输入参数</h4>
           <button class="btn btn-outline btn-sm" type="button" data-testid="task-parameter-add-input" onclick="addTaskParameter('inputs')">＋ 入参</button>
         </div>
-        <div class="task-param-header"><span>名称</span><span>类型</span><span>必填</span><span>说明</span><span>示例</span><span></span></div>
+        <div class="task-param-header"><span>中文名称</span><span>类型</span><span>必填</span><span>英文名称</span><span>说明/示例</span><span></span></div>
         ${renderTaskParameterRows('inputs', draft.parameters.inputs)}
       </section>
       <section class="task-param-panel">
@@ -1081,7 +1143,7 @@ function renderTaskParameterDialog() {
           <h4>输出参数</h4>
           <button class="btn btn-outline btn-sm" type="button" data-testid="task-parameter-add-output" onclick="addTaskParameter('outputs')">＋ 出参</button>
         </div>
-        <div class="task-param-header"><span>名称</span><span>类型</span><span>必填</span><span>说明</span><span>示例</span><span></span></div>
+        <div class="task-param-header"><span>中文名称</span><span>类型</span><span>必填</span><span>英文名称</span><span>说明/示例</span><span></span></div>
         ${renderTaskParameterRows('outputs', draft.parameters.outputs)}
       </section>
     </div>`;
@@ -1955,7 +2017,7 @@ function renderCapabilityDialog(capability) {
         ${renderMoveList(groupedConstructs, {
           emptyText: '暂无构件',
           testId: 'construct-open-button',
-          actionLabel: '编辑',
+          actionLabel: '查看/编辑',
           secondaryTestId: 'construct-detach-button',
           secondaryActionLabel: '移出',
           label: (construct) => construct.name || construct.uid,
@@ -2069,14 +2131,14 @@ function renderConstructDialog(construct) {
       <div class="business-model-dialog-grid">
         <div class="business-model-dialog-section">
           <div class="business-model-section-head">
-            <h4>构件实体</h4>
-            <button class="btn btn-outline btn-sm" type="button" data-testid="entity-definition-add-button" onclick="addEntityDefinitionAndOpen('${esc(jsString(constructId))}')">＋ 实体定义</button>
+            <h4>实体</h4>
+            <button class="btn btn-outline btn-sm" type="button" data-testid="entity-definition-add-button" onclick="addEntityDefinitionAndOpen('${esc(jsString(constructId))}')">＋ 实体</button>
           </div>
           <p class="business-model-section-hint">移出后进入未分组</p>
           ${renderMoveList(assignedEntities, {
             emptyText: '暂无实体',
             testId: 'construct-entity-edit',
-            actionLabel: '编辑',
+            actionLabel: '查看/编辑',
             secondaryTestId: 'construct-entity-remove',
             secondaryActionLabel: '移出',
             label: (entity) => entity.name || entity.id,
@@ -2086,7 +2148,7 @@ function renderConstructDialog(construct) {
           ${renderMoveList(unassignedEntities, {
             emptyText: '暂无未分组实体',
             testId: 'construct-entity-edit',
-            actionLabel: '编辑',
+            actionLabel: '查看/编辑',
             secondaryTestId: 'construct-entity-add',
             secondaryActionLabel: '移入组件',
             label: (entity) => entity.name || entity.id,
@@ -2096,13 +2158,13 @@ function renderConstructDialog(construct) {
         </div>
         <div class="business-model-dialog-section">
           <div class="business-model-section-head">
-            <h4>任务定义</h4>
-            <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-add-button" onclick="addTaskDefinitionAndOpen('${esc(jsString(construct.businessComponentUid || ''))}','${esc(jsString(constructId))}')">＋ 任务定义</button>
+            <h4>任务</h4>
+            <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-add-button" onclick="addTaskDefinitionAndOpen('${esc(jsString(construct.businessComponentUid || ''))}','${esc(jsString(constructId))}')">＋ 任务</button>
           </div>
           ${renderMoveList(assignedTasks, {
             emptyText: '暂无任务定义',
             testId: 'construct-task-edit',
-            actionLabel: '编辑',
+            actionLabel: '查看/编辑',
             secondaryTestId: 'construct-task-remove',
             secondaryActionLabel: '移出',
             label: (task) => task.name || task.id,
@@ -2112,7 +2174,7 @@ function renderConstructDialog(construct) {
           ${renderMoveList(unassignedTasks, {
             emptyText: '暂无未分组任务',
             testId: 'construct-task-edit',
-            actionLabel: '编辑',
+            actionLabel: '查看/编辑',
             secondaryTestId: 'construct-task-add',
             secondaryActionLabel: '移入组件',
             label: (task) => task.name || task.id,
@@ -2249,6 +2311,13 @@ function renderTaskDefinitionDialog(task) {
             oninput="setTaskDefinition('${esc(jsString(taskId))}','name',this.value)">
         </div>
         <div class="field-group">
+          <label>任务类型</label>
+          <select data-testid="task-definition-type-select"
+            onchange="setTaskDefinition('${esc(jsString(taskId))}','type',this.value);rerenderBusinessModelDialogContext()">
+            ${ORCHESTRATION_TYPES.map((option) => `<option value="${option.value}" ${typeValue === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-group">
           <label>&#25152;&#23646;&#19994;&#21153;&#32452;&#20214;</label>
           <select data-testid="task-definition-capability-select"
             onchange="setTaskDefinition('${esc(jsString(taskId))}','businessComponentId',this.value);rerenderBusinessModelDialogContext()">
@@ -2262,13 +2331,6 @@ function renderTaskDefinitionDialog(task) {
             ${constructOptions}
           </select>
         </div>
-        <div class="field-group">
-          <label>任务类型</label>
-          <select data-testid="task-definition-type-select"
-            onchange="setTaskDefinition('${esc(jsString(taskId))}','type',this.value);rerenderBusinessModelDialogContext()">
-            ${ORCHESTRATION_TYPES.map((option) => `<option value="${option.value}" ${typeValue === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
-          </select>
-        </div>
         ${typeValue === 'Query' ? `<div class="field-group">
           <label>查询来源</label>
           <select data-testid="task-definition-query-source-select"
@@ -2276,11 +2338,6 @@ function renderTaskDefinitionDialog(task) {
             ${QUERY_SOURCE_KINDS.map((option) => `<option value="${option.value}" ${task.querySourceKind === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
           </select>
         </div>` : ''}
-        <div class="field-group field-group-wide task-definition-tech-group">
-          <label>技术承接</label>
-          <input data-testid="task-definition-target-input" type="text" value="${esc(task.target || '')}" placeholder="目标服务 / 字典 / 枚举"
-            oninput="setTaskDefinition('${esc(jsString(taskId))}','target',this.value)">
-        </div>
         <div class="field-group field-group-wide task-definition-param-summary">
           <label>任务调用契约</label>
           <div class="task-definition-param-bar">
@@ -2289,10 +2346,22 @@ function renderTaskDefinitionDialog(task) {
               onclick="openTaskParameterDialog('${esc(jsString(taskId))}')">查看/编辑参数</button>
           </div>
         </div>
-        <div class="field-group field-group-wide">
-          <label>说明</label>
-          <textarea class="auto-resize" data-testid="task-definition-note-input" rows="3" placeholder="任务说明、约束或技术备注"
-            oninput="setTaskDefinition('${esc(jsString(taskId))}','note',this.value);autoResize(this)">${esc(task.note || '')}</textarea>
+        <div class="field-group field-group-wide task-definition-tech-group">
+          <label>技术承接</label>
+          <input data-testid="task-definition-target-input" type="text" value="${esc(task.target || '')}" placeholder="目标服务 / 字典 / 枚举"
+            oninput="setTaskDefinition('${esc(jsString(taskId))}','target',this.value)">
+        </div>
+        <div class="field-group field-group-wide task-detail-field">
+          <span class="task-detail-label-row"><label>详细设计</label>${renderRichTextToolbar('task-definition-note')}<span class="task-detail-shortcuts">Ctrl+B 加粗 · Ctrl+0 无序 · Ctrl+1 有序 · Ctrl+2 有序2级 · Tab 右移 · Shift+Tab 左移</span></span>
+          ${(() => {
+            const safeHtml = renderRichTextValue(task.note || '');
+            const sync = `syncRichTextEditor(this);setTaskDefinition('${esc(jsString(taskId))}','note',this.nextElementSibling.value)`;
+            return `<div class="rich-text-field task-detail-editor-box">
+              <div class="task-definition-note-editor rich-text-editor" data-testid="task-definition-note-editor" contenteditable="true" role="textbox" aria-multiline="true"
+                data-placeholder="参考业务规则" onfocus="moveCursorToEndOfContent(this)" oninput="${sync}" onpaste="handleRichTextPaste(event,this)" onkeydown="handleRichTextKeydown(event,this)">${safeHtml}</div>
+              <textarea class="rich-text-storage" data-testid="task-definition-note-storage" aria-hidden="true" tabindex="-1">${esc(sanitizeRichTextHtml(safeHtml))}</textarea>
+            </div>`;
+          })()}
         </div>
       ${processNodeActions}
       </div>
