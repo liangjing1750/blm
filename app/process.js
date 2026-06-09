@@ -2218,7 +2218,7 @@ function addProcess(subDomain, stageId = '') {
   const pos = _nextFreePos(S.doc.processes, null); /* 自动填补空缺格子 */
   const stage = findStage(stageId, S.doc);
   const nextSubDomain = String(subDomain || stage?.subDomain || '').trim();
-  S.doc.processes.push({id, name:'', subDomain:nextSubDomain, flowGroup:'', stageId:'', stagePos:{ x: 0, y: 0 }, trigger:'', outcome:'', prototypeFiles:[], nodes:[], pos});
+  S.doc.processes.push({id, name:'', subDomain:nextSubDomain, flowGroup:'', stageUid:'', stagePos:{ x: 0, y: 0 }, trigger:'', outcome:'', prototypeFiles:[], nodes:[], pos});
   hydrateDocumentForUi(S.doc);
   if (stage?.id) addStageProcessRef(stage.id, id, { silent: true });
   markModified();
@@ -3811,7 +3811,7 @@ function getReusableOrchestrationTaskItems(currentProcId, currentTaskId, filters
       const name = String(taskDefinition?.name || taskDefinition?.target || '').trim();
       if (!name) return;
       const usedBy = Array.isArray(taskDefinition.usedBy) ? taskDefinition.usedBy : [];
-      if (usedBy.length && usedBy.every((usage) => usage.processUid === currentProcId && usage.nodeId === currentTaskId)) {
+      if (usedBy.length && usedBy.every((usage) => (usage.processUid || usage.processId) === currentProcId && usage.nodeId === currentTaskId)) {
         return;
       }
       const capability = capabilityById.get(String(taskDefinition.businessComponentUid || ''))
@@ -4344,6 +4344,7 @@ function startStageNameEdit(stageId, event = null) {
   const stage = findStage(stageId, S.doc);
   if (!stage) return;
   S.ui.stageNameEditId = stage.id;
+  S.ui.stageNameEditDraft = stage.name || '';
   rerenderStageWorkbench({
     focusSelector: '[data-testid="stage-name-inline-input"]',
     selectText: true,
@@ -4355,6 +4356,7 @@ function finishStageNameEdit(stageId, nextName, options = {}) {
   if (String(S.ui.stageNameEditId || '') !== normalizedStageId) return;
   const stage = findStage(normalizedStageId, S.doc);
   S.ui.stageNameEditId = '';
+  S.ui.stageNameEditDraft = '';
   const normalizedName = String(nextName || '').trim();
   if (stage && normalizedName && normalizedName !== String(stage.name || '')) {
     stage.name = normalizedName;
@@ -4367,6 +4369,7 @@ function finishStageNameEdit(stageId, nextName, options = {}) {
 function cancelStageNameEdit(stageId) {
   if (String(S.ui.stageNameEditId || '') !== String(stageId || '')) return;
   S.ui.stageNameEditId = '';
+  S.ui.stageNameEditDraft = '';
   rerenderStageWorkbench();
 }
 
@@ -4389,6 +4392,7 @@ function renderStageNameInlineEditor(stageId, label, canEdit, className = 'stage
       aria-label="阶段名称" type="text" value="${esc(stageLabel)}"
       onmousedown="event.stopPropagation()" onclick="event.stopPropagation()" ondblclick="event.stopPropagation()"
       onkeydown="handleStageNameEditKeydown(event,'${esc(stageId)}')"
+      oninput="S.ui.stageNameEditDraft=this.value"
       onblur="finishStageNameEdit('${esc(stageId)}',this.value)">`;
   }
   return `<span class="${className}"${canEdit ? ` title="双击修改阶段名称" ondblclick="startStageNameEdit('${esc(stageId)}',event)"` : ''}>${esc(stageLabel)}</span>`;
@@ -4812,7 +4816,14 @@ function setStageEditorCollapsed(nextValue) {
     S.ui.stageViewMode = 'panorama';
   }
   S.ui.stageEditorCollapsed = normalized;
-  if (normalized) S.ui.stageNameEditId = '';
+  if (normalized) {
+    // 关闭编辑前提交内联编辑中的内容，避免丢失
+    if (S.ui.stageNameEditId && S.ui.stageNameEditDraft) {
+      finishStageNameEdit(S.ui.stageNameEditId, S.ui.stageNameEditDraft, { skipRender: true });
+    }
+    S.ui.stageNameEditId = '';
+    S.ui.stageNameEditDraft = '';
+  }
   renderProcessTab();
 }
 
@@ -6150,7 +6161,7 @@ function buildStageDetailGraphData(stageId) {
       name: proc?.name || '',
       meta: '',
       group: proc?.flowGroup || '',
-      processId: getProcessIdentity(proc) || ref.processUid,
+      processUid: getProcessIdentity(proc) || ref.processUid,
     };
   });
   const links = getStageFlowLinks(S.doc)

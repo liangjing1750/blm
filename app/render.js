@@ -936,7 +936,7 @@ function getTaskDefinitionSources(taskDefinition, doc = S.doc) {
     });
   });
   (taskDefinition?.usedBy || []).forEach((usage) => {
-    const proc = processMap.get(usage.processId);
+    const proc = processMap.get(usage.processUid || usage.processId);
     if (!proc) return;
     const node = getProcNodes(proc).find((item) => item.id === usage.nodeId);
     const usageIndex = Number(usage.taskIndex);

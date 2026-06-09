@@ -118,6 +118,52 @@ class MigrateDocumentTests(unittest.TestCase):
         self.assertEqual(refs[0]["stageUid"], "stage-1")
         self.assertEqual(refs[0]["processUid"], "process-1")
 
+    def test_canonical_document_preserves_stage_name_after_inline_edit(self):
+        """阶段视图内联编辑后关闭，阶段名称应保留（回归：关闭编辑时未提交内联输入框内容导致丢失）"""
+        document = {
+            "meta": {"title": "Stage Edit"},
+            "stages": [{"uid": "stage-001", "name": "原始阶段名"}],
+            "processes": [],
+            "stageFlowRefs": [],
+            "stageFlowLinks": [],
+            "roles": [],
+            "entities": [],
+            "businessComponents": [],
+            "businessConstructs": [],
+            "taskDefinitions": [],
+        }
+        # 模拟：用户通过 setStage 修改了阶段名称
+        document["stages"][0]["name"] = "修改后的阶段名"
+        canonical = canonical_document(document)
+        self.assertEqual(canonical["stages"][0]["name"], "修改后的阶段名",
+                         "阶段名称应在保存后保留，不能丢失")
+
+    def test_canonical_document_normalizes_stage_flow_ref_process_uid(self):
+        """stageFlowRef 的 processUid 应正确保留（回归：preview.js 构建节点 processId→processUid 键名不匹配）"""
+        document = {
+            "meta": {"title": "Ref Uid"},
+            "stages": [{"uid": "s1", "name": "A"}],
+            "processes": [{"uid": "p1", "name": "B", "nodes": []}],
+            "stageFlowRefs": [{"uid": "sfr1", "stageUid": "s1", "processUid": "p1", "order": 1}],
+            "stageFlowLinks": [],
+            "roles": [], "entities": [], "businessComponents": [], "businessConstructs": [], "taskDefinitions": [],
+        }
+        canonical = canonical_document(document)
+        self.assertEqual(canonical["stageFlowRefs"][0]["processUid"], "p1")
+
+    def test_canonical_document_does_not_revert_stage_id_on_new_process(self):
+        """新建流程的 stageUid 应保留（回归：新建流程用了 stageId:'' 而非 stageUid:''）"""
+        document = {
+            "meta": {"title": "Stage Uid"},
+            "stages": [{"uid": "s1", "name": "A"}],
+            "processes": [{"uid": "p1", "name": "B", "stageUid": "s1", "nodes": []}],
+            "stageFlowRefs": [{"uid": "sfr1", "stageUid": "s1", "processUid": "p1", "order": 1}],
+            "stageFlowLinks": [],
+            "roles": [], "entities": [], "businessComponents": [], "businessConstructs": [], "taskDefinitions": [],
+        }
+        canonical = canonical_document(document)
+        self.assertEqual(canonical["processes"][0]["stageUid"], "s1")
+
     def test_canonical_document_normalizes_task_parameters(self):
         document = {
             "meta": {"title": "Task Params"},

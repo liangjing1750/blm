@@ -197,6 +197,7 @@ const S = {
     stageGraphZoom: 1,
     stageEditorCollapsed: true,
     stageNameEditId: '',
+    stageNameEditDraft: '',
     entityDrawerW: 620,
     entityRelationEditorCollapsed: true,
     entityDraft: null,
@@ -872,8 +873,6 @@ function getPanoramaModel(doc = S.doc) {
     const laneRef = String(stage.panoramaLaneUid || stage.panoramaLaneId || '').trim();
     stage.panoramaColumnUid = columnRefMap.get(columnRef) || columnRef;
     stage.panoramaLaneUid = laneRefMap.get(laneRef) || laneRef;
-    delete stage.panoramaColumnId;
-    delete stage.panoramaLaneId;
   });
   defineModelUidAliasDeep(doc.panorama);
   return doc.panorama;
@@ -891,22 +890,22 @@ function normalizeStageProcessLinkEntry(link) {
   const normalized = link && typeof link === 'object' ? link : {};
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stageproc'),
-    fromProcessUid: String(normalized.fromProcessUid || normalized.fromProcessId || '').trim(),
-    toProcessUid: String(normalized.toProcessUid || normalized.toProcessId || '').trim(),
+    fromProcessUid: String(normalized.fromProcessUid || '').trim(),
+    toProcessUid: String(normalized.toProcessUid || '').trim(),
   };
 }
 function normalizeStageLinkEntry(link) {
   const normalized = link && typeof link === 'object' ? link : {};
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stagelink'),
-    fromStageUid: String(normalized.fromStageUid || normalized.fromStageId || '').trim(),
-    toStageUid: String(normalized.toStageUid || normalized.toStageId || '').trim(),
+    fromStageUid: String(normalized.fromStageUid || '').trim(),
+    toStageUid: String(normalized.toStageUid || '').trim(),
   };
 }
 function normalizeStageFlowRefEntry(ref, index = 1) {
   const normalized = ref && typeof ref === 'object' ? ref : {};
-  const stageUid = String(normalized.stageUid || normalized.stageId || normalized.stage_id || '').trim();
-  const processUid = String(normalized.processUid || normalized.processId || normalized.process_id || '').trim();
+  const stageUid = String(normalized.stageUid || normalized.stage_id || '').trim();
+  const processUid = String(normalized.processUid || normalized.process_id || '').trim();
   return {
     uid: String(normalized.uid || '').trim() || (stageUid && processUid ? createDeterministicUiUid('stage-flow-ref', stageUid, processUid) : createUiUid('stageref')),
     id: String(normalized.id || '').trim() || `SFR${index}`,
@@ -921,9 +920,9 @@ function normalizeStageFlowLinkEntry(link, index = 1) {
   return {
     uid: String(normalized.uid || '').trim() || createUiUid('stagereflink'),
     id: String(normalized.id || '').trim() || `SFL${index}`,
-    stageUid: String(normalized.stageUid || normalized.stageId || normalized.stage_id || '').trim(),
-    fromRefUid: String(normalized.fromRefUid || normalized.fromRefId || normalized.from_ref_id || '').trim(),
-    toRefUid: String(normalized.toRefUid || normalized.toRefId || normalized.to_ref_id || '').trim(),
+    stageUid: String(normalized.stageUid || normalized.stage_id || '').trim(),
+    fromRefUid: String(normalized.fromRefUid || normalized.from_ref_id || '').trim(),
+    toRefUid: String(normalized.toRefUid || normalized.to_ref_id || '').trim(),
   };
 }
 function normalizeStageEntry(stage, index = 1, processes = [], stageFlowRefs = []) {

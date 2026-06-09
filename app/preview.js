@@ -369,7 +369,7 @@ function buildPreviewStageDetailData(doc, stageItem) {
         label: proc?.name || proc?.id || ref.processUid,
         meta: '',
         group: proc?.flowGroup || '',
-        processId: proc?.id || ref.processUid,
+        processUid: getProcessIdentity(proc) || ref.processUid,
       };
     }),
     links: getStageFlowLinks(doc)
