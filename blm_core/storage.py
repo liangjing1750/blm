@@ -228,6 +228,38 @@ class WorkspaceStorage(DocumentFileStore):
                     "timestamp_label": timestamp_label,
                 }
             )
+        # 追加 ZIP 归档中的快照
+        archive = self._history_archive_path(name)
+        for zip_name in self._zlist(archive):
+            parts = zip_name.split("/")
+            if len(parts) < 2 or parts[-1] != "manifest.json":
+                continue
+            snapshot_id = parts[0]
+            if snapshot_id in seen_ids:
+                continue
+            seen_ids.add(snapshot_id)
+            try:
+                raw = self._zread(archive, zip_name)
+                size = len(raw) if raw else 0
+            except Exception:
+                size = 0
+            timestamp_label = self._format_timestamp_label(snapshot_id)
+            entries.append({
+                "id": snapshot_id,
+                "label": timestamp_label,
+                "doc_name": safe_name,
+                "message": "",
+                "kind": "auto",
+                "reason": "archive",
+                "content_hash": "",
+                "user": "",
+                "created_at": "",
+                "seq": inferred_seq_by_id.get(snapshot_id, 0),
+                "size": size,
+                "documentBytes": size,
+                "timestamp": snapshot_id,
+                "timestamp_label": timestamp_label,
+            })
         return entries
 
     @staticmethod
@@ -256,6 +288,37 @@ class WorkspaceStorage(DocumentFileStore):
 
     def load_history(self, name: str, snapshot_id: str) -> dict:
         return self._load_history_snapshot(self._validate_name(name), snapshot_id)
+
+    @staticmethod
+    def _zopen(path):
+        """打开 ZIP 文件，不存在则返回 None"""
+        p = Path(path) if not isinstance(path, Path) else path
+        return zipfile.ZipFile(str(p), "r") if p.is_file() else None
+
+    @staticmethod
+    def _zread(path: Path, name: str) -> bytes | None:
+        """从 ZIP 文件中读取条目"""
+        zf = WorkspaceStorage._zopen(path)
+        if zf is None:
+            return None
+        try:
+            return zf.read(name)
+        except KeyError:
+            return None
+        finally:
+            zf.close()
+
+    @staticmethod
+    def _zlist(path: Path, prefix: str = "") -> list[str]:
+        """列出 ZIP 中所有条目名"""
+        zf = WorkspaceStorage._zopen(path)
+        if zf is None:
+            return []
+        try:
+            names = zf.namelist()
+            return [n for n in names if n.startswith(prefix)] if prefix else list(names)
+        finally:
+            zf.close()
 
     def list_versions(self, name: str) -> list[dict]:
         safe_name = self._validate_name(name)
@@ -1302,6 +1365,9 @@ class WorkspaceStorage(DocumentFileStore):
         d.mkdir(parents=True, exist_ok=True)
         return d
 
+    def _history_archive_path(self, name: str) -> Path:
+        return self._history_dir(name) / "archive.zip"
+
     def _versions_dir(self, name: str) -> Path:
         """文档级归档版本目录（DOCNAME/versions/）。"""
         d = self._package_dir(self._validate_name(name)) / "versions"
@@ -1531,6 +1597,11 @@ class WorkspaceStorage(DocumentFileStore):
         snapshot_json_path = self._history_snapshot_json_path(name, snapshot_id)
         if snapshot_json_path.exists():
             return self.load_raw_path(snapshot_json_path)
+        # 查 ZIP 归档
+        archive = self._history_archive_path(name)
+        raw = self._zread(archive, f"{snapshot_id}/manifest.json")
+        if raw:
+            return json.loads(raw.decode("utf-8"))
         raise FileNotFoundError(snapshot_id)
 
     def _snapshot_meta_path(self, snapshot_path: Path) -> Path:

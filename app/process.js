@@ -253,6 +253,7 @@ function renderRichTextEditor({ value = '', testIdPrefix = 'rich-text', classNam
   const sync = `syncRichTextEditor(this);${oninput}`;
   return `<div class="rich-text-field">
     ${renderRichTextToolbar(testIdPrefix)}
+    <span class="rich-text-shortcuts">Ctrl+B 加粗 · Ctrl+0 无序 · Ctrl+1 有序 · Ctrl+2 有序2级 · Tab 右移 · Shift+Tab 左移</span>
     <div class="${esc(className)} rich-text-editor" data-testid="${esc(testIdPrefix)}-editor" contenteditable="true" role="textbox" aria-multiline="true"
       data-placeholder="${esc(placeholder)}" onfocus="moveCursorToEndOfContent(this)" oninput="${sync}" onpaste="handleRichTextPaste(event,this)" onkeydown="handleRichTextKeydown(event,this)">${safeHtml}</div>
     <textarea class="rich-text-storage" data-testid="${esc(testIdPrefix)}-storage" aria-hidden="true" tabindex="-1">${esc(sanitizeRichTextHtml(safeHtml))}</textarea>
@@ -401,7 +402,7 @@ function handleRichTextKeydown(event, editor) {
 }
 
 function applyRichTextCommand(button, command) {
-  const field = button?.closest?.('.rich-text-field');
+  const field = button?.closest?.('.rich-text-field') || button?.closest?.('.task-detail-field');
   const editor = field?.querySelector?.('.rich-text-editor');
   if (command === 'secondOrdered') {
     applyRichTextSecondLevelOrderedList(editor);
@@ -3057,8 +3058,7 @@ function getTaskBusinessRuleEditKey(procId, taskId, ruleId) {
 }
 
 function syncTaskBusinessRulesNote(task) {
-  if (!task) return;
-  task.rules_note = formatBusinessRulesText(getNodeBusinessRules(task));
+  // rules_note 是冗余衍生字段，已停用自动拼接
 }
 
 function addTaskBusinessRule(procId, taskId, presetName = '') {
@@ -6719,15 +6719,15 @@ function renderOrchestrationSection(proc, task) {
       <h4>节点任务 <span class="section-count">${orchestrationTasks.length} 项</span></h4>
       <div class="orch-toolbar-actions">
         <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-task-manager-button"
-          onclick="openTaskDefinitionManager()">管理任务定义</button>
+          onclick="openTaskDefinitionManager()">管理任务</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-define-new-task"
+          onclick="defineTaskDefinitionForNode('${esc(proc.id)}','${esc(task.id)}')">定义新任务</button>
       </div>
     </div>
     <div class="orch-reuse-block" data-testid="orchestration-reuse-block">
       <div class="orch-block-head">
         <strong>复用已有任务</strong>
         <span>从业务组件 / 业务构件中选择已有任务，加入当前节点编排。</span>
-        <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-define-new-task"
-          onclick="defineTaskDefinitionForNode('${esc(proc.id)}','${esc(task.id)}')">去定义新任务</button>
       </div>
       <div class="orch-reuse-panel" data-testid="orchestration-reuse-panel">
         <select data-testid="orchestration-reuse-capability-select" aria-label="选择业务组件"
@@ -6745,7 +6745,7 @@ function renderOrchestrationSection(proc, task) {
           ${visibleReusableTasks.map((item) => `<option value="${esc(item.key)}">${esc(item.label)}</option>`).join('')}
         </select>
         <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-reuse-button" ${reuseDisabled ? 'disabled' : ''}
-          onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">加入节点</button>
+          onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">复用任务</button>
       </div>
     </div>
     <div class="orch-compose-head" data-testid="orchestration-compose-head">

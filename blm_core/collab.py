@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import secrets
+import zipfile
 import socket
 import struct
 import threading
@@ -569,36 +570,82 @@ class CollaborationManager:
         """列出文档的所有提交记录摘要（不包含完整文档）"""
         safe_name = self.storage._validate_name(doc_name)
         submits_dir = self._collab_dir(safe_name) / "submits"
-        if not submits_dir.is_dir():
-            return []
         records = []
-        for path in sorted(submits_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        seen_ids = set()
+
+        # 目录中的 JSON 文件
+        if submits_dir.is_dir():
+            for path in sorted(submits_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+                try:
+                    data = json.loads(path.read_text("utf-8"))
+                    sid = data.get("submitId", path.stem)
+                    if sid in seen_ids:
+                        continue
+                    seen_ids.add(sid)
+                    records.append({
+                        "submitId": sid,
+                        "doc": data.get("doc", safe_name),
+                        "seq": data.get("seq", 0),
+                        "baseSeq": data.get("baseSeq", 0),
+                        "user": data.get("user", ""),
+                        "userId": data.get("userId", ""),
+                        "createdAt": data.get("createdAt", ""),
+                        "documentBytes": len(json.dumps(data.get("document", {}), ensure_ascii=False)),
+                    })
+                except (json.JSONDecodeError, OSError):
+                    continue
+
+        # ZIP 归档
+        archive = submits_dir / "archive.zip" if submits_dir.is_dir() else None
+        if archive and archive.is_file():
             try:
-                data = json.loads(path.read_text("utf-8"))
-                records.append({
-                    "submitId": data.get("submitId", path.stem),
-                    "doc": data.get("doc", safe_name),
-                    "seq": data.get("seq", 0),
-                    "baseSeq": data.get("baseSeq", 0),
-                    "user": data.get("user", ""),
-                    "userId": data.get("userId", ""),
-                    "createdAt": data.get("createdAt", ""),
-                    "documentBytes": len(json.dumps(data.get("document", {}), ensure_ascii=False)),
-                })
-            except (json.JSONDecodeError, OSError):
-                continue
+                with zipfile.ZipFile(str(archive), "r") as zf:
+                    for name in zf.namelist():
+                        sid = name.rsplit(".", 1)[0] if name.endswith(".json") else name
+                        if sid in seen_ids:
+                            continue
+                        seen_ids.add(sid)
+                        try:
+                            raw = zf.read(name)
+                            data = json.loads(raw.decode("utf-8"))
+                        except Exception:
+                            data = {}
+                        records.append({
+                            "submitId": sid,
+                            "doc": data.get("doc", safe_name),
+                            "seq": data.get("seq", 0),
+                            "baseSeq": data.get("baseSeq", 0),
+                            "user": data.get("user", ""),
+                            "userId": data.get("userId", ""),
+                            "createdAt": data.get("createdAt", ""),
+                            "documentBytes": len(raw) if raw else 0,
+                        })
+            except (zipfile.BadZipFile, OSError):
+                pass
+
         return records
 
     def load_submit(self, doc_name: str, submit_id: str) -> dict | None:
         """加载指定的提交记录完整内容"""
         safe_name = self.storage._validate_name(doc_name)
-        submit_path = self._collab_dir(safe_name) / "submits" / f"{submit_id}.json"
-        if not submit_path.is_file():
-            return None
-        try:
-            return json.loads(submit_path.read_text("utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return None
+        submits_dir = self._collab_dir(safe_name) / "submits"
+        submit_path = submits_dir / f"{submit_id}.json"
+        if submit_path.is_file():
+            try:
+                return json.loads(submit_path.read_text("utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+        # 查 ZIP 归档
+        archive = submits_dir / "archive.zip"
+        if archive.is_file():
+            try:
+                with zipfile.ZipFile(str(archive), "r") as zf:
+                    for name in zf.namelist():
+                        if name.rsplit(".", 1)[0] == submit_id:
+                            return json.loads(zf.read(name).decode("utf-8"))
+            except (zipfile.BadZipFile, OSError, json.JSONDecodeError):
+                pass
+        return None
 
     def _write_sync_log(
         self, session: CollabSession, submit_id: str, base_seq: int, stats: dict
