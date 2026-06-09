@@ -195,6 +195,31 @@ class MigrateDocumentTests(unittest.TestCase):
         self.assertEqual(len(final_rules), 2,
                          f"businessRules不应该重复，期望2条，实际{len(final_rules)}条")
 
+    def test_canonical_document_dedups_duplicate_business_rules(self):
+        """canonical_document 应去重 uid 相同的 businessRules（防御用户本地损坏草稿提交）"""
+        rules = [
+            {"uid": "r1", "id": "r1", "name": "A", "content": "X"},
+            {"uid": "r1", "id": "r1", "name": "A", "content": "X"},  # 重复uid
+            {"uid": "r2", "id": "r2", "name": "B", "content": "Y"},
+            {"uid": "r2", "id": "r2", "name": "B", "content": "Y"},  # 重复uid
+        ]
+        document = {
+            "meta": {"title": "Dedup"},
+            "roles": [], "stages": [], "stageFlowRefs": [], "stageFlowLinks": [],
+            "entities": [], "businessComponents": [], "businessConstructs": [], "taskDefinitions": [],
+            "processes": [{"uid": "p1", "name": "P", "nodes": [{
+                "uid": "n1", "name": "N",
+                "businessRules": rules,
+                "userSteps": [], "orchestrationTasks": [], "forms": [],
+            }], "prototypeFiles": [], "flow": {"nodes": [], "edges": []}}],
+        }
+        canonical = canonical_document(document)
+        result = canonical["processes"][0]["nodes"][0]["businessRules"]
+        self.assertEqual(len(result), 2,
+                         f"canonical_document 应去重，期望2条，实际{len(result)}条")
+        uids = [r["uid"] for r in result]
+        self.assertEqual(uids, ["r1", "r2"])
+
     def test_canonical_document_normalizes_task_parameters(self):
         document = {
             "meta": {"title": "Task Params"},

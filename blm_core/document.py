@@ -454,9 +454,40 @@ def strip_legacy_element_ids(value):
     return result
 
 
+def _dedup_by_uid(items):
+    """按 uid 去重，保留首次出现顺序。"""
+    seen = set()
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            result.append(item)
+            continue
+        uid = str(item.get("uid", "")).strip()
+        if not uid or uid not in seen:
+            if uid:
+                seen.add(uid)
+            result.append(item)
+    return result
+
+
+def _dedup_nested_lists(value):
+    """递归清理所有节点子列表中按 uid 重复的条目（防御草稿损坏等异常数据源）。"""
+    if isinstance(value, list):
+        return [_dedup_nested_lists(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    for key, child in value.items():
+        if key in ("businessRules", "userSteps", "orchestrationTasks", "forms") and isinstance(child, list):
+            result[key] = _dedup_by_uid(child)
+        else:
+            result[key] = _dedup_nested_lists(child)
+    return result
+
+
 def canonical_document(document: dict | None, *, skip_migrate: bool = False) -> dict:
     doc = document if skip_migrate else migrate_document(document)
-    return strip_legacy_element_ids(rename_reference_fields_to_uid(canonicalize_model_references(doc)))
+    return _dedup_nested_lists(strip_legacy_element_ids(rename_reference_fields_to_uid(canonicalize_model_references(doc))))
 
 
 def _normalize_text_list(values: list[str] | None) -> list[str]:
