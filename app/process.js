@@ -3504,26 +3504,42 @@ function duplicateTaskForm(procId, taskId, formId) {
   });
 }
 
-let _formClipboard = null;
-
 function copyFormToClipboard(procId, taskId, formId) {
   const { task } = getTaskByIds(procId, taskId);
   const form = (getTaskForms(task) || []).find((item) => item.id === formId);
   if (!form) return;
-  _formClipboard = JSON.parse(JSON.stringify(form));
-  showAppToast('已复制表单到剪贴板，可在其他节点"粘贴到当前节点"');
+  const text = JSON.stringify(form);
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(ta);
+  showAppToast(ok ? '已复制表单到系统剪贴板' : '复制失败，请重试');
 }
 
 async function pasteFormFromClipboard(procId, taskId) {
-  if (!_formClipboard) {
-    showAppToast('剪贴板为空，请先在某个表单上点"复制到其它节点"');
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch (_) {
+    // fallback: execCommand('paste') 不可靠，提示用户
+  }
+  if (!text) {
+    showAppToast('剪贴板无表单数据，请先在某个表单上点"复制到其它节点"');
+    return;
+  }
+  let form;
+  try { form = JSON.parse(text); } catch (_) { showAppToast('剪贴板内容不是有效表单数据'); return; }
+  if (!form || typeof form !== 'object' || !form.sections) {
+    showAppToast('剪贴板内容不是有效表单数据');
     return;
   }
   const { task } = getTaskByIds(procId, taskId);
   if (!task) return;
-  const forms = getTaskForms(task);
-  const clone = cloneTaskFormForCopy(_formClipboard, forms);
-  forms.push(clone);
+  const clone = cloneTaskFormForCopy(form, getTaskForms(task));
+  getTaskForms(task).push(clone);
   markModified();
   rerenderProcessEditor({
     focusSelector: `[data-testid="task-form-name"][data-form-id="${clone.id}"]`,
