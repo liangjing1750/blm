@@ -11,7 +11,7 @@
 import json, os, sys, zipfile
 from pathlib import Path
 
-WORKSPACE = os.path.join(os.path.dirname(__file__), "..", "workspace")
+WORKSPACE = os.path.join(os.path.dirname(__file__), "..", "..", "workspace")
 DEFAULT_KEEP = 100
 
 

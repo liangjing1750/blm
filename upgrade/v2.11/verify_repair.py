@@ -2,7 +2,7 @@
 """验证 repair_workspace.py 修复结果"""
 import json, os
 
-WORKSPACE = os.path.join(os.path.dirname(__file__), "..", "workspace")
+WORKSPACE = os.path.join(os.path.dirname(__file__), "..", "..", "workspace")
 
 def check_doc(doc):
     td = 0; dup = 0; rn = 0
