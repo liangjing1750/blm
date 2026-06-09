@@ -55,7 +55,9 @@ for dn in sorted(os.listdir(WORKSPACE)):
     hd = os.path.join(d, "history")
     if os.path.isdir(hd):
         for snap in os.listdir(hd):
-            hm = os.path.join(hd, snap, "manifest.json")
+            hm = os.path.join(hd, snap, "manifest", "manifest.json")
+            if not os.path.exists(hm):
+                hm = os.path.join(hd, snap, "manifest.json")
             if not os.path.exists(hm): continue
             with open(hm, encoding="utf-8") as f:
                 td, dup, rn = check_doc(json.load(f))
@@ -65,6 +67,6 @@ print(f"TD-xxx残留: {td_total}")
 print(f"数组uid重复: {dup_total}")
 print(f"rules_note过期: {rn_total}")
 if td_total == 0 and dup_total == 0 and rn_total == 0:
-    print("\n✓ 全部通过!")
+    print("\n[PASS] 全部通过!")
 else:
     print("\n✗ 仍有残留")

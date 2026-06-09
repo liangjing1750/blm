@@ -961,7 +961,7 @@ function renderHistoryEntries(docName, entries, versions = [], submits = [], tab
             <div class="recovery-item">
               <div class="recovery-item-main">
                 <div class="recovery-item-title">${esc(userLabel)}${esc(msg || '协作同步')}</div>
-                <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')}${entry.documentBytes || entry.size ? ` 路 ${formatBytes(Number(entry.documentBytes || entry.size || 0))}` : ''}</div>
+                <div class="recovery-item-meta">${esc(entry.timestamp_label || entry.id || '')}${entry.documentBytes || entry.size ? ` · ${formatBytes(Number(entry.documentBytes || entry.size || 0))}` : ''}</div>
               </div>
               <button class="btn btn-outline btn-sm" type="button"
                 onclick='App.openHistorySnapshot(${JSON.stringify(docName)}, ${JSON.stringify(entry.id)})'>只读打开</button>

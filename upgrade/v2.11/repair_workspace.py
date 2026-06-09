@@ -175,7 +175,9 @@ def main():
         hist_dir = os.path.join(doc_dir, "history")
         if os.path.isdir(hist_dir):
             for snap in sorted(os.listdir(hist_dir)):
-                hm = os.path.join(hist_dir, snap, "manifest.json")
+                hm = os.path.join(hist_dir, snap, "manifest", "manifest.json")
+                if not os.path.exists(hm):
+                    hm = os.path.join(hist_dir, snap, "manifest.json")
                 if not os.path.exists(hm):
                     continue
                 s = repair_file(hm, dry_run)
