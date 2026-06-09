@@ -370,7 +370,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   border-top: 1px solid #e2e8f0;
   background: #fff;
 }
-.collab-conflict-dialog {
+.modal.collab-conflict-dialog {
   max-width: 1560px;
   width: min(1560px, calc(100vw - 32px));
   height: min(90vh, 820px);
@@ -383,10 +383,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 @media (max-width: 760px) {
   .collab-conflict-actions { flex-wrap: wrap; }
 }
-.collab-conflict-dialog h3,
-.collab-conflict-dialog .field-hint { flex-shrink: 0; }
-.collab-conflict-dialog .collab-conflict-actions { flex-shrink: 0; }
-.collab-conflict-dialog h3 {
+.modal.collab-conflict-dialog h3,
+.modal.collab-conflict-dialog .field-hint { flex-shrink: 0; }
+.modal.collab-conflict-dialog .collab-conflict-actions { flex-shrink: 0; }
+.modal.collab-conflict-dialog h3 {
   margin: 0 0 4px 0;
   font-size: 16px;
   color: #dc2626;
@@ -3390,7 +3390,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .task-form-card-head,
 .task-form-section-head {
   display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) minmax(120px, .8fr) auto;
+  grid-template-columns: auto minmax(120px, 1fr) minmax(120px, .8fr) auto auto;
   gap: 8px;
   align-items: center;
 }
