@@ -2250,6 +2250,7 @@ function cloneTaskFormForCopy(form, existingForms = []) {
   const clone = clonePlainObject(form || {});
   const usedForms = [...(existingForms || [])];
   clone.id = nextId('F', usedForms);
+  clone.uid = createUiUid('form');
   usedForms.push({ id: clone.id });
   clone.name = makeUniqueCopyName(clone.name || '未命名表单', existingForms, '表单');
   clone.sections = Array.isArray(clone.sections) ? clone.sections : [];
@@ -2257,6 +2258,7 @@ function cloneTaskFormForCopy(form, existingForms = []) {
   clone.sections = clone.sections.map((section, sectionIndex) => {
     const nextSection = clonePlainObject(section || {});
     nextSection.id = nextId('SEC', usedSectionIds);
+    nextSection.uid = createUiUid('section');
     usedSectionIds.push({ id: nextSection.id });
     nextSection.name = String(nextSection.name || `分组${sectionIndex + 1}`);
     nextSection.fields = Array.isArray(nextSection.fields) ? nextSection.fields : [];
@@ -2264,6 +2266,7 @@ function cloneTaskFormForCopy(form, existingForms = []) {
     nextSection.fields = nextSection.fields.map((field) => {
       const nextField = clonePlainObject(field || {});
       nextField.id = nextId('FLD', usedFieldIds);
+      nextField.uid = createUiUid('field');
       usedFieldIds.push({ id: nextField.id });
       return nextField;
     });
@@ -3499,6 +3502,56 @@ function duplicateTaskForm(procId, taskId, formId) {
     focusSelector: `[data-testid="task-form-name"][data-form-id="${clone.id}"]`,
     caretToEnd: true,
   });
+}
+
+let _formClipboard = null;
+
+function copyFormToClipboard(procId, taskId, formId) {
+  const { task } = getTaskByIds(procId, taskId);
+  const form = (getTaskForms(task) || []).find((item) => item.id === formId);
+  if (!form) return;
+  _formClipboard = JSON.parse(JSON.stringify(form));
+  showAppToast('已复制表单到剪贴板，可在其他节点"粘贴到当前节点"');
+}
+
+async function pasteFormFromClipboard(procId, taskId) {
+  if (!_formClipboard) {
+    showAppToast('剪贴板为空，请先在某个表单上点"复制到其它节点"');
+    return;
+  }
+  const { task } = getTaskByIds(procId, taskId);
+  if (!task) return;
+  const forms = getTaskForms(task);
+  const clone = cloneTaskFormForCopy(_formClipboard, forms);
+  forms.push(clone);
+  markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-name"][data-form-id="${clone.id}"]`,
+    caretToEnd: true,
+  });
+}
+
+function showFormCopyMenu(event, procId, taskId, formId) {
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = event.currentTarget.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'form-copy-menu';
+  menu.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.bottom + 4}px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:4px;display:flex;flex-direction:column;gap:2px;`;
+  menu.innerHTML = [
+    `<button class="btn btn-ghost btn-sm" style="justify-content:flex-start;width:100%">复制到当前节点</button>`,
+    `<button class="btn btn-ghost btn-sm" style="justify-content:flex-start;width:100%">复制到其它节点</button>`,
+    `<button class="btn btn-ghost btn-sm" style="justify-content:flex-start;width:100%">粘贴到当前节点</button>`,
+  ].join('');
+  menu.querySelectorAll('button')[0].onclick = (e) => { e.stopPropagation(); closeFormCopyMenu(); duplicateTaskForm(procId, taskId, formId); };
+  menu.querySelectorAll('button')[1].onclick = (e) => { e.stopPropagation(); closeFormCopyMenu(); copyFormToClipboard(procId, taskId, formId); };
+  menu.querySelectorAll('button')[2].onclick = (e) => { e.stopPropagation(); closeFormCopyMenu(); pasteFormFromClipboard(procId, taskId); };
+  document.body.appendChild(menu);
+  const closeFormCopyMenu = () => {
+    if (document.body.contains(menu)) document.body.removeChild(menu);
+    document.removeEventListener('click', closeFormCopyMenu, true);
+  };
+  setTimeout(() => document.addEventListener('click', closeFormCopyMenu, true), 0);
 }
 
 async function removeTaskForm(procId, taskId, formId) {
@@ -6903,7 +6956,7 @@ function renderTaskFormCard(proc, task, form, index) {
         oninput="setTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','name',this.value)">
       <span class="task-form-entity-summary" data-testid="task-form-entity-summary">${esc(getTaskFormEntitySummary(form))}</span>
       <button class="step-action" type="button" data-testid="task-form-duplicate" title="复制表单"
-        onclick="duplicateTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">⧉</button>
+        onclick="showFormCopyMenu(event,'${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">⧉</button>
       <button class="step-del" type="button" data-testid="task-form-delete" title="删除表单"
         onclick="removeTaskForm('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}')">✕</button>
     </div>
