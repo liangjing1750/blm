@@ -2378,7 +2378,7 @@ function renderTaskDefinitionManagerDialog() {
       </span>
       <span class="business-model-move-actions">
         <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="task-definition-manager-edit"
-          onclick="openTaskDefinitionEditor('${esc(jsString(taskId))}','${esc(jsString(capability?.id || capability?.uid || task.businessComponentUid || task.businessComponentUid || task.capabilityUnitId || ''))}','${esc(jsString(construct?.id || construct?.uid || task.constructUid || task.constructUid || task.businessConstructUid || task.businessConstructUid || ''))}','tasks')">编辑</button>
+          onclick="openTaskDefinitionEditor('${esc(jsString(taskId))}','${esc(jsString(capability?.id || capability?.uid || task.businessComponentUid || task.businessComponentUid || task.capabilityUnitId || ''))}','${esc(jsString(construct?.id || construct?.uid || task.constructUid || task.constructUid || task.businessConstructUid || task.businessConstructUid || ''))}','tasks')">查看/编辑</button>
         <button class="stage-quick-btn stage-quick-btn-text danger" type="button" data-testid="task-definition-manager-delete"
           onclick="removeTaskDefinition('${esc(jsString(taskId))}').then((deleted)=>{if(deleted)openTaskDefinitionManager()})">删除</button>
       </span>
@@ -2389,14 +2389,12 @@ function renderTaskDefinitionManagerDialog() {
       <h3>任务定义管理</h3>
       <div class="business-model-dialog-actions">
         <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-clean-blank"
-          onclick="cleanupUnreferencedTaskDefinitions(true)">清理空白未引用 ${blankUnreferencedCount}</button>
-        <button class="btn btn-outline btn-sm" type="button" data-testid="task-definition-clean-unused"
-          onclick="cleanupUnreferencedTaskDefinitions(false)">清理未引用 ${unreferencedCount}</button>
+          onclick="cleanupUnreferencedTaskDefinitions(true)">删除未被使用的任务 ${blankUnreferencedCount}</button>
         <button class="drawer-close" type="button" data-testid="business-model-dialog-close" onclick="closeBusinessModelDialog()">×</button>
       </div>
     </div>
     <div class="business-model-dialog-body">
-      <p class="business-model-manager-hint">节点里的普通任务在节点内删除；这里管理可复用的任务定义。删除任务定义会解除流程节点引用，但保留节点任务内容。</p>
+      <p class="business-model-manager-hint">此页面仅维护"任务"，而"组件"、"构件"、"实体"等信息，请在"业务域"统一维护。</p>
       ${sortedGroups.length ? sortedGroups.map((group) => `
         <div class="business-model-dialog-section task-definition-manager-group" data-testid="task-definition-manager-group">
           <div class="business-model-section-head">
