@@ -3646,20 +3646,30 @@ function removeTaskFormSection(procId, taskId, formId, sectionId) {
   rerenderProcessEditor({ anchorSelector: `[data-form-id="${formId}"]` });
 }
 
-function setTaskFormSection(procId, taskId, formId, sectionId, key, value) {
+async function setTaskFormSection(procId, taskId, formId, sectionId, key, value) {
   const { task } = getTaskByIds(procId, taskId);
   const form = findTaskForm(task, formId);
   const section = findTaskFormSection(form, sectionId);
   if (!section || !['name', 'note', 'entity_id'].includes(key)) return;
   section[key] = value;
-  if (key === 'entity_id') {
-    const availableFields = new Set(getEntityFieldsForFormSection(section, form).map((field) => String(field.name || '').trim()).filter(Boolean));
+  if (key === 'entity_id' && value) {
+    const entityFields = getEntityFieldsForFormSection(section, form);
+    const availableFields = new Set(entityFields.map((field) => String(field.name || '').trim()).filter(Boolean));
     (section.fields || []).forEach((field) => {
       if (field.entity_field && !availableFields.has(field.entity_field)) field.entity_field = '';
     });
-    syncFormSectionFieldsFromEntity(section, form);
+    if (entityFields.length > 0) {
+      const shouldCopy = await showAppConfirm(
+        `实体有 ${entityFields.length} 个字段，是否复制到当前分组？`,
+        { title: '关联实体', confirmLabel: '复制字段', cancelLabel: '不复制字段' }
+      );
+      if (shouldCopy) syncFormSectionFieldsFromEntity(section, form);
+    }
   }
   markModified();
+  rerenderProcessEditor({
+    focusSelector: `[data-testid="task-form-section-entity"][data-section-id="${sectionId}"]`,
+  });
 }
 
 function addTaskFormField(procId, taskId, formId, sectionId, afterFieldId = '') {
@@ -6938,7 +6948,7 @@ function renderTaskFormSectionCard(proc, task, form, section, sectionIndex) {
         value="${esc(section.note || '')}" placeholder="分组说明"
         oninput="setTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','note',this.value)">
       <select data-testid="task-form-section-entity" data-section-id="${esc(section.id)}"
-        onchange="setTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','entity_id',this.value);rerenderProcessEditor({focusSelector:'[data-testid=&quot;task-form-section-entity&quot;][data-section-id=&quot;${esc(section.id)}&quot;]'})">
+        onchange="setTaskFormSection('${esc(proc.id)}','${esc(task.id)}','${esc(form.id)}','${esc(section.id)}','entity_id',this.value)">
         ${renderTaskFormEntityOptions(section.entity_id || form.entity_id || '')}
       </select>
       <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-field-add"
