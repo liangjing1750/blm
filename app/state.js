@@ -604,11 +604,19 @@ function getNodeBusinessRules(node) {
     ? node.businessRules
     : (Array.isArray(node.business_rules) ? node.business_rules : []);
   const rules = source.map((rule, index) => normalizeBusinessRuleEntry(rule, index + 1));
-  if (!rules.length && !hasExplicitRules && String(node.rules_note || '').trim()) {
+  // 去重：按 uid 保留首次出现（防御协作合并导致的累积重复）
+  const seen = new Set();
+  const deduped = rules.filter((rule) => {
+    const key = String(rule.uid || rule.id || '').trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (!deduped.length && !hasExplicitRules && String(node.rules_note || '').trim()) {
     const uid = createUiUid('rule');
-    rules.push({ uid, id: uid, name: '业务规则', content: String(node.rules_note || '').trim() });
+    deduped.push({ uid, id: uid, name: '业务规则', content: String(node.rules_note || '').trim() });
   }
-  node.businessRules = rules;
+  node.businessRules = deduped;
   return node.businessRules;
 }
 function formatBusinessRulesText(rules) {

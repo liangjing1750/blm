@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BLM - Business Language Modeling</title>
-  <link rel="stylesheet" href="style.css?v=34">
+  <link rel="stylesheet" href="style.css?v=50">
 </head>
 <body>
 
@@ -209,7 +209,7 @@
   </div>
 </div>
 
-<div id="task-parameter-modal-overlay" class="hidden" onclick="closeTaskParameterDialog()" data-testid="task-parameter-modal">
+<div id="task-parameter-modal-overlay" class="hidden" data-testid="task-parameter-modal">
   <div class="modal task-parameter-modal" onclick="event.stopPropagation()">
     <div class="modal-title-row">
       <h3 class="task-parameter-modal-title">任务参数</h3>
@@ -218,7 +218,7 @@
     <div class="task-parameter-modal-body"></div>
     <div class="modal-footer">
       <button type="button" class="btn btn-outline" onclick="closeTaskParameterDialog()">取消</button>
-      <button type="button" class="btn btn-primary" data-testid="task-parameter-save-button" onclick="saveTaskParameterDialog()">保存参数</button>
+      <button type="button" class="btn btn-primary" data-testid="task-parameter-save-button" onclick="saveTaskParameterDialog()">保存</button>
     </div>
   </div>
 </div>
@@ -324,18 +324,18 @@
   </div>
 </div>
 
-<script src="state.js?v=34"></script>
-<script src="api.js?v=34"></script>
-<script src="collab.js?v=34"></script>
-<script src="render.js?v=34"></script>
-<script src="domain.js?v=34"></script>
-<script src="process.js?v=34"></script>
-<script src="entity.js?v=34"></script>
-<script src="preview.js?v=34"></script>
-<script src="manual.js?v=34"></script>
-<script src="app.js?v=34"></script>
-<script src="vendor/mermaid.min.js?v=34"></script>
-<script src="vendor/marked.umd.js?v=34"></script>
+<script src="state.js?v=50"></script>
+<script src="api.js?v=50"></script>
+<script src="collab.js?v=50"></script>
+<script src="render.js?v=50"></script>
+<script src="domain.js?v=50"></script>
+<script src="process.js?v=50"></script>
+<script src="entity.js?v=50"></script>
+<script src="preview.js?v=50"></script>
+<script src="manual.js?v=50"></script>
+<script src="app.js?v=50"></script>
+<script src="vendor/mermaid.min.js?v=50"></script>
+<script src="vendor/marked.umd.js?v=50"></script>
 <script>
   if (window.mermaid) {
     window.mermaidLib = window.mermaid;

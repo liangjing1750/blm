@@ -164,6 +164,37 @@ class MigrateDocumentTests(unittest.TestCase):
         canonical = canonical_document(document)
         self.assertEqual(canonical["processes"][0]["stageUid"], "s1")
 
+    def test_merge_does_not_duplicate_business_rules(self):
+        """协作合并不应导致businessRules重复累积（回归：CMC文档131076条规则中仅8条唯一）"""
+        from blm_core.merge import analyze_merge
+        rules = [
+            {"uid": "r1", "id": "r1", "name": "A", "content": "X"},
+            {"uid": "r2", "id": "r2", "name": "B", "content": "Y"},
+        ]
+        def make_doc(rs):
+            return canonical_document({
+                "meta": {"title": "Test"},
+                "roles": [], "stages": [], "stageFlowRefs": [], "stageFlowLinks": [],
+                "entities": [], "businessComponents": [], "businessConstructs": [], "taskDefinitions": [],
+                "processes": [{"uid": "p1", "name": "P", "nodes": [{
+                    "uid": "n1", "name": "N",
+                    "businessRules": rs,
+                    "userSteps": [], "orchestrationTasks": [], "forms": [],
+                }], "prototypeFiles": [], "flow": {"nodes": [], "edges": []}}],
+            })
+
+        base = make_doc(rules)
+        # 模拟10次提交，每次规则内容略有不同
+        for i in range(10):
+            modified = [{"uid": "r1", "id": "r1", "name": "A", "content": f"X-v{i}"},
+                        {"uid": "r2", "id": "r2", "name": "B", "content": f"Y-v{i}"}]
+            user = make_doc(modified)
+            result = analyze_merge("combine", left_document=base, right_document=user)
+            base = canonical_document(result["merged_document"])
+        final_rules = base["processes"][0]["nodes"][0]["businessRules"]
+        self.assertEqual(len(final_rules), 2,
+                         f"businessRules不应该重复，期望2条，实际{len(final_rules)}条")
+
     def test_canonical_document_normalizes_task_parameters(self):
         document = {
             "meta": {"title": "Task Params"},

@@ -1018,7 +1018,7 @@ function renderTaskParameterRows(kind, rows) {
     const cls = isChild ? 'task-param-row task-param-child-row' : 'task-param-row';
 
     const rowHtml = `<div class="${cls}" data-testid="task-parameter-row">
-      <input type="text" value="${esc(row.name || '')}" placeholder="参数名称"
+      <input type="text" value="${esc(row.name || '')}" placeholder="中文名称"
         oninput="${setterFn}(${setterArgs},'name',this.value)">
       <select onchange="${setterFn}(${setterArgs},'type',this.value)">
         <option value="" ${!row.type ? 'selected' : ''}>类型</option>
@@ -1026,10 +1026,10 @@ function renderTaskParameterRows(kind, rows) {
       </select>
       <label class="task-param-required"><input type="checkbox" ${row.required ? 'checked' : ''}
         onchange="${setterFn}(${setterArgs},'required',this.checked)"> 必填</label>
-      <textarea class="auto-resize" rows="1" placeholder="说明"
+      <textarea class="auto-resize" rows="1" placeholder="英文名称"
         oninput="${setterFn}(${setterArgs},'description',this.value);autoResize(this)"
         >${esc(row.description || '')}</textarea>
-      <textarea class="auto-resize" rows="1" placeholder="示例"
+      <textarea class="auto-resize" rows="1" placeholder="说明/示例"
         oninput="${setterFn}(${setterArgs},'example',this.value);autoResize(this)"
         >${esc(row.example || '')}</textarea>
       <button class="stage-quick-btn danger" type="button" title="删除" onclick="${removeFn}">×</button>
