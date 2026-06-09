@@ -311,6 +311,11 @@ async function maybePromptLocalCollabDraftRecovery(docName = S.currentFile) {
     );
     if (!confirmed) {
       await clearLocalCollabDraft(docName);
+      S.collab.promptingLocalDraft = false;
+      setLocalDraftState(false);
+      // 丢弃草稿后强制从服务端拉取最新文档
+      S.collab.forceSnapshotSync = true;
+      queueCollabSnapshotSync();
       return;
     }
     if (confirmed && S.currentFile === docName) {
