@@ -6740,16 +6740,12 @@ function renderOrchestrationSection(proc, task) {
           <option value="">全部业务构件</option>
           ${constructOptions.map(([id, name]) => `<option value="${esc(id)}" ${activeConstructId === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}
         </select>
-        <input type="search" data-testid="orchestration-reuse-search" aria-label="搜索任务定义"
-          value="${esc(reuseFilter.query)}" placeholder="搜索任务名称 / 服务 / 备注"
-          oninput="setOrchestrationReuseFilter('${esc(proc.id)}','${esc(task.id)}','query',this.value)" ${allReusableTasks.length ? '' : 'disabled'}>
         <select id="${esc(reuseSelectId)}" data-testid="orchestration-reuse-select" aria-label="选择任务定义" ${reuseDisabled ? 'disabled' : ''}>
           <option value="">选择任务...</option>
           ${visibleReusableTasks.map((item) => `<option value="${esc(item.key)}">${esc(item.label)}</option>`).join('')}
         </select>
         <button class="btn btn-outline btn-sm" type="button" data-testid="orchestration-reuse-button" ${reuseDisabled ? 'disabled' : ''}
           onclick="reuseOrchestrationTask('${esc(proc.id)}','${esc(task.id)}',document.getElementById('${esc(reuseSelectId)}').value)">加入节点</button>
-        ${reusableTasks.length > visibleReusableTasks.length ? `<span class="orch-reuse-more">还有 ${reusableTasks.length - visibleReusableTasks.length} 项，继续搜索缩小范围</span>` : ''}
       </div>
     </div>
     <div class="orch-compose-head" data-testid="orchestration-compose-head">
