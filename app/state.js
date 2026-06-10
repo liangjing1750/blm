@@ -165,6 +165,7 @@ const S = {
   },
   ui: {
     tab: 'domain',
+    domainTab: 'home',
     procId: null, taskId: null,
     stageId: null,
     stageViewMode: 'panorama',

@@ -1903,7 +1903,7 @@ function renderSubDomainMapCard(selectedDomainId = 'all', selectedDomainLabel = 
   return `<div class="domain-info-map-block" data-testid="domain-subdomain-map-card">
     <div class="domain-info-map-head">
       <div class="domain-info-scope-title">
-        <strong>业务域信息</strong>
+        <h3>业务能力组件</h3>
         <span data-testid="domain-info-scope-label">当前业务域：${esc(selectedDomainLabel)}</span>
         <span data-testid="business-model-summary">组件 ${items.length} · 构件 ${totalConstructs} · 任务定义 ${totalTasks}</span>
       </div>
@@ -2576,19 +2576,30 @@ function renderRoleSummaryCard(roles = getRoles(), selectedDomainId = 'all') {
   return h;
 }
 
+function switchDomainTab(tabId) {
+  S.ui.domainTab = tabId;
+  renderDomainTab();
+}
+
 function renderDomainTab(options = {}) {
   ensureProcPos(S.doc);
   const meta = S.doc.meta || {};
   const domainInfoContext = getSelectedDomainInfoContext();
   const selectedDomainId = domainInfoContext.id;
-  const filteredRoles = getRolesForDomainInfo(selectedDomainId);
-  const languageEntries = getLanguageEntriesForDomainInfo(selectedDomainId);
-  const langCollapsed = S.ui.sbCollapse.lang !== false;
+  const activeDomainTab = S.ui.domainTab || 'home';
 
-  const languageActions = `<span class="domain-panel-toggle">${langCollapsed ? '展开' : '折叠'}</span>`;
-  const languageSubtitle = languageEntries.length
-    ? `当前范围显示 ${languageEntries.length} 条术语，用于统一命名和口径。`
-    : '用于固定高频核心名词，避免不同流程叫法不一致。';
+  // ── 子 tab 导航 ──
+  const subTabs = [
+    { id: 'home', label: '首页' },
+    { id: 'terms', label: '术语管理' },
+    { id: 'dict', label: '字典管理' },
+  ];
+  const subTabBar = `<div class="view-toggle-group" style="margin-bottom:16px" data-testid="domain-subtab-bar">
+    ${subTabs.map((t) => `<button class="vtb ${activeDomainTab === t.id ? 'active' : ''}"
+      data-testid="domain-subtab-${t.id}" onclick="switchDomainTab('${t.id}')">${t.label}</button>`).join('')}
+  </div>`;
+
+  // ── 文档信息（首页） ──
   const domainInfoActions = `
     <div class="domain-info-inline" data-testid="domain-info-inline">
       <label class="domain-info-inline-field">
@@ -2613,63 +2624,76 @@ function renderDomainTab(options = {}) {
       </label>
     </div>
   `;
-
-  let h = '<div class="domain-scroll" data-testid="domain-scroll">';
-
-  h += `<div class="ctx-card domain-panel domain-info-card">
-    ${renderDomainPanelHeader('文档信息', '', domainInfoActions)}
-    <div class="domain-panel-body domain-info-card-body">
-      ${renderSubDomainMapCard(selectedDomainId, domainInfoContext.label)}
+  const homeContent = `
+    <div class="ctx-card domain-panel domain-info-card">
+      ${renderDomainPanelHeader('文档信息', '', domainInfoActions)}
+      <div class="domain-panel-body domain-info-card-body">
+        ${renderSubDomainMapCard(selectedDomainId, domainInfoContext.label)}
+      </div>
     </div>
-  </div>`;
+    ${renderRoleSummaryCard(getRolesForDomainInfo(selectedDomainId), selectedDomainId)}
+  `;
 
-  h += renderRoleSummaryCard(filteredRoles, selectedDomainId);
-
-  h += `<div class="ctx-card domain-panel domain-language-card" data-testid="language-card">
-    ${renderDomainPanelHeader(
-      '统一语言/术语表',
-      languageSubtitle,
-      languageActions,
-      {
-        button: true,
-        onclick: "toggleDomainSection('lang')",
-        dataTestId: 'language-toggle',
-        dataPanel: 'language',
-        ariaExpanded: !langCollapsed,
-      }
-    )}`;
-
-  if (!langCollapsed) {
-    h += `<div class="domain-panel-body domain-language-body">
-      <div class="domain-language-toolbar">
-        <span class="domain-language-hint">建议只保留高频且容易混用的术语，不用追求把所有名词都填满。</span>
-        <button class="btn btn-outline btn-sm" onclick="addTerm()">添加术语</button>
-      </div>`;
+  // ── 术语管理 ──
+  const languageEntries = getLanguageEntriesForDomainInfo(selectedDomainId);
+  const langCollapsed = S.ui.sbCollapse.lang === true;
+  const languageBody = (() => {
+    if (langCollapsed) return '';
+    let body = `<div class="domain-language-toolbar">
+      <span class="domain-language-hint">建议只保留高频且容易混用的术语，不用追求把所有名词都填满。</span>
+      <button class="btn btn-outline btn-sm" onclick="addTerm()">添加术语</button>
+    </div>`;
     if (languageEntries.length) {
-      h += `<table class="term-table">
+      body += `<table class="term-table">
         <thead><tr><th>术语</th><th>定义</th><th></th></tr></thead><tbody>`;
       languageEntries.forEach(({ term, index }) => {
-        h += `<tr data-testid="term-row">
+        body += `<tr data-testid="term-row">
           <td><input type="text" data-testid="term-input" value="${esc(term.term || '')}" oninput="setTerm(${index},'term',this.value)" placeholder="术语"></td>
           <td><input type="text" data-testid="term-definition-input" value="${esc(term.definition || '')}" oninput="setTerm(${index},'definition',this.value)" placeholder="定义"></td>
-          <td>
-            <div class="term-quick-actions">
-              <button class="stage-quick-btn" type="button" data-testid="term-row-add" title="在下方新增术语" onclick="addTermAfter(${index})">+</button>
-              <button class="stage-quick-btn" type="button" data-testid="term-row-move-up" title="上移" onclick="moveTerm(${index},-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
-              <button class="stage-quick-btn" type="button" data-testid="term-row-move-down" title="下移" onclick="moveTerm(${index},1)" ${index === (S.doc.language || []).length - 1 ? 'disabled' : ''}>↓</button>
-              <button class="stage-quick-btn danger" type="button" data-testid="term-row-remove" title="删除术语" onclick="removeTerm(${index})">✕</button>
-            </div>
-          </td>
+          <td><div class="term-quick-actions">
+            <button class="stage-quick-btn" type="button" data-testid="term-row-add" title="在下方新增术语" onclick="addTermAfter(${index})">+</button>
+            <button class="stage-quick-btn" type="button" data-testid="term-row-move-up" title="上移" onclick="moveTerm(${index},-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button class="stage-quick-btn" type="button" data-testid="term-row-move-down" title="下移" onclick="moveTerm(${index},1)" ${index === (S.doc.language || []).length - 1 ? 'disabled' : ''}>↓</button>
+            <button class="stage-quick-btn danger" type="button" data-testid="term-row-remove" title="删除术语" onclick="removeTerm(${index})">✕</button>
+          </div></td>
         </tr>`;
       });
-      h += '</tbody></table>';
+      body += '</tbody></table>';
     } else {
-      h += '<p class="no-refs domain-panel-empty">暂无术语定义。有容易混用的关键名词时再补充即可。</p>';
+      body += '<p class="no-refs domain-panel-empty">暂无术语定义。有容易混用的关键名词时再补充即可。</p>';
     }
-    h += '</div>';
+    return body;
+  })();
+  const termsContent = `
+    <div class="ctx-card domain-panel domain-language-card" data-testid="language-card">
+      ${renderDomainPanelHeader('统一语言/术语表', languageEntries.length ? `当前范围显示 ${languageEntries.length} 条术语，用于统一命名和口径。` : '用于固定高频核心名词，避免不同流程叫法不一致。', `<span class="domain-panel-toggle">${langCollapsed ? '展开' : '折叠'}</span>`, {
+        button: true, onclick: "toggleDomainSection('lang')",
+        dataTestId: 'language-toggle', dataPanel: 'language', ariaExpanded: !langCollapsed,
+      })}
+      ${languageBody ? `<div class="domain-panel-body domain-language-body">${languageBody}</div>` : ''}
+    </div>
+  `;
+
+  // ── 字典管理（占位） ──
+  const dictContent = `
+    <div class="ctx-card domain-panel">
+      ${renderDomainPanelHeader('字典管理', '字典管理功能正在开发中...')}
+      <div class="domain-panel-body">
+        <p class="no-refs domain-panel-empty">字典管理功能即将上线。</p>
+      </div>
+    </div>
+  `;
+
+  let h = `<div class="domain-scroll" data-testid="domain-scroll">${subTabBar}`;
+
+  if (activeDomainTab === 'home') {
+    h += homeContent;
+  } else if (activeDomainTab === 'terms') {
+    h += termsContent;
+  } else if (activeDomainTab === 'dict') {
+    h += dictContent;
   }
 
-  h += '</div>';
   h += '</div>';
   h += renderBusinessModelDialog();
 
