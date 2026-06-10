@@ -410,10 +410,10 @@ class WorkspaceStorage(DocumentFileStore):
         return entries
 
     def restore_trash(self, entry_id: str) -> tuple[str, dict]:
-        with self._shared_write_lock:
-            safe_entry_id = self._sanitize_workspace_entry(entry_id)
+        safe_entry_id = self._sanitize_workspace_entry(entry_id)
+        original_name, _ = self._parse_trash_entry_name(safe_entry_id)
+        with self._get_write_lock(self._validate_name(original_name)):
             entry_path = self.trash_dir / safe_entry_id
-            original_name, _ = self._parse_trash_entry_name(safe_entry_id)
             if entry_path.is_dir() and self._is_package_dir(entry_path):
                 document = self._load_package_dir(entry_path)
                 restored_document = self.save(original_name, document)
@@ -704,9 +704,10 @@ class WorkspaceStorage(DocumentFileStore):
         overwrite: bool = False,
         save_message: str = "",
     ) -> tuple[str, dict]:
-        with self._shared_write_lock:
-            old_safe_name = self._validate_name(old_name)
-            new_safe_name = self._validate_name(new_name)
+        old_safe_name = self._validate_name(old_name)
+        new_safe_name = self._validate_name(new_name)
+        # 同时获取新旧两个文档的锁，避免跟save并发绕过
+        with self._get_write_lock(old_safe_name), self._get_write_lock(new_safe_name):
             if old_safe_name == new_safe_name:
                 return new_safe_name, self.save(new_safe_name, document, save_message=save_message)
             if self._workspace_document_exists(new_safe_name) and not overwrite:
@@ -720,9 +721,9 @@ class WorkspaceStorage(DocumentFileStore):
             return new_safe_name, saved_document
 
     def copy_document(self, source_name: str, target_name: str) -> dict:
-        with self._shared_write_lock:
-            source_safe_name = self._validate_name(source_name)
-            target_safe_name = self._validate_name(target_name)
+        source_safe_name = self._validate_name(source_name)
+        target_safe_name = self._validate_name(target_name)
+        with self._get_write_lock(source_safe_name), self._get_write_lock(target_safe_name):
             if self._workspace_document_exists(target_safe_name):
                 raise FileExistsError(target_safe_name)
             if not self._workspace_document_exists(source_safe_name):
@@ -767,8 +768,9 @@ class WorkspaceStorage(DocumentFileStore):
             return self._save_workspace_document(safe_name, create_empty_document(safe_name))
 
     def delete(self, name: str) -> None:
-        with self._shared_write_lock:
-            self._move_workspace_document_to_trash(self._validate_name(name), self._timestamp())
+        safe_name = self._validate_name(name)
+        with self._get_write_lock(safe_name):
+            self._move_workspace_document_to_trash(safe_name, self._timestamp())
 
     def export_markdown(self, name: str) -> str:
         return self.exporter.export(self.load(name))

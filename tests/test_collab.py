@@ -1489,6 +1489,56 @@ class CollaborationLockGranularityTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_save_and_rename_on_same_document_are_mutually_exclusive(self):
+        """save 和 rename 操作同一文档时应互斥——两者必须使用同一把锁"""
+        import time
+        temp_dir = self._temp_workspace()
+        try:
+            storage = WorkspaceStorage(temp_dir)
+            doc = create_empty_document("DocA")
+            storage.create("DocA")
+            # 也创建一个 DocB 用于 rename 目标
+            storage.create("DocB")
+
+            save_started = threading.Event()
+            rename_completed_too_fast = threading.Event()
+            errors = []
+
+            def save_thread():
+                safe_name = storage._validate_name("DocA")
+                lock = storage._get_write_lock(safe_name)
+                with lock:
+                    save_started.set()
+                    time.sleep(2)  # 模拟长时间保存
+
+            def rename_thread():
+                save_started.wait(2)
+                start = time.monotonic()
+                try:
+                    # rename 需要同时获取 old_name 和 new_name 的锁
+                    # 如果 DocA 的锁被 save 持有，rename 应该阻塞
+                    storage.rename("DocA", "DocB_renamed", doc, overwrite=True)
+                except Exception as e:
+                    errors.append(f"rename 异常: {e}")
+                elapsed = time.monotonic() - start
+                # rename 如果绕过了锁，会在 < 1 秒内完成
+                if elapsed < 1.0:
+                    rename_completed_too_fast.set()
+                    errors.append(
+                        f"rename 在 {elapsed:.2f}s 内完成——绕过了 save 持有的 DocA 锁！"
+                    )
+
+            t1 = threading.Thread(target=save_thread)
+            t2 = threading.Thread(target=rename_thread)
+            t1.start()
+            t2.start()
+            t1.join(timeout=5)
+            t2.join(timeout=5)
+
+            self.assertFalse(errors, f"锁粒度不一致: {'; '.join(errors)}")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     @staticmethod
     def _temp_workspace():
         import tempfile
