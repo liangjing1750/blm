@@ -299,11 +299,13 @@ function render() {
   if(!S.doc){renderNoDoc();}
   else {
   renderSidebar();
-  const t=S.ui.tab;
-  if     (t==='domain') renderDomainTab();
-  else if(t==='process') renderProcessTab();
-  else if(t==='data')   renderDataTab();
-  else if(t==='preview') renderPreviewTab();
+  const t = S.ui.mainTab || 'businessArch';
+  if      (t === 'businessArch') renderBusinessArchitectureTab();
+  else if (t === 'bizDomain')    renderBizDomainTab();
+  else if (t === 'bizComponent') renderBizComponentTab();
+  else if (t === 'appArch')      renderAppArchTab();
+  else if (t === 'preview')      renderPreviewTab();
+  else                           renderDomainTab();
   } // end if(S.doc) else block
   /* 渲染完成后初始化所有 auto-resize textarea 高度 */
   setTimeout(initAutoResize, 0);
@@ -1483,20 +1485,29 @@ function renderSidebar() {
 /* ═══════════════════════════════════════════════════════════
    RENDER — Tab Bar
 ═══════════════════════════════════════════════════════════ */
+function switchMainTab(mainTabId) {
+  S.ui.mainTab = mainTabId;
+  // 向后兼容: 同步旧 tab 值
+  const legacyMap = { businessArch: 'domain', bizDomain: 'process', bizComponent: 'data', appArch: 'domain', preview: 'preview' };
+  S.ui.tab = legacyMap[mainTabId] || mainTabId;
+  if (typeof render === 'function') render();
+}
+
 function renderTabBar() {
-  const tabs=[
-    {id:'domain', label:'业务域'},
-    {id:'process',label:'流程'},
-    {id:'data',   label:'数据'},
-    {id:'preview',label:'预览'},
+  const tabs = [
+    { id: 'businessArch', label: '业务架构' },
+    { id: 'bizDomain',    label: '业务域' },
+    { id: 'bizComponent', label: '业务组件' },
+    { id: 'appArch',      label: '应用架构' },
+    { id: 'preview',      label: '预览导出' },
   ];
+  const activeTab = S.ui.mainTab || 'businessArch';
   const canGoBack = canGoBackNavigation();
   const backTitle = esc(getBackNavigationTitle());
-  const tabHtml = tabs.map(t=>{
-    const onclick = t.id === 'process' ? 'openProcessHome()' : `navigate('${t.id}',{})`;
+  const tabHtml = tabs.map(t => {
     const disabled = S.isPreviewRendering ? 'disabled' : '';
-    return `<button class="tab-btn ${S.ui.tab===t.id?'active':''}" data-testid="tab-${t.id}"
-      onclick="${onclick}" ${disabled}>${t.label}</button>`;
+    return `<button class="tab-btn ${activeTab === t.id ? 'active' : ''}" data-testid="tab-${t.id}"
+      onclick="switchMainTab('${t.id}')" ${disabled}>${t.label}</button>`;
   }).join('');
   document.getElementById('tab-bar').innerHTML = `
     <div class="tab-btn-group">${tabHtml}</div>
@@ -1556,4 +1567,19 @@ function startDrawerResize(e) {
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
+}
+
+/* ── 新 Tab 渲染入口 ── */
+function renderBusinessArchitectureTab() {
+  if (typeof renderDomainTab === 'function') renderDomainTab();
+}
+function renderBizDomainTab() {
+  if (typeof renderProcessTab === 'function') renderProcessTab();
+}
+function renderBizComponentTab() {
+  if (typeof renderDataTab === 'function') renderDataTab();
+}
+function renderAppArchTab() {
+  var h = '<div class="domain-scroll" data-testid="domain-scroll"><div class="ctx-card domain-panel"><h3>应用架构</h3><p class="no-refs domain-panel-empty">服务接口目录、服务编排、技术承接功能即将上线。</p></div></div>';
+  document.getElementById('tab-content').innerHTML = h;
 }

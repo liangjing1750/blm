@@ -165,7 +165,11 @@ const S = {
   },
   ui: {
     tab: 'domain',
+    mainTab: 'businessArch',
     domainTab: 'home',
+    bizDomainTab: 'stage',
+    bizComponentTab: 'construct',
+    appArchTab: 'orchestration',
     procId: null, taskId: null,
     stageId: null,
     stageViewMode: 'panorama',
