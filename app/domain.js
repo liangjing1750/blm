@@ -28,8 +28,9 @@ function setMeta(key, val) {
 
 function rerenderDomainTabPreserveScroll() {
   const scroller = document.querySelector('.domain-scroll');
-  renderDomainTab({ scrollTop: scroller ? scroller.scrollTop : 0 });
+  renderBusinessArchitectureTab({ scrollTop: scroller ? scroller.scrollTop : 0 });
 }
+function renderDomainTab(options) { renderBusinessArchitectureTab(options); }
 
 function rerenderBusinessModelDialogContext() {
   if (S.ui.tab === 'process' && typeof rerenderProcessEditor === 'function') {
@@ -2578,121 +2579,106 @@ function renderRoleSummaryCard(roles = getRoles(), selectedDomainId = 'all') {
 
 function switchDomainTab(tabId) {
   S.ui.domainTab = tabId;
-  renderDomainTab();
+  renderBusinessArchitectureTab();
 }
 
-function renderDomainTab(options = {}) {
+function renderBusinessArchitectureTab(options = {}) {
   ensureProcPos(S.doc);
   const meta = S.doc.meta || {};
   const domainInfoContext = getSelectedDomainInfoContext();
   const selectedDomainId = domainInfoContext.id;
-  const activeDomainTab = S.ui.domainTab || 'home';
+  const activeDomainTab = S.ui.domainTab || 'panorama';
 
   // ── 子 tab 导航 ──
   const subTabs = [
-    { id: 'home', label: '首页' },
-    { id: 'terms', label: '术语管理' },
-    { id: 'dict', label: '字典管理' },
+    { id: 'panorama', label: '全景视图' },
+    { id: 'roles', label: '角色管理' },
+    { id: 'language', label: '统一语言' },
+    { id: 'rules', label: '规则条目' },
   ];
   const subTabBar = `<div class="view-toggle-group" style="margin-bottom:16px" data-testid="domain-subtab-bar">
     ${subTabs.map((t) => `<button class="vtb ${activeDomainTab === t.id ? 'active' : ''}"
       data-testid="domain-subtab-${t.id}" onclick="switchDomainTab('${t.id}')">${t.label}</button>`).join('')}
   </div>`;
 
-  // ── 文档信息（首页） ──
+  // ── 全景视图 ──
   const domainInfoActions = `
     <div class="domain-info-inline" data-testid="domain-info-inline">
-      <label class="domain-info-inline-field">
-        <span>文档名称 <span class="inline-help inline-help-left" tabindex="0" data-tip="这里填写这份建模文档的名称。">?</span></span>
-        <input type="text" value="${esc(meta.domain || meta.title || '')}" oninput="setDomain(this.value)">
-      </label>
-      <label class="domain-info-inline-field domain-info-author-field">
-        <span>作者</span>
-        <input type="text" data-testid="domain-author-input" value="${esc(meta.author || '')}" oninput="setMeta('author',this.value)">
-      </label>
-      <label class="domain-info-inline-field domain-info-date-field">
-        <span>日期</span>
-        <input type="text" data-testid="domain-date-input" value="${esc(meta.date || '')}" oninput="setMeta('date',this.value)">
-      </label>
-      <label class="domain-info-inline-field domain-info-space-field">
-        <span>团队空间</span>
-        <input type="text" data-testid="domain-space-input" value="${esc(meta.space || meta.teamSpace || '')}" placeholder="如：交割业务" oninput="setMeta('space',this.value)">
-      </label>
-      <label class="domain-info-inline-field domain-info-tags-field">
-        <span>标签</span>
-        <input type="text" data-testid="domain-tags-input" value="${esc(Array.isArray(meta.tags) ? meta.tags.join('，') : (meta.tags || ''))}" placeholder="逗号分隔" oninput="setMeta('tags',this.value)">
-      </label>
+      <label class="domain-info-inline-field"><span>文档名称</span><input type="text" value="${esc(meta.domain || meta.title || '')}" oninput="setDomain(this.value)"></label>
+      <label class="domain-info-inline-field"><span>作者</span><input type="text" data-testid="domain-author-input" value="${esc(meta.author || '')}" oninput="setMeta('author',this.value)"></label>
+      <label class="domain-info-inline-field"><span>日期</span><input type="text" data-testid="domain-date-input" value="${esc(meta.date || '')}" oninput="setMeta('date',this.value)"></label>
+      <label class="domain-info-inline-field"><span>团队空间</span><input type="text" data-testid="domain-space-input" value="${esc(meta.space || meta.teamSpace || '')}" placeholder="如：交割业务" oninput="setMeta('space',this.value)"></label>
+      <label class="domain-info-inline-field"><span>标签</span><input type="text" data-testid="domain-tags-input" value="${esc(Array.isArray(meta.tags) ? meta.tags.join('，') : (meta.tags || ''))}" placeholder="逗号分隔" oninput="setMeta('tags',this.value)"></label>
     </div>
   `;
-  const homeContent = `
+  const panoramaContent = `
+    <div class="ctx-card domain-panel">
+      ${renderDomainPanelHeader('战略设计', '愿景、使命、价值观等顶层设计内容即将支持编辑。')}
+      <div class="domain-panel-body"><p class="no-refs domain-panel-empty">战略设计功能即将上线。</p></div>
+    </div>
     <div class="ctx-card domain-panel domain-info-card">
       ${renderDomainPanelHeader('文档信息', '', domainInfoActions)}
       <div class="domain-panel-body domain-info-card-body">
         ${renderSubDomainMapCard(selectedDomainId, domainInfoContext.label)}
       </div>
     </div>
-    ${renderRoleSummaryCard(getRolesForDomainInfo(selectedDomainId), selectedDomainId)}
   `;
 
-  // ── 术语管理 ──
+  // ── 角色管理 ──
+  const rolesContent = renderRoleSummaryCard(getRolesForDomainInfo(selectedDomainId), selectedDomainId);
+
+  // ── 统一语言（术语 + 字典占位） ──
   const languageEntries = getLanguageEntriesForDomainInfo(selectedDomainId);
   const langCollapsed = S.ui.sbCollapse.lang === true;
   const languageBody = (() => {
     if (langCollapsed) return '';
-    let body = `<div class="domain-language-toolbar">
-      <span class="domain-language-hint">建议只保留高频且容易混用的术语，不用追求把所有名词都填满。</span>
-      <button class="btn btn-outline btn-sm" onclick="addTerm()">添加术语</button>
-    </div>`;
+    let body = `<div class="domain-language-toolbar"><span class="domain-language-hint">建议只保留高频且容易混用的术语，不用追求把所有名词都填满。</span><button class="btn btn-outline btn-sm" onclick="addTerm()">添加术语</button></div>`;
     if (languageEntries.length) {
-      body += `<table class="term-table">
-        <thead><tr><th>术语</th><th>定义</th><th></th></tr></thead><tbody>`;
+      body += `<table class="term-table"><thead><tr><th>术语</th><th>定义</th><th></th></tr></thead><tbody>`;
       languageEntries.forEach(({ term, index }) => {
-        body += `<tr data-testid="term-row">
-          <td><input type="text" data-testid="term-input" value="${esc(term.term || '')}" oninput="setTerm(${index},'term',this.value)" placeholder="术语"></td>
-          <td><input type="text" data-testid="term-definition-input" value="${esc(term.definition || '')}" oninput="setTerm(${index},'definition',this.value)" placeholder="定义"></td>
-          <td><div class="term-quick-actions">
-            <button class="stage-quick-btn" type="button" data-testid="term-row-add" title="在下方新增术语" onclick="addTermAfter(${index})">+</button>
-            <button class="stage-quick-btn" type="button" data-testid="term-row-move-up" title="上移" onclick="moveTerm(${index},-1)" ${index === 0 ? 'disabled' : ''}>↑</button>
-            <button class="stage-quick-btn" type="button" data-testid="term-row-move-down" title="下移" onclick="moveTerm(${index},1)" ${index === (S.doc.language || []).length - 1 ? 'disabled' : ''}>↓</button>
-            <button class="stage-quick-btn danger" type="button" data-testid="term-row-remove" title="删除术语" onclick="removeTerm(${index})">✕</button>
-          </div></td>
-        </tr>`;
+        body += `<tr data-testid="term-row"><td><input type="text" data-testid="term-input" value="${esc(term.term || '')}" oninput="setTerm(${index},'term',this.value)" placeholder="术语"></td><td><input type="text" data-testid="term-definition-input" value="${esc(term.definition || '')}" oninput="setTerm(${index},'definition',this.value)" placeholder="定义"></td><td><div class="term-quick-actions"><button class="stage-quick-btn" type="button" title="在下方新增术语" onclick="addTermAfter(${index})">+</button><button class="stage-quick-btn" type="button" title="上移" onclick="moveTerm(${index},-1)" ${index === 0 ? 'disabled' : ''}>↑</button><button class="stage-quick-btn" type="button" title="下移" onclick="moveTerm(${index},1)" ${index === (S.doc.language || []).length - 1 ? 'disabled' : ''}>↓</button><button class="stage-quick-btn danger" type="button" title="删除术语" onclick="removeTerm(${index})">✕</button></div></td></tr>`;
       });
       body += '</tbody></table>';
-    } else {
-      body += '<p class="no-refs domain-panel-empty">暂无术语定义。有容易混用的关键名词时再补充即可。</p>';
-    }
+    } else { body += '<p class="no-refs domain-panel-empty">暂无术语定义。</p>'; }
     return body;
   })();
-  const termsContent = `
+  const languageContent = `
     <div class="ctx-card domain-panel domain-language-card" data-testid="language-card">
-      ${renderDomainPanelHeader('统一语言/术语表', languageEntries.length ? `当前范围显示 ${languageEntries.length} 条术语，用于统一命名和口径。` : '用于固定高频核心名词，避免不同流程叫法不一致。', `<span class="domain-panel-toggle">${langCollapsed ? '展开' : '折叠'}</span>`, {
-        button: true, onclick: "toggleDomainSection('lang')",
-        dataTestId: 'language-toggle', dataPanel: 'language', ariaExpanded: !langCollapsed,
-      })}
+      ${renderDomainPanelHeader('术语表', languageEntries.length ? `${languageEntries.length} 条术语` : '统一命名和口径', `<span class="domain-panel-toggle">${langCollapsed ? '展开' : '折叠'}</span>`, {button:true, onclick:"toggleDomainSection('lang')", dataTestId:'language-toggle', dataPanel:'language', ariaExpanded:!langCollapsed})}
       ${languageBody ? `<div class="domain-panel-body domain-language-body">${languageBody}</div>` : ''}
+    </div>
+    <div class="ctx-card domain-panel">
+      ${renderDomainPanelHeader('字典管理', '字典管理功能正在开发中...')}
+      <div class="domain-panel-body"><p class="no-refs domain-panel-empty">字典管理功能即将上线。</p></div>
     </div>
   `;
 
-  // ── 字典管理（占位） ──
-  const dictContent = `
+  // ── 规则条目（全量汇总） ──
+  const allRules = [];
+  (S.doc.processes || []).forEach((proc) => {
+    (proc.nodes || []).forEach((node) => {
+      (node.businessRules || []).forEach((rule) => {
+        allRules.push({ procName: proc.name || '?', nodeName: node.name || '?', rule });
+      });
+    });
+  });
+  const rulesContent = `
     <div class="ctx-card domain-panel">
-      ${renderDomainPanelHeader('字典管理', '字典管理功能正在开发中...')}
+      ${renderDomainPanelHeader('规则条目', allRules.length ? `全量汇总 ${allRules.length} 条业务规则` : '暂无业务规则')}
       <div class="domain-panel-body">
-        <p class="no-refs domain-panel-empty">字典管理功能即将上线。</p>
+        ${allRules.length ? `<table class="term-table"><thead><tr><th>流程</th><th>节点</th><th>规则名称</th><th>规则内容</th></tr></thead><tbody>
+          ${allRules.map(({procName, nodeName, rule}) => `<tr><td>${esc(procName)}</td><td>${esc(nodeName)}</td><td>${esc(rule.name || '')}</td><td>${esc(String(rule.content || '').substring(0, 100))}</td></tr>`).join('')}
+        </tbody></table>` : '<p class="no-refs domain-panel-empty">暂无业务规则。</p>'}
       </div>
     </div>
   `;
 
   let h = `<div class="domain-scroll" data-testid="domain-scroll">${subTabBar}`;
 
-  if (activeDomainTab === 'home') {
-    h += homeContent;
-  } else if (activeDomainTab === 'terms') {
-    h += termsContent;
-  } else if (activeDomainTab === 'dict') {
-    h += dictContent;
-  }
+  if (activeDomainTab === 'panorama') { h += panoramaContent; }
+  else if (activeDomainTab === 'roles') { h += rolesContent; }
+  else if (activeDomainTab === 'language') { h += languageContent; }
+  else if (activeDomainTab === 'rules') { h += rulesContent; }
 
   h += '</div>';
   h += renderBusinessModelDialog();
@@ -2707,4 +2693,69 @@ function renderDomainTab(options = {}) {
       scroller.scrollTop = Math.min(options.scrollTop, maxScrollTop);
     });
   }
+}
+
+function switchAppArchTab(tabId) {
+  S.ui.appArchTab = tabId;
+  renderAppArchitectureTab();
+}
+
+function renderAppArchitectureTab() {
+  var activeTab = S.ui.appArchTab || 'orchestration';
+  var subTabs = [
+    { id: 'serviceCatalog', label: '服务接口目录' },
+    { id: 'orchestration', label: '服务编排' },
+    { id: 'techImpl', label: '技术承接' },
+  ];
+  var subTabBar = '<div class="view-toggle-group" style="margin-bottom:16px">' +
+    subTabs.map(function(t) {
+      return '<button class="vtb ' + (activeTab === t.id ? 'active' : '') + '" onclick="switchAppArchTab(\'' + t.id + '\')">' + t.label + '</button>';
+    }).join('') + '</div>';
+
+  var h = '<div class="domain-scroll" data-testid="domain-scroll">' + subTabBar;
+
+  if (activeTab === 'serviceCatalog') {
+    h += '<div class="ctx-card domain-panel"><h3>服务接口目录</h3><div class="domain-panel-body"><p class="no-refs domain-panel-empty">服务接口目录功能即将上线，用于展示界面↔接口→服务的映射关系。</p></div></div>';
+  } else if (activeTab === 'orchestration') {
+    // 服务编排: orchestrationTasks 全量平铺
+    var orchItems = [];
+    (S.doc.processes || []).forEach(function(proc) {
+      (proc.nodes || []).forEach(function(node) {
+        (node.orchestrationTasks || []).forEach(function(task, idx) {
+          orchItems.push({ procName: proc.name || '', nodeName: node.name || '', taskName: task.name || '', taskType: task.type || '', index: idx + 1 });
+        });
+      });
+    });
+    h += '<div class="ctx-card domain-panel"><h3>服务编排</h3><p class="field-hint">全量汇总所有流程节点中的编排任务，共 ' + orchItems.length + ' 条。</p>';
+    if (orchItems.length) {
+      h += '<div class="domain-panel-body"><table class="term-table"><thead><tr><th>流程</th><th>节点</th><th>任务</th><th>类型</th><th>序号</th></tr></thead><tbody>';
+      orchItems.forEach(function(item) {
+        h += '<tr><td>' + esc(item.procName) + '</td><td>' + esc(item.nodeName) + '</td><td>' + esc(item.taskName) + '</td><td>' + esc(item.taskType) + '</td><td>' + item.index + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    } else {
+      h += '<p class="no-refs domain-panel-empty">暂无编排任务。</p>';
+    }
+    h += '</div>';
+  } else if (activeTab === 'techImpl') {
+    // 技术承接: taskDefinitions[].target 汇总
+    var techItems = [];
+    (S.doc.taskDefinitions || []).forEach(function(td) {
+      if (td.target) techItems.push({ name: td.name || '', target: td.target, type: td.type || '' });
+    });
+    h += '<div class="ctx-card domain-panel"><h3>技术承接</h3><p class="field-hint">所有任务定义的技术承接字段汇总，共 ' + techItems.length + ' 条。</p>';
+    if (techItems.length) {
+      h += '<div class="domain-panel-body"><table class="term-table"><thead><tr><th>任务</th><th>类型</th><th>技术承接</th></tr></thead><tbody>';
+      techItems.forEach(function(item) {
+        h += '<tr><td>' + esc(item.name) + '</td><td>' + esc(item.type) + '</td><td>' + esc(item.target) + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    } else {
+      h += '<p class="no-refs domain-panel-empty">暂无技术承接信息。</p>';
+    }
+    h += '</div>';
+  }
+
+  h += '</div>';
+  document.getElementById('tab-content').innerHTML = h;
 }

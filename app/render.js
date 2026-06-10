@@ -1574,12 +1574,13 @@ function renderBusinessArchitectureTab() {
   if (typeof renderDomainTab === 'function') renderDomainTab();
 }
 function renderBizDomainTab() {
+  S.ui.procView = 'stage';
   if (typeof renderProcessTab === 'function') renderProcessTab();
 }
 function renderBizComponentTab() {
+  S.ui.tab = 'data';
   if (typeof renderDataTab === 'function') renderDataTab();
 }
 function renderAppArchTab() {
-  var h = '<div class="domain-scroll" data-testid="domain-scroll"><div class="ctx-card domain-panel"><h3>应用架构</h3><p class="no-refs domain-panel-empty">服务接口目录、服务编排、技术承接功能即将上线。</p></div></div>';
-  document.getElementById('tab-content').innerHTML = h;
+  if (typeof renderAppArchitectureTab === 'function') renderAppArchitectureTab();
 }
