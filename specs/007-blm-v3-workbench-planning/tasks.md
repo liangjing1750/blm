@@ -261,3 +261,20 @@
 - [x] `tools/e2e` Playwright 工具链可用，不迁移到根目录。
 - [x] `npm.cmd run test:e2e -- tests/angular-legacy-port.spec.js`
 - [x] 浏览器级验证旧 toolbar、文件菜单、打开文档后的工作台 tab、legacy 全局对象和 Angular 子路由 fallback。
+
+## T8/T9 Angular 整洁架构地基
+
+确认状态：已开发，待用户验收。
+
+修改范围：
+- [x] 新增 `LegacyBridge`，统一管理 legacy runtime 加载、旧全局对象访问、旧主 tab 切换。
+- [x] `legacy-shell` 改为过渡壳，只调用 bridge，不直接访问 `window.App/window.S`。
+- [x] 新增工作台迁移状态表，记录 `legacy | hybrid | angular`。
+- [x] 新增结构测试约束 Angular 新代码边界。
+- [x] 新增 4 个主工作台 Playwright smoke 场景。
+
+验收标准：
+- [x] `npm.cmd test`
+- [x] `npm.cmd run build`
+- [x] `python -m unittest tests.test_frontend_structure tests.test_project_layout`
+- [x] `cd tools/e2e; npm.cmd run test:e2e -- tests/angular-legacy-port.spec.js`

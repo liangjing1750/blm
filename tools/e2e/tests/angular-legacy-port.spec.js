@@ -86,3 +86,28 @@ test('Angular child routes refresh back into the old shell', async ({ page }) =>
     await expect(page.locator('#tab-content')).toContainText('BLM');
   }
 });
+
+test('main workbench tabs keep a minimal user journey while still in legacy mode', async ({ page, request }) => {
+  const documentName = `workbench-smoke-${Date.now()}`;
+  await createDocument(request, documentName, buildSmokeDocument(documentName));
+
+  await page.goto('/');
+  await page.locator('#dd-file .tbar-dd-btn').click();
+  await page.getByTestId('toolbar-open-button').click();
+  await page.locator('.file-list-item').filter({ hasText: documentName }).first().click();
+  await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
+
+  const workbenches = [
+    { tab: 'tab-panoramaWorkbench', content: '[data-testid="panorama-overview-map"], .panorama-map, #tab-content' },
+    { tab: 'tab-processWorkbench', content: '[data-testid="process-switch-panorama"], #tab-content' },
+    { tab: 'tab-constructWorkbench', content: '[data-testid="entity-state-empty"], .entity-state-graph, #tab-content' },
+    { tab: 'tab-orchestrationWorkbench', content: '[data-testid="orchestration-workbench"], .orchestration-board, #tab-content' },
+  ];
+
+  for (const workbench of workbenches) {
+    await page.getByTestId(workbench.tab).click();
+    await expect(page.getByTestId(workbench.tab)).toHaveClass(/active/);
+    await expect(page.locator(workbench.content).first()).toBeVisible();
+    await expect(page.locator('#tab-content')).not.toHaveText('');
+  }
+});

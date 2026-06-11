@@ -123,6 +123,39 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn('data-testid="toolbar-new-button"', html_text)
         self.assertIn("#toolbar", scss_text)
 
+    def test_legacy_shell_uses_legacy_bridge_as_transition_boundary(self):
+        shell_text = (ANGULAR_APP_DIR / "legacy-shell" / "legacy-shell.component.ts").read_text("utf-8")
+        bridge_file = ANGULAR_APP_DIR / "core" / "legacy" / "legacy-bridge.ts"
+        bridge_text = bridge_file.read_text("utf-8")
+
+        self.assertTrue(bridge_file.exists())
+        self.assertIn("LegacyBridge", shell_text)
+        self.assertIn("legacyBridge.mount()", shell_text)
+        self.assertNotIn("window.App", shell_text)
+        self.assertNotIn("window.S", shell_text)
+        self.assertIn("TRANSITION_SHELL", shell_text)
+        self.assertIn("@Injectable", bridge_text)
+        for method_name in [
+            "mount",
+            "getApp",
+            "getState",
+            "switchMainTab",
+            "openWorkbench",
+        ]:
+            self.assertIn(f"{method_name}(", bridge_text)
+
+    def test_migration_status_table_tracks_workbench_progress(self):
+        status_file = ANGULAR_APP_DIR / "core" / "migration" / "workbench-migration-status.ts"
+        status_text = status_file.read_text("utf-8")
+
+        self.assertTrue(status_file.exists())
+        self.assertIn("WorkbenchMigrationStatus", status_text)
+        self.assertIn("legacy", status_text)
+        self.assertIn("hybrid", status_text)
+        self.assertIn("angular", status_text)
+        for area in ["panorama", "process", "component", "orchestration", "entity", "knowledge", "role"]:
+            self.assertIn(f"id: '{area}'", status_text)
+
     def test_legacy_runtime_assets_are_declared_in_angular_source_order(self):
         manifest_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.manifest.ts"
         bootstrap_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.bootstrap.ts"

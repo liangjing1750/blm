@@ -78,3 +78,10 @@
 - 已新增 `tools/e2e/tests/angular-legacy-port.spec.js`，覆盖 Angular legacy port 的浏览器级冒烟：旧 toolbar、文件菜单、打开文档后的工作台 tab、`window.App/window.S/window.AI`、以及 Angular 子路由刷新回旧 shell。
 - 已新增 `legacy-runtime/bootstrap-init.js`，解决旧 `DOMContentLoaded` 初始化在 Angular 动态加载脚本时被错过的问题，并显式暴露 `window.S`、`window.App`、`window.AI`。
 - 验证已通过：`npm.cmd run test:e2e -- tests/angular-legacy-port.spec.js`、`npm.cmd test`、`npm.cmd run build`、`python -m unittest tests.test_frontend_structure tests.test_project_layout`、后端 3 项定向测试。
+
+### T8/T9 Angular 整洁架构地基
+- 已新增 `LegacyBridge`，由 `legacy-shell` 统一通过桥接服务加载旧运行时、访问旧全局对象和执行 legacy 初始化；`legacy-shell` 本身标记为 `TRANSITION_SHELL`。
+- 已新增工作台迁移状态表，当前 7 个工作台均标记为 `legacy`，作为后续 `hybrid`、`angular` 迁移记录的单一来源。
+- 已补结构守卫：legacy shell 不再直接访问 `window.App/window.S`，新增 Angular 代码不得在 legacy 过渡边界外使用 `innerHTML`、`onclick=`、`document.getElementById`。
+- 已补 Playwright 主工作台 smoke：创建并打开文档后，验证全景、流程、构件、应用编排 4 个主 tab 可激活且内容区域可见。
+- 发现并记录现状：`constructWorkbench` 在 legacy 基线中当前渲染更接近实体设计视图，本轮不修产品行为，只用 smoke 守住可见性和入口不回退。

@@ -1,5 +1,8 @@
 ﻿import { AfterViewInit, Component, OnDestroy, ViewEncapsulation } from '@angular/core';
-import { loadLegacyRuntime, resetLegacyRuntimeForTests } from '../legacy-runtime/legacy-runtime.bootstrap';
+import { LegacyBridge } from '../core/legacy/legacy-bridge';
+import { resetLegacyRuntimeForTests } from '../legacy-runtime/legacy-runtime.bootstrap';
+
+export const TRANSITION_SHELL = 'legacy-shell';
 
 @Component({
   selector: 'app-legacy-shell',
@@ -10,13 +13,13 @@ import { loadLegacyRuntime, resetLegacyRuntimeForTests } from '../legacy-runtime
 export class LegacyShellComponent implements AfterViewInit, OnDestroy {
   private disposed = false;
 
+  constructor(private readonly legacyBridge: LegacyBridge) {}
+
   ngAfterViewInit(): void {
-    void loadLegacyRuntime().then(() => {
+    void this.legacyBridge.mount().then(() => {
       if (this.disposed) {
         return;
       }
-      const legacyApp = (window as unknown as { App?: { init?: () => void } }).App;
-      legacyApp?.init?.();
     });
   }
 
