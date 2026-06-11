@@ -2703,8 +2703,8 @@ function switchAppArchTab(tabId) {
 function renderAppArchitectureTab() {
   var activeTab = S.ui.appArchTab || 'orchestration';
   var subTabs = [
-    { id: 'serviceCatalog', label: '服务接口目录' },
-    { id: 'orchestration', label: '服务编排' },
+    { id: 'serviceCatalog', label: '服务目录' },
+    { id: 'orchestration', label: '应用服务场景' },
     { id: 'techImpl', label: '技术承接' },
   ];
   var subTabBar = '<div class="view-toggle-group" style="margin-bottom:16px">' +
@@ -2713,11 +2713,13 @@ function renderAppArchitectureTab() {
     }).join('') + '</div>';
 
   var h = '<div class="domain-scroll" data-testid="domain-scroll">' + subTabBar;
+  h += '<div class="ctx-card domain-panel"><h3>应用编排工作台</h3>' +
+    '<p class="field-hint">从前端接口需求出发，整理页面动作对应的应用服务场景，再把应用服务场景拆到后端任务链路和技术承接。实体设计仍由构件工作台维护。</p></div>';
 
   if (activeTab === 'serviceCatalog') {
-    h += '<div class="ctx-card domain-panel"><h3>服务接口目录</h3><div class="domain-panel-body"><p class="no-refs domain-panel-empty">服务接口目录功能即将上线，用于展示界面↔接口→服务的映射关系。</p></div></div>';
+    h += '<div class="ctx-card domain-panel"><h3>服务目录</h3><div class="domain-panel-body"><p class="no-refs domain-panel-empty">服务目录功能即将上线，用于展示界面 / 按钮触发的前端接口需求，以及它们对应的应用服务场景。</p></div></div>';
   } else if (activeTab === 'orchestration') {
-    // 服务编排: orchestrationTasks 全量平铺
+    // 应用服务场景: orchestrationTasks 全量平铺，先作为后端任务链路来源。
     var orchItems = [];
     (S.doc.processes || []).forEach(function(proc) {
       (proc.nodes || []).forEach(function(node) {
@@ -2726,9 +2728,9 @@ function renderAppArchitectureTab() {
         });
       });
     });
-    h += '<div class="ctx-card domain-panel"><h3>服务编排</h3><p class="field-hint">全量汇总所有流程节点中的编排任务，共 ' + orchItems.length + ' 条。</p>';
+    h += '<div class="ctx-card domain-panel"><h3>应用服务场景</h3><p class="field-hint">一个前端动作可对应一个应用服务场景；应用服务场景再承接后端任务链路。当前先全量汇总所有流程节点中的编排任务，共 ' + orchItems.length + ' 条。</p>';
     if (orchItems.length) {
-      h += '<div class="domain-panel-body"><table class="term-table"><thead><tr><th>流程</th><th>节点</th><th>任务</th><th>类型</th><th>序号</th></tr></thead><tbody>';
+      h += '<div class="domain-panel-body"><table class="term-table"><thead><tr><th>流程</th><th>节点</th><th>后端任务链路</th><th>类型</th><th>序号</th></tr></thead><tbody>';
       orchItems.forEach(function(item) {
         h += '<tr><td>' + esc(item.procName) + '</td><td>' + esc(item.nodeName) + '</td><td>' + esc(item.taskName) + '</td><td>' + esc(item.taskType) + '</td><td>' + item.index + '</td></tr>';
       });

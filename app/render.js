@@ -299,13 +299,14 @@ function render() {
   if(!S.doc){renderNoDoc();}
   else {
   renderSidebar();
-  const t = S.ui.mainTab || 'businessArch';
-  if      (t === 'businessArch') renderBusinessArchitectureTab();
-  else if (t === 'bizDomain')    renderBizDomainTab();
-  else if (t === 'bizComponent') renderBizComponentTab();
-  else if (t === 'appArch')      renderAppArchTab();
-  else if (t === 'preview')      renderPreviewTab();
-  else                           renderDomainTab();
+  const t = normalizeMainTabId(S.ui.mainTab || 'panoramaWorkbench');
+  S.ui.mainTab = t;
+  if      (t === 'panoramaWorkbench')      renderBusinessArchitectureTab();
+  else if (t === 'processWorkbench')       renderBizDomainTab();
+  else if (t === 'constructWorkbench')     renderBizComponentTab();
+  else if (t === 'orchestrationWorkbench') renderAppArchTab();
+  else if (t === 'preview')                renderPreviewTab();
+  else                                     renderDomainTab();
   } // end if(S.doc) else block
   /* 渲染完成后初始化所有 auto-resize textarea 高度 */
   setTimeout(initAutoResize, 0);
@@ -1485,23 +1486,41 @@ function renderSidebar() {
 /* ═══════════════════════════════════════════════════════════
    RENDER — Tab Bar
 ═══════════════════════════════════════════════════════════ */
+function normalizeMainTabId(mainTabId) {
+  const aliasMap = {
+    businessArch: 'panoramaWorkbench',
+    bizDomain: 'processWorkbench',
+    bizComponent: 'constructWorkbench',
+    appArch: 'orchestrationWorkbench',
+  };
+  return aliasMap[mainTabId] || mainTabId || 'panoramaWorkbench';
+}
+
 function switchMainTab(mainTabId) {
-  S.ui.mainTab = mainTabId;
+  const normalizedMainTabId = normalizeMainTabId(mainTabId);
+  S.ui.mainTab = normalizedMainTabId;
   // 向后兼容: 同步旧 tab 值
-  const legacyMap = { businessArch: 'domain', bizDomain: 'process', bizComponent: 'data', appArch: 'domain', preview: 'preview' };
-  S.ui.tab = legacyMap[mainTabId] || mainTabId;
+  const legacyMap = {
+    panoramaWorkbench: 'domain',
+    processWorkbench: 'process',
+    constructWorkbench: 'data',
+    orchestrationWorkbench: 'domain',
+    preview: 'preview',
+  };
+  S.ui.tab = legacyMap[normalizedMainTabId] || normalizedMainTabId;
   if (typeof render === 'function') render();
 }
 
 function renderTabBar() {
   const tabs = [
-    { id: 'businessArch', label: '业务架构' },
-    { id: 'bizDomain',    label: '业务域' },
-    { id: 'bizComponent', label: '业务组件' },
-    { id: 'appArch',      label: '应用架构' },
-    { id: 'preview',      label: '预览导出' },
+    { id: 'panoramaWorkbench', label: '全景工作台' },
+    { id: 'processWorkbench',  label: '流程工作台' },
+    { id: 'constructWorkbench', label: '构件工作台' },
+    { id: 'orchestrationWorkbench', label: '应用编排' },
+    { id: 'preview', label: '预览导出' },
   ];
-  const activeTab = S.ui.mainTab || 'businessArch';
+  const activeTab = normalizeMainTabId(S.ui.mainTab || 'panoramaWorkbench');
+  S.ui.mainTab = activeTab;
   const canGoBack = canGoBackNavigation();
   const backTitle = esc(getBackNavigationTitle());
   const tabHtml = tabs.map(t => {

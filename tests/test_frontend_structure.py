@@ -105,6 +105,29 @@ class FrontendStructureTests(unittest.TestCase):
             self.assertGreater(position, previous_position, f"{script_name} 加载顺序不正确")
             previous_position = position
 
+    def test_role_workbench_layout_uses_responsibility_oriented_navigation(self):
+        render_js = (APP_DIR / "render.js").read_text("utf-8")
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        domain_js = (APP_DIR / "domain.js").read_text("utf-8")
+
+        self.assertIn("{ id: 'panoramaWorkbench', label: '全景工作台' }", render_js)
+        self.assertIn("{ id: 'processWorkbench',  label: '流程工作台' }", render_js)
+        self.assertIn("{ id: 'constructWorkbench', label: '构件工作台' }", render_js)
+        self.assertIn("{ id: 'orchestrationWorkbench', label: '应用编排' }", render_js)
+        self.assertNotIn("{ id: 'businessArch', label: '业务架构' }", render_js)
+        self.assertNotIn("{ id: 'bizDomain',    label: '业务域' }", render_js)
+        self.assertNotIn("{ id: 'bizComponent', label: '业务组件' }", render_js)
+        self.assertNotIn("{ id: 'appArch',      label: '应用架构' }", render_js)
+
+        self.assertIn("概念实体", process_js)
+        self.assertIn("产品经理只维护概念实体名称和表单关联", process_js)
+        self.assertIn("实体字段、状态、关系由构件工作台继续细化", process_js)
+        self.assertIn("实体设计", domain_js)
+        self.assertIn("服务目录", domain_js)
+        self.assertIn("前端接口需求", domain_js)
+        self.assertIn("应用服务场景", domain_js)
+        self.assertIn("后端任务链路", domain_js)
+
     def test_browser_frontend_no_longer_depends_on_path_merge_state(self):
         app_js = (APP_DIR / "app.js").read_text("utf-8")
         api_js = (APP_DIR / "api.js").read_text("utf-8")

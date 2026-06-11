@@ -7005,7 +7005,7 @@ function renderTaskFormsSection(proc, task) {
       <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-add"
         onclick="addTaskForm('${esc(proc.id)}','${esc(task.id)}')">＋添加表单</button>
     </div>
-    <p class="section-hint">表单是节点办理时看到或填写的界面载体；实体是沉淀后的业务数据。一个节点可绑定多个表单，表单字段可按需映射到实体字段。</p>
+    <p class="section-hint">表单是节点办理时看到或填写的界面载体；概念实体用于先记录业务对象名称。产品经理只维护概念实体名称和表单关联，实体字段、状态、关系由构件工作台继续细化。</p>
     ${forms.length ? `<div class="task-form-list">${forms.map((form, index) => renderTaskFormCard(proc, task, form, index)).join('')}</div>` : '<p class="no-refs">暂无表单模型</p>'}
   </div>`;
 }
