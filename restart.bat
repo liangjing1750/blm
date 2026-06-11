@@ -23,6 +23,9 @@ echo [2/3] Cleaning Python cache...
 for /d /r "blm_core" %%d in (__pycache__) do (
     if exist "%%d" rd /s /q "%%d" 2>nul
 )
+for /d /r "blm_ai" %%d in (__pycache__) do (
+    if exist "%%d" rd /s /q "%%d" 2>nul
+)
 echo Done.
 
 echo.

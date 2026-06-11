@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLM Agent 架构设计文档</title>
+<style>
+:root{--bg:#f8fafc;--card:#fff;--text:#1e293b;--muted:#64748b;--accent:#3b82f6;--accent-h:#2563eb;--border:#e2e8f0;--hover:#f1f5f9;--green:#16a34a;--amber:#d97706;--red:#ef4444;--code-bg:#1e293b;--code-text:#e2e8f0;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.7;padding:0}
+nav{position:sticky;top:0;z-index:100;background:#fff;border-bottom:1px solid var(--border);padding:0 20px;height:48px;display:flex;align-items:center;gap:12px;overflow-x:auto;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+nav .logo{font-weight:700;font-size:16px;color:var(--accent);white-space:nowrap}
+nav a{color:var(--muted);text-decoration:none;font-size:12px;padding:3px 6px;border-radius:4px;white-space:nowrap}
+nav a:hover{color:var(--accent);background:var(--hover)}
+.main{display:flex;max-width:1400px;margin:0 auto}
+aside{width:240px;position:sticky;top:48px;height:calc(100vh - 48px);overflow-y:auto;padding:20px 16px;border-right:1px solid var(--border);background:var(--card);flex-shrink:0}
+aside h4{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px}
+aside a{display:block;font-size:12px;color:var(--muted);text-decoration:none;padding:3px 8px;border-radius:3px;border-left:2px solid transparent}
+aside a:hover,aside a.active{color:var(--accent);background:var(--hover);border-left-color:var(--accent)}
+aside a.l1{font-weight:500}
+aside a.l2{padding-left:22px;font-size:11px}
+article{flex:1;min-width:0;padding:32px 40px;max-width:1000px}
+h1{font-size:30px;margin-bottom:6px}
+h2{font-size:21px;margin:48px 0 14px;padding-bottom:6px;border-bottom:2px solid var(--accent)}
+h3{font-size:16px;margin:32px 0 10px;color:var(--accent)}
+h4{font-size:13px;color:var(--muted);margin:16px 0 6px;text-transform:uppercase;letter-spacing:.5px}
+p,li{font-size:13px;margin-bottom:6px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:14px;box-shadow:var(--shadow)}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
+.bg-green{background:#dcfce7;color:#16a34a}.bg-amber{background:#fef3c7;color:#d97706}.bg-red{background:#fee2e2;color:#ef4444}.bg-blue{background:#dbeafe;color:#2563eb}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)}
+th{background:var(--hover);font-weight:600;font-size:11px;color:var(--muted)}
+tr:hover{background:var(--hover)}
+code{font-family:"SF Mono","Cascadia Code","Consolas",monospace;font-size:11px;background:var(--hover);padding:1px 4px;border-radius:3px}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 18px;border-radius:var(--radius);overflow-x:auto;font-size:11px;line-height:1.55;margin:10px 0}
+pre .kw{color:#93c5fd}pre .str{color:#86efac}pre .cm{color:#64748b}
+.diagram{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin:12px 0;overflow-x:auto;font-family:"SF Mono","Cascadia Code",monospace;font-size:10px;line-height:1.5;white-space:pre;color:var(--text)}
+.flow-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;justify-content:center}
+.flow-box{border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;text-align:center;min-width:70px}
+.flow-a{background:var(--accent);color:#fff}.flow-g{background:#dcfce7;border:1px solid #86efac;color:#166534}
+.flow-y{background:#fef3c7;border:1px solid #fcd34d;color:#92400e}.flow-r{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b}
+.flow-gray{background:var(--hover);border:1px solid var(--border);color:var(--muted)}
+.flow-arrow{font-size:16px;color:var(--muted);margin:0 2px}
+.arch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin:12px 0}
+.arch-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.arch-item h4{font-size:12px;color:var(--accent);margin-bottom:4px}
+.arch-item .files{font-size:10px;color:var(--muted);margin-top:6px}
+.arch-item .files span{display:inline-block;background:var(--hover);padding:1px 6px;border-radius:3px;margin:1px}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;text-align:center;min-width:110px;flex:1}
+.stat .num{font-size:26px;font-weight:700;color:var(--accent)}
+.stat .label{font-size:10px;color:var(--muted);letter-spacing:.5px}
+.timeline{position:relative;padding-left:20px;margin:12px 0}
+.timeline::before{content:'';position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--border)}
+.timeline-item{position:relative;margin-bottom:18px}
+.timeline-item::before{content:'';position:absolute;left:-17px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 0 0 2px var(--accent)}
+@media(max-width:900px){aside{display:none}article{padding:16px}}
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">BLM Agent</span>
+  <a href="#s1">概述</a><a href="#s2">原则</a><a href="#s3">架构</a>
+  <a href="#s4">模块</a><a href="#s5">协议</a><a href="#s6">演进</a><a href="#s7">路线</a>
+</nav>
+
+<div class="main">
+<aside>
+  <h4>1. 概述</h4>
+  <a href="#s1" class="l1">1.1 项目定位</a>
+  <h4>2. 设计原则</h4>
+  <a href="#s2" class="l1">2.1 六条原则</a>
+  <h4>3. 架构总览</h4>
+  <a href="#s3" class="l1">3.1 五层架构</a><a href="#s3" class="l2">3.2 模块全景</a><a href="#s3" class="l2">3.3 数据流</a>
+  <h4>4. 模块详解</h4>
+  <a href="#m1" class="l1">4.1 Agent 循环</a><a href="#m2" class="l1">4.2 工具系统</a><a href="#m3" class="l1">4.3 权限管线</a>
+  <a href="#m4" class="l1">4.4 上下文压缩</a><a href="#m5" class="l1">4.5 系统提示词</a><a href="#m6" class="l1">4.6 会话管理</a>
+  <a href="#m7" class="l1">4.7 技能系统</a><a href="#m8" class="l1">4.8 记忆子系统</a><a href="#m9" class="l1">4.9 错误恢复</a>
+  <a href="#m10" class="l1">4.10 其他模块</a>
+  <h4>5. 交互协议</h4>
+  <a href="#s5" class="l1">5.1 HTTP API</a><a href="#s5" class="l2">5.2 SSE 协议</a><a href="#s5" class="l2">5.3 CLI 格式</a>
+  <h4>6. 方案演进</h4>
+  <a href="#s6" class="l1">6.1 五个阶段</a>
+  <h4>7. 路线图</h4>
+  <a href="#s7" class="l1">7.1 已完成</a><a href="#s7" class="l2">7.2 待完成</a>
+</aside>
+
+<article>
+
+<!-- ═══════════ 1. 概述 ═══════════ -->
+<h1>BLM Agent 架构设计文档</h1>
+<p style="font-size:14px;color:var(--muted);margin-bottom:24px">面向业务语言建模的生产级 AI Agent 框架 · 75 测试用例 · 15 Eval 场景<br>基于 learn-claude-code S1-S20 + claw0 8层提示词 + reasonix/hermes/pi-mono/cc</p>
+
+<div class="stats">
+  <div class="stat"><div class="num">68</div><div class="label">Python 模块</div></div>
+  <div class="stat"><div class="num">~7,000</div><div class="label">行代码</div></div>
+  <div class="stat"><div class="num">75</div><div class="label">测试用例</div></div>
+  <div class="stat"><div class="num">15</div><div class="label">Eval 场景</div></div>
+  <div class="stat"><div class="num">9</div><div class="label">顶层包</div></div>
+  <div class="stat"><div class="num">8</div><div class="label">提示词层</div></div>
+</div>
+
+<div class="card" id="s1">
+  <h3>1.1 项目定位</h3>
+  <p>BLM Agent 是 BLM 业务建模工具的内置 AI 助手。遵循 <strong>Harness = Model + Tools + Knowledge + Permissions</strong> 的架构哲学——模型提供智能（Agency comes from training），Harness 提供执行环境。</p>
+  <table>
+    <tr><th>Harness 要素</th><th>实现</th></tr>
+    <tr><td><strong>工具</strong></td><td>bash, read_file, write_file, edit_file, grep, glob, ls, web_fetch + 5 BLM 专用 + 2 元工具</td></tr>
+    <tr><td><strong>知识</strong></td><td>SKILL.md 两层加载（索引→完整内容）、种子技能库（5个）、8层文件式提示词</td></tr>
+    <tr><td><strong>感知</strong></td><td>BLM 工作区读写、16 种类型化事件流、工具结果分析</td></tr>
+    <tr><td><strong>行动</strong></td><td>双层 Agent 循环（follow-up/steering）、工具调度（并行分区）、子 Agent</td></tr>
+    <tr><td><strong>权限</strong></td><td>5 门管线 + Plan 模式 + 安全路径守卫 + Bash 沙箱 + 诚实准则</td></tr>
+  </table>
+</div>
+
+<!-- ═══════════ 2. 设计原则 ═══════════ -->
+<h2 id="s2">2. 设计原则</h2>
+<p style="color:var(--muted);font-size:12px">来自 learn-claude-code S1-S20 教学体系 + claw0</p>
+
+<div class="arch-grid">
+  <div class="arch-item"><h4>① One loop is all you need</h4><p style="font-size:11px">所有机制挂在同一个 while True 上。工具调度、权限检查、钩子触发、压缩触发——都不改循环本体。</p></div>
+  <div class="arch-item"><h4>② Hang on the loop</h4><p style="font-size:11px">新功能通过钩子注入：PreToolUse、PostToolUse、Stop、UserPromptSubmit。不侵入循环代码。</p></div>
+  <div class="arch-item"><h4>③ Cheap first, expensive last</h4><p style="font-size:11px">4层压缩管线：L1修剪→L2微压缩→L3预算→L4 LLM摘要。前三层免费，最后一层才调用API。</p></div>
+  <div class="arch-item"><h4>④ Files are the prompt</h4><p style="font-size:11px">claw0 理念：8个文件映射8层提示词。修改SOUL.md改变人格，无需改代码。层序决定影响力。</p></div>
+  <div class="arch-item"><h4>⑤ Load when needed</h4><p style="font-size:11px">两层技能加载：系统提示只放索引(~100 token/skill)，需要时通过skill_manage加载完整内容。</p></div>
+  <div class="arch-item"><h4>⑥ Errors = start of retry</h4><p style="font-size:11px">三级恢复链：max_tokens升级→reactive compact→fallback model。错误不是终点，是重试的起点。</p></div>
+</div>
+
+<!-- ═══════════ 3. 架构总览 ═══════════ -->
+<h2 id="s3">3. 架构总览</h2>
+
+<h3>3.1 五层架构</h3>
+<p style="font-size:12px;color:var(--muted)">learn-claude-code S1-S20 的分层递进设计，每层在上一层基础上叠加新能力</p>
+<table>
+  <tr><th>层</th><th>对应章节</th><th>机制</th><th>BLM 模块</th><th>状态</th></tr>
+  <tr><td><strong>1. 核心循环</strong></td><td>s01-s02</td><td>Agent loop + 工具调度</td><td>kernel/loop.py, kernel/tool.py</td><td><span class="badge bg-green">完成</span></td></tr>
+  <tr><td><strong>2. 安全</strong></td><td>s03-s04</td><td>权限管线 + 钩子系统</td><td>kernel/permission.py, kernel/hook.py, kernel/sandbox.py</td><td><span class="badge bg-green">完成</span></td></tr>
+  <tr><td><strong>3. 上下文管理</strong></td><td>s05-s10</td><td>压缩/技能/记忆/提示组装</td><td>context/*, memory/*, skill/*, prompt/*</td><td><span class="badge bg-green">完成</span></td></tr>
+  <tr><td><strong>4. 韧性</strong></td><td>s11-s14</td><td>错误恢复/任务系统</td><td>kernel/retry.py, task/*</td><td><span class="badge bg-green">完成</span></td></tr>
+  <tr><td><strong>5. 多Agent</strong></td><td>s15-s20</td><td>团队/协议/MCP</td><td>—</td><td><span class="badge bg-blue">无需</span></td></tr>
+</table>
+
+<h3>3.2 模块全景图</h3>
+<div class="card"><pre style="font-size:10px;line-height:1.4">
+blm_ai/
+├── <span style="color:#93c5fd">kernel/</span>       <span style="color:#64748b"># L1+L2: 循环+安全 (10 files)</span>
+│   ├── loop.py           <span style="color:#64748b"># 双层循环: follow-up/steering + 风暴断路器 + 子Agent</span>
+│   ├── tool.py           <span style="color:#64748b"># Tool ABC + Registry + 并行分区 + lifecycle hooks</span>
+│   ├── permission.py     <span style="color:#64748b"># 5门管线: Plan→deny→tool check→policy→safety guard</span>
+│   ├── hook.py           <span style="color:#64748b"># PreToolUse/PostToolUse/Stop shell hooks</span>
+│   ├── event_stream.py   <span style="color:#64748b"># 16种类型化事件 + EventSink/MultiSink/NullSink</span>
+│   ├── provider.py       <span style="color:#64748b"># Anthropic/OpenAI/Qwen 多提供者工厂</span>
+│   ├── retry.py          <span style="color:#64748b"># 三级恢复 + max_tokens升级 + FallbackTracker</span>
+│   ├── sandbox.py        <span style="color:#64748b"># 100+只读命令 + 危险子模式检测</span>
+│   ├── boot.py           <span style="color:#64748b"># 装配器: config→LoopState</span>
+│   └── capability_gate.py<span style="color:#64748b"># 诚实守卫: 禁止话题检测 + 不确定信号扫描</span>
+│
+├── <span style="color:#86efac">context/</span>       <span style="color:#64748b"># L3: 上下文管理 (8 files)</span>
+│   ├── engine.py         <span style="color:#64748b"># ContextEngine/NoopEngine/ThresholdEngine ABC</span>
+│   ├── compressor.py     <span style="color:#64748b"># 4层压缩管线编排 (CC模式9段摘要)</span>
+│   ├── snip_compact.py   <span style="color:#64748b"># L1: 修剪过渡短消息</span>
+│   ├── micro_compact.py  <span style="color:#64748b"># L2: 清理旧工具结果</span>
+│   ├── budget_compact.py <span style="color:#64748b"># L3: 大结果→磁盘</span>
+│   ├── token_counter.py  <span style="color:#64748b"># 字符→令牌估算 + BudgetTracker</span>
+│   ├── collapse.py       <span style="color:#64748b"># 上下文塌陷 + CollapseStore</span>
+│   └── prompt_builder.py <span style="color:#64748b"># 三层提示组装(稳定/上下文/易变)</span>
+│
+├── <span style="color:#f0abfc">prompt/</span>        <span style="color:#64748b"># 8层系统提示词 (2 files)</span>
+│   └── composer.py       <span style="color:#64748b"># L1-L8: IDENTITY→SOUL→TOOLS→Skills→Memory→Bootstrap→Runtime→Channel</span>
+│
+├── <span style="color:#fcd34d">session/</span>       <span style="color:#64748b"># 会话管理 (5 files)</span>
+│   ├── storage.py        <span style="color:#64748b"># JSONL树形存储 + parentId导航 + 原子写入</span>
+│   ├── manager.py        <span style="color:#64748b"># CRUD + 列表 + 归档</span>
+│   ├── checkpoint.py     <span style="color:#64748b"># 快照捕获 + 回退</span>
+│   ├── branch.py         <span style="color:#64748b"># Fork + Rewind + Summarize</span>
+│   └── search.py         <span style="color:#64748b"># SQLite FTS5跨会话搜索</span>
+│
+├── <span style="color:#c4b5fd">memory/</span>        <span style="color:#64748b"># 记忆子系统 (5 files)</span>
+│   ├── provider.py       <span style="color:#64748b"># MemoryProvider ABC (可插拔)</span>
+│   ├── store.py          <span style="color:#64748b"># §分隔符存储 + freeze-snapshot</span>
+│   ├── manager.py        <span style="color:#64748b"># 编排器: 预取→注入→同步</span>
+│   ├── guard.py          <span style="color:#64748b"># 注入/渗透模式扫描</span>
+│   └── soul.py           <span style="color:#64748b"># SOUL.md 人格加载</span>
+│
+├── <span style="color:#fda4af">skill/</span>         <span style="color:#64748b"># 技能系统 (7 files)</span>
+│   ├── manager.py        <span style="color:#64748b"># SKILL.md CRUD + 模糊修补</span>
+│   ├── index.py          <span style="color:#64748b"># 索引构建 + 渐进披露</span>
+│   ├── telemetry.py      <span style="color:#64748b"># .usage.json 追踪</span>
+│   ├── curator.py        <span style="color:#64748b"># ACTIVE→STALE→ARCHIVE 策展</span>
+│   ├── guard.py          <span style="color:#64748b"># 12高危+5中危模式扫描</span>
+│   ├── hub.py            <span style="color:#64748b"># GitHub registry 技能市场</span>
+│   └── bundle.py         <span style="color:#64748b"># 技能包 YAML</span>
+│
+├── <span style="color:#67e8f9">task/</span>          <span style="color:#64748b"># 任务系统 (2 files)</span>
+│   ├── dag.py            <span style="color:#64748b"># Task DAG + blockedBy + 状态机</span>
+│   └── persistence.py    <span style="color:#64748b"># .tasks/{id}.json 原子持久化</span>
+│
+├── <span style="color:#fde68a">tools/</span>         <span style="color:#64748b"># 内置工具 (12 files)</span>
+│   ├── bash/read/write/edit/grep/glob/ls/web_fetch
+│   ├── skill_manage.py   <span style="color:#64748b"># 技能CRUD工具</span>
+│   ├── memory_tool.py    <span style="color:#64748b"># 记忆读写工具</span>
+│   ├── task.py           <span style="color:#64748b"># 任务管理工具</span>
+│   └── blm_workspace.py  <span style="color:#64748b"># list/read/save/create/read_json 5工具</span>
+│
+├── <span style="color:#f0abfc">service/</span>       <span style="color:#64748b"># BLM集成 (4 files)</span>
+│   ├── cli.py            <span style="color:#64748b"># CLI交互入口</span>
+│   ├── personality.py    <span style="color:#64748b"># 默认人格(SOUL.md回退)+诚实准则</span>
+│   └── webui_bridge.py   <span style="color:#64748b"># SSE→WireEvent 转换</span>
+│
+├── config.py              <span style="color:#64748b"># 多provider配置 + .env加载</span>
+└── agent_builder.py       <span style="color:#64748b"># 装配器: 8层提示词+技能+记忆+工具→Agent</span>
+</pre></div>
+
+<h3>3.3 Agent 循环数据流</h3>
+<div class="diagram">
+<span style="color:#64748b">┌────────── 外层循环 (Agent Lifecycle) ──────────┐</span>
+<span style="color:#64748b">│</span>  User Prompt                                    <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    │                                            <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    ▼                                            <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  ┌──────┐  ┌────────┐  ┌──────────┐  ┌──────┐ <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  │ LLM  │─→│ Tool   │─→│Permission│─→│Exec  │ <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  │ Call │  │Dispatch│  │ Pipeline │  │Tool  │ <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  └──────┘  └────────┘  └──────────┘  └──────┘ <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    │           │                            │    <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    │    ┌──────┴─ 有工具? ──Yes───────────┘    <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    │    │                                       <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    │   No                                       <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    ▼    │                                       <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  ┌──────┐  ▼                                    <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  │Final │ ┌──────────┐                           <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  │Ready │ │Follow-up?│──Yes──→ 注入队列 ──→ 继续 <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  └──────┘ └──────────┘                           <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    │         No                                   <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>    ▼         ▼                                    <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  ┌──────────────┐                               <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  │Agent Complete│                               <span style="color:#64748b">│</span>
+<span style="color:#64748b">│</span>  └──────────────┘                               <span style="color:#64748b">│</span>
+<span style="color:#64748b">└──────────────────────────────────────────────────┘</span>
+</div>
+
+<!-- ═══════════ 4. 模块详解 ═══════════ -->
+<h2 id="s4">4. 模块详解</h2>
+
+<!-- 4.1 Agent 循环 -->
+<h3 id="m1">4.1 Agent 循环 — kernel/loop.py (411行)</h3>
+<div class="card">
+  <p><strong>参考</strong>: learn-claude-code s01 "One loop is all you need" + pi-mono 双层循环 + reasonix 风暴断路器</p>
+
+  <h4>设计思路</h4>
+  <p>Agent 循环是整个框架的心脏。遵循 <strong>"One loop is all you need"</strong> 原则——所有机制（工具调度、权限检查、钩子触发、压缩触发）都挂在这个循环上，不修改循环本体。采用 <strong>双层结构</strong>（pi-mono 模式）：外层处理 Agent 生命周期（follow-up 队列），内层处理单轮对话（LLM 调用→工具执行→结果收集）。</p>
+  <p>循环状态封装在 <code>LoopState</code> 中——包含消息历史、工具注册表、权限管线、钩子管理器、提供者等。这种设计使得状态可序列化、可恢复、可分支。</p>
+
+  <h4>核心接口</h4>
+  <pre>async def agent_loop(state: LoopState) -> AsyncGenerator[AgentEvent, None]:
+    """双层事件驱动 Agent 循环，yields AgentEvent 在每个生命周期阶段。"""</pre>
+  <p><code>LoopState</code> 关键字段: <code>messages</code>(对话历史), <code>tools</code>(ToolRegistry), <code>provider</code>(LLM), <code>permissions</code>(管线), <code>hooks</code>(钩子), <code>config</code>(LoopConfig), <code>abort</code>(取消信号), <code>_follow_up/_steering</code>(消息队列)。</p>
+
+  <h4>内层循环 — 单轮对话</h4>
+  <div class="diagram">
+<span style="color:#64748b"># 每轮的标准流程</span>
+1. yield TurnStarted
+2. drain_steering() → 注入中轮引导消息
+3. provider.create_message() → LLM 调用 + usage 追踪
+4. yield LLMResponse(text, tool_blocks)
+5. 构建 assistant 消息，追加到 state.messages
+6. if tool_blocks:
+     partition(tool_blocks) → 并行/串行批次
+     for batch: execute → yield ToolResult
+     追加 tool_results 到 state.messages
+   else:
+     检查 follow_up 队列 → 注入或完成
+7. yield TurnDone</div>
+
+  <h4>外层循环 — follow-up 队列</h4>
+  <p>Follow-up 队列是 Agent 自然停止后才处理的消息（pi-mono 模式）。例如：用户说"帮我分析工作区"→Agent 完成→系统注入 "顺便也分析一下实体结构"→Agent 继续。这不同于 steering 队列——steering 是中轮立即干预（如用户按了"停止"按钮）。</p>
+
+  <h4>工具并行分区</h4>
+  <p><code>ToolRegistry.partition()</code> 将 LLM 返回的 tool_blocks 分为批次：连续只读工具（read_file, grep, glob）→并行执行（asyncio.gather，上限 8），写工具（write_file, edit_file, bash）→独占串行。这来自 reasonix 的设计——只读工具无副作用，安全并行。</p>
+
+  <h4>风暴断路器 (Storm Breaker)</h4>
+  <p>来自 reasonix agent.go。当同一工具+同一错误模式连续出现 ≥3 次时，不再简单返回错误——而是在输出中注入提示："This error pattern has repeated 3+ times. Consider changing approach." 防止 Agent 陷入死循环。</p>
+  <pre>def record_error(tool_name, error_msg) -> bool:
+    key = f"{tool_name}:{fingerprint(error_msg)}"
+    count = error_history[key] = error_history.get(key, 0) + 1
+    return count >= max_storm_repeats  # 默认 3</pre>
+
+  <h4>子 Agent 执行</h4>
+  <p><code>run_sub_agent()</code> 创建隔离的 LoopState（独立的消息历史、过滤的工具集、有限的轮次），在子会话中执行。用于 task 工具的后台执行——子 Agent 的结果不影响父 Agent 的消息历史，避免上下文污染。</p>
+
+  <h4>最终就绪检查 (Final Readiness)</h4>
+  <p>来自 reasonix。在 Agent 宣布完成前验证：最后一条消息是否包含工具错误（如有则提示重试或换方法）。防止 Agent 在工具失败后错误地返回"完成"。</p>
+
+  <h4>与参考项目对比</h4>
+  <table>
+    <tr><th>特性</th><th>BLM</th><th>learn-claude-code</th><th>cc</th><th>pi-mono</th><th>reasonix</th></tr>
+    <tr><td>循环结构</td><td>双层(外follow-up+内tool)</td><td>单层while True</td><td>单层+continuation</td><td>双层事件驱动</td><td>单层+step计数</td></tr>
+    <tr><td>工具并行</td><td>只读并行+写串行</td><td>串行</td><td>StreamingExecutor</td><td>默认并行</td><td>只读并行</td></tr>
+    <tr><td>风暴断路器</td><td>✅ 同错误×3</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td></tr>
+    <tr><td>子Agent</td><td>✅ 隔离LoopState</td><td>✅ (s06)</td><td>✅ forked agent</td><td>❌</td><td>✅ task.go</td></tr>
+  </table>
+</div>
+
+<!-- 4.2 工具系统 -->
+<h3 id="m2">4.2 工具系统 — kernel/tool.py (207行)</h3>
+<div class="card">
+  <p><strong>参考</strong>: reasonix tool.go Tool 接口 + pi-mono tool lifecycle hooks</p>
+
+  <h4>设计思路</h4>
+  <p>工具是 Agent 的手。设计核心是 <strong>最小接口 + 最大灵活性</strong>——Tool 是一个抽象基类，子类只需实现 <code>execute()</code>，可选覆盖 <code>validate()</code>、<code>check_permissions()</code>、<code>preview()</code>。这与 reasonix 的 Tool 接口一致——Go 的 <code>Tool { Name(); Description(); Schema(); Execute(); ReadOnly() }</code> 直接映射到 Python ABC。</p>
+
+  <h4>Tool ABC 接口</h4>
+  <pre>class Tool(ABC):
+    name: str          # 工具名称 (LLM 通过此名调用)
+    description: str    # LLM 理解工具用途的描述
+    parameters: dict    # JSON Schema — 自动转为 API 格式
+    read_only: bool     # True = 并行安全, Plan模式可过
+
+    async def execute(self, args, ctx) -> str: ...       # 必须实现
+    async def validate(self, args) -> ValidationResult: ... # 参数校验
+    async def check_permissions(self, args, ctx) -> PermissionResult: ...
+    def preview(self, args) -> str | None: ...           # diff 预览</pre>
+
+  <h4>生命周期钩子</h4>
+  <p>来自 pi-mono: 每个工具执行经过 <strong>prepare → validate → before_hook → execute → after_hook → finalize</strong>。before_hook 可以阻止执行（返回 block=True），after_hook 可以追加输出。钩子按注册顺序链式执行——第一个阻止结果短路后续钩子。</p>
+
+  <h4>只读并行分区算法</h4>
+  <div class="diagram">
+<span style="color:#64748b"># partition() 算法 — reasonix 模式</span>
+输入: [{read, id:1}, {read, id:2}, {write, id:3}, {read, id:4}]
+输出: [[{read,1}, {read,2}], [{write,3}], [{read,4}]]
+
+<span style="color:#64748b">规则</span>:
+- 连续只读工具 → 同一批次，asyncio.gather 并行
+- 写工具 → 独占批次，串行执行
+- concurrency_safe=False → 独占批次</div>
+
+  <h4>工具注册</h4>
+  <p><code>ToolRegistry.register(tool)</code> 按名称注册。<code>list_definitions()</code> 生成 Anthropic API 格式的工具定义列表。<code>remove_by_prefix("mcp__server__")</code> 支持批量移除（reasonix 的 MCP 命名空间模式）。</p>
+
+  <h4>与参考项目对比</h4>
+  <table>
+    <tr><th>特性</th><th>BLM</th><th>pi-mono</th><th>reasonix</th><th>cc</th></tr>
+    <tr><td>工具定义</td><td>ABC 类</td><td>TypeBox schema + execute</td><td>Go interface</td><td>buildTool() 工厂</td></tr>
+    <tr><td>并行策略</td><td>只读并行+写串行</td><td>默认并行+sequential覆盖</td><td>只读并行</td><td>concurrencySafe标记</td></tr>
+    <tr><td>lifecycle hooks</td><td>before/after 链</td><td>beforeToolCall/afterToolCall</td><td>PreToolUse/PostToolUse</td><td>toolHooks</td></tr>
+    <tr><td>参数校验</td><td>JSON Schema 手动</td><td>TypeBox 运行时</td><td>JSON Schema</td><td>Zod schema</td></tr>
+  </table>
+</div>
+
+<!-- 4.3 权限管线 -->
+<h3 id="m3">4.3 权限管线 — kernel/permission.py (274行)</h3>
+<div class="card">
+  <p><strong>参考</strong>: cc permissions.ts 5步评估链 + reasonix permission.go 三态决策</p>
+
+  <h4>设计思路</h4>
+  <p>权限系统的核心问题是 <strong>在安全性和可用性之间取得平衡</strong>——太严格则 Agent 无法工作，太宽松则可能造成破坏。BLM 采用 5 门管线：从最严格的内置拒绝列表开始，逐层放宽，最后以永不旁路的安全路径守卫结束。每层可以独立配置和扩展。</p>
+
+  <h4>5 门管线详解</h4>
+  <div class="diagram">
+<span style="color:#64748b">Gate 0: Plan Mode</span>
+  阻止所有非只读工具。用于"只看不做"的安全审查模式。
+  检查: if plan_mode and not is_read_only → DENY
+
+<span style="color:#64748b">Gate 1: 内置 Deny List</span>
+  硬编码的危险模式——sudo, rm -rf /, mkfs, dd, fork bomb等。
+  这些模式在任何情况下都不允许。不依赖用户配置。
+
+<span style="color:#64748b">Gate 2: Tool Check</span>
+  工具自身的 check_permissions() 方法。bash 工具在此层检查
+  子命令和路径。可扩展——新工具覆盖此方法即可。
+
+<span style="color:#64748b">Gate 3: Policy 规则评估</span>
+  用户配置的规则（JSON文件）。优先级: deny > allow > ask。
+  支持通配符(mcp__*)、内容glob(bash(rm -rf*))。
+  运行时可通过 PermissionPolicy 动态修改。
+
+<span style="color:#64748b">Gate 4: Safety Guard (永不旁路)</span>
+  安全路径守卫——.git/ .env .ssh/ .bashrc 等。
+  即使在 bypass 模式下也必须询问。这是最后防线。</div>
+
+  <h4>权限模式</h4>
+  <table><tr><th>模式</th><th>行为</th><th>适用场景</th></tr>
+  <tr><td>DEFAULT</td><td>每步询问(Gate 3→ASK)</td><td>CLI 交互</td></tr>
+  <tr><td>PLAN</td><td>只读(Gate 0 阻止写)</td><td>安全审查</td></tr>
+  <tr><td>ACCEPT_EDITS</td><td>自动接受文件修改</td><td>信任的文件操作</td></tr>
+  <tr><td>BYPASS</td><td>跳过(Gate 3→ALLOW)</td><td>自动化(需谨慎)</td></tr>
+  <tr><td>HEADLESS</td><td>无人值守自动允许</td><td>API/后台任务</td></tr></table>
+
+  <h4>策略规则 JSON 格式</h4>
+  <pre>{"deny": [{"tool":"bash","content":"rm -rf*"}],
+ "allow": [{"tool":"bash(ls *)"}, {"tool":"read_workspace"}],
+ "ask": [{"tool":"mcp__*"}]}</pre>
+  <p>通过 <code>load_rules_from_file()</code> 加载，运行时可通过 <code>switch_mode()</code> 切换模式。</p>
+
+  <h4>与参考项目对比</h4>
+  <table><tr><th>特性</th><th>BLM</th><th>cc</th><th>reasonix</th></tr>
+  <tr><td>门数</td><td>5</td><td>5(checkRuleBasedPermissions)</td><td>3(Deny/Ask/Allow)</td></tr>
+  <tr><td>安全路径</td><td>永不旁路</td><td>safetyCheck 标记</td><td>无</td></tr>
+  <tr><td>规则来源</td><td>JSON文件+内置</td><td>user/project/local/flag/policy/session 6源</td><td>TOML config</td></tr>
+  <tr><td>模式切换</td><td>运行时switch_mode</td><td>运行时+classifier</td><td>headless gate</td></tr></table>
+</div>
+
+<!-- 4.4 上下文压缩 -->
+<h3 id="m4">4.4 上下文压缩 — context/ (8 files)</h3>
+<div class="card">
+  <p><strong>参考</strong>: cc compact.ts 4层流水线 + hermes context_compressor.py + reasonix 三比率触发</p>
+
+  <h4>设计思路</h4>
+  <p>LLM 的上下文窗口有限（如 128K tokens）。当对话积累超过窗口时，必须压缩旧内容。核心原则是 <strong>"Cheap first, expensive last"</strong>——前三层压缩不调用 API（免费），第四层才调用 LLM 做结构化摘要（昂贵）。四层依次尝试，前一层失败或不足时才进入下一层。</p>
+
+  <h4>三比率触发机制</h4>
+  <p>来自 reasonix compact.go——不是简单的"到了 80% 就压缩"，而是三级预警：</p>
+  <table><tr><th>比率</th><th>阈值</th><th>行为</th></tr>
+  <tr><td>soft_ratio</td><td>50%</td><td>仅通知"上下文增长中"，不触发压缩</td></tr>
+  <tr><td>compact_ratio</td><td>80%</td><td>触发自动压缩（4层依次尝试）</td></tr>
+  <tr><td>force_ratio</td><td>90%</td><td>强制压缩，跳过经济性判断</td></tr></table>
+
+  <h4>四层压缩流水线</h4>
+  <div class="flow-row">
+    <div class="flow-box flow-g">L1: Snip<br><small>修剪过渡短消息<br>(<30字符的assistant文本)</small></div><div class="flow-arrow">→</div>
+    <div class="flow-box flow-g">L2: Micro<br><small>清理旧工具结果<br>(替换为sentinel)</small></div><div class="flow-arrow">→</div>
+    <div class="flow-box flow-g">L3: Budget<br><small>大结果写磁盘<br>(>2000字节→文件)</small></div><div class="flow-arrow">→</div>
+    <div class="flow-box flow-a">L4: LLM Summary<br><small>9段结构化摘要<br>(CC compact.ts模板)</small></div>
+  </div>
+
+  <h4>L1 修剪 (snip_compact.py)</h4>
+  <p>删除中间区域的过渡性短消息（"Let me check..."、"Looking at..."）。保留头部(3条)和尾部(10条)。保留所有工具调用和工具结果。零 API 调用。</p>
+
+  <h4>L2 微压缩 (micro_compact.py)</h4>
+  <p>遍历可压缩工具（read_workspace, list_workspaces, grep, glob, ls, read_file, web_fetch）的历史结果，只保留最近 3 个，旧结果替换为 sentinel 字符串 <code>[Old tool result content cleared]</code>。不破坏消息结构，不调用 API。</p>
+
+  <h4>L3 预算压缩 (budget_compact.py)</h4>
+  <p>检测超过 2KB 的 tool_result，将完整内容写入 <code>.blm_ai_temp/budget/</code> 目录，在原消息中仅保留头部 500 字符 + 尾部 200 字符 + 文件路径引用。Agent 需要完整内容时可以读取磁盘文件。</p>
+
+  <h4>L4 LLM 结构化摘要 (compressor.py)</h4>
+  <p>唯一需要 API 调用的层。使用 CC 的 9 段模板指导模型生成结构化摘要：Goal→Key Decisions→Files→Commands→Errors→Pending Tasks→Current Work→All User Messages→Optional Next Step。摘要注入到压缩后的消息列表，用 <code>## Context Summary</code> 和 <code>--- END OF CONTEXT SUMMARY ---</code> 标记边界。</p>
+
+  <h4>抗抖动策略</h4>
+  <p>60 秒冷却（两次压缩间隔不小于 60s）、连续失败断路器（≥3次停止尝试）、连续无效跳过（≥2次节省<10%跳过）。摘要失败时使用确定性后备——统计工具名称和消息类型，不调用 API。</p>
+
+  <h4>与参考项目对比</h4>
+  <table><tr><th>特性</th><th>BLM</th><th>cc</th><th>hermes</th><th>reasonix</th></tr>
+  <tr><td>压缩层数</td><td>4 (snip→micro→budget→LLM)</td><td>3 (micro→session→full) + collapse</td><td>2 (prune→LLM summary)</td><td>1 (LLM summary)</td></tr>
+  <tr><td>触发方式</td><td>三比率(50/80/90%)</td><td>token阈值+circuit breaker</td><td>阈值%+protect边界</td><td>三比率(50/80/90%)</td></tr>
+  <tr><td>摘要模板</td><td>9段(CC模式)</td><td>9段+analysis草稿</td><td>自由格式</td><td>6段</td></tr>
+  <tr><td>抗抖动</td><td>冷却+断路器+无效跳过</td><td>circuit breaker</td><td>冷却+无效跳过</td><td>冷却+断路器</td></tr></table>
+</div>
+
+<!-- 4.5 系统提示词 -->
+<h3 id="m5">4.5 系统提示词 — prompt/composer.py (180行)</h3>
+<div class="card">
+  <p><strong>参考</strong>: claw0 s06 8层文件式架构 + hermes system_prompt.py 三层分离</p>
+
+  <h4>设计思路</h4>
+  <p>核心理念来自 claw0: <strong>文件即提示词</strong>。修改 SOUL.md 即可改变 Agent 人格，无需改代码。8 层架构使得每个关注点独立——身份、性格、工具规范、技能、记忆、项目背景、运行时上下文、通道适配——各管各的，互不干扰。层序决定影响力——越靠前对模型行为影响越强。</p>
+
+  <h4>为什么 8 层？</h4>
+  <p>claw0 的设计通过实验验证：模型对系统提示词前面的内容给予更高注意力权重。因此最重要的行为约束（身份、诚实准则）放在 L1-L2，其次是操作规范（L3-L4），最后是辅助上下文（L5-L8）。这与 hermes 的三层分离（稳定/上下文/易变）互补——hermes 侧重缓存策略，claw0 侧重注意力权重。</p>
+
+  <h4>8 层详解</h4>
+  <table><tr><th>层</th><th>文件</th><th>内容</th><th>缓存策略</th><th>设计理由</th></tr>
+  <tr><td>L1</td><td>IDENTITY.md</td><td>"你是BLM Agent..."</td><td>会话内不变</td><td>最基础的身份定义，影响所有行为</td></tr>
+  <tr><td>L2</td><td>SOUL.md</td><td>性格+能力边界+诚实准则</td><td>会话内不变</td><td>行为约束——不编造、不越界</td></tr>
+  <tr><td>L3</td><td>TOOLS.md</td><td>12个工具的使用规范</td><td>工具集变化时重建</td><td>告诉模型何时用什么工具</td></tr>
+  <tr><td>L4</td><td>skills/*/SKILL.md</td><td>技能索引(~100t/skill)</td><td>技能变化时重建</td><td>渐进披露——需要时才加载完整内容</td></tr>
+  <tr><td>L5</td><td>MEMORY.md</td><td>团队记忆(冻结快照)</td><td>会话开始冻结</td><td>保持前缀缓存稳定——写入立即持久化但提示不变</td></tr>
+  <tr><td>L6</td><td>BOOTSTRAP+AGENTS</td><td>项目背景+约定</td><td>文件变化时重建</td><td>项目特定知识——每个项目有自己的背景</td></tr>
+  <tr><td>L7</td><td>(动态)</td><td>时间/模型/会话</td><td>每次重建</td><td>时间敏感信息——放在最后避免影响缓存</td></tr>
+  <tr><td>L8</td><td>(动态)</td><td>通道提示(CLI/Web)</td><td>通道切换时</td><td>格式适配——CLI简洁/Web支持Markdown</td></tr></table>
+
+  <h4>组装入口</h4>
+  <pre>def assemble(blm_dir, skills_dir, memory_path, model_id, channel):
+    layers = [layer_identity, layer_soul, layer_tool_guide,
+              layer_skills, layer_memory, layer_bootstrap,
+              layer_runtime, layer_channel]
+    prompt = "\n\n".join(l(bd) for l in layers if l(bd))
+    return prompt[:MAX_TOTAL_CHARS]  # 150K 上限</pre>
+
+  <h4>与参考项目对比</h4>
+  <table><tr><th>特性</th><th>BLM (claw0风格)</th><th>hermes</th><th>cc</th></tr>
+  <tr><td>层数</td><td>8层文件式</td><td>3层(稳定/上下文/易变)</td><td>动态组装(sections字典)</td></tr>
+  <tr><td>人格定义</td><td>SOUL.md文件</td><td>SOUL.md+USER.md</td><td>system prompt模板</td></tr>
+  <tr><td>记忆注入</td><td>freeze-snapshot</td><td>builtin+external provider</td><td>memory tool+index</td></tr>
+  <tr><td>技能索引</td><td>~100t/skill</td><td>分类列表+条件可见</td><td>on-demand加载</td></tr>
+  <tr><td>缓存策略</td><td>层粒度(不变/变化重建)</td><td>stable/cache/volatile</td><td>prefix cache aware</td></tr></table>
+
+  <h4>人格切换示例</h4>
+  <pre><span style="color:#64748b"># 默认人格 (service/personality.py 回退)</span>
+"你是 BLM Agent，一个业务语言建模助手..."
+
+<span style="color:#64748b"># 自定义人格 (workspace/.blm/SOUL.md)</span>
+"你是 担保品业务专家，专注于金融担保品管理领域的建模分析..."
+<span style="color:#64748b"># → 只需修改这个文件，重启 Agent 即可切换人格</span></pre>
+</div>
+
+<!-- 4.6 会话管理 -->
+<h3 id="m6">4.6 会话管理 — session/ (5 files)</h3>
+<div class="card">
+  <p><strong>参考</strong>: pi-mono jsonl-storage.ts 树形存储 + reasonix checkpoint.go 快照回退</p>
+
+  <h4>设计思路</h4>
+  <p>会话持久化的核心需求是：支持 Fork（从历史某点创建新分支）、Rewind（回退到之前的消息）、Compact（压缩旧消息为摘要）。pi-mono 的 JSONL 树形设计完美满足这些需求——每个条目有 id 和 parentId，形成有向无环图。叶子指针（leaf entry）指向当前活跃末端，改变叶子指针即可"回退"。</p>
+
+  <h4>JSONL 树形结构</h4>
+  <div class="diagram">
+<span style="color:#64748b"># 条目类型 (7种)</span>
+session       → 文件头部 (version, id, cwd)
+message       → 对话消息 (user/assistant/tool_result)
+compaction    → 压缩记录 (summary, firstKeptId, tokensBefore)
+branch_summary→ 分支摘要 (fromId, summary)
+custom        → 自定义数据 (扩展用)
+leaf          → 叶子指针 (targetId → 当前活跃末端)
+
+<span style="color:#64748b"># 树形导航</span>
+get_path_to_root(): 从 leaf.targetId 沿 parentId 链回溯
+get_messages():     遍历路径,展开 compaction 为概要消息
+                    返回可直接注入 Agent 上下文的消息列表</div>
+
+  <h4>Checkpoint 快照</h4>
+  <p>来自 reasonix checkpoint.go。每个写工具（write_file, edit_file, save_workspace）执行前，自动在 <code>.ckpt/</code> 目录保存编辑前的文件副本。命名格式: <code>t{turn}_{filename}</code>。回退时从指定轮次的快照恢复文件。Git-free——不依赖版本控制系统。</p>
+
+  <h4>分支操作</h4>
+  <p><code>BranchManager.fork(session_id, at_entry)</code> 创建新会话，复制到分叉点的所有条目。<code>rewind(session_id, to_entry)</code> 将叶子指针设置到指定条目——"撤销"之后的所有操作。<code>summarize_range()</code> 返回指定范围内的条目元数据。</p>
+
+  <h4>FTS5 跨会话搜索</h4>
+  <p><code>SessionSearch</code> 使用 SQLite FTS5 索引所有会话消息。三种调用模式：Discover（全文搜索）、Scroll（围绕特定消息查看上下文）、Browse（列出最近会话）。来自 hermes session_search_tool.py 的设计。</p>
+
+  <h4>与 pi-mono 对比</h4>
+  <table><tr><th>特性</th><th>BLM</th><th>pi-mono</th></tr>
+  <tr><td>存储格式</td><td>JSONL (一行一JSON)</td><td>JSONL</td></tr>
+  <tr><td>树形结构</td><td>id/parentId + leaf指针</td><td>id/parentId + leaf entry</td></tr>
+  <tr><td>分支</td><td>Fork(复制)+Rewind(叶子)</td><td>moveTo(entryId)+Fork(新文件)</td></tr>
+  <tr><td>快照</td><td>.ckpt/ 文件副本</td><td>(Git worktree)</td></tr>
+  <tr><td>搜索</td><td>SQLite FTS5</td><td>内存遍历</td></tr></table>
+</div>
+
+<!-- 4.7 技能系统 -->
+<h3 id="m7">4.7 技能系统 — skill/ (7 files)</h3>
+<div class="card">
+  <p><strong>参考</strong>: hermes-agent 自沉淀技能 + learn-claude-code s07 两层加载</p>
+
+  <h4>设计思路</h4>
+  <p>技能是 Agent 的"肌肉记忆"——完成过复杂任务后，把流程记录下来，下次遇到同类任务自动加载执行。技能 = <strong>Markdown + YAML 元数据</strong>（hermes 模式），不是代码，不是插件。Agent 通过同样的工具调用接口读写技能——创建、查看、修补、删除。</p>
+
+  <h4>两层加载</h4>
+  <p>来自 learn-claude-code s07: <strong>索引先行，内容按需</strong>。系统提示词中只放技能名称+一句话描述（约 100 tokens/技能），避免撑满上下文。Agent 判断某技能匹配当前任务时，调用 <code>skill_manage(action="view")</code> 加载完整内容。这保证了即使有 100 个技能，系统提示词也只增加约 10K tokens。</p>
+
+  <h4>模糊修补算法</h4>
+  <p>当 Agent 想修补技能中的某段文本时，可能因为空格/换行差异导致精确匹配失败。模糊修补使用 <code>difflib.SequenceMatcher</code> 正态化空格后比较，取 ratio > 0.7 的最佳匹配。这使得修补对格式差异鲁棒。</p>
+
+  <h4>策展生命周期</h4>
+  <p><code>ACTIVE → STALE(30天未用) → ARCHIVE(90天,移到.archive/)</code>。策展器（curator.py）定期运行，只处理 Agent 自创技能，不触碰捆绑/市场技能。钉住（pin）的技能跳过所有自动流转。</p>
+
+  <h4>安全扫描</h4>
+  <p><code>skill/guard.py</code> 检查 12 种高危模式（curl外传、rm -rf /、eval base64 等）+ 5 种中危模式（pip install、git clone 等）。市场安装的技能必须通过安全扫描。</p>
+
+  <h4>与 hermes 对比</h4>
+  <table><tr><th>特性</th><th>BLM</th><th>hermes-agent</th></tr>
+  <tr><td>技能格式</td><td>SKILL.md + YAML frontmatter</td><td>同</td></tr>
+  <tr><td>加载方式</td><td>索引(~100t/skill)→按需完整</td><td>同(两层缓存)</td></tr>
+  <tr><td>修补</td><td>精确+模糊(SequenceMatcher)</td><td>同(fuzzy_match.py)</td></tr>
+  <tr><td>策展</td><td>30d→90d→archive</td><td>同+Curator fork子Agent</td></tr>
+  <tr><td>技能市场</td><td>GitHub registry</td><td>openai/anthropic/huggingface</td></tr></table>
+</div>
+
+<!-- 4.8 记忆子系统 -->
+<h3 id="m8">4.8 记忆子系统 — memory/ (5 files)</h3>
+<div class="card">
+  <p><strong>参考</strong>: hermes-agent memory_provider.py ABC + cc memory store</p>
+
+  <h4>设计思路</h4>
+  <p>记忆系统解决"Agent 跨会话记住团队约定"的问题。核心设计: <strong>MemoryProvider ABC</strong> 支持可插拔后端（内置文件 + 未来可扩展向量数据库）。内置实现用 <strong>§ 段落分隔符</strong> 管理 MEMORY.md 条目，支持添加/删除/召回。</p>
+
+  <h4>freeze-snapshot 模式</h4>
+  <p>来自 hermes: 会话开始时将 MEMORY.md 内容冻结为快照（<code>format_for_system_prompt()</code> 返回冻结状态）。会话内通过 memory 工具的写入立即持久化到磁盘，但系统提示词中的记忆块不变——这保持了 LLM 的 <strong>前缀缓存稳定</strong>。下次会话重新加载时自动包含新内容。</p>
+
+  <h4>威胁扫描</h4>
+  <p><code>memory/guard.py</code> 在写入前检查注入模式（[SYSTEM]、&lt;|im_start|&gt; 等）、渗出模式（curl POST、nc、ssh 等）、破坏性模式（rm -rf /、> /dev/sd 等）。匹配的内容被替换为 [BLOCKED] 占位符。</p>
+
+  <h4>关键接口</h4>
+  <pre>class MemoryProvider(ABC):
+    def system_prompt_block() -> str     # 静态文本，注入提示词
+    def prefetch(query, session_id) -> str  # 每轮前召回
+    def sync_turn(user, assistant, ...)     # 每轮后异步写入
+    def get_tool_schemas() -> list[dict]    # 暴露给 Agent 的工具</pre>
+</div>
+
+<!-- 4.9 错误恢复 -->
+<h3 id="m9">4.9 错误恢复 — kernel/retry.py (200行)</h3>
+<div class="card">
+  <p><strong>参考</strong>: learn-claude-code s11 三级恢复 + cc reactive compact</p>
+
+  <h4>设计思路</h4>
+  <p>LLM API 调用有四种典型失败模式，每种需要不同的恢复策略。核心原则: <strong>"Errors aren't the end, they're the start of a retry"</strong>。通过 <code>classify_error()</code> 将异常分类，然后走对应的恢复路径。</p>
+
+  <h4>错误分类 + 恢复策略</h4>
+  <div class="diagram"><span style="color:#64748b"># classify_error() → 5 种分类</span>
+TRANSIENT (timeout/connection) → retry_with_backoff(指数退避+随机抖动)
+OVERLOADED (429/529/503)       → FallbackTracker(连续3次→降级模型)
+MAX_TOKENS (output truncated)  → escalate(8K→16K→32K→64K)+continuation prompt
+CONTEXT_OVERFLOW (413/4001)    → reactive compact → retry
+FATAL (auth/403)               → 不重试，直接报错
+
+<span style="color:#64748b"># 退避算法 (s11: 500*2^attempt + jitter)</span>
+delay = min(500ms * 2^attempt, 32s) + random(0, delay*0.5)</div>
+
+  <h4>Max Tokens 升级链</h4>
+  <p>当 Agent 输出被截断时，不放弃——逐步提高 max_tokens（8K→16K→32K→64K），并发送 continuation prompt 让模型从截断处继续。最多 3 次 continuation。</p>
+
+  <h4>Fallback Model</h4>
+  <p><code>FallbackTracker</code> 追踪连续 529/503 错误。当连续过载 ≥3 次时自动触发降级——切换到备用模型或移除工具（减少 prompt 大小）。成功调用后重置计数器。</p>
+
+  <h4>与 cc 对比</h4>
+  <table><tr><th>特性</th><th>BLM</th><th>cc</th></tr>
+  <tr><td>恢复层级</td><td>分类→针对性恢复</td><td>collapse drain→reactive compact→error surface</td></tr>
+  <tr><td>max_tokens</td><td>4级升级(8/16/32/64K)</td><td>continuation+budget tracker</td></tr>
+  <tr><td>fallback model</td><td>连续过载触发</td><td>GrowthBook配置</td></tr>
+  <tr><td>退避</td><td>指数+抖动(500ms基)</td><td>指数+抖动</td></tr></table>
+</div>
+
+<!-- 4.10 其他模块 -->
+<h3 id="m10">4.10 其他模块</h3>
+
+<h4>kernel/event_stream.py (222行)</h4>
+<div class="card"><p>16 种类型化事件的判别联合（dataclass + Union）。<code>EventSink</code> 支持多路复用（多个观察者同时监听），<code>MultiSink</code> 向多个子 Sink 分发（如同时写文件和推 Web），<code>NullSink</code> 丢弃所有事件（无头模式）。事件回放（replay）支持新订阅者获取历史事件。</p></div>
+
+<h4>kernel/sandbox.py (197行)</h4>
+<div class="card"><p>100+ 只读命令分类（ls/cat/grep/find 等），30+ 危险命令（rm/dd/iptables 等），12 种危险子模式（rm -rf、git push --force、> /dev/sd 等）。<code>classify_bash(command)</code> 返回完整的只读/危险分类。git 特殊处理——仅 destructive 子命令标记为危险。</p></div>
+
+<h4>kernel/hook.py (191行)</h4>
+<div class="card"><p>4 事件钩子: PreToolUse、PostToolUse、Stop、UserSubmit。Shell 钩子从 <code>.blm/hooks/</code> 目录加载，exit 2 = block（reasonix 模式）。信任文件 (<code>.trusted</code>) 管理安全——项目钩子首次使用需用户确认。</p></div>
+
+<h4>kernel/provider.py (235行)</h4>
+<div class="card"><p><code>AnthropicProvider</code> 和 <code>OpenAIProvider</code> 实现相同的 LLMProvider ABC。Tool 格式自动转换——Anthropic 的 <code>input_schema</code> ↔ OpenAI 的 <code>function.parameters</code>。Usage 提取（input_tokens/output_tokens/cache_read/cache_write）。工厂模式 <code>create_provider(kind)</code> 支持注册新提供者。</p></div>
+
+<h4>kernel/capability_gate.py (67行)</h4>
+<div class="card"><p>三级诚实体系的第三级。不阻止执行——Agent 自主决策——但在输出中扫描：禁止话题（医疗/法律/编程/预测）、不确定信号（大概/可能/估计/约/应该可以）。匹配时自动注入 <code>[诚实提醒]</code> 或 <code>[不确定]</code> 标记。</p></div>
+
+<h4>task/ (dag.py + persistence.py)</h4>
+<div class="card"><p>Task DAG 实现 s12 任务依赖系统。<code>Task</code> 有 blocked_by（前驱依赖列表）和 blocks（后继列表）。<code>can_start()</code> 检查所有依赖是否完成。<code>TaskDAG.get_ready()</code> 返回可开始的任务。<code>TaskStore</code> 用原子写入持久化到 <code>.tasks/{id}.json</code>。</p></div>
+
+<h4>tools/ (12个内置工具)</h4>
+<div class="card">
+  <p>bash(流式+超时+进程组管理)、read(分页+图片base64)、write(原子写入+路径安全)、edit(精确+模糊匹配+diff预览)、grep(正则+context lines+二进制跳过)、glob(通配符+系统目录排除)、ls(文件/目录分类+大小格式化)、web_fetch(HTTP+HTML→文本+3次重试)。元工具: skill_manage(CRUD+模糊修补)、memory(添加/删除/召回+威胁扫描)、task(列表/状态/依赖管理)。BLM 专用: list_workspaces/read_workspace/read_workspace_json/save_workspace/create_workspace。</p>
+</div>
+  <div class="arch-item"><h4>kernel/event_stream.py · 222行</h4><p style="font-size:11px">16种事件判别联合。EventSink(多路复用)、MultiSink(多子Sink分发)、NullSink(丢弃)。</p><div class="files"><span>TurnStarted</span><span>LLMResponse</span><span>ToolDispatch</span><span>ToolResult</span><span>Usage</span><span>Error</span></div></div>
+  <div class="arch-item"><h4>kernel/sandbox.py · 197行</h4><p style="font-size:11px">100+只读命令分类。危险子模式检测。git特殊处理(仅push --force/rebase --hard是危险的)。</p><div class="files"><span>classify_bash()</span><span>READONLY_COMMANDS</span><span>DANGEROUS_SUB_PATTERNS</span></div></div>
+  <div class="arch-item"><h4>kernel/hook.py · 191行</h4><p style="font-size:11px">4事件钩子: PreToolUse/PostToolUse/Stop/UserSubmit。Shell钩子: exit 2=block。</p><div class="files"><span>HookManager</span><span>HookResult</span><span>shell hooks</span></div></div>
+  <div class="arch-item"><h4>kernel/provider.py · 235行</h4><p style="font-size:11px">AnthropicProvider + OpenAIProvider。Tool格式自动转换(Anthropic↔OpenAI)。Usage提取。</p><div class="files"><span>LLMProvider ABC</span><span>create_provider()</span></div></div>
+  <div class="arch-item"><h4>kernel/capability_gate.py · 67行</h4><p style="font-size:11px">诚实守卫。禁止话题检测+不确定信号扫描。输出中自动注入[不确定]标记。</p><div class="files"><span>CapabilityGate</span><span>check_forbidden()</span><span>inject_warning()</span></div></div>
+  <div class="arch-item"><h4>task/dag.py + persistence.py</h4><p style="font-size:11px">Task DAG + blockedBy依赖 + 状态机(pending→in_progress→completed)。JSON文件持久化。</p><div class="files"><span>TaskDAG</span><span>TaskStore</span><span>can_start()</span><span>blocked_by</span></div></div>
+  <div class="arch-item"><h4>tools/ (12个内置工具)</h4><p style="font-size:11px">bash(流式+超时+进程组管理)、read(分页+图片检测)、write(原子写入)、edit(模糊匹配+diff)。grep/glob/ls/web_fetch。skill_manage/memory_tool/task元工具。blm_workspace(5个BLM专用工具)。</p></div>
+  <div class="arch-item"><h4>service/ + config.py + agent_builder.py</h4><p style="font-size:11px">CLI交互、Web API(SSE)、WebUI Bridge(WireEvent转换)。多provider配置。装配器: 8层提示词+技能+记忆+工具→Agent。</p></div>
+</div>
+
+<!-- ═══════════ 5. 交互协议 ═══════════ -->
+<h2 id="s5">5. 交互协议</h2>
+
+<h3>5.1 HTTP REST API</h3>
+<div class="arch-grid">
+  <div class="arch-item"><h4>POST /api/ai/ask</h4><pre style="font-size:10px;padding:6px">Req: {"workspace":"入库","question":"有哪些角色?"}
+Res: SSE text/event-stream
+  data: {"text":"正在加载..."}
+  data: {"text":"3个角色..."}
+  data: {"done":true}</pre></div>
+  <div class="arch-item"><h4>POST /api/ai/export/start</h4><pre style="font-size:10px;padding:6px">Req: {"workspace":"入库"}
+Res: {"id":"abc","status":"queued","progress":5}</pre></div>
+  <div class="arch-item"><h4>GET /api/ai/export/{id}/status</h4><pre style="font-size:10px;padding:6px">Res: {"id":"abc","status":"running","progress":50}</pre></div>
+  <div class="arch-item"><h4>POST /api/agent/chat (WebUI)</h4><pre style="font-size:10px;padding:6px">Req: {"prompt":"...","sessionId":"..."}
+Res: SSE WireEvent stream
+  {"kind":"tool_dispatch","tool_id":"t1",...}
+  {"kind":"tool_result","output":"...",...}</pre></div>
+</div>
+
+<h3>5.2 SSE WireEvent 协议</h3>
+<table>
+  <tr><th>事件</th><th>方向</th><th>负载</th></tr>
+  <tr><td><code>turn_started</code></td><td>agent→client</td><td>turn</td></tr>
+  <tr><td><code>llm_response</code></td><td>agent→client</td><td>text, tool_blocks[]</td></tr>
+  <tr><td><code>tool_dispatch</code></td><td>agent→client</td><td>tool_id, tool_name, args, read_only</td></tr>
+  <tr><td><code>tool_result</code></td><td>agent→client</td><td>tool_id, tool_name, output, is_error</td></tr>
+  <tr><td><code>approval_request</code></td><td>agent→client</td><td>approval_id, tool_name, reason</td></tr>
+  <tr><td><code>usage</code></td><td>agent→client</td><td>prompt_tokens, completion_tokens, total</td></tr>
+  <tr><td><code>error</code></td><td>agent→client</td><td>error, recoverable</td></tr>
+  <tr><td><code>agent_complete</code></td><td>agent→client</td><td>reason</td></tr>
+</table>
+
+<h3>5.3 CLI 格式</h3>
+<div class="card"><pre style="font-size:11px"><span style="color:#64748b">$ python -m blm ai [workspace_name]</span>
+
+BLM >> <span style="color:#93c5fd">列出所有工作区</span>          <span style="color:#64748b">← 用户输入</span>
+  <span style="color:#fcd34d">></span> list_workspaces <span style="color:#86efac">✓</span>          <span style="color:#64748b">← 工具执行</span>
+当前有2个工作区...              <span style="color:#64748b">← Agent响应</span>
+
+BLM >> q                       <span style="color:#64748b">← 退出</span></pre></div>
+
+<!-- ═══════════ 6. 方案演进 ═══════════ -->
+<h2 id="s6">6. 方案演进</h2>
+<div class="timeline">
+  <div class="timeline-item"><strong>Phase 1: 固定技能模式</strong> (2026-06-10) — Python原生内核 + 两个硬编码Skill + 3门权限管线。约1,425行。</div>
+  <div class="timeline-item"><strong>Phase 2: 自沉淀技能体系</strong> (2026-06-10) — 引入hermes-agent机制。技能=SKILL.md+对话中自沉淀。三层系统提示。</div>
+  <div class="timeline-item"><strong>Phase 3: 30K行规划</strong> (2026-06-10) — 深度研究4个参考项目。5层架构+20轮实施。</div>
+  <div class="timeline-item"><strong>Phase 4: 测试驱动+Eval</strong> (2026-06-10) — 从追行数转向追质量。MockLLM+Eval JSON数据集。</div>
+  <div class="timeline-item"><strong>Phase 5: S1-S20+claw0深度学习</strong> (2026-06-11) — 4层压缩+错误恢复链+动态提示+Task DAG+8层文件式提示词+诚实体系+原生前端。</div>
+</div>
+
+<!-- ═══════════ 7. 路线图 ═══════════ -->
+<h2 id="s7">7. 路线图</h2>
+<div class="card"><h4>已完成</h4>
+<table>
+  <tr><th>阶段</th><th>内容</th><th>测试</th></tr>
+  <tr><td>基础骨架</td><td>kernel/context/session/memory/skill/tools/service/prompt 全部模块</td><td>17</td></tr>
+  <tr><td>内核强化</td><td>双层循环+5门权限+4提供者+沙箱+钩子+重试</td><td>17</td></tr>
+  <tr><td>上下文+会话</td><td>4层压缩+JSONL树+FTS5搜索</td><td>35</td></tr>
+  <tr><td>记忆+技能</td><td>§分隔符+freeze-snapshot+策展+技能市场</td><td>49</td></tr>
+  <tr><td>任务+工具</td><td>Task DAG+12内置工具+BLM工作区工具</td><td>59</td></tr>
+  <tr><td>S1-S20完善</td><td>4层压缩流水线+错误恢复链+FallbackTracker</td><td>64</td></tr>
+  <tr><td>诚实体系</td><td>能力边界+诚实准则+CapabilityGate+5个诚实度Eval</td><td>64</td></tr>
+  <tr><td>8层提示词</td><td>claw0风格prompt/composer.py+75测试</td><td><strong>75</strong></td></tr>
+  <tr><td colspan="2"><strong>当前总计</strong></td><td><strong>75 tests + 15 evals</strong></td></tr>
+</table></div>
+
+<div class="card" style="margin-top:32px;text-align:center;color:var(--muted);font-size:11px">
+  BLM Agent 架构设计文档 v2 · 基于 learn-claude-code S1-S20 + claw0 8层架构<br>
+  最后更新: 2026-06-11 · 75 tests PASS · 15 evals PASS · 68 Python modules<br>
+  参考项目: reasonix · hermes-agent · cc (Claude Code) · pi-mono · claw0
+</div>
+
+</article></div></body></html>

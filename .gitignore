@@ -6,6 +6,7 @@
 
 # Sensitive local data. Never push this directory.
 /ignore/
+.env
 
 # Local working documents and generated runtime data
 /workspace/

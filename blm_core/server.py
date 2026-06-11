@@ -141,6 +141,16 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_attachment(path)
                 if path.startswith("/api/export-docx/"):
                     return self._handle_export_docx(path)
+                # AI 路由（通过 register_ai_routes 注入）
+                if getattr(self.__class__, '_ai_routes_get', None):
+                    for prefix, handler in self.__class__._ai_routes_get.items():
+                        if path == prefix: return handler(self)
+                if path.startswith("/api/ai/export/") and path.endswith("/download"):
+                    if hasattr(self.__class__, '_ai_export_download'):
+                        return self.__class__._ai_export_download(self, path)
+                if path.startswith("/api/ai/export/"):
+                    if hasattr(self.__class__, '_ai_export_status'):
+                        return self.__class__._ai_export_status(self, path)
                 if path.startswith("/api/export-jobs/") and path.endswith("/download"):
                     return self._handle_export_job_download(path)
                 if path.startswith("/api/export-jobs/"):
@@ -206,6 +216,10 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_merge_apply(body)
                 if path == "/api/export-docx/start":
                     return self._handle_export_docx_start(body)
+                # AI 路由（通过 register_ai_routes 注入）
+                if getattr(self.__class__, '_ai_routes_post', None):
+                    for prefix, handler in self.__class__._ai_routes_post.items():
+                        if path == prefix: return handler(self, body)
                 if path == "/api/collab/snapshot" and collab:
                     return self._handle_collab_snapshot(body)
                 if path == "/api/collab/submits/list" and collab:
@@ -888,6 +902,10 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+    # 注入 AI 路由 — AI 与 BLM 解耦的关键点
+    from blm_ai.server_routes import register_ai_routes
+    register_ai_routes(BlmRequestHandler, storage)
 
     return BlmRequestHandler
 

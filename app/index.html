@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BLM - Business Language Modeling</title>
-  <link rel="stylesheet" href="style.css?v=65">
+  <link rel="stylesheet" href="style.css?v=68">
+  <link rel="stylesheet" href="ai.css?v=68">
 </head>
 <body>
 
@@ -21,18 +22,39 @@
     <button id="user-account-button" class="user-account-button" type="button" onclick="openUserAccountModal()" data-testid="user-account-button">用户信息配置</button>
   </div>
   <div class="toolbar-right">
-    <button onclick="App.cmdNew()" class="btn btn-ghost" data-testid="toolbar-new-button">新建</button>
-    <button onclick="App.cmdOpen()" class="btn btn-ghost" data-testid="toolbar-open-button">打开</button>
-    <button onclick="App.cmdDelete()" class="btn btn-ghost btn-danger" data-testid="toolbar-delete-button">删除</button>
+    <div class="tbar-dd" id="dd-file">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('file')">文件 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdNew();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-new-button">新建</button>
+        <button onclick="App.cmdOpen();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-open-button">打开</button>
+        <button onclick="App.cmdDelete();App.closeAllDropdowns()" class="tbar-dd-item tbar-dd-danger" data-testid="toolbar-delete-button">删除</button>
+      </div>
+    </div>
     <button onclick="App.cmdSave()" class="btn btn-ghost" id="btn-save" title="立即同步 (Ctrl+S)">立即同步</button>
-    <button onclick="App.cmdCreateVersion()" class="btn btn-primary" data-testid="toolbar-version-button">归档版本</button>
-    <button onclick="App.cmdVersions()" class="btn btn-ghost" data-testid="toolbar-history-button">历史记录</button>
-    <button onclick="App.cmdSaveAs()" class="btn btn-ghost" data-testid="toolbar-save-as-button" id="toolbar-save-as-label">复制</button>
-    <button onclick="App.cmdCompare()" class="btn btn-ghost" data-testid="toolbar-compare-button">比对</button>
-    <button onclick="App.cmdMerge()" class="btn btn-ghost" data-testid="toolbar-merge-button">合并</button>
-    <button onclick="App.cmdExport()" class="btn btn-ghost" data-testid="toolbar-export-button">导出</button>
-    <button onclick="App.cmdManual()" class="btn btn-ghost" data-testid="toolbar-manual-button" id="toolbar-manual-button">使用手册</button>
-    <button onclick="App.cmdFeedback()" class="btn btn-ghost" data-testid="toolbar-feedback-button">反馈建议</button>
+    <div class="tbar-dd" id="dd-history">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('history')">历史 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdCreateVersion();App.closeAllDropdowns()" class="tbar-dd-item tbar-dd-primary" data-testid="toolbar-version-button">归档版本</button>
+        <button onclick="App.cmdVersions();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-history-button">历史记录</button>
+      </div>
+    </div>
+    <div class="tbar-dd" id="dd-tools">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('tools')">工具 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdSaveAs();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-save-as-button">复制</button>
+        <button onclick="App.cmdCompare();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-compare-button">比对</button>
+        <button onclick="App.cmdMerge();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-merge-button">合并</button>
+        <div class="tbar-dd-sep"></div>
+        <button onclick="AI.toggle();App.closeAllDropdowns()" class="tbar-dd-item tbar-dd-primary" data-testid="toolbar-ai-button" title="AI 助手 (Ctrl+J)">AI 助手</button>
+      </div>
+    </div>
+    <div class="tbar-dd" id="dd-help">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('help')">帮助 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdManual();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-manual-button">使用手册</button>
+        <button onclick="App.cmdFeedback();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-feedback-button">反馈建议</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -324,18 +346,41 @@
   </div>
 </div>
 
-<script src="state.js?v=65"></script>
-<script src="api.js?v=65"></script>
-<script src="collab.js?v=65"></script>
-<script src="render.js?v=65"></script>
-<script src="domain.js?v=65"></script>
-<script src="process.js?v=65"></script>
-<script src="entity.js?v=65"></script>
-<script src="preview.js?v=65"></script>
-<script src="manual.js?v=65"></script>
-<script src="app.js?v=65"></script>
-<script src="vendor/mermaid.min.js?v=65"></script>
-<script src="vendor/marked.umd.js?v=65"></script>
+<!-- AI Drawer -->
+<div id="ai-drawer" class="ai-drawer hidden">
+  <div id="ai-drawer-handle" class="ai-drawer-handle" onmousedown="AI._resizeStart(event)"></div>
+  <div class="ai-drawer-header">
+    <span class="ai-drawer-title">AI 助手</span>
+    <select id="ai-session-select" class="ai-session-select" onchange="AI._switchSession(this.value)"><option>新会话</option></select>
+    <span id="ai-ws-label" class="ai-drawer-ws"></span>
+    <span id="ai-status" class="ai-status">就绪</span>
+    <button class="ai-drawer-close" onclick="AI.toggle()" title="收起 (Ctrl+J)">×</button>
+  </div>
+  <div id="ai-body" class="ai-body">
+    <div class="ai-welcome"><p><strong>你好！我是 BLM AI 助手</strong></p><p>读取/分析工作区 · 建模引导 · 文档导入 · 技能管理</p><p class="ai-honesty-note">我会坦诚说明能力边界——不知道的绝不会编造。</p></div>
+  </div>
+  <div class="ai-input-row">
+    <textarea id="ai-input" class="ai-input" rows="1" placeholder="输入问题或任务... (Enter发送, Shift+Enter换行)"
+      onkeydown="AI._onKey(event)"></textarea>
+    <button onclick="AI.send()" class="ai-send-btn" id="ai-send-btn">发送</button>
+    <button onclick="AI.stop()" class="ai-stop-btn hidden" id="ai-stop-btn">停止</button>
+  </div>
+</div>
+
+<script src="state.js?v=67"></script>
+<script src="api.js?v=67"></script>
+<script src="collab.js?v=67"></script>
+<script src="render.js?v=67"></script>
+<script src="domain.js?v=67"></script>
+<script src="process.js?v=67"></script>
+<script src="entity.js?v=67"></script>
+<script src="preview.js?v=67"></script>
+<script src="manual.js?v=67"></script>
+<script src="app.js?v=68"></script>
+<script src="ai_api.js?v=68"></script>
+<script src="ai.js?v=68"></script>
+<script src="vendor/mermaid.min.js?v=67"></script>
+<script src="vendor/marked.umd.js?v=67"></script>
 <script>
   if (window.mermaid) {
     window.mermaidLib = window.mermaid;

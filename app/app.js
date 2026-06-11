@@ -3806,6 +3806,131 @@ const App = {
     }
   },
 
+  // ---- Dropdown menus ----
+
+  _activeDropdown: null,
+
+  toggleDropdown(name) {
+    const menu = document.querySelector('#dd-' + name + ' .tbar-dd-menu');
+    if (!menu) return;
+    const wasHidden = menu.classList.contains('hidden');
+    App.closeAllDropdowns();
+    if (wasHidden) {
+      menu.classList.remove('hidden');
+      App._activeDropdown = name;
+    }
+  },
+
+  closeAllDropdowns() {
+    document.querySelectorAll('.tbar-dd-menu').forEach(function(m) { m.classList.add('hidden'); });
+    App._activeDropdown = null;
+  },
+
+  // ---- AI 助手（委托给 ai.js） ----
+
+  cmdAI() {
+    if (typeof AI !== 'undefined' && AI.toggle) { AI.toggle(); }
+  },
+
+  closeAI() {
+    document.getElementById('ai-overlay').classList.add('hidden');
+  },
+
+  _addAIMessage(role, text) {
+    const messages = document.getElementById('ai-messages');
+    const div = document.createElement('div');
+    div.className = 'ai-msg ai-msg-' + role;
+    div.textContent = text;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return div;
+  },
+
+  sendAI() {
+    const input = document.getElementById('ai-input');
+    const question = input.value.trim();
+    if (!question) return;
+
+    this._addAIMessage('user', question);
+
+    const aiDiv = this._addAIMessage('ai', '思考中...');
+
+    input.value = '';
+    document.getElementById('ai-send-btn').disabled = true;
+
+    api.aiAskStream(S.currentFile, question,
+      function onChunk(text) {
+        if (aiDiv.textContent === '思考中...') aiDiv.textContent = '';
+        aiDiv.textContent += text;
+        document.getElementById('ai-messages').scrollTop = document.getElementById('ai-messages').scrollHeight;
+      },
+      function onDone() {
+        document.getElementById('ai-send-btn').disabled = false;
+        document.getElementById('ai-input').focus();
+        if (aiDiv.textContent === '思考中...') aiDiv.textContent = '(无回答)';
+      },
+      function onError(err) {
+        aiDiv.textContent = '错误: ' + err;
+        aiDiv.style.color = '#ef4444';
+        document.getElementById('ai-send-btn').disabled = false;
+      }
+    );
+  },
+
+  async aiExportDocx() {
+    if (!S.currentFile) { showToast('请先打开一个工作区文档', 'warning'); return; }
+    if (S.isExporting) return;
+
+    S.isExporting = true;
+    syncSavingControls();
+
+    const self = this;
+    self._addAIMessage('system', '⏳ AI 正在分析文档结构，准备导出 DOCX...');
+
+    try {
+      if (S.modified) { await App.cmdSave(); }
+      if (S.modified) { S.isExporting = false; syncSavingControls(); return; }
+
+      const startResult = await api.aiExportStart(S.currentFile);
+      if (startResult.error) {
+        self._addAIMessage('system', '❌ 导出失败: ' + startResult.error);
+        S.isExporting = false; syncSavingControls(); return;
+      }
+
+      const jobId = startResult.id;
+      const statusEl = self._addAIMessage('system', startResult.message || '导出中...');
+
+      for (let i = 0; i < 120; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const status = await api.aiExportJob(jobId);
+        if (status.error) {
+          statusEl.textContent = '❌ 导出失败: ' + status.error;
+          S.isExporting = false; syncSavingControls(); return;
+        }
+        statusEl.textContent = status.message || '处理中...';
+        if (status.status === 'done') {
+          const resp = await api.downloadAIExportJob(jobId);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            App._downloadBlob(blob, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', status.filename || 'blm-ai-export.docx');
+            statusEl.textContent = '✅ DOCX 导出完成，文件已下载';
+          }
+          S.isExporting = false; syncSavingControls(); return;
+        }
+        if (status.status === 'failed') {
+          statusEl.textContent = '❌ 导出失败: ' + (status.error || '未知错误');
+          S.isExporting = false; syncSavingControls(); return;
+        }
+      }
+      statusEl.textContent = '⚠️ 导出超时，请稍后重试';
+    } catch (err) {
+      self._addAIMessage('system', '❌ 导出出错: ' + (err.message || ''));
+    } finally {
+      S.isExporting = false;
+      syncSavingControls();
+    }
+  },
+
   cmdManual() {
     navigate('manual', {});
   },
@@ -4749,7 +4874,10 @@ function copyVersionLocator(docName, versionId) {
 }
 
 document.addEventListener('contextmenu', showLocatorMenu);
-document.addEventListener('click', hideLocatorMenu);
+document.addEventListener('click', function(e) {
+  hideLocatorMenu();
+  if (!e.target.closest('.tbar-dd')) { App.closeAllDropdowns(); }
+});
 window.addEventListener('blur', hideLocatorMenu);
 
 function getStartupLinkParams() {

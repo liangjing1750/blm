@@ -51,6 +51,101 @@ def build_docx_from_markdown(markdown: str, *, title: str, attachments: list[Doc
     return buffer.getvalue()
 
 
+def build_docx_with_screenshots(
+    markdown: str,
+    *,
+    title: str,
+    screenshots: list[DocxImage] | None = None,
+    attachments: list[DocxAttachment] | None = None,
+) -> bytes:
+    """Build a DOCX package that includes both Mermaid SVG images and PNG screenshots.
+
+    PNG screenshots are appended after the markdown content as additional images.
+    """
+    clean_title = _text(title) or "BLM Document"
+    blocks, markdown_images = _parse_markdown_blocks(markdown)
+    screenshot_images = list(screenshots or [])
+
+    # Add screenshot blocks after markdown content
+    for i in range(len(screenshot_images)):
+        blocks.append({"type": "image", "index": len(markdown_images) + i})
+
+    all_images = markdown_images + screenshot_images
+    attachment_parts = _prepare_attachments(attachments or [])
+    image_parts = _prepare_images(all_images)
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _content_types_xml(attachment_parts, image_parts))
+        archive.writestr("_rels/.rels", _root_rels_xml())
+        archive.writestr("docProps/core.xml", _core_xml(clean_title))
+        archive.writestr("docProps/app.xml", _app_xml())
+        archive.writestr("word/styles.xml", _styles_xml())
+        archive.writestr("word/_rels/document.xml.rels", _document_rels_xml(attachment_parts, image_parts))
+        archive.writestr(
+            "word/document.xml",
+            _document_xml_with_screenshots(
+                blocks, clean_title, attachment_parts, image_parts,
+                len(screenshot_images), len(markdown_images),
+            ),
+        )
+        for part_name, attachment in attachment_parts:
+            archive.writestr(f"word/{part_name}", attachment.payload)
+        for part_name, image in image_parts:
+            archive.writestr(f"word/{part_name}", image.payload)
+    return buffer.getvalue()
+
+
+def _document_xml_with_screenshots(
+    blocks: list[dict],
+    title: str,
+    attachment_parts: list[tuple[str, DocxAttachment]],
+    image_parts: list[tuple[str, DocxImage]],
+    screenshot_count: int,
+    markdown_image_count: int,
+) -> str:
+    """Like _document_xml but adds a 'Screenshots' heading before screenshot images."""
+    body_parts = [_paragraph(title, style="Title")]
+    screenshot_header_added = False
+
+    for block in blocks:
+        if block.get("type") == "image":
+            image_index = int(block.get("index") or 0)
+            if 0 <= image_index < len(image_parts):
+                if not screenshot_header_added and image_index >= markdown_image_count and screenshot_count > 0:
+                    screenshot_header_added = True
+                    body_parts.append(_paragraph("截图附件", style="Heading1"))
+                _, image = image_parts[image_index]
+                body_parts.append(_image_paragraph(f"rImage{image_index + 1}", image))
+            continue
+        body_parts.append(_paragraph(str(block.get("text", "")), style=str(block.get("style", ""))))
+
+    if attachment_parts:
+        body_parts.append(_paragraph("附件", style="Heading1"))
+        body_parts.append(_paragraph("以下附件已嵌入到当前 DOCX 文件中。"))
+        for _, attachment in attachment_parts:
+            size_label = _format_size(len(attachment.payload))
+            body_parts.append(
+                _paragraph(
+                    f"• {attachment.name}（{attachment.content_type or 'application/octet-stream'}，{size_label}）",
+                    style="ListParagraph",
+                )
+            )
+
+    body_parts.append(
+        '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1200" w:bottom="1440" w:left="1200" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>'
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        f"<w:body>{''.join(body_parts)}</w:body></w:document>"
+    )
+
+
 def _parse_markdown_blocks(markdown: str) -> tuple[list[dict], list[DocxImage]]:
     blocks: list[dict] = []
     images: list[DocxImage] = []
