@@ -301,10 +301,10 @@ function render() {
   renderSidebar();
   const t = normalizeMainTabId(S.ui.mainTab || 'panoramaWorkbench');
   S.ui.mainTab = t;
-  if      (t === 'panoramaWorkbench')      renderBusinessArchitectureTab();
-  else if (t === 'processWorkbench')       renderBizDomainTab();
-  else if (t === 'constructWorkbench')     renderBizComponentTab();
-  else if (t === 'orchestrationWorkbench') renderAppArchTab();
+  if      (t === 'panoramaWorkbench')      window.PanoramaWorkbench ? window.PanoramaWorkbench.render() : renderBusinessArchitectureTab();
+  else if (t === 'processWorkbench')       window.ProcessWorkbench ? window.ProcessWorkbench.render() : renderBizDomainTab();
+  else if (t === 'constructWorkbench')     window.ComponentWorkbench ? window.ComponentWorkbench.render() : renderBizComponentTab();
+  else if (t === 'orchestrationWorkbench') window.OrchestrationWorkbench ? window.OrchestrationWorkbench.render() : renderAppArchTab();
   else if (t === 'preview')                renderPreviewTab();
   else                                     renderDomainTab();
   } // end if(S.doc) else block
@@ -1590,16 +1590,20 @@ function startDrawerResize(e) {
 
 /* ── 新 Tab 渲染入口 ── */
 function renderBusinessArchitectureTab() {
+  if (window.PanoramaWorkbench) return window.PanoramaWorkbench.render();
   if (typeof renderDomainTab === 'function') renderDomainTab();
 }
 function renderBizDomainTab() {
   S.ui.procView = 'stage';
+  if (window.ProcessWorkbench) return window.ProcessWorkbench.render();
   if (typeof renderProcessTab === 'function') renderProcessTab();
 }
 function renderBizComponentTab() {
   S.ui.tab = 'data';
+  if (window.ComponentWorkbench) return window.ComponentWorkbench.render();
   if (typeof renderDataTab === 'function') renderDataTab();
 }
 function renderAppArchTab() {
+  if (window.OrchestrationWorkbench) return window.OrchestrationWorkbench.render();
   if (typeof renderAppArchitectureTab === 'function') renderAppArchitectureTab();
 }

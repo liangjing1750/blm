@@ -1932,6 +1932,20 @@ function renderSubDomainMapCard(selectedDomainId = 'all', selectedDomainLabel = 
   </div>`;
 }
 
+function setPanoramaCapabilitySelection(capabilityId) {
+  if (window.PanoramaWorkbench) return window.PanoramaWorkbench.setCapabilitySelection(capabilityId);
+}
+
+function getPanoramaCapabilityStageIds(capability, selectedDomainId = 'all') {
+  if (window.PanoramaModel) return window.PanoramaModel.getCapabilityStageIds(capability, selectedDomainId);
+  return new Set();
+}
+
+function renderPanoramaValueMatrix(selectedDomainId = 'all') {
+  if (window.PanoramaWorkbench) return window.PanoramaWorkbench.renderMap(selectedDomainId);
+  return '';
+}
+
 function getLightRoleSummary(role, selectedDomainId = 'all') {
   const usage = getRoleUsageSummaryForDomainInfo(role.id, selectedDomainId);
   return usage.taskCount ? `${usage.taskCount}N` : '未使用';
@@ -2578,13 +2592,14 @@ function renderRoleSummaryCard(roles = getRoles(), selectedDomainId = 'all') {
 }
 
 function switchDomainTab(tabId) {
+  if (window.PanoramaWorkbench) return window.PanoramaWorkbench.switchTab(tabId);
   S.ui.domainTab = tabId;
   renderBusinessArchitectureTab();
 }
 
 function renderBusinessArchitectureTab(options = {}) {
+  if (window.PanoramaWorkbench) return window.PanoramaWorkbench.render(options);
   ensureProcPos(S.doc);
-  const meta = S.doc.meta || {};
   const domainInfoContext = getSelectedDomainInfoContext();
   const selectedDomainId = domainInfoContext.id;
   const activeDomainTab = S.ui.domainTab || 'panorama';
@@ -2602,24 +2617,10 @@ function renderBusinessArchitectureTab(options = {}) {
   </div>`;
 
   // ── 全景视图 ──
-  const domainInfoActions = `
-    <div class="domain-info-inline" data-testid="domain-info-inline">
-      <label class="domain-info-inline-field"><span>文档名称</span><input type="text" value="${esc(meta.domain || meta.title || '')}" oninput="setDomain(this.value)"></label>
-      <label class="domain-info-inline-field"><span>作者</span><input type="text" data-testid="domain-author-input" value="${esc(meta.author || '')}" oninput="setMeta('author',this.value)"></label>
-      <label class="domain-info-inline-field"><span>日期</span><input type="text" data-testid="domain-date-input" value="${esc(meta.date || '')}" oninput="setMeta('date',this.value)"></label>
-      <label class="domain-info-inline-field"><span>团队空间</span><input type="text" data-testid="domain-space-input" value="${esc(meta.space || meta.teamSpace || '')}" placeholder="如：交割业务" oninput="setMeta('space',this.value)"></label>
-      <label class="domain-info-inline-field"><span>标签</span><input type="text" data-testid="domain-tags-input" value="${esc(Array.isArray(meta.tags) ? meta.tags.join('，') : (meta.tags || ''))}" placeholder="逗号分隔" oninput="setMeta('tags',this.value)"></label>
-    </div>
-  `;
   const panoramaContent = `
-    <div class="ctx-card domain-panel">
-      ${renderDomainPanelHeader('战略设计', '愿景、使命、价值观等顶层设计内容即将支持编辑。')}
-      <div class="domain-panel-body"><p class="no-refs domain-panel-empty">战略设计功能即将上线。</p></div>
-    </div>
     <div class="ctx-card domain-panel domain-info-card">
-      ${renderDomainPanelHeader('文档信息', '', domainInfoActions)}
       <div class="domain-panel-body domain-info-card-body">
-        ${renderSubDomainMapCard(selectedDomainId, domainInfoContext.label)}
+        ${renderPanoramaValueMatrix(selectedDomainId)}
       </div>
     </div>
   `;
@@ -2696,11 +2697,13 @@ function renderBusinessArchitectureTab(options = {}) {
 }
 
 function switchAppArchTab(tabId) {
+  if (window.OrchestrationWorkbench) return window.OrchestrationWorkbench.switchTab(tabId);
   S.ui.appArchTab = tabId;
   renderAppArchitectureTab();
 }
 
 function renderAppArchitectureTab() {
+  if (window.OrchestrationWorkbench) return window.OrchestrationWorkbench.render();
   var subTabs = [
     { id: 'pageReference', label: '页面与原型引用' },
     { id: 'frontendApi', label: '前端接口需求' },

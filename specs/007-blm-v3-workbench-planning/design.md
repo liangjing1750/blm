@@ -6,6 +6,38 @@
 2. 先弱参考，后强关系。
 3. 先复用现有能力，后新增能力。
 4. 一个角色只有一个主要工作台，其他工作台只做输入、评审或协同。
+5. 前端按工作台隔离，上层到下层单向依赖，同层工作台之间不直接依赖。
+
+## 前端目标架构
+
+```text
+core
+  app shell / action / DOM 基础能力
+
+shared
+  UI helper / document query / model ref
+
+workbenches
+  panorama / process / component / orchestration / entity / knowledge
+
+legacy
+  尚未完全迁出的旧实现，后续逐步清空
+```
+
+依赖规则：
+
+- `workbenches/*` 可以依赖 `shared` 和 `core`。
+- `shared` 不依赖任何工作台。
+- 同层工作台之间不直接依赖。
+- 视图模型不直接访问 DOM。
+- 工作台之间需要跳转时，通过 `AppActions` 发起统一动作。
+
+当前迁移策略：
+
+- 全景工作台先拆出独立视图模型和渲染模块。
+- 应用编排台先拆出独立工作台模块。
+- 流程、构件、实体先通过 facade 隔离入口，后续在对应工作台内继续收敛。
+- 继续使用普通 `<script>` 加载，暂不切换 ES Modules，降低一次性重构风险。
 
 ## 工作台结构
 

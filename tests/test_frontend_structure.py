@@ -11,6 +11,17 @@ EXPECTED_SCRIPTS = [
     "state.js",
     "api.js",
     "collab.js",
+    "core/dom.js",
+    "core/actions.js",
+    "shared/ui.js",
+    "shared/document-queries.js",
+    "workbenches/panorama/panorama-model.js",
+    "workbenches/panorama/panorama-workbench.js",
+    "workbenches/process/process-workbench.js",
+    "workbenches/component/component-workbench.js",
+    "workbenches/orchestration/orchestration-workbench.js",
+    "workbenches/knowledge/knowledge-workbench.js",
+    "workbenches/entity/entity-workbench.js",
     "render.js",
     "domain.js",
     "process.js",
@@ -27,6 +38,44 @@ class FrontendStructureTests(unittest.TestCase):
             self.assertTrue((APP_DIR / script_name).exists(), f"{script_name} 不存在")
         self.assertTrue((APP_DIR / "vendor" / "mermaid.min.js").exists())
         self.assertTrue((APP_DIR / "vendor" / "marked.umd.js").exists())
+
+    def test_workbench_target_architecture_boundaries(self):
+        html = (APP_DIR / "index.html").read_text("utf-8")
+        required_scripts = [
+            "core/dom.js",
+            "core/actions.js",
+            "shared/ui.js",
+            "shared/document-queries.js",
+            "workbenches/panorama/panorama-model.js",
+            "workbenches/panorama/panorama-workbench.js",
+            "workbenches/process/process-workbench.js",
+            "workbenches/component/component-workbench.js",
+            "workbenches/orchestration/orchestration-workbench.js",
+            "workbenches/knowledge/knowledge-workbench.js",
+            "workbenches/entity/entity-workbench.js",
+        ]
+        for script_name in required_scripts:
+            self.assertIn(f'<script src="{script_name}', html)
+
+        workbench_files = list((APP_DIR / "workbenches").glob("**/*.js"))
+        self.assertGreaterEqual(len(workbench_files), 7)
+        for path in workbench_files:
+            text = path.read_text("utf-8")
+            relative = path.relative_to(APP_DIR).as_posix()
+            own_area = relative.split("/")[1]
+            for other_area in ["panorama", "process", "component", "orchestration", "knowledge", "entity"]:
+                if other_area == own_area:
+                    continue
+                self.assertNotIn(f"workbenches/{other_area}/", text, f"{relative} 不应依赖同层工作台 {other_area}")
+
+        for path in (APP_DIR / "shared").glob("*.js"):
+            text = path.read_text("utf-8")
+            self.assertNotIn("workbenches/", text, f"{path.name} 不应依赖工作台层")
+
+        for path in (APP_DIR / "workbenches").glob("**/*model.js"):
+            text = path.read_text("utf-8")
+            self.assertNotIn("document.getElementById", text, f"{path.name} 视图模型不应直接访问 DOM")
+            self.assertNotIn(".innerHTML", text, f"{path.name} 视图模型不应渲染 DOM")
 
     def test_split_scripts_pass_node_syntax_check(self):
         for script_name in EXPECTED_SCRIPTS:
@@ -109,6 +158,7 @@ class FrontendStructureTests(unittest.TestCase):
         render_js = (APP_DIR / "render.js").read_text("utf-8")
         process_js = (APP_DIR / "process.js").read_text("utf-8")
         domain_js = (APP_DIR / "domain.js").read_text("utf-8")
+        orchestration_js = (APP_DIR / "workbenches" / "orchestration" / "orchestration-workbench.js").read_text("utf-8")
 
         self.assertIn("{ id: 'panoramaWorkbench', label: '全景工作台' }", render_js)
         self.assertIn("{ id: 'processWorkbench',  label: '流程工作台' }", render_js)
@@ -127,10 +177,69 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn("{ id: 'serviceCatalog', label: '服务目录' }", domain_js)
         self.assertNotIn("{ id: 'orchestration', label: '应用服务场景' }", domain_js)
         self.assertNotIn("{ id: 'techImpl', label: '技术承接' }", domain_js)
-        self.assertIn("页面与原型引用", domain_js)
-        self.assertIn("前端接口需求", domain_js)
-        self.assertIn("接口后的后端任务链路", domain_js)
-        self.assertIn("应用编排台", domain_js)
+        self.assertIn("页面与原型引用", orchestration_js)
+        self.assertIn("前端接口需求", orchestration_js)
+        self.assertIn("接口后的后端任务链路", orchestration_js)
+        self.assertIn("应用编排台", orchestration_js)
+
+    def test_file_menu_exposes_document_properties_modal(self):
+        html = (APP_DIR / "index.html").read_text("utf-8")
+        app_js = (APP_DIR / "app.js").read_text("utf-8")
+
+        self.assertIn('data-testid="toolbar-properties-button">属性</button>', html)
+        self.assertLess(
+            html.find('data-testid="toolbar-properties-button"'),
+            html.find('data-testid="toolbar-delete-button"'),
+        )
+        self.assertIn('data-testid="document-properties-modal"', html)
+        self.assertIn('id="document-properties-name"', html)
+        self.assertIn('id="document-properties-author"', html)
+        self.assertIn('id="document-properties-date"', html)
+        self.assertIn('id="document-properties-space"', html)
+        self.assertIn('id="document-properties-tags"', html)
+        self.assertIn("cmdProperties()", app_js)
+        self.assertIn("saveDocumentProperties()", app_js)
+
+    def test_panorama_workbench_groups_strategy_matrix_and_components(self):
+        panorama_js = (APP_DIR / "workbenches" / "panorama" / "panorama-workbench.js").read_text("utf-8")
+        panorama_model_js = (APP_DIR / "workbenches" / "panorama" / "panorama-model.js").read_text("utf-8")
+
+        self.assertIn("战略", panorama_js)
+        self.assertIn("价值与业务域矩阵", panorama_js)
+        self.assertIn("业务能力组件", panorama_js)
+        self.assertIn("panorama-business-map", panorama_js)
+        self.assertIn("panorama-layer-strategy", panorama_js)
+        self.assertIn("panorama-layer-matrix", panorama_js)
+        self.assertNotIn("panorama-layer-component", panorama_js)
+        self.assertNotIn("panorama-business-component-card", panorama_js)
+        self.assertNotIn("renderDomainPanelHeader('业务组件'", panorama_js)
+        self.assertIn("renderPanoramaValueMatrix", panorama_js)
+        self.assertIn("panorama-stage-cell", panorama_js)
+        self.assertIn("panorama-stage-name", panorama_js)
+        self.assertIn("panorama-stage-count", panorama_js)
+        self.assertIn("getStageProcessCount", panorama_js)
+        self.assertIn("panorama-corner-axis", panorama_js)
+        self.assertIn("panorama-corner-domain", panorama_js)
+        self.assertIn("panorama-corner-stream", panorama_js)
+        self.assertIn("panorama-corner-slash", panorama_js)
+        self.assertIn("fitZoom", panorama_js)
+        self.assertIn("onWheel", panorama_js)
+        self.assertIn("panorama-zoom-viewport", panorama_js)
+        self.assertIn("panorama-zoom-canvas", panorama_js)
+        self.assertIn("panorama-strategy-flow", panorama_js)
+        self.assertIn("panorama-capability-node", panorama_js)
+        self.assertIn("panorama-capability-group core", panorama_js)
+        self.assertIn("panorama-capability-group generic", panorama_js)
+        self.assertIn("panorama-capability-constructs", panorama_js)
+        self.assertIn("getCapabilityConstructs", panorama_model_js)
+        self.assertIn("setPanoramaCapabilitySelection", panorama_js)
+        self.assertNotIn("panorama-support-line", panorama_js)
+        self.assertIn("build(selectedDomainId", panorama_model_js)
+        self.assertNotIn("全景总览", panorama_js)
+        self.assertNotIn("文档信息", panorama_js)
+        self.assertNotIn("战略牵引价值流", panorama_js)
+        self.assertIn("暂无价值与业务域矩阵数据", panorama_js)
+        self.assertIn("暂无业务能力组件数据", panorama_js)
 
     def test_browser_frontend_no_longer_depends_on_path_merge_state(self):
         app_js = (APP_DIR / "app.js").read_text("utf-8")

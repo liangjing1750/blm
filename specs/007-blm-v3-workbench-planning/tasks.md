@@ -42,23 +42,64 @@
 
 ## T2 全景工作台整合视图
 
-确认状态：待用户确认。
+确认状态：已开发，待用户验收。
 
 修改范围：
 
-- 预计涉及全景工作台前端展示。
-- 优先复用现有战略、价值流矩阵、业务组件数据和页面。
-- 不新增复杂画布编辑器。
+- [x] 涉及全景工作台前端展示。
+- [x] 优先复用现有战略、价值流矩阵、业务组件数据和页面。
+- [x] 不新增复杂画布编辑器。
 
 目标：
 
-- 战略设计、价值流矩阵、业务组件在一个全景工作台中形成关系。
-- 总览展示关系，维护仍然分区。
+- [x] 全景工作台按一张完整业务全景图展示：上层战略，中层价值与业务域矩阵，下层业务能力组件。
+- [x] 价值流矩阵使用现有价值流、业务域和阶段数据。
+- [x] 矩阵方向保持横向价值流、纵向业务域，单元格展示阶段。
+- [x] 矩阵左上角用“业务域 / 价值流”水平斜线表头表达坐标关系。
+- [x] 阶段卡片展示关联流程数量。
+- [x] 点击业务能力组件后，仅将其支撑阶段高亮为橘色，不再展示冗余连线。
+- [x] 全景图支持进入页面自动一屏自适应，并支持鼠标滚轮缩放。
+- [x] 业务能力组件按核心、通用两层展示，核心在上、通用在下。
+- [x] 业务能力组件卡片内展示关联构件，提升下层业务组件的分量感。
+- [x] 文档信息从全景工作台移出，改为文件菜单下的“属性”弹窗。
 
 测试思路：
 
-- 静态测试覆盖三部分同时存在。
-- 空数据场景应有清晰提示。
+- [x] 静态测试覆盖完整全景图、矩阵阶段单元、组件节点和支撑关系。
+- [x] 静态测试覆盖价值流轴、业务域轴、阶段名称和流程数量。
+- [x] 静态测试覆盖斜线表头、缩放入口、核心/通用分层、组件构件展示，并确认不再出现支撑连线。
+- [x] 浏览器冒烟验证全景图可自适应、滚轮缩放、组件点击后阶段高亮。
+- [x] 空数据场景应有清晰提示。
+- [x] 定向测试通过：`python -m unittest tests.test_frontend_structure.FrontendStructureTests.test_panorama_workbench_groups_strategy_matrix_and_components`。
+- [x] 定向测试通过：`python -m unittest tests.test_frontend_structure.FrontendStructureTests.test_file_menu_exposes_document_properties_modal`。
+- [x] 用户要求完成 4 个小优化后提交代码。
+
+## T2-R 前端按工作台重构
+
+确认状态：已开发，待用户验收。
+
+修改范围：
+
+- [x] 建立 `core`、`shared`、`workbenches` 三层前端目录。
+- [x] 按主工作台拆出全景、流程、构件、应用编排、实体、知识类 facade。
+- [x] 全景工作台拆出独立视图模型和渲染模块。
+- [x] 应用编排台拆出独立工作台模块。
+- [x] 保持普通 `<script>` 加载，不切 ES Modules。
+- [x] 不改后端数据模型。
+
+目标：
+
+- [x] 上层到下层单向依赖。
+- [x] 同层工作台之间不直接依赖。
+- [x] 后续修改全景和应用编排时，不再继续扩大 `domain.js`。
+- [x] 流程、构件、实体先通过 facade 隔离入口，后续再逐步搬迁内部实现。
+
+测试思路：
+
+- [x] 架构测试覆盖目标目录、脚本加载、工作台同层隔离、视图模型不访问 DOM。
+- [x] 定向测试通过：`python -m unittest tests.test_frontend_structure.FrontendStructureTests.test_workbench_target_architecture_boundaries`。
+- [x] 定向测试通过：`python -m unittest tests.test_frontend_structure.FrontendStructureTests.test_split_scripts_exist tests.test_frontend_structure.FrontendStructureTests.test_split_scripts_pass_node_syntax_check tests.test_frontend_structure.FrontendStructureTests.test_workbench_target_architecture_boundaries`。
+- [x] 用户要求完成 4 个小优化后提交代码。
 
 ## T3 流程工作台概念实体 UX
 

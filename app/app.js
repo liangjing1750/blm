@@ -3528,6 +3528,45 @@ const App = {
     openWorkspaceSaveAsModal(buildSuggestedCopyName(baseName, workspaceFiles), 'copy');
   },
 
+  cmdProperties() {
+    if (!S.doc) return showAppAlert('请先打开或新建一个文档。');
+    const meta = S.doc.meta || {};
+    const setValue = (id, value) => {
+      const input = document.getElementById(id);
+      if (input) input.value = String(value || '');
+    };
+    setValue('document-properties-name', meta.domain || meta.title || S.currentFile || '');
+    setValue('document-properties-author', meta.author || '');
+    setValue('document-properties-date', meta.date || '');
+    setValue('document-properties-space', meta.space || meta.teamSpace || '');
+    setValue('document-properties-tags', Array.isArray(meta.tags) ? meta.tags.join('，') : (meta.tags || ''));
+    openModalById('document-properties-modal-overlay');
+    setTimeout(() => document.getElementById('document-properties-name')?.focus(), 50);
+  },
+
+  closeDocumentPropertiesModal() {
+    closeModalById('document-properties-modal-overlay');
+  },
+
+  saveDocumentProperties() {
+    if (!S.doc) return;
+    S.doc.meta = S.doc.meta || {};
+    const readValue = (id) => String(document.getElementById(id)?.value || '').trim();
+    const name = readValue('document-properties-name');
+    if (!name) return showAppToast('请填写文档名称。');
+    S.doc.meta.domain = name;
+    S.doc.meta.title = name;
+    S.doc.meta.author = readValue('document-properties-author');
+    S.doc.meta.date = readValue('document-properties-date');
+    S.doc.meta.space = readValue('document-properties-space');
+    S.doc.meta.tags = readValue('document-properties-tags');
+    markModified();
+    document.getElementById('file-name').textContent = name || '未命名';
+    App.closeDocumentPropertiesModal();
+    if (typeof renderToolbar === 'function') renderToolbar();
+    if (typeof render === 'function') render();
+  },
+
   closeSaveAsModal() {
     S.saveDialogMode = 'save';
     refreshSaveDialogText();

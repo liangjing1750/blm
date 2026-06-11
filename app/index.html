@@ -27,6 +27,7 @@
       <div class="tbar-dd-menu hidden">
         <button onclick="App.cmdNew();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-new-button">新建</button>
         <button onclick="App.cmdOpen();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-open-button">打开</button>
+        <button onclick="App.cmdProperties();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-properties-button">属性</button>
         <button onclick="App.cmdDelete();App.closeAllDropdowns()" class="tbar-dd-item tbar-dd-danger" data-testid="toolbar-delete-button">删除</button>
       </div>
     </div>
@@ -41,7 +42,7 @@
     <div class="tbar-dd" id="dd-tools">
       <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('tools')">工具 ▾</button>
       <div class="tbar-dd-menu hidden">
-        <button onclick="App.cmdSaveAs();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-save-as-button">复制</button>
+        <button onclick="App.cmdSaveAs();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-save-as-button" id="toolbar-save-as-label">复制</button>
         <button onclick="App.cmdCompare();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-compare-button">比对</button>
         <button onclick="App.cmdMerge();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-merge-button">合并</button>
         <div class="tbar-dd-sep"></div>
@@ -197,6 +198,21 @@
     <div class="modal-footer">
       <button onclick="App.closeSaveAsModal()" class="btn btn-ghost">取消</button>
       <button onclick="App.confirmSaveAs()" class="btn btn-primary" data-testid="save-as-confirm-button" id="save-as-confirm-label">确认复制</button>
+    </div>
+  </div>
+</div>
+
+<div id="document-properties-modal-overlay" class="hidden" onclick="App.closeDocumentPropertiesModal()" data-testid="document-properties-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>属性</h3>
+    <input id="document-properties-name" type="text" placeholder="文档名称">
+    <input id="document-properties-author" type="text" placeholder="作者">
+    <input id="document-properties-date" type="text" placeholder="日期">
+    <input id="document-properties-space" type="text" placeholder="团队空间">
+    <input id="document-properties-tags" type="text" placeholder="标签，逗号分隔">
+    <div class="modal-footer">
+      <button onclick="App.closeDocumentPropertiesModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.saveDocumentProperties()" class="btn btn-primary" data-testid="document-properties-save-button">保存</button>
     </div>
   </div>
 </div>
@@ -370,6 +386,17 @@
 <script src="state.js?v=67"></script>
 <script src="api.js?v=67"></script>
 <script src="collab.js?v=67"></script>
+<script src="core/dom.js?v=69"></script>
+<script src="core/actions.js?v=69"></script>
+<script src="shared/ui.js?v=69"></script>
+<script src="shared/document-queries.js?v=69"></script>
+<script src="workbenches/panorama/panorama-model.js?v=69"></script>
+<script src="workbenches/panorama/panorama-workbench.js?v=69"></script>
+<script src="workbenches/process/process-workbench.js?v=69"></script>
+<script src="workbenches/component/component-workbench.js?v=69"></script>
+<script src="workbenches/orchestration/orchestration-workbench.js?v=69"></script>
+<script src="workbenches/knowledge/knowledge-workbench.js?v=69"></script>
+<script src="workbenches/entity/entity-workbench.js?v=69"></script>
 <script src="render.js?v=67"></script>
 <script src="domain.js?v=67"></script>
 <script src="process.js?v=67"></script>
