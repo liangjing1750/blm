@@ -32,7 +32,11 @@ window.PanoramaWorkbench = {
     if (!viewport || !canvas) return;
     const zoom = this.getZoom();
     canvas.style.transform = `scale(${zoom})`;
-    viewport.style.height = `${Math.ceil(canvas.offsetHeight * zoom)}px`;
+    const scaledWidth = Math.ceil(canvas.offsetWidth * zoom);
+    const scaledHeight = Math.ceil(canvas.offsetHeight * zoom);
+    viewport.style.height = `${scaledHeight}px`;
+    viewport.style.overflowX = scaledWidth > viewport.clientWidth + 2 ? 'auto' : 'hidden';
+    viewport.style.overflowY = 'hidden';
   },
 
   fitZoom() {
@@ -76,7 +80,7 @@ window.PanoramaWorkbench = {
         return itemMatchesBusinessDomain(stage, domain.id, S.doc);
       });
       return `<div class="panorama-matrix-cell" data-testid="panorama-matrix-cell">
-        ${cellStages.length ? cellStages.map(renderStageCell).join('') : '<span class="panorama-empty-cell">-</span>'}
+        ${cellStages.length ? `<div class="panorama-stage-lane">${cellStages.map(renderStageCell).join('')}</div>` : '<span class="panorama-empty-cell">-</span>'}
       </div>`;
     };
     const renderCapabilityNode = (capability) => {
@@ -96,23 +100,23 @@ window.PanoramaWorkbench = {
     const genericCapabilities = model.capabilities.filter((capability) => capability.kind !== 'core');
 
     return `<div class="panorama-business-map" data-testid="panorama-business-map">
-      <div class="panorama-zoom-toolbar">
-        <button class="stage-quick-btn stage-quick-btn-text" type="button" onclick="PanoramaWorkbench.setZoom(PanoramaWorkbench.getZoom()-0.1)">缩小</button>
-        <button class="stage-quick-btn stage-quick-btn-text" type="button" onclick="PanoramaWorkbench.fitZoom()">自适应</button>
-        <button class="stage-quick-btn stage-quick-btn-text" type="button" onclick="PanoramaWorkbench.setZoom(PanoramaWorkbench.getZoom()+0.1)">放大</button>
-      </div>
       <div class="panorama-zoom-viewport" onwheel="PanoramaWorkbench.onWheel(event)">
         <div class="panorama-zoom-canvas">
-          <div class="panorama-map-row panorama-layer-strategy" data-testid="panorama-strategy-card">
+          <div class="panorama-map-row panorama-map-header panorama-layer-strategy" data-testid="panorama-strategy-card">
             <div class="panorama-strategy-flow">
               <div class="panorama-strategy-pill">企业愿景 / 价值观</div>
               <span class="panorama-strategy-arrow">↓</span>
               <div class="panorama-strategy-pill primary">企业战略</div>
             </div>
+            <div class="panorama-map-actions">
+              <button class="stage-quick-btn stage-quick-btn-text" type="button" onclick="PanoramaWorkbench.setZoom(PanoramaWorkbench.getZoom()-0.1)">缩小</button>
+              <button class="stage-quick-btn stage-quick-btn-text" type="button" onclick="PanoramaWorkbench.fitZoom()">自适应</button>
+              <button class="stage-quick-btn stage-quick-btn-text" type="button" onclick="PanoramaWorkbench.setZoom(PanoramaWorkbench.getZoom()+0.1)">放大</button>
+            </div>
           </div>
           <div class="panorama-map-row panorama-layer-matrix" data-testid="panorama-value-matrix-card">
             ${model.valueStreams.length ? `<div class="panorama-matrix-frame">
-              <div class="panorama-matrix" style="grid-template-columns: 128px repeat(${model.valueStreams.length}, minmax(142px, 1fr));">
+              <div class="panorama-matrix" style="grid-template-columns: 128px repeat(${model.valueStreams.length}, minmax(290px, 1fr));">
                 <div class="panorama-matrix-corner">
                   <span class="panorama-corner-axis">
                     <span class="panorama-corner-domain">业务域</span>
