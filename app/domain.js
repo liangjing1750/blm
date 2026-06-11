@@ -2701,62 +2701,42 @@ function switchAppArchTab(tabId) {
 }
 
 function renderAppArchitectureTab() {
-  var activeTab = S.ui.appArchTab || 'orchestration';
   var subTabs = [
-    { id: 'serviceCatalog', label: '服务目录' },
-    { id: 'orchestration', label: '应用服务场景' },
-    { id: 'techImpl', label: '技术承接' },
+    { id: 'pageReference', label: '页面与原型引用' },
+    { id: 'frontendApi', label: '前端接口需求' },
+    { id: 'backendTasks', label: '接口后的后端任务链路' },
   ];
   var subTabBar = '<div class="view-toggle-group" style="margin-bottom:16px">' +
     subTabs.map(function(t) {
-      return '<button class="vtb ' + (activeTab === t.id ? 'active' : '') + '" onclick="switchAppArchTab(\'' + t.id + '\')">' + t.label + '</button>';
+      return '<button class="vtb" type="button">' + t.label + '</button>';
     }).join('') + '</div>';
 
   var h = '<div class="domain-scroll" data-testid="domain-scroll">' + subTabBar;
-  h += '<div class="ctx-card domain-panel"><h3>应用编排工作台</h3>' +
-    '<p class="field-hint">从前端接口需求出发，整理页面动作对应的应用服务场景，再把应用服务场景拆到后端任务链路和技术承接。实体设计仍由构件工作台维护。</p></div>';
+  h += '<div class="ctx-card domain-panel"><h3>应用编排台</h3>' +
+    '<p class="field-hint">应用编排台从页面、原型和用户步骤出发，整理前端接口需求，再说明接口后的后端任务链路。实体设计和任务定义仍由构件工作台维护。</p></div>';
 
-  if (activeTab === 'serviceCatalog') {
-    h += '<div class="ctx-card domain-panel"><h3>服务目录</h3><div class="domain-panel-body"><p class="no-refs domain-panel-empty">服务目录功能即将上线，用于展示界面 / 按钮触发的前端接口需求，以及它们对应的应用服务场景。</p></div></div>';
-  } else if (activeTab === 'orchestration') {
-    // 应用服务场景: orchestrationTasks 全量平铺，先作为后端任务链路来源。
-    var orchItems = [];
-    (S.doc.processes || []).forEach(function(proc) {
-      (proc.nodes || []).forEach(function(node) {
-        (node.orchestrationTasks || []).forEach(function(task, idx) {
-          orchItems.push({ procName: proc.name || '', nodeName: node.name || '', taskName: task.name || '', taskType: task.type || '', index: idx + 1 });
-        });
+  var orchItems = [];
+  (S.doc.processes || []).forEach(function(proc) {
+    (proc.nodes || []).forEach(function(node) {
+      (node.orchestrationTasks || []).forEach(function(task, idx) {
+        orchItems.push({ procName: proc.name || '', nodeName: node.name || '', taskName: task.name || '', taskType: task.type || '', index: idx + 1 });
       });
     });
-    h += '<div class="ctx-card domain-panel"><h3>应用服务场景</h3><p class="field-hint">一个前端动作可对应一个应用服务场景；应用服务场景再承接后端任务链路。当前先全量汇总所有流程节点中的编排任务，共 ' + orchItems.length + ' 条。</p>';
-    if (orchItems.length) {
-      h += '<div class="domain-panel-body"><table class="term-table"><thead><tr><th>流程</th><th>节点</th><th>后端任务链路</th><th>类型</th><th>序号</th></tr></thead><tbody>';
-      orchItems.forEach(function(item) {
-        h += '<tr><td>' + esc(item.procName) + '</td><td>' + esc(item.nodeName) + '</td><td>' + esc(item.taskName) + '</td><td>' + esc(item.taskType) + '</td><td>' + item.index + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    } else {
-      h += '<p class="no-refs domain-panel-empty">暂无编排任务。</p>';
-    }
-    h += '</div>';
-  } else if (activeTab === 'techImpl') {
-    // 技术承接: taskDefinitions[].target 汇总
-    var techItems = [];
-    (S.doc.taskDefinitions || []).forEach(function(td) {
-      if (td.target) techItems.push({ name: td.name || '', target: td.target, type: td.type || '' });
+  });
+
+  h += '<div class="ctx-card domain-panel"><h3>页面与原型引用</h3><div class="domain-panel-body"><p class="field-hint">页面层先通过流程原型/附件、页面说明和用户步骤表达，不在第一版新增完整页面模型。</p></div></div>';
+  h += '<div class="ctx-card domain-panel"><h3>前端接口需求</h3><div class="domain-panel-body"><p class="field-hint">接口需求应说明页面、用户步骤、按钮或操作、输入数据和期望返回。第一版先作为应用编排台的整理入口。</p></div></div>';
+  h += '<div class="ctx-card domain-panel"><h3>接口后的后端任务链路</h3><p class="field-hint">当前先全量汇总所有流程节点中的编排任务，共 ' + orchItems.length + ' 条。后续再把接口需求与构件任务建立更清晰的引用。</p>';
+  if (orchItems.length) {
+    h += '<div class="domain-panel-body"><table class="term-table"><thead><tr><th>流程</th><th>节点</th><th>后端任务</th><th>类型</th><th>序号</th></tr></thead><tbody>';
+    orchItems.forEach(function(item) {
+      h += '<tr><td>' + esc(item.procName) + '</td><td>' + esc(item.nodeName) + '</td><td>' + esc(item.taskName) + '</td><td>' + esc(item.taskType) + '</td><td>' + item.index + '</td></tr>';
     });
-    h += '<div class="ctx-card domain-panel"><h3>技术承接</h3><p class="field-hint">所有任务定义的技术承接字段汇总，共 ' + techItems.length + ' 条。</p>';
-    if (techItems.length) {
-      h += '<div class="domain-panel-body"><table class="term-table"><thead><tr><th>任务</th><th>类型</th><th>技术承接</th></tr></thead><tbody>';
-      techItems.forEach(function(item) {
-        h += '<tr><td>' + esc(item.name) + '</td><td>' + esc(item.type) + '</td><td>' + esc(item.target) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    } else {
-      h += '<p class="no-refs domain-panel-empty">暂无技术承接信息。</p>';
-    }
-    h += '</div>';
+    h += '</tbody></table></div>';
+  } else {
+    h += '<p class="no-refs domain-panel-empty">暂无后端任务链路。</p>';
   }
+  h += '</div>';
 
   h += '</div>';
   document.getElementById('tab-content').innerHTML = h;

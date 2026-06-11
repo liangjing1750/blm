@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BLM v3版本规划</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #fff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --hover: #f1f5f9;
+      --accent: #2563eb;
+      --green: #0f8f65;
+      --amber: #d97706;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(15, 23, 42, .08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.72;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 48px;
+      padding: 0 20px;
+      overflow-x: auto;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    }
+    nav .logo {
+      color: var(--accent);
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      padding: 3px 7px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    nav a:hover {
+      color: var(--accent);
+      background: var(--hover);
+    }
+    .main {
+      display: flex;
+      max-width: 1360px;
+      margin: 0 auto;
+    }
+    aside {
+      width: 248px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 48px;
+      height: calc(100vh - 48px);
+      overflow-y: auto;
+      padding: 22px 16px;
+      background: var(--card);
+      border-right: 1px solid var(--border);
+    }
+    aside h4 {
+      margin: 16px 0 6px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+    aside a {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-left: 2px solid transparent;
+      border-radius: 3px;
+    }
+    aside a:hover {
+      color: var(--accent);
+      background: var(--hover);
+      border-left-color: var(--accent);
+    }
+    aside a.l2 {
+      padding-left: 22px;
+      font-size: 11px;
+    }
+    article {
+      flex: 1;
+      min-width: 0;
+      max-width: 980px;
+      padding: 34px 42px 72px;
+    }
+    h1 {
+      font-size: 30px;
+      line-height: 1.25;
+      margin-bottom: 10px;
+    }
+    .lead {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 22px;
+    }
+    h2 {
+      margin: 42px 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--accent);
+      font-size: 21px;
+    }
+    h3 {
+      margin: 26px 0 10px;
+      color: var(--accent);
+      font-size: 16px;
+    }
+    p, li {
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    ul { padding-left: 20px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 12px;
+      table-layout: fixed;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--hover);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    code {
+      font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 11px;
+      background: var(--hover);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px 22px;
+      margin-bottom: 14px;
+    }
+    .note {
+      border-left: 4px solid var(--accent);
+      background: #f4f7ff;
+      padding: 12px 14px;
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .flow {
+      display: grid;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .flow-item {
+      display: grid;
+      grid-template-columns: 140px 1fr 220px;
+      gap: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+    .flow-name {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      font-weight: 700;
+      color: #174ea6;
+      background: var(--hover);
+      text-align: center;
+    }
+    .flow-body { padding: 12px 0; }
+    .flow-owner {
+      padding: 12px;
+      color: var(--muted);
+      background: #fbfcff;
+      border-left: 1px solid var(--border);
+    }
+    .tree {
+      white-space: pre-wrap;
+      font-family: "SF Mono", "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      padding: 14px 16px;
+      margin: 12px 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fbfcff;
+    }
+    .badge {
+      display: inline-block;
+      margin: 2px 4px 2px 0;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: #334155;
+      font-size: 11px;
+    }
+    .ok { color: var(--green); font-weight: 700; }
+    .warn { color: var(--amber); font-weight: 700; }
+    @media (max-width: 900px) {
+      aside { display: none; }
+      article { padding: 22px 18px 48px; }
+      .grid, .flow-item { grid-template-columns: 1fr; }
+      .flow-owner { border-left: 0; border-top: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <span class="logo">BLM v3</span>
+    <a href="#s1">问题说明</a>
+    <a href="#s2">产品定位</a>
+    <a href="#s3">整体思路</a>
+    <a href="#s4">角色定义</a>
+    <a href="#s5">工作台展开</a>
+    <a href="#s6">落地顺序</a>
+  </nav>
+
+  <div class="main">
+    <aside>
+      <h4>1. 问题说明</h4>
+      <a href="#s1" class="l1">1. 问题说明</a>
+      <a href="#s1-1" class="l2">1.1 现状功能</a>
+      <a href="#s1-2" class="l2">1.2 主要问题</a>
+
+      <h4>2. 产品定位</h4>
+      <a href="#s2" class="l1">2. 产品定位</a>
+      <a href="#s2-1" class="l2">2.1 定位与价值</a>
+      <a href="#s2-2" class="l2">2.2 服务对象与承接</a>
+
+      <h4>3. 整体思路</h4>
+      <a href="#s3" class="l1">3. 整体思路</a>
+      <a href="#s3-1" class="l2">3.1 工作台约束</a>
+      <a href="#s3-2" class="l2">3.2 AI 发挥 EA 技能</a>
+
+      <h4>4. 角色定义</h4>
+      <a href="#s4" class="l1">4. 角色定义</a>
+      <a href="#s4-1" class="l2">4.1 五类角色</a>
+
+      <h4>5. 工作台展开</h4>
+      <a href="#s5" class="l1">5. 工作台展开</a>
+      <a href="#s5-1" class="l2">5.1 全景工作台</a>
+      <a href="#s5-2" class="l2">5.2 流程工作台</a>
+      <a href="#s5-3" class="l2">5.3 构件工作台</a>
+      <a href="#s5-4" class="l2">5.4 应用编排工作台</a>
+
+      <h4>6. 落地顺序</h4>
+      <a href="#s6" class="l1">6. 落地顺序</a>
+    </aside>
+
+    <article>
+      <h1>BLM v3版本规划</h1>
+      <p class="lead">目标是把 BLM 从“功能集合”整理成“多人协作的业务建模工作台”。本轮重点是职责边界和方法引导，不急着增加复杂数据模型。</p>
+
+      <section id="s1">
+        <h2>1. 问题说明</h2>
+
+        <div class="card" id="s1-1">
+          <h3>1.1 现状功能</h3>
+          <p>BLM 已经有比较完整的建模基础。现在不是从零开始，而是在已有能力上重新组织使用方式。</p>
+          <table>
+            <tr><th>已有能力</th><th>说明</th><th>当前价值</th></tr>
+            <tr><td>全景</td><td>价值流与业务域矩阵、阶段卡片。</td><td>能表达业务活动在整盘业务中的位置。</td></tr>
+            <tr><td>流程</td><td>阶段视图、流程视图、节点、角色、用户步骤。</td><td>能表达业务如何发生，谁在什么节点负责。</td></tr>
+            <tr><td>表单与实体</td><td>节点表单、字段、实体、关系、状态。</td><td>能连接产品交互和业务数据。</td></tr>
+            <tr><td>任务与组件</td><td>节点任务、任务定义、业务构件、业务组件。</td><td>能沉淀可复用的业务能力。</td></tr>
+            <tr><td>角色与术语</td><td>角色词典、术语和规则。</td><td>能减少沟通口径不一致。</td></tr>
+          </table>
+        </div>
+
+        <div class="card" id="s1-2">
+          <h3>1.2 主要问题</h3>
+          <p>我的判断，主要问题有两个。</p>
+          <div class="grid">
+            <div>
+              <p><span class="warn">问题一：</span>缺少角色工作流的界限。</p>
+              <ul>
+                <li>总负责人、产品、技术经理、前端、后端都可能进入同一批功能。</li>
+                <li>产品经理容易被实体字段、任务参数、接口细节拖走。</li>
+                <li>开发人员也不容易判断自己应该从哪个业务产物开始承接。</li>
+              </ul>
+            </div>
+            <div>
+              <p><span class="warn">问题二：</span>工具没有起到足够的引导作用。</p>
+              <ul>
+                <li>界面仍然偏技术功能堆叠。</li>
+                <li>用户容易沿用过去写需求、画原型、拆接口的方式。</li>
+                <li>EA 中的价值流、业务域、能力复用、业务构件等内容没有被充分传递出来。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s2">
+        <h2>2. 产品定位</h2>
+        <p>我的理解，BLM v3 首先是业务架构建模工具。它的核心不是把流程跑起来，也不是替代原型、接口或低代码平台，而是帮助团队先把业务本身讲清楚。</p>
+
+        <div class="grid">
+          <div class="card" id="s2-1">
+            <h3>2.1 定位与价值</h3>
+            <p><strong>产品定位：</strong>面向业务架构的建模工具。</p>
+            <p><strong>核心价值：</strong>把业务负责人对业务的理解结构化，形成价值流、业务域、阶段、流程、角色、表单、概念实体和业务组件。</p>
+            <p><strong>工作重点：</strong>先关注业务如何运转，再承接到产品交互和技术实现。</p>
+          </div>
+          <div class="card" id="s2-2">
+            <h3>2.2 服务对象与承接</h3>
+            <p><strong>主要服务对象：</strong>业务负责人。产品经理、技术经理、前后端研发是协作角色。</p>
+            <p><strong>上游承接：</strong>战略、目标、业务规划和管理口径。</p>
+            <p><strong>下游承接：</strong>流程应用平台、表单配置、接口设计和任务实现。</p>
+            <p><strong>不做什么：</strong>不做流程运行引擎，不做低代码平台，不做单纯接口管理工具。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s3">
+        <h2>3. 整体思路</h2>
+        <p>v3 不先追求更多功能，而是先让工具有明确的使用路径。谁负责什么，在哪个工作台完成，做到什么程度，下一步交给谁，要在界面上直接表达出来。</p>
+
+        <div class="flow" id="s3-1">
+          <div class="flow-item">
+            <div class="flow-name">工作台约束</div>
+            <div class="flow-body">
+              <p>通过定义角色和划分工作台，硬性约束职责边界。</p>
+              <p>每个角色只保留一个主要工作台，其他工作台只作为输入、评审或协同。</p>
+            </div>
+            <div class="flow-owner">解决问题：角色工作流边界不清</div>
+          </div>
+          <div class="flow-item" id="s3-2">
+            <div class="flow-name">AI 方法引导</div>
+            <div class="flow-body">
+              <p>通过 AI 助手把 EA 技能用起来。</p>
+              <p>AI 不只是回答问题，而是在用户建模时提醒价值流、业务域、流程节点、概念实体、业务构件这些方法边界。</p>
+            </div>
+            <div class="flow-owner">解决问题：工具没有传递 EA 方法</div>
+          </div>
+          <div class="flow-item">
+            <div class="flow-name">现有模型优先</div>
+            <div class="flow-body">
+              <p>尽量复用现有全景、流程、表单、实体、任务定义和附件能力。</p>
+              <p>新增概念先用界面分组、标签、弱参考来表达，不先大改后端数据模型。</p>
+            </div>
+            <div class="flow-owner">解决问题：方案落地成本过高</div>
+          </div>
+        </div>
+
+        <div class="tree">总思路
+├── 先用工作台分清职责
+│   ├── 全景工作台：定方向和业务地图
+│   ├── 流程工作台：定业务交互和概念实体
+│   ├── 构件工作台：定逻辑实体、任务和构件
+│   └── 应用编排工作台：定前端接口需求和后端任务链路
+└── 再用 AI 助手补方法引导
+    ├── 检查价值流和业务域是否清楚
+    ├── 检查流程节点是否按角色责任划分
+    ├── 检查产品经理是否过早进入技术细节
+    └── 提醒哪些内容应沉淀为业务构件</div>
+      </section>
+
+      <section id="s4">
+        <h2>4. 角色定义</h2>
+        <p>v3 先固定五类角色。角色不要太多，否则工具会变成权限系统，而不是建模工作台。</p>
+
+        <table id="s4-1">
+          <tr><th>角色</th><th>主要责任</th><th>主要工作台</th><th>不负责什么</th></tr>
+          <tr>
+            <td>总负责人</td>
+            <td>确定目标、范围、业务边界和优先级。</td>
+            <td>全景工作台</td>
+            <td>不下钻维护字段、接口和任务参数。</td>
+          </tr>
+          <tr>
+            <td>产品经理</td>
+            <td>维护阶段、流程、节点、用户步骤、表单和概念实体。</td>
+            <td>流程工作台</td>
+            <td>不维护实体字段、状态、关系和后端任务链路。</td>
+          </tr>
+          <tr>
+            <td>技术经理，兼应用编排者</td>
+            <td>承接产品模型，组织前端接口需求和后端任务链路。</td>
+            <td>应用编排工作台</td>
+            <td>不替代产品经理定义业务流程。</td>
+          </tr>
+          <tr>
+            <td>前端研发</td>
+            <td>根据原型、页面说明和表单整理前端接口需求，说明页面动作、输入和期望返回。</td>
+            <td>应用编排工作台</td>
+            <td>不直接定义后端领域任务。</td>
+          </tr>
+          <tr>
+            <td>后端研发</td>
+            <td>补实体字段、状态、关系、任务定义和业务构件。</td>
+            <td>构件工作台</td>
+            <td>不把流程节点简单等同为服务实现。</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="s5">
+        <h2>5. 各个工作台的展开</h2>
+
+        <div class="card" id="s5-1">
+          <h3>5.1 全景工作台</h3>
+          <p><strong>主责角色：</strong>总负责人。产品经理参与输入和确认。</p>
+          <p><strong>目标：</strong>先把业务地图和能力边界定住。</p>
+          <div class="tree">全景工作台
+├── 战略设计
+│   ├── 愿景
+│   ├── 价值观
+│   └── 目标
+├── 价值流与业务域矩阵
+│   ├── 价值流
+│   ├── 业务域
+│   └── 阶段卡片
+├── 业务组件
+│   ├── 组件清单
+│   ├── 关联流程
+│   └── 资产覆盖情况
+└── 术语与角色
+    ├── 统一语言
+    └── 角色词典</div>
+          <p><strong>边界：</strong>这里不处理字段、接口和任务链路。这里只回答“业务在哪里、能力归哪里”。</p>
+        </div>
+
+        <div class="card" id="s5-2">
+          <h3>5.2 流程工作台</h3>
+          <p><strong>主责角色：</strong>产品经理。</p>
+          <p><strong>目标：</strong>把全景中的业务活动细化成可讨论、可评审的业务交互。</p>
+          <div class="tree">流程工作台
+├── 阶段视图
+│   ├── 阶段下有哪些流程
+│   └── 流程之间如何衔接
+├── 流程视图
+│   ├── 流程节点
+│   ├── 角色责任
+│   ├── 用户步骤
+│   ├── 表单
+│   └── 业务规则
+├── 原型与界面参考
+│   ├── 原型附件
+│   ├── 页面说明
+│   └── 操作入口
+└── 概念实体
+│   ├── 只写名称和业务含义
+│   ├── 可关联表单、用户步骤或原型说明
+│   └── 第一版默认对应一个逻辑实体</div>
+          <p><strong>边界：</strong>界面不等于表单。当前先用原型附件和页面说明表达界面层，不急着新增完整页面模型。概念实体只到名称和业务含义，逻辑实体、字段、状态、关系进入构件工作台。</p>
+        </div>
+
+        <div class="card" id="s5-3">
+          <h3>5.3 构件工作台</h3>
+          <p><strong>主责角色：</strong>后端研发。技术经理做承接确认。</p>
+          <p><strong>目标：</strong>在参考流程产物的基础上，形成可实现、可复用的业务能力。</p>
+          <div class="tree">构件工作台
+├── 流程参考
+│   ├── 概念实体
+│   ├── 用户步骤
+│   ├── 表单
+│   └── 业务规则
+├── 逻辑实体设计
+│   ├── 字段
+│   ├── 状态
+│   ├── 关系
+│   └── 生命周期
+├── 任务定义
+│   ├── 查询
+│   ├── 校验
+│   ├── 计算
+│   ├── 状态变更
+│   └── 通知
+└── 构件管理
+│   ├── 业务构件 = 实体 + 任务 + 规则
+│   └── 业务组件 = 多个构件的聚合</div>
+          <p><strong>边界：</strong>流程参考是弱关联，主要用于说明来源和形成记录。第一版为减少改动，概念实体与逻辑实体先按一一对应处理。概念实体是业务名词，逻辑实体更接近表结构。</p>
+        </div>
+
+        <div class="card" id="s5-4">
+          <h3>5.4 应用编排工作台</h3>
+          <p><strong>主责角色：</strong>技术经理，兼应用编排者；前端研发在同一工作台补前端接口需求，后端研发提供构件任务输入。</p>
+          <p><strong>目标：</strong>把页面、用户步骤、操作入口、前端接口需求和后端任务链路串起来。</p>
+          <div class="tree">应用编排工作台
+├── 页面与原型引用
+│   ├── 页面
+│   ├── 原型附件
+│   └── 关联用户步骤
+├── 前端接口需求
+│   ├── 用户步骤
+│   ├── 按钮或操作
+│   ├── 输入数据
+│   └── 期望返回
+└── 接口后的后端任务链路
+    ├── 校验
+    ├── 保存
+    ├── 状态变更
+    ├── 待办
+    └── 通知</div>
+          <p><strong>边界：</strong>应用编排不是流程节点编排。流程节点是业务责任单元；前端接口需求是应用调用入口，一个接口后面可以编排一组构件任务。</p>
+        </div>
+      </section>
+
+      <section id="s6">
+        <h2>6. 落地顺序</h2>
+        <p>建议按小步推进，不一次性做成大平台。</p>
+        <table>
+          <tr><th>阶段</th><th>目标</th><th>动作</th></tr>
+          <tr>
+            <td>第一步</td>
+            <td>先把工作台和角色边界立起来。</td>
+            <td>调整导航、目录、页面说明和工作台入口。</td>
+          </tr>
+          <tr>
+            <td>第二步</td>
+            <td>让产品经理和开发者的实体边界清楚。</td>
+            <td>在界面上区分概念实体和逻辑实体。概念实体先用现有实体数据加标签表达。</td>
+          </tr>
+          <tr>
+            <td>第三步</td>
+            <td>让应用编排有基本抓手。</td>
+            <td>先汇总页面/原型引用、前端接口需求和后端任务链路，不急着建复杂模型。</td>
+          </tr>
+          <tr>
+            <td>第四步</td>
+            <td>把 AI 助手变成 EA 方法引导者。</td>
+            <td>让 AI 按当前工作台检查缺口、提示边界、给出下一步建议。</td>
+          </tr>
+        </table>
+        <div class="note">
+          <p><strong>结论：</strong>v3 的重点不是把技术模型做得更重，而是让 BLM 更会引导人。先通过角色和工作台约束协作边界，再通过 AI 助手把 EA 方法嵌入日常建模过程。</p>
+        </div>
+      </section>
+    </article>
+  </div>
+</body>
+</html>

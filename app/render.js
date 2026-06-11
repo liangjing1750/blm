@@ -1516,7 +1516,7 @@ function renderTabBar() {
     { id: 'panoramaWorkbench', label: '全景工作台' },
     { id: 'processWorkbench',  label: '流程工作台' },
     { id: 'constructWorkbench', label: '构件工作台' },
-    { id: 'orchestrationWorkbench', label: '应用编排' },
+    { id: 'orchestrationWorkbench', label: '应用编排台' },
     { id: 'preview', label: '预览导出' },
   ];
   const activeTab = normalizeMainTabId(S.ui.mainTab || 'panoramaWorkbench');
