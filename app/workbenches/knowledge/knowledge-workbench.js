@@ -2,7 +2,7 @@
 
 window.KnowledgeWorkbench = {
   render(tabId, selectedDomainId) {
-    if (tabId === 'roles') return renderRoleSummaryCard(getRolesForDomainInfo(selectedDomainId), selectedDomainId);
+    if (tabId === 'roles') return window.RoleWorkbench ? window.RoleWorkbench.renderManagement(selectedDomainId) : '';
     if (tabId === 'language') return this.renderLanguage(selectedDomainId);
     if (tabId === 'rules') return this.renderRules();
     return '';

@@ -17,10 +17,14 @@ EXPECTED_SCRIPTS = [
     "shared/document-queries.js",
     "workbenches/panorama/panorama-model.js",
     "workbenches/panorama/panorama-workbench.js",
+    "workbenches/process/process-legacy.js",
     "workbenches/process/process-workbench.js",
+    "workbenches/component/component-legacy.js",
     "workbenches/component/component-workbench.js",
     "workbenches/orchestration/orchestration-workbench.js",
+    "workbenches/role/role-workbench.js",
     "workbenches/knowledge/knowledge-workbench.js",
+    "workbenches/entity/entity-legacy.js",
     "workbenches/entity/entity-workbench.js",
     "render.js",
     "domain.js",
@@ -48,10 +52,14 @@ class FrontendStructureTests(unittest.TestCase):
             "shared/document-queries.js",
             "workbenches/panorama/panorama-model.js",
             "workbenches/panorama/panorama-workbench.js",
+            "workbenches/process/process-legacy.js",
             "workbenches/process/process-workbench.js",
+            "workbenches/component/component-legacy.js",
             "workbenches/component/component-workbench.js",
             "workbenches/orchestration/orchestration-workbench.js",
+            "workbenches/role/role-workbench.js",
             "workbenches/knowledge/knowledge-workbench.js",
+            "workbenches/entity/entity-legacy.js",
             "workbenches/entity/entity-workbench.js",
         ]
         for script_name in required_scripts:
@@ -63,7 +71,7 @@ class FrontendStructureTests(unittest.TestCase):
             text = path.read_text("utf-8")
             relative = path.relative_to(APP_DIR).as_posix()
             own_area = relative.split("/")[1]
-            for other_area in ["panorama", "process", "component", "orchestration", "knowledge", "entity"]:
+            for other_area in ["panorama", "process", "component", "orchestration", "knowledge", "entity", "role"]:
                 if other_area == own_area:
                     continue
                 self.assertNotIn(f"workbenches/{other_area}/", text, f"{relative} 不应依赖同层工作台 {other_area}")
@@ -76,6 +84,25 @@ class FrontendStructureTests(unittest.TestCase):
             text = path.read_text("utf-8")
             self.assertNotIn("document.getElementById", text, f"{path.name} 视图模型不应直接访问 DOM")
             self.assertNotIn(".innerHTML", text, f"{path.name} 视图模型不应渲染 DOM")
+
+    def test_legacy_workbench_implementations_live_under_aggregate_roots(self):
+        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        domain_js = (APP_DIR / "domain.js").read_text("utf-8")
+        entity_js = (APP_DIR / "entity.js").read_text("utf-8")
+        process_legacy_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
+        component_legacy_js = (APP_DIR / "workbenches" / "component" / "component-legacy.js").read_text("utf-8")
+        entity_legacy_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
+
+        self.assertLess(len(process_js.splitlines()), 80)
+        self.assertLess(len(domain_js.splitlines()), 80)
+        self.assertLess(len(entity_js.splitlines()), 80)
+        self.assertNotIn("function renderProcessTab", process_js)
+        self.assertNotIn("function renderBusinessArchitectureTab", domain_js)
+        self.assertNotIn("function renderDataTab", entity_js)
+
+        self.assertIn("function renderProcessTab", process_legacy_js)
+        self.assertIn("function renderBusinessArchitectureTab", component_legacy_js)
+        self.assertIn("function renderDataTab", entity_legacy_js)
 
     def test_split_scripts_pass_node_syntax_check(self):
         for script_name in EXPECTED_SCRIPTS:
@@ -156,8 +183,9 @@ class FrontendStructureTests(unittest.TestCase):
 
     def test_role_workbench_layout_uses_responsibility_oriented_navigation(self):
         render_js = (APP_DIR / "render.js").read_text("utf-8")
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
-        domain_js = (APP_DIR / "domain.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
+        domain_js = (APP_DIR / "workbenches" / "component" / "component-legacy.js").read_text("utf-8")
+        role_js = (APP_DIR / "workbenches" / "role" / "role-workbench.js").read_text("utf-8")
         orchestration_js = (APP_DIR / "workbenches" / "orchestration" / "orchestration-workbench.js").read_text("utf-8")
 
         self.assertIn("{ id: 'panoramaWorkbench', label: '全景工作台' }", render_js)
@@ -181,6 +209,32 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("前端接口需求", orchestration_js)
         self.assertIn("接口后的后端任务链路", orchestration_js)
         self.assertIn("应用编排台", orchestration_js)
+        self.assertNotIn("function addRole()", domain_js)
+        self.assertNotIn("async function removeRole", domain_js)
+        self.assertNotIn("function openRoleView(roleId)", domain_js)
+        self.assertNotIn("function renderRoleSummaryCard", domain_js)
+        self.assertIn("window.RoleWorkbench.renderManagement(selectedDomainId)", domain_js)
+        self.assertIn("window.RoleWorkbench", role_js)
+        self.assertIn("addRole()", role_js)
+        self.assertIn("async removeRole(roleId)", role_js)
+        self.assertIn("renderManagement(selectedDomainId", role_js)
+        self.assertIn("renderSummaryCard(roles = getRoles()", role_js)
+        self.assertIn("openRoleView(roleId)", role_js)
+        self.assertIn("openRoleProjection()", role_js)
+        self.assertIn("getRolesForDomainInfo(selectedDomainId)", role_js)
+        self.assertIn("getProcessPanoramaContexts(proc", role_js)
+        self.assertIn("buildUsecaseMap(selectedRole", role_js)
+        self.assertIn("renderProcessRoleView()", role_js)
+        self.assertIn("this.buildUsecaseMap(selectedRole, { participatingOnly })", role_js)
+        self.assertIn("S.ui.mainTab = 'processWorkbench'", role_js)
+        self.assertIn("S.ui.procView = 'role'", role_js)
+        self.assertNotIn("function buildRoleUsecaseMap", process_js)
+        self.assertNotIn("function renderProcessRoleView", process_js)
+        self.assertNotIn("function openRoleProjection", process_js)
+        self.assertNotIn("function getProcessPanoramaContexts", process_js)
+        self.assertIn("window.RoleWorkbench.renderProcessRoleView()", process_js)
+        self.assertNotIn("const roleFrames = [];", process_js)
+        self.assertIn("横向角色管理", (APP_DIR.parent / "specs" / "007-blm-v3-workbench-planning" / "design.md").read_text("utf-8"))
 
     def test_file_menu_exposes_document_properties_modal(self):
         html = (APP_DIR / "index.html").read_text("utf-8")
@@ -262,7 +316,7 @@ class FrontendStructureTests(unittest.TestCase):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
         render_js = (APP_DIR / "render.js").read_text("utf-8")
         manual_js = (APP_DIR / "manual.js").read_text("utf-8")
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
         preview_js = (APP_DIR / "preview.js").read_text("utf-8")
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
@@ -414,7 +468,7 @@ class FrontendStructureTests(unittest.TestCase):
     def test_feedback_image_attachments_use_inline_preview(self):
         index_html = (APP_DIR / "index.html").read_text("utf-8")
         app_js = (APP_DIR / "app.js").read_text("utf-8")
-        domain_js = (APP_DIR / "domain.js").read_text("utf-8")
+        domain_js = (APP_DIR / "workbenches" / "component" / "component-legacy.js").read_text("utf-8")
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
         self.assertIn('id="feedback-image-preview-overlay"', index_html)
@@ -435,7 +489,7 @@ class FrontendStructureTests(unittest.TestCase):
 
     def test_sidebar_stage_directory_supports_flow_groups_and_stage_order_moves(self):
         render_js = (APP_DIR / "render.js").read_text("utf-8")
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
         self.assertIn("function getSidebarProcessGroups(processes)", render_js)
@@ -525,7 +579,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn(".modified-badge-dot", style_css)
 
     def test_entity_relation_layout_uses_deterministic_entity_node_size(self):
-        entity_js = (APP_DIR / "entity.js").read_text("utf-8")
+        entity_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
         self.assertIn("function _efGetEntityNodeSize(entity)", entity_js)
@@ -537,8 +591,8 @@ class FrontendStructureTests(unittest.TestCase):
 
     def test_business_ids_are_hidden_from_business_modeling_ui(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
-        entity_js = (APP_DIR / "entity.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
+        entity_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
         render_js = (APP_DIR / "render.js").read_text("utf-8")
 
         self.assertIn("function nextStableId", state_js)
@@ -553,11 +607,12 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("renameFlowEdgeId", entity_js)
 
     def test_process_form_entity_copy_affordances_are_available(self):
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
-        entity_js = (APP_DIR / "entity.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
+        entity_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
+        render_js = (APP_DIR / "render.js").read_text("utf-8")
 
         self.assertIn("function duplicateProcess", process_js)
-        self.assertIn("data-testid=\"process-duplicate-button\"", process_js)
+        self.assertIn('data-testid="sidebar-process-copy-action"', render_js)
         self.assertIn("`${source.name || '未命名流程'}- 副本`", process_js)
         self.assertIn("const newProcessUid = createUiUid('process')", process_js)
         self.assertIn("clone.uid = newProcessUid", process_js)
@@ -569,7 +624,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("data-testid=\"entity-duplicate-button\"", entity_js)
 
     def test_sidebar_copy_and_stage_group_drop_affordances_are_available(self):
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
         render_js = (APP_DIR / "render.js").read_text("utf-8")
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
@@ -591,18 +646,19 @@ class FrontendStructureTests(unittest.TestCase):
 
     def test_stage_process_refs_support_uid_only_documents(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
 
         self.assertIn("function getProcessIdentity", state_js)
         self.assertIn("function getStageIdentity", state_js)
         self.assertIn("function findProcessByIdentity", state_js)
         self.assertIn("function findStageByIdentity", state_js)
         self.assertIn("normalized.id || normalized.uid", state_js)
-        self.assertIn("normalized.processId || normalized.processUid", state_js)
-        self.assertIn("return findProcessByIdentity(processId, doc)", state_js)
+        self.assertIn("const stageUid = String(normalized.stageUid || normalized.stage_id || '').trim()", state_js)
+        self.assertIn("const processUid = String(normalized.processUid || normalized.process_id || '').trim()", state_js)
+        self.assertIn("return findProcessByIdentity(processUid, doc)", state_js)
         self.assertIn("label: proc ? (proc.name || '未命名流程') : '失效流程引用'", process_js)
         self.assertIn("const source = findProcessByIdentity(procId, S.doc)", process_js)
-        self.assertIn("addStageProcessRef(ref.stageId, newProcessKey", process_js)
+        self.assertIn("addStageProcessRef(ref.stageUid, newProcessKey", process_js)
 
     def test_swimlane_tasklevel_view_uses_outer_vertical_scroll(self):
         style_css = (APP_DIR / "style.css").read_text("utf-8")
@@ -613,7 +669,7 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("overflow: visible;", style_css)
 
     def test_process_flow_node_role_control_is_plain_dropdown(self):
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
         style_css = (APP_DIR / "style.css").read_text("utf-8")
 
         self.assertIn('data-testid="process-flow-node-role-picker"', process_js)
@@ -625,7 +681,7 @@ class FrontendStructureTests(unittest.TestCase):
 
     def test_frontend_normalizers_preserve_existing_uids(self):
         state_js = (APP_DIR / "state.js").read_text("utf-8")
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
+        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
         app_js = (APP_DIR / "app.js").read_text("utf-8")
         api_js = (APP_DIR / "api.js").read_text("utf-8")
 

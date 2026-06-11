@@ -18,7 +18,7 @@ shared
   UI helper / document query / model ref
 
 workbenches
-  panorama / process / component / orchestration / entity / knowledge
+  panorama / process / component / orchestration / entity / knowledge / role
 
 legacy
   尚未完全迁出的旧实现，后续逐步清空
@@ -37,6 +37,7 @@ legacy
 - 全景工作台先拆出独立视图模型和渲染模块。
 - 应用编排台先拆出独立工作台模块。
 - 流程、构件、实体先通过 facade 隔离入口，后续在对应工作台内继续收敛。
+- 角色管理与角色视图先迁入 `role` 工作台模块，再推进融合视图，避免继续扩大 `domain.js` 和 `process.js`。
 - 继续使用普通 `<script>` 加载，暂不切换 ES Modules，降低一次性重构风险。
 
 ## 工作台结构
@@ -53,7 +54,20 @@ legacy
 
 应用编排工作台
   页面与原型引用 / 前端接口需求 / 接口后的后端任务链路
+
+角色工作台
+  横向角色管理 / 竖向角色用例 / 选中角色联动
 ```
+
+## 角色工作台
+
+角色工作台用于承接总负责人、产品经理在全景层维护角色，以及流程工作台中的角色用例回看。
+
+设计边界：
+- 角色管理适合横向排列，按分组展示角色、使用状态和管理入口。
+- 角色用例适合竖向展示，按“角色 -> 流程 -> 节点”回看参与链路。
+- 两者不强行合成一张图，而是在同一工作台内联动：点击角色后，下方用例视图聚焦该角色。
+- 第一轮先迁移入口和渲染模块，保留现有数据模型和现有流程角色视图能力。
 
 ## 全景工作台
 
@@ -144,3 +158,9 @@ legacy
 - 交互类任务：先写用户旅程或浏览器验收路径，再实现。
 - 数据转换类任务：先写单元测试，覆盖现有数据兼容和空状态。
 - 每个任务只验证本任务范围，并跑相关回归。
+## 当前落地形态
+
+- `domain.js`、`process.js`、`entity.js` 只作为兼容加载槽，不再承载已迁移工作台主体逻辑。
+- `workbenches/process/process-legacy.js`、`workbenches/component/component-legacy.js`、`workbenches/entity/entity-legacy.js` 是本轮为了零回归迁入聚合目录的旧实现层。
+- 后续新增或修改流程、构件、实体能力时，优先在对应聚合目录内继续拆分 `queries/views/actions/model`，不要把逻辑写回旧大文件。
+- 同级工作台之间仍避免直接依赖；确需跳转或协作时，通过聚合根公开方法或 `AppActions` 协调。
