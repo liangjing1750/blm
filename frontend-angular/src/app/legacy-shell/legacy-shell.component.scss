@@ -1,0 +1,4 @@
+﻿/* The full legacy visual system is loaded globally from src/styles.scss so dynamic DOM created by the legacy runtime keeps the same appearance. */
+#toolbar {
+  flex-shrink: 0;
+}

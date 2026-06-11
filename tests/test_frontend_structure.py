@@ -1,705 +1,217 @@
+import json
+import re
 import subprocess
 import unittest
-import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = ROOT / "app"
+ANGULAR_DIR = ROOT / "frontend-angular"
+ANGULAR_APP_DIR = ANGULAR_DIR / "src" / "app"
 
-EXPECTED_SCRIPTS = [
+WORKBENCHES = [
+    "panorama",
+    "process",
+    "component",
+    "orchestration",
+    "entity",
+    "knowledge",
+    "role",
+]
+
+LEGACY_FRONTEND_FILES = [
     "state.js",
     "api.js",
     "collab.js",
-    "core/dom.js",
-    "core/actions.js",
-    "shared/ui.js",
-    "shared/document-queries.js",
-    "workbenches/panorama/panorama-model.js",
-    "workbenches/panorama/panorama-workbench.js",
-    "workbenches/process/process-legacy.js",
-    "workbenches/process/process-workbench.js",
-    "workbenches/component/component-legacy.js",
-    "workbenches/component/component-workbench.js",
-    "workbenches/orchestration/orchestration-workbench.js",
-    "workbenches/role/role-workbench.js",
-    "workbenches/knowledge/knowledge-workbench.js",
-    "workbenches/entity/entity-legacy.js",
-    "workbenches/entity/entity-workbench.js",
-    "render.js",
     "domain.js",
     "process.js",
     "entity.js",
+    "render.js",
+    "app.js",
     "preview.js",
     "manual.js",
+    "ai.js",
+    "ai_api.js",
+    "style.css",
+    "ai.css",
+]
+
+LEGACY_RUNTIME_FILES = [
+    "state.js",
+    "api.js",
+    "collab.js",
+    "core/actions.js",
+    "core/dom.js",
+    "shared/document-queries.js",
+    "shared/ui.js",
+    "workbenches/panorama/panorama-model.js",
+    "workbenches/panorama/panorama-workbench.js",
+    "workbenches/role/role-workbench.js",
+    "workbenches/component/component-legacy.js",
+    "workbenches/component/component-workbench.js",
+    "workbenches/entity/entity-legacy.js",
+    "workbenches/entity/entity-workbench.js",
+    "workbenches/knowledge/knowledge-workbench.js",
+    "workbenches/orchestration/orchestration-workbench.js",
+    "workbenches/process/process-legacy.js",
+    "workbenches/process/process-workbench.js",
+    "domain.js",
+    "process.js",
+    "entity.js",
+    "render.js",
     "app.js",
+    "preview.js",
+    "manual.js",
+    "ai_api.js",
+    "ai.js",
 ]
 
 
 class FrontendStructureTests(unittest.TestCase):
-    def test_split_scripts_exist(self):
-        for script_name in EXPECTED_SCRIPTS:
-            self.assertTrue((APP_DIR / script_name).exists(), f"{script_name} 不存在")
-        self.assertTrue((APP_DIR / "vendor" / "mermaid.min.js").exists())
-        self.assertTrue((APP_DIR / "vendor" / "marked.umd.js").exists())
+    def test_angular_workspace_exists_with_required_dependencies(self):
+        package_json = json.loads((ANGULAR_DIR / "package.json").read_text("utf-8"))
 
-    def test_workbench_target_architecture_boundaries(self):
+        self.assertTrue((ANGULAR_DIR / "angular.json").exists())
+        self.assertTrue((ANGULAR_DIR / "tsconfig.json").exists())
+        self.assertIn("@angular/core", package_json["dependencies"])
+        self.assertIn("@angular/router", package_json["dependencies"])
+        self.assertIn("@angular/forms", package_json["dependencies"])
+        self.assertIn("typescript", package_json["devDependencies"])
+        self.assertIn("vitest", package_json["devDependencies"])
+
+    def test_old_static_frontend_sources_are_removed_from_app_output(self):
+        for legacy_file in LEGACY_FRONTEND_FILES:
+            self.assertFalse((APP_DIR / legacy_file).exists(), f"{legacy_file} should not remain in app/")
+
+        self.assertFalse((APP_DIR / "workbenches").exists())
+        self.assertFalse((APP_DIR / "core").exists())
+        self.assertFalse((APP_DIR / "shared").exists())
+        self.assertTrue((APP_DIR / "index.html").exists())
+        self.assertTrue(any(APP_DIR.glob("main-*.js")))
+
+    def test_built_index_loads_only_angular_bundles(self):
         html = (APP_DIR / "index.html").read_text("utf-8")
-        required_scripts = [
-            "core/dom.js",
-            "core/actions.js",
-            "shared/ui.js",
-            "shared/document-queries.js",
-            "workbenches/panorama/panorama-model.js",
-            "workbenches/panorama/panorama-workbench.js",
-            "workbenches/process/process-legacy.js",
-            "workbenches/process/process-workbench.js",
-            "workbenches/component/component-legacy.js",
-            "workbenches/component/component-workbench.js",
-            "workbenches/orchestration/orchestration-workbench.js",
-            "workbenches/role/role-workbench.js",
-            "workbenches/knowledge/knowledge-workbench.js",
-            "workbenches/entity/entity-legacy.js",
-            "workbenches/entity/entity-workbench.js",
-        ]
-        for script_name in required_scripts:
-            self.assertIn(f'<script src="{script_name}', html)
 
-        workbench_files = list((APP_DIR / "workbenches").glob("**/*.js"))
-        self.assertGreaterEqual(len(workbench_files), 7)
-        for path in workbench_files:
-            text = path.read_text("utf-8")
-            relative = path.relative_to(APP_DIR).as_posix()
-            own_area = relative.split("/")[1]
-            for other_area in ["panorama", "process", "component", "orchestration", "knowledge", "entity", "role"]:
-                if other_area == own_area:
-                    continue
-                self.assertNotIn(f"workbenches/{other_area}/", text, f"{relative} 不应依赖同层工作台 {other_area}")
-
-        for path in (APP_DIR / "shared").glob("*.js"):
-            text = path.read_text("utf-8")
-            self.assertNotIn("workbenches/", text, f"{path.name} 不应依赖工作台层")
-
-        for path in (APP_DIR / "workbenches").glob("**/*model.js"):
-            text = path.read_text("utf-8")
-            self.assertNotIn("document.getElementById", text, f"{path.name} 视图模型不应直接访问 DOM")
-            self.assertNotIn(".innerHTML", text, f"{path.name} 视图模型不应渲染 DOM")
-
-    def test_legacy_workbench_implementations_live_under_aggregate_roots(self):
-        process_js = (APP_DIR / "process.js").read_text("utf-8")
-        domain_js = (APP_DIR / "domain.js").read_text("utf-8")
-        entity_js = (APP_DIR / "entity.js").read_text("utf-8")
-        process_legacy_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        component_legacy_js = (APP_DIR / "workbenches" / "component" / "component-legacy.js").read_text("utf-8")
-        entity_legacy_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
-
-        self.assertLess(len(process_js.splitlines()), 80)
-        self.assertLess(len(domain_js.splitlines()), 80)
-        self.assertLess(len(entity_js.splitlines()), 80)
-        self.assertNotIn("function renderProcessTab", process_js)
-        self.assertNotIn("function renderBusinessArchitectureTab", domain_js)
-        self.assertNotIn("function renderDataTab", entity_js)
-
-        self.assertIn("function renderProcessTab", process_legacy_js)
-        self.assertIn("function renderBusinessArchitectureTab", component_legacy_js)
-        self.assertIn("function renderDataTab", entity_legacy_js)
-
-    def test_split_scripts_pass_node_syntax_check(self):
-        for script_name in EXPECTED_SCRIPTS:
-            script_path = APP_DIR / script_name
-            result = subprocess.run(
-                ["node", "--check", str(script_path)],
-                capture_output=True,
-                text=True,
-                cwd=ROOT,
-            )
-            self.assertEqual(
-                result.returncode,
-                0,
-                f"{script_name} 语法检查失败: {result.stderr}",
-            )
-
-    def test_index_html_references_split_scripts_in_order(self):
-        html = (APP_DIR / "index.html").read_text("utf-8")
-        self.assertIn("<title>BLM - Business Language Modeling</title>", html)
-        self.assertIn('<span class="logo">BLM</span>', html)
-        self.assertIn('id="btn-save" title="立即同步 (Ctrl+S)">立即同步</button>', html)
-        self.assertIn('data-testid="user-account-button"', html)
-        self.assertIn('data-testid="user-modal"', html)
-        self.assertIn('用户信息配置</button>', html)
-        self.assertIn('id="toolbar-save-as-label">复制</button>', html)
-        self.assertIn('data-testid="open-modal-tabs"', html)
-        self.assertIn('data-open-tab="workspace"', html)
-        self.assertIn('data-open-tab="trash"', html)
-        self.assertIn('id="open-workspace-panel"', html)
-        self.assertIn('id="open-trash-panel"', html)
-        self.assertIn('data-testid="open-space-tabs"', html)
-        self.assertIn('data-testid="open-tag-filters"', html)
-        self.assertIn('id="open-file-search"', html)
-        self.assertIn('data-testid="history-modal"', html)
-        self.assertIn('id="history-list"', html)
-        self.assertIn('id="trash-list"', html)
-        self.assertIn('id="save-as-modal-title">复制文档</h3>', html)
-        self.assertIn('id="save-as-confirm-label">确认复制</button>', html)
-        self.assertNotIn('id="save-alert"', html)
-        self.assertIn('data-testid="toolbar-compare-button"', html)
-        self.assertIn('data-testid="toolbar-history-button"', html)
-        self.assertIn('id="locator-menu"', html)
-        self.assertLess(
-            html.find('data-testid="toolbar-save-as-button"'),
-            html.find('data-testid="toolbar-compare-button"'),
-        )
-        self.assertLess(
-            html.find('data-testid="toolbar-compare-button"'),
-            html.find('data-testid="toolbar-merge-button"'),
-        )
-        self.assertIn('data-testid="toolbar-manual-button"', html)
-        self.assertLess(
-            html.find('data-testid="toolbar-export-button"'),
-            html.find('data-testid="toolbar-manual-button"'),
-        )
-        self.assertRegex(html, r'<script src="vendor/mermaid\.min\.js(?:\?[^"]*)?"></script>')
-        self.assertRegex(html, r'<script src="vendor/marked\.umd\.js(?:\?[^"]*)?"></script>')
-        self.assertRegex(html, r'<script src="manual\.js(?:\?[^"]*)?"></script>')
+        self.assertIn("<app-root></app-root>", html)
+        self.assertRegex(html, r'src="main-[A-Z0-9]+\.js"')
+        self.assertNotIn("state.js", html)
+        self.assertNotIn("render.js", html)
+        self.assertNotIn("domain.js", html)
+        self.assertNotIn("process.js", html)
+        self.assertNotIn("entity.js", html)
+        self.assertNotIn("vendor/mermaid", html)
         self.assertNotIn("https://cdn.jsdelivr.net", html)
-        self.assertIn('id="merge-left-select"', html)
-        self.assertIn('id="merge-right-select"', html)
-        self.assertIn("App.selectMergeWorkspace('left', this.value)", html)
-        self.assertIn("App.selectMergeWorkspace('right', this.value)", html)
-        self.assertIn('data-testid="merge-confirm-button"', html)
-        self.assertIn('data-testid="compare-modal"', html)
-        self.assertIn('id="compare-left-version-select"', html)
-        self.assertIn('id="compare-right-version-select"', html)
-        self.assertNotIn('data-testid="merge-analyze-button"', html)
-        self.assertNotIn('上传 JSON', html)
-        self.assertNotIn('生成新的合并文档', html)
-        previous_position = -1
-        for script_name in EXPECTED_SCRIPTS:
-            match = re.search(rf'<script src="{re.escape(script_name)}(?:\?[^"]*)?"></script>', html)
-            position = match.start() if match else -1
-            self.assertNotEqual(position, -1, f"index.html 未加载 {script_name}")
-            self.assertGreater(position, previous_position, f"{script_name} 加载顺序不正确")
-            previous_position = position
 
-    def test_role_workbench_layout_uses_responsibility_oriented_navigation(self):
-        render_js = (APP_DIR / "render.js").read_text("utf-8")
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        domain_js = (APP_DIR / "workbenches" / "component" / "component-legacy.js").read_text("utf-8")
-        role_js = (APP_DIR / "workbenches" / "role" / "role-workbench.js").read_text("utf-8")
-        orchestration_js = (APP_DIR / "workbenches" / "orchestration" / "orchestration-workbench.js").read_text("utf-8")
+    def test_legacy_shell_uses_component_template_and_scss(self):
+        shell_dir = ANGULAR_APP_DIR / "legacy-shell"
+        ts_file = shell_dir / "legacy-shell.component.ts"
+        html_file = shell_dir / "legacy-shell.component.html"
+        scss_file = shell_dir / "legacy-shell.component.scss"
 
-        self.assertIn("{ id: 'panoramaWorkbench', label: '全景工作台' }", render_js)
-        self.assertIn("{ id: 'processWorkbench',  label: '流程工作台' }", render_js)
-        self.assertIn("{ id: 'constructWorkbench', label: '构件工作台' }", render_js)
-        self.assertIn("{ id: 'orchestrationWorkbench', label: '应用编排台' }", render_js)
-        self.assertNotIn("{ id: 'businessArch', label: '业务架构' }", render_js)
-        self.assertNotIn("{ id: 'bizDomain',    label: '业务域' }", render_js)
-        self.assertNotIn("{ id: 'bizComponent', label: '业务组件' }", render_js)
-        self.assertNotIn("{ id: 'appArch',      label: '应用架构' }", render_js)
+        self.assertTrue(ts_file.exists())
+        self.assertTrue(html_file.exists())
+        self.assertTrue(scss_file.exists())
 
-        self.assertIn("概念实体", process_js)
-        self.assertIn("界面不等于表单", process_js)
-        self.assertIn("产品经理只维护概念实体名称、业务含义和来源", process_js)
-        self.assertIn("第一版概念实体与逻辑实体先按一一对应处理", process_js)
-        self.assertIn("实体设计", domain_js)
-        self.assertNotIn("{ id: 'serviceCatalog', label: '服务目录' }", domain_js)
-        self.assertNotIn("{ id: 'orchestration', label: '应用服务场景' }", domain_js)
-        self.assertNotIn("{ id: 'techImpl', label: '技术承接' }", domain_js)
-        self.assertIn("页面与原型引用", orchestration_js)
-        self.assertIn("前端接口需求", orchestration_js)
-        self.assertIn("接口后的后端任务链路", orchestration_js)
-        self.assertIn("应用编排台", orchestration_js)
-        self.assertNotIn("function addRole()", domain_js)
-        self.assertNotIn("async function removeRole", domain_js)
-        self.assertNotIn("function openRoleView(roleId)", domain_js)
-        self.assertNotIn("function renderRoleSummaryCard", domain_js)
-        self.assertIn("window.RoleWorkbench.renderManagement(selectedDomainId)", domain_js)
-        self.assertIn("window.RoleWorkbench", role_js)
-        self.assertIn("addRole()", role_js)
-        self.assertIn("async removeRole(roleId)", role_js)
-        self.assertIn("renderManagement(selectedDomainId", role_js)
-        self.assertIn("renderSummaryCard(roles = getRoles()", role_js)
-        self.assertIn("openRoleView(roleId)", role_js)
-        self.assertIn("openRoleProjection()", role_js)
-        self.assertIn("getRolesForDomainInfo(selectedDomainId)", role_js)
-        self.assertIn("getProcessPanoramaContexts(proc", role_js)
-        self.assertIn("buildUsecaseMap(selectedRole", role_js)
-        self.assertIn("renderProcessRoleView()", role_js)
-        self.assertIn("this.buildUsecaseMap(selectedRole, { participatingOnly })", role_js)
-        self.assertIn("S.ui.mainTab = 'processWorkbench'", role_js)
-        self.assertIn("S.ui.procView = 'role'", role_js)
-        self.assertNotIn("function buildRoleUsecaseMap", process_js)
-        self.assertNotIn("function renderProcessRoleView", process_js)
-        self.assertNotIn("function openRoleProjection", process_js)
-        self.assertNotIn("function getProcessPanoramaContexts", process_js)
-        self.assertIn("window.RoleWorkbench.renderProcessRoleView()", process_js)
-        self.assertNotIn("const roleFrames = [];", process_js)
-        self.assertIn("横向角色管理", (APP_DIR.parent / "specs" / "007-blm-v3-workbench-planning" / "design.md").read_text("utf-8"))
+        ts_text = ts_file.read_text("utf-8")
+        html_text = html_file.read_text("utf-8")
+        scss_text = scss_file.read_text("utf-8")
 
-    def test_file_menu_exposes_document_properties_modal(self):
-        html = (APP_DIR / "index.html").read_text("utf-8")
-        app_js = (APP_DIR / "app.js").read_text("utf-8")
+        self.assertIn("templateUrl", ts_text)
+        self.assertIn("styleUrl", ts_text)
+        self.assertIn('id="toolbar"', html_text)
+        self.assertIn('data-testid="toolbar-new-button"', html_text)
+        self.assertIn("#toolbar", scss_text)
 
-        self.assertIn('data-testid="toolbar-properties-button">属性</button>', html)
-        self.assertLess(
-            html.find('data-testid="toolbar-properties-button"'),
-            html.find('data-testid="toolbar-delete-button"'),
-        )
-        self.assertIn('data-testid="document-properties-modal"', html)
-        self.assertIn('id="document-properties-name"', html)
-        self.assertIn('id="document-properties-author"', html)
-        self.assertIn('id="document-properties-date"', html)
-        self.assertIn('id="document-properties-space"', html)
-        self.assertIn('id="document-properties-tags"', html)
-        self.assertIn("cmdProperties()", app_js)
-        self.assertIn("saveDocumentProperties()", app_js)
+    def test_legacy_runtime_assets_are_declared_in_angular_source_order(self):
+        manifest_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.manifest.ts"
+        bootstrap_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.bootstrap.ts"
 
-    def test_panorama_workbench_groups_strategy_matrix_and_components(self):
-        panorama_js = (APP_DIR / "workbenches" / "panorama" / "panorama-workbench.js").read_text("utf-8")
-        panorama_model_js = (APP_DIR / "workbenches" / "panorama" / "panorama-model.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
+        self.assertTrue(manifest_file.exists())
+        self.assertTrue(bootstrap_file.exists())
 
-        self.assertIn("战略", panorama_js)
-        self.assertIn("价值与业务域矩阵", panorama_js)
-        self.assertIn("业务能力组件", panorama_js)
-        self.assertIn("panorama-business-map", panorama_js)
-        self.assertIn("panorama-layer-strategy", panorama_js)
-        self.assertIn("panorama-layer-matrix", panorama_js)
-        self.assertNotIn("panorama-layer-component", panorama_js)
-        self.assertNotIn("panorama-business-component-card", panorama_js)
-        self.assertNotIn("renderDomainPanelHeader('业务组件'", panorama_js)
-        self.assertIn("renderPanoramaValueMatrix", panorama_js)
-        self.assertIn("panorama-stage-cell", panorama_js)
-        self.assertIn("panorama-stage-lane", panorama_js)
-        self.assertIn("panorama-stage-name", panorama_js)
-        self.assertIn("panorama-stage-count", panorama_js)
-        self.assertIn("getStageProcessCount", panorama_js)
-        self.assertIn("panorama-corner-axis", panorama_js)
-        self.assertIn("panorama-corner-domain", panorama_js)
-        self.assertIn("panorama-corner-stream", panorama_js)
-        self.assertIn("panorama-corner-slash", panorama_js)
-        self.assertIn("fitZoom", panorama_js)
-        self.assertIn("onWheel", panorama_js)
-        self.assertIn("overflowX", panorama_js)
-        self.assertIn("overflowY", panorama_js)
-        self.assertIn("panorama-zoom-viewport", panorama_js)
-        self.assertIn("panorama-zoom-canvas", panorama_js)
-        self.assertIn("panorama-map-header", panorama_js)
-        self.assertIn("panorama-map-actions", panorama_js)
-        self.assertIn("panorama-strategy-flow", panorama_js)
-        self.assertIn("panorama-capability-node", panorama_js)
-        self.assertIn("panorama-capability-group core", panorama_js)
-        self.assertIn("panorama-capability-group generic", panorama_js)
-        self.assertIn("panorama-capability-constructs", panorama_js)
-        self.assertIn("getCapabilityConstructs", panorama_model_js)
-        self.assertIn("setPanoramaCapabilitySelection", panorama_js)
-        self.assertNotIn("panorama-support-line", panorama_js)
-        self.assertIn("build(selectedDomainId", panorama_model_js)
-        self.assertNotIn("全景总览", panorama_js)
-        self.assertNotIn("文档信息", panorama_js)
-        self.assertNotIn("战略牵引价值流", panorama_js)
-        self.assertIn("暂无价值与业务域矩阵数据", panorama_js)
-        self.assertIn("暂无业务能力组件数据", panorama_js)
-        self.assertIn(".panorama-stage-lane", style_css)
-        self.assertIn("grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));", style_css)
-        self.assertIn("minmax(290px, 1fr)", panorama_js)
-        self.assertIn("width: max-content;", style_css)
-        self.assertIn("grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));", style_css)
-        self.assertIn("grid-template-rows: 1fr 1fr;", style_css)
-        self.assertIn("transform: rotate(18deg);", style_css)
-        self.assertIn("justify-content: center;", style_css)
-        self.assertIn("position: absolute;", style_css)
+        manifest_text = manifest_file.read_text("utf-8")
+        bootstrap_text = bootstrap_file.read_text("utf-8")
 
-    def test_browser_frontend_no_longer_depends_on_path_merge_state(self):
-        app_js = (APP_DIR / "app.js").read_text("utf-8")
-        api_js = (APP_DIR / "api.js").read_text("utf-8")
-        state_js = (APP_DIR / "state.js").read_text("utf-8")
-        render_js = (APP_DIR / "render.js").read_text("utf-8")
-        manual_js = (APP_DIR / "manual.js").read_text("utf-8")
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        preview_js = (APP_DIR / "preview.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
+        previous_index = -1
+        for legacy_file in LEGACY_RUNTIME_FILES:
+            asset_path = f"legacy-runtime/{legacy_file}"
+            self.assertIn(asset_path, manifest_text)
+            next_index = manifest_text.index(asset_path)
+            self.assertGreater(next_index, previous_index, f"{legacy_file} is out of legacy script order")
+            previous_index = next_index
 
-        self.assertNotIn("S.merge.paths", app_js)
-        self.assertNotIn("getPathBasename", app_js)
-        self.assertNotIn("path = ''", app_js)
+        self.assertIn("loadLegacyRuntime", bootstrap_text)
+        self.assertIn("LEGACY_RUNTIME_SCRIPTS", bootstrap_text)
+        self.assertIn("document.createElement('script')", bootstrap_text)
 
-        self.assertIn("async runtime()", api_js)
-        self.assertIn("fetch('/api/runtime')", api_js)
-        self.assertIn("async loadHistory(name, snapshotId)", api_js)
-        self.assertNotIn("paths:", state_js)
-        self.assertIn("supportsDocs", state_js)
-        self.assertIn("supportsCopy", state_js)
-        self.assertIn("supportsCollab", state_js)
-        self.assertIn("queueCollabSnapshotSync", state_js)
-        self.assertIn("pendingRemoteSnapshot", state_js)
-        self.assertIn("hasConflict", state_js)
-        self.assertIn("readOnly", state_js)
-        self.assertIn("async createVersion(name, document, message = '')", api_js)
-        self.assertIn("async loadVersion(name, versionId)", api_js)
-        self.assertIn("async fileSummaries()", api_js)
-        self.assertIn("async startDocxExport(name)", api_js)
-        self.assertIn("async exportJob(jobId)", api_js)
-        self.assertIn("async downloadExportJob(jobId)", api_js)
-        self.assertIn("api.startDocxExport(S.currentFile)", app_js)
-        self.assertIn("api.downloadExportJob(job.id)", app_js)
-        self.assertIn("if (!response.ok) return []", api_js)
-        self.assertIn("catch(() => [])", api_js)
-        self.assertIn("COLLAB_SNAPSHOT_DEBOUNCE_MS = 5000", (APP_DIR / "collab.js").read_text("utf-8"))
-        collab_js = (APP_DIR / "collab.js").read_text("utf-8")
-        self.assertIn("COLLAB_RECONNECT_MS = 3000", collab_js)
-        self.assertIn("COLLAB_PING_MS = 10000", collab_js)
-        self.assertIn("receiveRemoteCollabSnapshot", collab_js)
-        self.assertIn("applyPendingRemoteCollabSnapshot", collab_js)
-        self.assertIn("keepLocalCollabSnapshot", collab_js)
-        self.assertIn("scheduleCollabReconnect", collab_js)
-        self.assertIn("lastActivity", collab_js)
-        self.assertIn("COLLAB_USER_PROFILE_KEY = 'blm.user.profile'", collab_js)
-        self.assertIn("getCollabSessionId", collab_js)
-        self.assertIn("saveCollabUserProfile", collab_js)
-        self.assertIn("openUserAccountModal", collab_js)
-        self.assertIn("normalizeCollabDisplayName", collab_js)
-        self.assertIn("hasConfiguredCollabUser", collab_js)
-        self.assertIn("getCollabPayloadUserName", collab_js)
-        self.assertIn("connectionCount", collab_js)
-        self.assertIn("isCurrentUser", collab_js)
-        self.assertIn("clientIds.includes(state.clientId)", collab_js)
-        self.assertIn("sessionIds.includes(currentProfile.sessionId)", collab_js)
-        self.assertIn("names.unshift(currentProfile.name)", collab_js)
-        self.assertIn("ensureUserConfiguredForApp", app_js)
-        index_html = (APP_DIR / "index.html").read_text("utf-8")
-        self.assertNotIn('id="collab-conflict-alert"', index_html)
-        self.assertIn('data-testid="toolbar-version-button"', index_html)
-        self.assertIn('data-testid="toolbar-history-button"', index_html)
-        self.assertIn('data-testid="toolbar-version-button">归档版本</button>', index_html)
-        self.assertIn('data-testid="toolbar-history-button">历史记录</button>', index_html)
-        self.assertIn('id="readonly-alert"', index_html)
-        self.assertIn("showLocatorMenu", app_js)
-        self.assertIn("copyVersionLocator", app_js)
-        self.assertIn("copyTextToClipboard", app_js)
-        self.assertIn("document.execCommand('copy')", app_js)
-        self.assertIn("data-locator-action", app_js)
-        self.assertNotIn("onclick=\"copyLocatorUrl", app_js)
-        self.assertIn("formatCompareHistoryOptionLabel", app_js)
-        self.assertIn("自动同步", app_js)
-        self.assertIn("手动同步", app_js)
-        self.assertIn("const hasLocalUnsubmitted", render_js)
-        self.assertIn("const hasRemoteUnsynced", render_js)
-        self.assertIn("const hasActionableChange = Boolean(hasLocalUnsubmitted || hasRemoteUnsynced);", render_js)
-        self.assertIn("renderWorkspaceFileList(files)", app_js)
-        self.assertIn("getWorkspaceDocumentSummaries(files)", app_js)
-        self.assertIn("renderOpenSpaceTabs(spaces, summaries)", app_js)
-        self.assertIn("compareWorkspaceSpaceNames", app_js)
-        self.assertIn("leftText === DEFAULT_WORKSPACE_SPACE", app_js)
-        self.assertIn("renderOpenTagFilters(tags, activeTag)", app_js)
-        self.assertIn("selectOpenSpace(space)", app_js)
-        self.assertIn("selectOpenTag(tag)", app_js)
-        self.assertIn("openModalById('open-modal-overlay')", app_js)
-        self.assertIn("loadWorkspaceDocumentSummaries()", app_js)
-        self.assertIn("已降级为普通文档列表", app_js)
-        self.assertIn("workspace-doc-card", style_css)
-        self.assertIn("history-modal-shell", style_css)
-        self.assertIn("trash-toolbar", style_css)
-        self.assertIn("user-account-button", style_css)
-        self.assertIn("user-modal-shell", style_css)
-        self.assertIn(".collab-status[data-users]::after", style_css)
-        self.assertIn("badge.dataset.users", collab_js)
-        self.assertIn("clearSelectedTrash", app_js)
-        self.assertIn("clearAllTrash", app_js)
-        self.assertIn("openHistorySnapshot", app_js)
-        self.assertIn("async deleteTrash(entryIds)", api_js)
-        self.assertIn("async clearTrash()", api_js)
-        self.assertIn("open-space-tab", style_css)
-        self.assertIn("open-tag-filter", style_css)
-        self.assertIn("locator-menu", style_css)
-        self.assertIn("openStartupLocatorIfPresent", app_js)
-        self.assertIn("applyLocatorToUi", app_js)
-        self.assertIn("App.openLatestVersion()", index_html)
-        self.assertIn("flowGroup", state_js)
-        self.assertIn("orchestrationTasks", state_js)
-        self.assertIn("getNodeForms", state_js)
-        self.assertNotIn("{id:'manual', label:'使用手册'}", render_js)
-        self.assertIn("toolbar-manual-button", render_js)
-        self.assertIn("document.getElementById('tab-bar').innerHTML = '';", render_js)
-        self.assertIn("const MANUAL_RUNTIME_ERROR", manual_js)
-        self.assertIn("MANUAL_DOC_ID = 'user-manual'", manual_js)
-        self.assertIn("supports_docs", manual_js)
-        self.assertIn("supports_copy", app_js)
-        self.assertIn("manual-reader-head", manual_js)
-        self.assertIn("toggleManualOutlineGroup", manual_js)
-        self.assertIn("getActiveManualDoc", manual_js)
-        self.assertIn("renderManualDocList", manual_js)
-        self.assertIn("renderBasicManualMarkdown", manual_js)
-        self.assertIn("manual-doc-intro", manual_js)
-        self.assertIn("returnFromManual", manual_js)
-        self.assertIn("manual-back-button", manual_js)
-        self.assertNotIn("manual-doc-button-summary", manual_js)
-        self.assertNotIn("manual-image-card", manual_js)
-        self.assertIn("flowGroup", process_js)
-        self.assertIn("renderOrchestrationSection", process_js)
-        self.assertIn("renderTaskFormsSection", process_js)
-        self.assertIn("task-form-section-entity", process_js)
-        self.assertIn("getTaskFormEntitySummary", process_js)
-        self.assertIn("function syncFormSectionFieldsFromEntity", process_js)
-        self.assertIn("function duplicateTaskForm", process_js)
-        self.assertIn("data-testid=\"task-form-duplicate\"", process_js)
-        self.assertNotIn('data-testid="task-form-entity"', process_js)
-        self.assertIn("renderTaskBusinessRulesSection", process_js)
-        self.assertIn("businessRules", state_js)
-        self.assertIn("buildOrchestrationFlowHtml", process_js)
-        self.assertIn("node-perspective-switch", process_js)
-        self.assertNotIn("\\u8fdb\\u5165\\u7f16\\u6392\\u4efb\\u52a1", process_js)
-        self.assertIn("用户操作步骤", preview_js)
-        self.assertIn("节点任务", preview_js)
-        self.assertIn("表单模型", preview_js)
-        self.assertIn(".manual-shell #tab-bar", style_css)
+    def test_old_vendor_assets_are_available_to_legacy_runtime(self):
+        public_dir = ANGULAR_DIR / "public"
 
-    def test_workspace_space_summary_is_not_overwritten_by_current_document(self):
-        app_js = (APP_DIR / "app.js").read_text("utf-8")
+        self.assertTrue((public_dir / "vendor" / "marked.umd.js").exists())
+        self.assertTrue((public_dir / "vendor" / "mermaid.min.js").exists())
+        self.assertTrue((public_dir / "legacy-runtime" / "app.js").exists())
+        self.assertTrue((public_dir / "legacy-runtime" / "render.js").exists())
 
-        self.assertIn("const DEFAULT_WORKSPACE_SPACE", app_js)
-        self.assertIn("function normalizeWorkspaceSpace", app_js)
-        self.assertIn("if (!summaryByName.has(S.currentFile))", app_js)
-        self.assertIn("space: normalizeWorkspaceSpace(summary.space)", app_js)
-        self.assertIn("previousSummaries", app_js)
-        self.assertIn("return previousSummaries", app_js)
-        self.assertNotIn("document.getElementById('open-modal-overlay');\n  if (openModal", app_js)
+    def test_document_model_algorithms_have_targeted_unit_tests(self):
+        model_file = ANGULAR_APP_DIR / "core" / "document" / "document-model.ts"
+        spec_file = ANGULAR_APP_DIR / "core" / "document" / "document-model.spec.ts"
+        model_text = model_file.read_text("utf-8")
+        spec_text = spec_file.read_text("utf-8")
 
-    def test_feedback_image_attachments_use_inline_preview(self):
-        index_html = (APP_DIR / "index.html").read_text("utf-8")
-        app_js = (APP_DIR / "app.js").read_text("utf-8")
-        domain_js = (APP_DIR / "workbenches" / "component" / "component-legacy.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
+        for function_name in [
+            "normalizeDocument",
+            "normalizeStageFlowRefs",
+            "findProcessByIdentity",
+            "getStageProcesses",
+            "getRoleUsage",
+            "getComponentSupportedStages",
+        ]:
+            self.assertIn(f"function {function_name}", model_text)
+            self.assertIn(function_name, spec_text)
 
-        self.assertIn('id="feedback-image-preview-overlay"', index_html)
-        self.assertNotIn('id="feedback-image-preview-open"', index_html)
-        self.assertNotIn("新标签打开", index_html)
-        self.assertIn("function openFeedbackImagePreview", app_js)
-        self.assertIn("function closeFeedbackImagePreview", app_js)
-        self.assertIn("uploadFeedbackAttachmentEntries", app_js)
-        self.assertIn("deleteFeedbackAttachment", app_js)
-        self.assertIn("openFeedbackImagePreview(decodeURIComponent", domain_js)
-        self.assertIn("contentType.startsWith('image/')", domain_js)
-        self.assertIn("fb-attachment-image", domain_js)
-        self.assertIn("fb-message-add-attachment", domain_js)
-        self.assertIn("download=\"${esc(filename)}\"", domain_js)
-        self.assertIn(".feedback-image-preview-modal", style_css)
-        self.assertIn(".fb-attachment-thumb img", style_css)
-        self.assertIn(".fb-attachment-delete", style_css)
+    def test_angular_routes_send_workbench_paths_to_legacy_shell(self):
+        routes_text = (ANGULAR_APP_DIR / "app.routes.ts").read_text("utf-8")
 
-    def test_sidebar_stage_directory_supports_flow_groups_and_stage_order_moves(self):
-        render_js = (APP_DIR / "render.js").read_text("utf-8")
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
+        self.assertRegex(routes_text, r"legacy-shell", re.IGNORECASE)
+        for area in WORKBENCHES:
+            self.assertIn(f"path: '{area}'", routes_text)
 
-        self.assertIn("function getSidebarProcessGroups(processes)", render_js)
-        self.assertIn("未分组", render_js)
-        self.assertIn("renderStageProcessList(stageItem, stageProcesses)", render_js)
-        self.assertIn("stageId: stageItem.id", render_js)
-        self.assertIn("inFlowGroup: true", render_js)
-        self.assertIn("function moveProcInSd(procId, dir, e, stageId = '')", process_js)
-        self.assertIn("moveStageProcessRef(targetStageId, procId, dir)", process_js)
-        self.assertIn('<span class="sb-caret-icon">\\u25b6</span>', render_js)
-        self.assertIn('<span class="sb-subgrp-badge">\\u6d41\\u7a0b\\u7ec4</span>', render_js)
-        self.assertNotIn("鈻?/span", render_js)
-        self.assertNotIn("流程组/span", render_js)
-        self.assertIn(".sb-flow-group-head", style_css)
-        self.assertIn(".sb-proc-head.in-flow-group", style_css)
+    def test_no_legacy_script_patterns_outside_legacy_port(self):
+        forbidden_patterns = [
+            "document.getElementById",
+            ".innerHTML",
+            "onclick=",
+            "<script",
+        ]
+        for path in ANGULAR_APP_DIR.rglob("*"):
+            if path.suffix not in {".ts", ".html"}:
+                continue
+            if "legacy-shell" in path.parts or "legacy-runtime" in path.parts:
+                continue
+            text = path.read_text("utf-8")
+            for pattern in forbidden_patterns:
+                self.assertNotIn(pattern, text, f"{path.relative_to(ROOT)} contains legacy pattern {pattern}")
 
-    def test_frontend_fragment_checker_passes(self):
-        result = subprocess.run(
-            ["python", "tools/check_frontend_fragments.py"],
-            cwd=ROOT,
-            text=True,
+    def test_angular_build_and_tests_pass(self):
+        test_result = subprocess.run(
+            ["npm.cmd", "test"],
+            cwd=ANGULAR_DIR,
             capture_output=True,
-            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
         )
+        self.assertEqual(test_result.returncode, 0, test_result.stdout + test_result.stderr)
 
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("Frontend fragment check passed.", result.stdout)
-
-    def test_reverse_action_buttons_are_readable_on_light_surfaces(self):
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
-
-        self.assertIn(".btn-ghost   { background: #fff; color: var(--text); border-color: var(--border); }", style_css)
-        self.assertIn("#toolbar .btn-ghost { background: transparent; color: var(--header-text); border-color: #475569; }", style_css)
-        self.assertLess(
-            style_css.find(".btn-ghost   { background: #fff; color: var(--text);"),
-            style_css.find("#toolbar .btn-ghost { background: transparent; color: var(--header-text);"),
+        build_result = subprocess.run(
+            ["npm.cmd", "run", "build"],
+            cwd=ANGULAR_DIR,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
         )
-
-    def test_compare_modal_supports_remote_archive_and_submit_sources(self):
-        index_html = (APP_DIR / "index.html").read_text("utf-8")
-        app_js = (APP_DIR / "app.js").read_text("utf-8")
-        state_js = (APP_DIR / "state.js").read_text("utf-8")
-
-        self.assertIn('id="compare-left-source-select"', index_html)
-        self.assertIn('id="compare-right-source-select"', index_html)
-        self.assertIn("App.selectCompareSource('left', this.value)", index_html)
-        self.assertIn("App.selectCompareSource('right', this.value)", index_html)
-        self.assertIn('<option value="version">归档版本记录</option>', index_html)
-        self.assertIn("sourceKinds", state_js)
-        self.assertIn("archiveVersions", state_js)
-        self.assertIn("submitVersions", state_js)
-        self.assertIn("function getCompareSelectedSourceKind", app_js)
-        self.assertIn("api.collabSubmitLoad(name, submitId)", app_js)
-        self.assertIn("api.loadVersion(name, id)", app_js)
-        self.assertIn("api.loadHistory(name, id)", app_js)
-        self.assertIn("async archiveHistorySnapshot", app_js)
-        self.assertIn("copyVersionLocator", app_js)
-        self.assertIn("extendCompareVersionOptionsIfNeeded", app_js)
-
-    def test_history_restore_is_local_and_actions_are_visually_distinct(self):
-        app_js = (APP_DIR / "app.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
-
-        self.assertIn(">只读打开</button>", app_js)
-        self.assertIn(">本地恢复</button>", app_js)
-        self.assertIn("btn btn-danger-solid btn-sm", app_js)
-        self.assertIn("onclick='App.archiveHistorySnapshot", app_js)
-        self.assertIn("btn btn-primary btn-sm", app_js)
-        self.assertIn("const result = await api.loadHistory(name, snapshotId);", app_js)
-        self.assertNotIn("const result = await api.restoreHistory(name, snapshotId);", app_js)
-        self.assertIn("点击“立即同步”后才会影响其他人", app_js)
-        self.assertIn(".btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }", style_css)
-
-    def test_collab_toolbar_shows_local_and_remote_sync_states(self):
-        render_js = (APP_DIR / "render.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
-
-        self.assertIn("const hasLocalUnsubmitted", render_js)
-        self.assertIn("const hasRemoteUnsynced", render_js)
-        self.assertIn("const hasActionableChange = Boolean(hasLocalUnsubmitted || hasRemoteUnsynced);", render_js)
-        self.assertIn("本地未提交", render_js)
-        self.assertIn("远端未同步", render_js)
-        self.assertIn("modified-badge-row local", render_js)
-        self.assertIn("modified-badge-row remote", render_js)
-        self.assertIn(".modified-badge-row.local", style_css)
-        self.assertIn(".modified-badge-row.remote", style_css)
-        self.assertIn(".modified-badge-dot", style_css)
-
-    def test_entity_relation_layout_uses_deterministic_entity_node_size(self):
-        entity_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
-
-        self.assertIn("function _efGetEntityNodeSize(entity)", entity_js)
-        self.assertIn("const size = _efGetEntityNodeSize(entity);", entity_js)
-        self.assertIn("colWidths[col] = Math.max(colWidths[col], _efGetEntityNodeSize(entity).width);", entity_js)
-        self.assertIn("const size = _efGetEntityNodeSize(e);", entity_js)
-        self.assertIn("width:${size.width}px;height:${size.height}px", entity_js)
-        self.assertIn("justify-content: center;", style_css)
-
-    def test_business_ids_are_hidden_from_business_modeling_ui(self):
-        state_js = (APP_DIR / "state.js").read_text("utf-8")
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        entity_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
-        render_js = (APP_DIR / "render.js").read_text("utf-8")
-
-        self.assertIn("function nextStableId", state_js)
-        self.assertNotIn('data-testid="process-id-input"', process_js)
-        self.assertNotIn('data-testid="process-task-id-input"', process_js)
-        self.assertNotIn('data-testid="process-flow-node-id-input"', process_js)
-        self.assertNotIn('data-testid="process-flow-gateway-id-input"', process_js)
-        self.assertNotIn('data-testid="process-flow-edge-id-input"', process_js)
-        self.assertNotIn("detail-id editable-id", entity_js)
-        self.assertNotIn("sb-id editable-id", render_js)
-        self.assertIn("renameGatewayId", entity_js)
-        self.assertIn("renameFlowEdgeId", entity_js)
-
-    def test_process_form_entity_copy_affordances_are_available(self):
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        entity_js = (APP_DIR / "workbenches" / "entity" / "entity-legacy.js").read_text("utf-8")
-        render_js = (APP_DIR / "render.js").read_text("utf-8")
-
-        self.assertIn("function duplicateProcess", process_js)
-        self.assertIn('data-testid="sidebar-process-copy-action"', render_js)
-        self.assertIn("`${source.name || '未命名流程'}- 副本`", process_js)
-        self.assertIn("const newProcessUid = createUiUid('process')", process_js)
-        self.assertIn("clone.uid = newProcessUid", process_js)
-        self.assertIn("node.uid = createUiUid('task')", process_js)
-        self.assertIn("cloneTaskFormForCopy", process_js)
-        self.assertIn("taskIdMap.set(oldTaskId, newTaskId)", process_js)
-        self.assertIn("function duplicateEntity", entity_js)
-        self.assertIn("entity.uid = createUiUid('entity')", entity_js)
-        self.assertIn("data-testid=\"entity-duplicate-button\"", entity_js)
-
-    def test_sidebar_copy_and_stage_group_drop_affordances_are_available(self):
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        render_js = (APP_DIR / "render.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
-
-        self.assertIn("oncontextmenu=\"showSidebarProcessContextMenu", render_js)
-        self.assertIn("function showSidebarProcessContextMenu", render_js)
-        self.assertIn("function bindSidebarProcessContextMenu", render_js)
-        self.assertIn("bindSidebarProcessContextMenu();", render_js)
-        self.assertIn("menu.setAttribute('data-testid', 'sidebar-process-context-menu')", render_js)
-        self.assertIn('data-testid="sidebar-process-copy-action"', render_js)
-        self.assertIn("duplicateProcess(getProcessIdentity(process))", render_js)
-        self.assertIn('oncontextmenu="showSidebarProcessContextMenu', process_js)
-        self.assertIn("function getStageFlowDragTargetGroup", process_js)
-        self.assertIn("function updateStageFlowGroupDragTarget", process_js)
-        self.assertIn("nodeRect.left + nodeRect.width / 2", process_js)
-        self.assertIn("if (processId && group)", process_js)
-        self.assertIn("setFlowGroupForProcesses(processId, nextGroup)", process_js)
-        self.assertIn("data-flow-group=\"${esc(group.label || '')}\"", process_js)
-        self.assertIn(".stage-flow-group-box.is-drag-target", style_css)
-
-    def test_stage_process_refs_support_uid_only_documents(self):
-        state_js = (APP_DIR / "state.js").read_text("utf-8")
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-
-        self.assertIn("function getProcessIdentity", state_js)
-        self.assertIn("function getStageIdentity", state_js)
-        self.assertIn("function findProcessByIdentity", state_js)
-        self.assertIn("function findStageByIdentity", state_js)
-        self.assertIn("normalized.id || normalized.uid", state_js)
-        self.assertIn("const stageUid = String(normalized.stageUid || normalized.stage_id || '').trim()", state_js)
-        self.assertIn("const processUid = String(normalized.processUid || normalized.process_id || '').trim()", state_js)
-        self.assertIn("return findProcessByIdentity(processUid, doc)", state_js)
-        self.assertIn("label: proc ? (proc.name || '未命名流程') : '失效流程引用'", process_js)
-        self.assertIn("const source = findProcessByIdentity(procId, S.doc)", process_js)
-        self.assertIn("addStageProcessRef(ref.stageUid, newProcessKey", process_js)
-
-    def test_swimlane_tasklevel_view_uses_outer_vertical_scroll(self):
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
-
-        self.assertIn(".process-flow-view.is-swimlane.has-tasklevel", style_css)
-        self.assertIn(".process-flow-view.is-swimlane.has-tasklevel .process-flow-card", style_css)
-        self.assertIn("height: auto;", style_css)
-        self.assertIn("overflow: visible;", style_css)
-
-    def test_process_flow_node_role_control_is_plain_dropdown(self):
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        style_css = (APP_DIR / "style.css").read_text("utf-8")
-
-        self.assertIn('data-testid="process-flow-node-role-picker"', process_js)
-        self.assertIn("setProcessFlowNodeRole", process_js)
-        self.assertIn('type="checkbox"', process_js)
-        self.assertIn(".flow-node-role-menu", style_css)
-        self.assertNotIn('class="flow-node-role-select" multiple', process_js)
-        self.assertNotIn('multiple size="1"', process_js)
-
-    def test_frontend_normalizers_preserve_existing_uids(self):
-        state_js = (APP_DIR / "state.js").read_text("utf-8")
-        process_js = (APP_DIR / "workbenches" / "process" / "process-legacy.js").read_text("utf-8")
-        app_js = (APP_DIR / "app.js").read_text("utf-8")
-        api_js = (APP_DIR / "api.js").read_text("utf-8")
-
-        self.assertIn("uid: String(source.uid || '').trim() || id", state_js)
-        self.assertIn("const uid = String(normalized.uid || '').trim();", state_js)
-        self.assertIn("...(uid ? { uid } : {})", state_js)
-        self.assertIn("const uid = createUiUid('rule');", process_js)
-        self.assertIn("const rule = { uid, id: uid, name, content: '' };", process_js)
-        self.assertIn("uid: String(transition?.uid || '').trim() || createUiUid('transition')", state_js)
-        self.assertIn("async copyDocument(sourceName, targetName)", api_js)
-        self.assertIn("return postJson('/api/copy'", api_js)
-        self.assertIn("copyWorkspaceDocument(S.currentFile, name)", app_js)
-        self.assertIn("当前运行的本地服务不支持复制接口", app_js)
-        self.assertIn("'meta.revision'", app_js)
-        self.assertIn("'versionUid'", app_js)
-        self.assertIn("function isImplicitDefaultCompareValue(path, value)", app_js)
-        self.assertIn("isImplicitDefaultCompareValue(path, rightMap[path])", app_js)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(build_result.returncode, 0, build_result.stdout + build_result.stderr)

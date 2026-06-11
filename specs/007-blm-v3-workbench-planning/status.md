@@ -52,3 +52,29 @@
 - 已补结构守卫测试：旧大文件不得重新出现已迁移工作台主体函数，聚合根文件必须存在并被加载。
 - 验证已通过：`python -m unittest tests.test_frontend_structure`、`python tools\check_frontend_fragments.py`、全量 `node --check app/**/*.js`、Playwright 聚合入口冒烟。
 - 剩余风险：这是“一次性物理归位 + 兼容入口”重构，尚未把各聚合内部继续拆成 queries/views/actions/model；后续小功能应在对应聚合目录内继续沉淀，不能回写旧大文件。
+
+### Angular 一次性迁移
+
+- 已在提交 `4b794d3` 保存旧前端聚合根基线。
+- 已新增 `frontend-angular/`，使用 Angular 21、TypeScript、Angular Router、Angular Forms 和 Vitest。
+- 已建立 TypeScript 文档模型、规范化算法和单元测试，覆盖阶段流程引用、uid/id 查找、角色使用、构件支撑阶段等关键关系。
+- 已建立 7 个 Angular 工作台组件：全景、流程、构件、应用编排、实体、知识、角色。
+- 已将 `app/` 替换为 Angular 构建产物，旧手写 JS/CSS/workbenches/vendor 前端文件已删除。
+- 已为后端静态服务增加 SPA fallback，支持刷新 `/process` 等 Angular 子路由。
+- 已更新 `tests.test_frontend_structure`，新的结构守卫检查 Angular 工程、模板分离、旧前端源文件退场、Angular 构建产物和单元测试。
+- 当前剩余风险：这是 Angular 架构和核心模型迁移，旧前端的大量交互细节尚未逐项功能等价迁回；后续应继续在 Angular 组件、服务和模型中补齐，而不是恢复旧 JS。
+
+### T7-B Angular legacy 等价迁移层
+- 已将上一版 Angular 新骨架调整为 legacy port：Angular 负责启动壳、路由和构建，旧界面主体由 `legacy-shell.component.html` 承载。
+- 已从基线 `4b794d3` 抽取旧 `index.html` 的 body、`style.css`、`ai.css`、旧 JS 和 vendor 文件。
+- 旧 CSS 合并到 `frontend-angular/src/styles.scss`，旧 JS 作为 Angular public assets 输出到 `app/legacy-runtime/`，由 `legacy-runtime.bootstrap.ts` 按旧 script 顺序加载。
+- `app/` 仍只作为构建产物目录；旧手写前端源码不再直接放在 `app/` 根目录运行。
+- 验证已通过：`npm.cmd test`、`npm.cmd run build`、`python -m unittest tests.test_frontend_structure`、HTTP 冒烟检查 `/`、各工作台子路由、legacy runtime 和 vendor 资源均返回 200。
+- 剩余风险：本轮未完成像素级截图 diff；浏览器点击级冒烟受当前环境缺少 Playwright 包限制，暂以构建、单测、结构测试和 HTTP 资源检查兜底。
+
+### T7-C Playwright legacy port 冒烟补充
+- 已复用 `tools/e2e` 中现有 Playwright 工具链，没有迁移到项目根目录；`tests.test_project_layout` 仍约束 e2e 工具留在 `tools/e2e/`。
+- 已修正 `tools/e2e/playwright.config.js`：Windows 下不再依赖缺失的 `py` launcher，统一使用 `python blm.py`；e2e workspace 改为每次运行唯一目录，避免固定目录被锁导致 `EPERM`。
+- 已新增 `tools/e2e/tests/angular-legacy-port.spec.js`，覆盖 Angular legacy port 的浏览器级冒烟：旧 toolbar、文件菜单、打开文档后的工作台 tab、`window.App/window.S/window.AI`、以及 Angular 子路由刷新回旧 shell。
+- 已新增 `legacy-runtime/bootstrap-init.js`，解决旧 `DOMContentLoaded` 初始化在 Angular 动态加载脚本时被错过的问题，并显式暴露 `window.S`、`window.App`、`window.AI`。
+- 验证已通过：`npm.cmd run test:e2e -- tests/angular-legacy-port.spec.js`、`npm.cmd test`、`npm.cmd run build`、`python -m unittest tests.test_frontend_structure tests.test_project_layout`、后端 3 项定向测试。

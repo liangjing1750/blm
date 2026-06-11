@@ -1,0 +1,39 @@
+<section class="workbench">
+  <header class="workbench-header">
+    <h1>构件工作台</h1>
+    <p>后端研发维护逻辑实体、任务定义和业务组件，弱参考流程产物。</p>
+  </header>
+
+  <div class="grid">
+    <article class="panel">
+      <h2>构件管理</h2>
+      <ul class="list">
+        @for (component of document().businessComponents; track component.uid) {
+          <li>
+            <strong>{{ component.name }}</strong>
+            <div class="muted">类型：{{ component.kind === 'core' ? '核心' : '通用' }}</div>
+            <div class="muted">支撑阶段：{{ supportedStages(component) }}</div>
+          </li>
+        }
+      </ul>
+    </article>
+
+    <article class="panel">
+      <h2>逻辑实体</h2>
+      <ul class="list">
+        @for (entity of document().entities; track entity.uid) {
+          <li>{{ entity.name }} <span class="muted">{{ entity.fields.length }} 字段</span></li>
+        }
+      </ul>
+    </article>
+
+    <article class="panel">
+      <h2>任务定义</h2>
+      <ul class="list">
+        @for (task of document().taskDefinitions; track task.uid) {
+          <li>{{ task.name }} <span class="muted">{{ task.target || '未绑定实现' }}</span></li>
+        }
+      </ul>
+    </article>
+  </div>
+</section>

@@ -163,6 +163,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_history(path)
                 if path.startswith("/api/versions/"):
                     return self._handle_versions(path)
+                if not path.startswith("/api/") and not (app_dir / path.lstrip("/")).exists():
+                    self.path = "/index.html"
                 return super().do_GET()
             except Exception as exc:
                 log_error("blm.http", "http.request.error", method="GET", path=self.path, error=str(exc))

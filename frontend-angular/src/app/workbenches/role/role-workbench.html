@@ -1,0 +1,16 @@
+<section class="workbench">
+  <header class="workbench-header">
+    <h1>角色工作台</h1>
+    <p>横向维护角色，纵向回看角色参与的流程节点。</p>
+  </header>
+
+  <div class="grid">
+    @for (role of document().roles; track role.uid) {
+      <article class="panel">
+        <h2>{{ role.name }}</h2>
+        <p class="muted">{{ role.group || '未分组' }}</p>
+        <p>参与节点：{{ usageCount(role) }}</p>
+      </article>
+    }
+  </div>
+</section>

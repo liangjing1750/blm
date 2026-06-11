@@ -1,0 +1,19 @@
+<section class="workbench">
+  <header class="workbench-header">
+    <h1>实体工作台</h1>
+    <p>后端研发维护逻辑实体字段、状态和关系。</p>
+  </header>
+
+  <div class="grid">
+    @for (entity of document().entities; track entity.uid) {
+      <article class="panel">
+        <h2>{{ entity.name }}</h2>
+        <ul class="list">
+          @for (field of entity.fields; track field.name) {
+            <li>{{ field.name }} <span class="muted">{{ field.type }}</span></li>
+          }
+        </ul>
+      </article>
+    }
+  </div>
+</section>

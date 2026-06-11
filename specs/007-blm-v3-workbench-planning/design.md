@@ -164,3 +164,11 @@ legacy
 - `workbenches/process/process-legacy.js`、`workbenches/component/component-legacy.js`、`workbenches/entity/entity-legacy.js` 是本轮为了零回归迁入聚合目录的旧实现层。
 - 后续新增或修改流程、构件、实体能力时，优先在对应聚合目录内继续拆分 `queries/views/actions/model`，不要把逻辑写回旧大文件。
 - 同级工作台之间仍避免直接依赖；确需跳转或协作时，通过聚合根公开方法或 `AppActions` 协调。
+
+## Angular 迁移后形态
+
+- `frontend-angular/` 是前端源码事实来源，`app/` 只保存 Angular 构建产物。
+- 工作台以 Angular component 表达，模板放在独立 `.html` 文件，交互逻辑放在 `.ts` 文件，样式放在 `.css` 文件。
+- 文档模型、规范化算法和查询逻辑放在 `src/app/core/document/`。
+- 工作台之间通过 Router 和共享文档 Store 协作，不通过全局函数、`window`、`innerHTML` 或手写 `<script>` 串联。
+- 旧 `domain.js`、`process.js`、`entity.js`、`render.js` 以及 `app/workbenches/*` 旧源文件已退场；后续不要恢复旧静态前端实现。

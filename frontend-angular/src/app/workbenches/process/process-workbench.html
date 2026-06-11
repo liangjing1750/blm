@@ -1,0 +1,22 @@
+<section class="workbench">
+  <header class="workbench-header">
+    <h1>流程工作台</h1>
+    <p>产品经理维护阶段、流程、节点、用户步骤、表单和概念实体。</p>
+  </header>
+
+  <div class="grid">
+    @for (stage of document().stages; track stage.uid) {
+      <article class="panel">
+        <h2>{{ stage.name }}</h2>
+        <ul class="list">
+          @for (process of processesForStage(stage.uid); track process.uid) {
+            <li>
+              <strong>{{ process.name }}</strong>
+              <div class="muted">{{ process.nodes.length }} 个节点</div>
+            </li>
+          }
+        </ul>
+      </article>
+    }
+  </div>
+</section>

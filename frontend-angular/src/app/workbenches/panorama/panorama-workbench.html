@@ -1,0 +1,42 @@
+<section class="workbench">
+  <header class="workbench-header">
+    <h1>全景工作台</h1>
+    <p>战略、价值流与业务域矩阵、业务组件放在同一张业务全景里。</p>
+  </header>
+
+  <div class="grid">
+    <article class="panel">
+      <h2>战略</h2>
+      <ul class="list">
+        <li>产品定位：业务架构建模工具</li>
+        <li>核心用户：业务负责人、产品经理、技术经理</li>
+        <li>衔接方向：流程应用平台与接口实现</li>
+      </ul>
+    </article>
+
+    <article class="panel">
+      <h2>价值与业务域矩阵</h2>
+      <ul class="list">
+        @for (stage of document().stages; track stage.uid) {
+          <li>
+            <strong>{{ stage.name }}</strong>
+            <span class="muted"> / {{ stage.subDomain || '未归属业务域' }} / {{ stageProcessCount(stage.uid) }} 个流程</span>
+          </li>
+        }
+      </ul>
+    </article>
+
+    <article class="panel">
+      <h2>业务组件</h2>
+      <ul class="list">
+        @for (row of componentRows(); track row.component.uid) {
+          <li>
+            <strong>{{ row.component.name }}</strong>
+            <span class="muted"> / {{ row.component.kind === 'core' ? '核心' : '通用' }}</span>
+            <div class="muted">支撑阶段：{{ row.stages.length ? row.stages.map(stage => stage.name).join('、') : '待承接' }}</div>
+          </li>
+        }
+      </ul>
+    </article>
+  </div>
+</section>

@@ -215,3 +215,49 @@
 - [x] `python tools\check_frontend_fragments.py`
 - [x] 全量 `node --check app/**/*.js`
 - [x] Playwright 浏览器冒烟：确认聚合根入口加载、可调用，主要工作台无 JS 错误。
+
+## T7 Angular 一次性迁移
+
+确认状态：已开发，待用户验收。
+
+修改范围：
+- [x] 提交旧前端聚合根基线。
+- [x] 新增 Angular + TypeScript 前端工程。
+- [x] 建立 BLM 文档模型与关键算法单元测试。
+- [x] 建立 7 个工作台组件和路由。
+- [x] 用 Angular 构建产物替换 `app/` 旧静态前端。
+- [x] 后端补 SPA fallback，支持 Angular 子路由刷新。
+- [x] 更新前端结构测试到 Angular 架构守卫。
+
+验收标准：
+- [x] `python -m unittest tests.test_frontend_structure`
+- [x] `npm.cmd test`
+- [x] `npm.cmd run build`
+- [x] 浏览器冒烟：主页、工作台导航、`/process` 子路由刷新。
+
+## T7-B Angular legacy 等价迁移层
+
+确认状态：已开发，待用户验收。
+
+修改范围：
+- [x] 从 `4b794d3` 抽取旧前端 HTML/CSS/JS/vendor。
+- [x] 新增 `frontend-angular/src/app/legacy-shell/`，用 Angular component 承载旧页面主体。
+- [x] 新增 `frontend-angular/src/app/legacy-runtime/`，声明旧脚本加载顺序和启动逻辑。
+- [x] 将旧运行时文件作为 Angular public assets 输出到 `app/legacy-runtime/`。
+- [x] 将旧 CSS 合并为全局 `src/styles.scss`。
+- [x] 将工作台路由统一指向 legacy shell，保证刷新子路由仍进入旧等价界面。
+
+验收标准：
+- [x] `npm.cmd test`
+- [x] `npm.cmd run build`
+- [x] `python -m unittest tests.test_frontend_structure`
+- [x] HTTP 冒烟：`/`、`/process`、`/role`、`/entity`、`/component`、`/orchestration`、`/knowledge`、legacy runtime 和 vendor 资源均可访问。
+
+后续规范化方向：
+- [ ] 为旧版 Oracle 和 Angular legacy port 增加截图 diff。
+- [ ] 逐步把 `legacy-runtime` 中的全局函数、inline handler、手写 DOM 拆到 Angular component/service/model。
+
+补充验收：
+- [x] `tools/e2e` Playwright 工具链可用，不迁移到根目录。
+- [x] `npm.cmd run test:e2e -- tests/angular-legacy-port.spec.js`
+- [x] 浏览器级验证旧 toolbar、文件菜单、打开文档后的工作台 tab、legacy 全局对象和 Angular 子路由 fallback。

@@ -1,0 +1,25 @@
+<section class="workbench">
+  <header class="workbench-header">
+    <h1>知识工作台</h1>
+    <p>维护术语、规则条目和业务语言共识。</p>
+  </header>
+
+  <div class="grid">
+    <article class="panel">
+      <h2>术语</h2>
+      <ul class="list">
+        @for (term of document().terms; track term.uid) {
+          <li>{{ term.name }} <span class="muted">{{ term.desc }}</span></li>
+        }
+      </ul>
+    </article>
+    <article class="panel">
+      <h2>规则条目</h2>
+      <ul class="list">
+        @for (rule of document().rules; track rule.uid) {
+          <li>{{ rule.name }} <span class="muted">{{ rule.desc }}</span></li>
+        }
+      </ul>
+    </article>
+  </div>
+</section>

@@ -3,9 +3,10 @@ const path = require('node:path');
 
 const toolDir = __dirname;
 const repoRoot = path.resolve(toolDir, '..', '..');
-const workspaceDir = path.join(toolDir, '.tmp', 'playwright-workspace');
+const workspaceDir =
+  process.env.BLM_E2E_WORKSPACE_DIR ||
+  path.join(toolDir, '.tmp', `playwright-workspace-${Date.now()}`);
 
-fs.rmSync(workspaceDir, { recursive: true, force: true });
 fs.mkdirSync(workspaceDir, { recursive: true });
 process.env.BLM_E2E_WORKSPACE_DIR = workspaceDir;
 
@@ -33,7 +34,7 @@ module.exports = {
     },
   },
   webServer: {
-    command: process.platform === 'win32' ? 'py blm.py' : 'python blm.py',
+    command: 'python blm.py',
     url: 'http://127.0.0.1:8899',
     reuseExistingServer: false,
     timeout: 30_000,

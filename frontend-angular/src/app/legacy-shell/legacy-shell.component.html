@@ -1,0 +1,414 @@
+﻿
+<div id="toolbar">
+  <div class="toolbar-left">
+    <span class="brand-mark">
+      <span class="logo">BLM</span>
+      <span class="product-version">v2.11</span>
+    </span>
+    <span id="file-name" class="file-name" data-testid="current-file-name">-</span>
+    <span id="document-version-badge" class="document-version-badge hidden" data-testid="document-version-badge"></span>
+    <span id="modified-badge" class="modified-badge hidden" data-testid="modified-badge">未保存</span>
+    <span id="collab-status" class="collab-status hidden" role="button" tabindex="0" onclick="openCollabDiagnosticsModal()" onkeydown="if(event.key==='Enter'||event.key===' ') openCollabDiagnosticsModal()" data-testid="collab-status">协作未连接</span>
+    <button id="user-account-button" class="user-account-button" type="button" onclick="openUserAccountModal()" data-testid="user-account-button">用户信息配置</button>
+  </div>
+  <div class="toolbar-right">
+    <div class="tbar-dd" id="dd-file">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('file')">文件 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdNew();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-new-button">新建</button>
+        <button onclick="App.cmdOpen();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-open-button">打开</button>
+        <button onclick="App.cmdProperties();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-properties-button">属性</button>
+        <button onclick="App.cmdDelete();App.closeAllDropdowns()" class="tbar-dd-item tbar-dd-danger" data-testid="toolbar-delete-button">删除</button>
+      </div>
+    </div>
+    <button onclick="App.cmdSave()" class="btn btn-ghost" id="btn-save" title="立即同步 (Ctrl+S)">立即同步</button>
+    <div class="tbar-dd" id="dd-history">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('history')">历史 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdCreateVersion();App.closeAllDropdowns()" class="tbar-dd-item tbar-dd-primary" data-testid="toolbar-version-button">归档版本</button>
+        <button onclick="App.cmdVersions();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-history-button">历史记录</button>
+      </div>
+    </div>
+    <div class="tbar-dd" id="dd-tools">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('tools')">工具 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdSaveAs();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-save-as-button" id="toolbar-save-as-label">复制</button>
+        <button onclick="App.cmdCompare();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-compare-button">比对</button>
+        <button onclick="App.cmdMerge();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-merge-button">合并</button>
+        <div class="tbar-dd-sep"></div>
+        <button onclick="AI.toggle();App.closeAllDropdowns()" class="tbar-dd-item tbar-dd-primary" data-testid="toolbar-ai-button" title="AI 助手 (Ctrl+J)">AI 助手</button>
+      </div>
+    </div>
+    <div class="tbar-dd" id="dd-help">
+      <button class="btn btn-ghost tbar-dd-btn" onclick="App.toggleDropdown('help')">帮助 ▾</button>
+      <div class="tbar-dd-menu hidden">
+        <button onclick="App.cmdManual();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-manual-button">使用手册</button>
+        <button onclick="App.cmdFeedback();App.closeAllDropdowns()" class="tbar-dd-item" data-testid="toolbar-feedback-button">反馈建议</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="readonly-alert" class="readonly-alert hidden" data-testid="readonly-alert">
+  <div>
+    <strong>正在查看只读版本</strong>
+    <span>命名版本不会连接实时协作，也不能编辑保存。</span>
+  </div>
+  <button class="btn btn-primary" onclick="App.openLatestVersion()">回到最新版本</button>
+</div>
+
+<div id="app-toast" class="app-toast hidden" data-testid="app-toast" role="status" aria-live="polite"></div>
+
+<div id="locator-menu" class="locator-menu hidden" data-testid="locator-menu"></div>
+
+<div id="save-progress" class="operation-progress hidden" data-testid="save-progress" aria-live="polite" aria-modal="true">
+  <div class="operation-progress-card" role="status">
+    <div class="operation-spinner" aria-hidden="true"></div>
+    <strong id="save-progress-message">正在保存...</strong>
+    <div class="operation-progress-track"><span id="save-progress-bar"></span></div>
+    <span id="save-progress-detail" class="operation-progress-detail">请稍候，正在处理文档。</span>
+  </div>
+</div>
+
+<div id="collab-reconnect-overlay" class="collab-reconnect-overlay hidden" data-testid="collab-reconnect-overlay" aria-live="assertive" aria-modal="true">
+  <div class="collab-reconnect-card" role="alertdialog" aria-labelledby="collab-reconnect-title">
+    <div class="operation-spinner" aria-hidden="true"></div>
+    <strong id="collab-reconnect-title">协作连接中断，正在重连恢复</strong>
+    <p id="collab-reconnect-detail">为避免未同步内容丢失，暂时暂停编辑。恢复成功后会自动继续同步。</p>
+    <div class="collab-reconnect-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+  </div>
+</div>
+
+<div id="layout">
+  <aside id="sidebar">
+    <div id="sidebar-content"></div>
+    <div id="sidebar-resize-handle" data-testid="sidebar-resize-handle" onmousedown="startSidebarResize(event)"></div>
+  </aside>
+  <div id="sb-toggle-wrap">
+    <button id="sb-toggle-btn" onclick="toggleSidebar()" title="展开/折叠侧边栏">折叠</button>
+  </div>
+  <main id="content">
+    <div id="tab-bar"></div>
+    <div id="tab-content"></div>
+  </main>
+</div>
+
+<div id="modal-overlay" class="hidden" onclick="App.closeModal()" data-testid="new-doc-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>新建文档</h3>
+    <input
+      id="new-doc-name"
+      type="text"
+      placeholder="输入文档名称，例如：入库流程"
+      data-testid="new-doc-name-input"
+      onkeydown="if(event.key==='Enter') App.confirmNew()"
+    >
+    <div class="modal-footer">
+      <button onclick="App.closeModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.confirmNew()" class="btn btn-primary" data-testid="new-doc-confirm-button">创建</button>
+    </div>
+  </div>
+</div>
+
+<div id="open-modal-overlay" class="hidden" onclick="App.closeOpenModal()">
+  <div class="modal open-modal-shell" onclick="event.stopPropagation()">
+    <h3>打开文档</h3>
+    <div class="open-modal-tabs" data-testid="open-modal-tabs">
+      <button
+        type="button"
+        class="open-modal-tab"
+        data-open-tab="workspace"
+        onclick="App.switchOpenTab('workspace')"
+      >工作区文档</button>
+      <button
+        type="button"
+        class="open-modal-tab"
+        data-open-tab="trash"
+        onclick="App.switchOpenTab('trash')"
+      >回收站</button>
+    </div>
+    <div class="open-modal-body">
+      <section id="open-workspace-panel" class="open-modal-panel">
+        <div class="open-space-head">
+          <div>
+            <div class="open-space-title">团队文档空间</div>
+            <div class="recovery-subtitle">按团队空间隔离文档；标签用于筛选和备注，正式归档请使用“归档版本”。</div>
+          </div>
+          <input id="open-file-search" class="open-file-search" type="search" placeholder="搜索文档名称" oninput="App.searchOpenFiles()">
+        </div>
+        <div id="open-space-tabs" class="open-space-tabs" data-testid="open-space-tabs"></div>
+        <div id="open-tag-filters" class="open-tag-filters" data-testid="open-tag-filters"></div>
+        <div id="file-list" class="file-list open-modal-scroll"></div>
+        <div id="workspace-pagination" class="open-pagination" data-testid="workspace-pagination"></div>
+      </section>
+      <section id="open-trash-panel" class="open-modal-panel hidden">
+        <div class="trash-toolbar">
+          <div class="recovery-subtitle">删除的文档会先进入回收站；恢复后回到原工作区名称，覆盖前会先保留快照。</div>
+          <div class="trash-actions">
+            <button class="btn btn-outline btn-sm" type="button" onclick="App.clearSelectedTrash()">清理勾选 <span id="trash-selected-count">0</span></button>
+            <button class="btn btn-danger btn-sm" type="button" onclick="App.clearAllTrash()">全部彻底清理</button>
+          </div>
+        </div>
+        <div id="trash-list" class="file-list open-modal-scroll"></div>
+        <div id="trash-pagination" class="open-pagination" data-testid="trash-pagination"></div>
+      </section>
+    </div>
+    <div class="modal-footer">
+      <button onclick="App.closeOpenModal()" class="btn btn-ghost">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="history-modal-overlay" class="hidden" onclick="App.closeHistoryModal()" data-testid="history-modal">
+  <div class="modal history-modal-shell" onclick="event.stopPropagation()">
+    <h3>历史记录</h3>
+    <div class="history-tab-bar">
+      <button class="history-tab active" data-tab="remote" onclick="App.switchHistoryTab('remote')">远端历史记录</button>
+      <button class="history-tab" data-tab="local" onclick="App.switchHistoryTab('local')">本地提交记录</button>
+    </div>
+    <div id="history-modal-subtitle" class="recovery-subtitle"></div>
+    <div id="history-list" class="file-list"></div>
+    <div class="modal-footer">
+      <button onclick="App.closeHistoryModal()" class="btn btn-ghost">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="save-as-modal-overlay" class="hidden" onclick="App.closeSaveAsModal()" data-testid="save-as-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="save-as-modal-title">复制文档</h3>
+    <input
+      id="save-as-name"
+      type="text"
+      placeholder="输入新文档名称，例如：仓储仓单管理 副本"
+      data-testid="save-as-name-input"
+      onkeydown="if(event.key==='Enter') App.confirmSaveAs()"
+    >
+    <div class="modal-footer">
+      <button onclick="App.closeSaveAsModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.confirmSaveAs()" class="btn btn-primary" data-testid="save-as-confirm-button" id="save-as-confirm-label">确认复制</button>
+    </div>
+  </div>
+</div>
+
+<div id="document-properties-modal-overlay" class="hidden" onclick="App.closeDocumentPropertiesModal()" data-testid="document-properties-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>属性</h3>
+    <input id="document-properties-name" type="text" placeholder="文档名称">
+    <input id="document-properties-author" type="text" placeholder="作者">
+    <input id="document-properties-date" type="text" placeholder="日期">
+    <input id="document-properties-space" type="text" placeholder="团队空间">
+    <input id="document-properties-tags" type="text" placeholder="标签，逗号分隔">
+    <div class="modal-footer">
+      <button onclick="App.closeDocumentPropertiesModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.saveDocumentProperties()" class="btn btn-primary" data-testid="document-properties-save-button">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="user-modal-overlay" class="hidden" onclick="closeUserAccountModal()" data-testid="user-modal">
+  <div class="modal user-modal-shell" onclick="event.stopPropagation()">
+    <h3>用户信息配置</h3>
+    <div class="recovery-subtitle">必须先配置显示名称才能查看和编辑文档。它只用于实时协作显示“谁在修改文档”，不做权限控制；同一浏览器的多个页面会复用同一个用户。</div>
+    <label class="user-form-field">
+      <span>显示名称</span>
+      <input id="user-display-name-input" type="text" placeholder="例如：张三" onkeydown="if(event.key==='Enter') saveUserAccountFromModal()">
+    </label>
+    <div class="user-session-note" id="user-session-note"></div>
+    <div class="modal-footer">
+      <button onclick="closeUserAccountModal()" class="btn btn-ghost">取消</button>
+      <button onclick="saveUserAccountFromModal()" class="btn btn-primary" data-testid="user-save-button">保存配置</button>
+    </div>
+  </div>
+</div>
+
+<div id="collab-diagnostics-modal-overlay" class="hidden" onclick="closeCollabDiagnosticsModal()" data-testid="collab-diagnostics-modal">
+  <div class="modal collab-diagnostics-modal" onclick="event.stopPropagation()">
+    <div class="modal-title-row">
+      <h3>协作连接诊断</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeCollabDiagnosticsModal()">关闭</button>
+    </div>
+    <div id="collab-diagnostics-content" class="collab-diagnostics-content"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="copyCollabDiagnostics()">复制诊断信息</button>
+      <button type="button" class="btn btn-primary" onclick="syncCollabImmediatelyFromCommand()">立即同步</button>
+    </div>
+  </div>
+</div>
+
+<div id="task-parameter-modal-overlay" class="hidden" data-testid="task-parameter-modal">
+  <div class="modal task-parameter-modal" onclick="event.stopPropagation()">
+    <div class="modal-title-row">
+      <h3 class="task-parameter-modal-title">任务参数</h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeTaskParameterDialog()">关闭</button>
+    </div>
+    <div class="task-parameter-modal-body"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeTaskParameterDialog()">取消</button>
+      <button type="button" class="btn btn-primary" data-testid="task-parameter-save-button" onclick="saveTaskParameterDialog()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="compare-modal-overlay" class="hidden" data-testid="compare-modal">
+  <div class="modal merge-modal compare-modal" onclick="event.stopPropagation()">
+    <div class="modal-title-row">
+      <h3>比对信息</h3>
+      <button onclick="App.closeCompareModal()" class="btn btn-ghost btn-sm" type="button" data-testid="compare-close-button">关闭</button>
+    </div>
+    <div class="merge-select-grid compare-select-grid">
+      <label class="merge-select-field">
+        <span>新版本文档</span>
+        <select id="compare-left-select" data-testid="compare-left-select" onchange="App.selectCompareWorkspace('left', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>新版本来源</span>
+        <select id="compare-left-source-select" data-testid="compare-left-source-select" onchange="App.selectCompareSource('left', this.value)">
+          <option value="remote">远端历史记录</option>
+          <option value="version">归档版本记录</option>
+          <option value="submit">本地提交记录</option>
+        </select>
+      </label>
+      <label class="merge-select-field">
+        <span>新版本</span>
+        <select id="compare-left-version-select" data-testid="compare-left-version-select" onchange="App.selectCompareVersion('left', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>旧版本文档</span>
+        <select id="compare-right-select" data-testid="compare-right-select" onchange="App.selectCompareWorkspace('right', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>旧版本来源</span>
+        <select id="compare-right-source-select" data-testid="compare-right-source-select" onchange="App.selectCompareSource('right', this.value)">
+          <option value="remote">远端历史记录</option>
+          <option value="version">归档版本记录</option>
+          <option value="submit">本地提交记录</option>
+        </select>
+      </label>
+      <label class="merge-select-field">
+        <span>旧版本</span>
+        <select id="compare-right-version-select" data-testid="compare-right-version-select" onchange="App.selectCompareVersion('right', this.value)"></select>
+      </label>
+    </div>
+    <div class="merge-inline-note">默认左侧为新版本、右侧为旧版本；选择好文档和版本后，点击“开始比对”生成只读报告，不会修改当前文档。</div>
+    <div class="compare-action-row">
+      <button id="compare-start-button" onclick="App.startCompare()" class="btn btn-primary" type="button" data-testid="compare-start-button">开始比对</button>
+      <div id="compare-progress" class="compare-progress hidden" data-testid="compare-progress" aria-live="polite">
+        <div class="compare-progress-track"><span></span></div>
+        <strong id="compare-progress-message" data-testid="compare-progress-message">正在比对...</strong>
+      </div>
+    </div>
+    <div id="compare-result" class="merge-analysis compare-result" data-testid="compare-result"></div>
+  </div>
+</div>
+
+<div id="merge-modal-overlay" class="hidden" onclick="App.closeMergeModal()" data-testid="merge-modal">
+  <div class="modal merge-modal" onclick="event.stopPropagation()">
+    <h3>合并文档</h3>
+    <div class="merge-select-grid">
+      <label class="merge-select-field">
+        <span>左侧文档</span>
+        <select id="merge-left-select" onchange="App.selectMergeWorkspace('left', this.value)"></select>
+      </label>
+      <label class="merge-select-field">
+        <span>右侧文档</span>
+        <select id="merge-right-select" onchange="App.selectMergeWorkspace('right', this.value)"></select>
+      </label>
+    </div>
+    <div class="merge-inline-note">只支持工作区文档合并；先执行合并前检查，确认冲突项和校验问题处理完成后，再生成合并文档。</div>
+    <div id="merge-analysis" class="merge-analysis" data-testid="merge-analysis"></div>
+    <div class="modal-footer">
+      <button onclick="App.closeMergeModal()" class="btn btn-ghost">取消</button>
+      <button onclick="App.handleMergePrimaryAction()" class="btn btn-primary" data-testid="merge-confirm-button">合并前检查</button>
+    </div>
+  </div>
+</div>
+
+<div id="feedback-image-preview-overlay" class="hidden" onclick="closeFeedbackImagePreview()" data-testid="feedback-image-preview">
+  <div class="feedback-image-preview-modal" onclick="event.stopPropagation()">
+    <div class="feedback-image-preview-head">
+      <strong id="feedback-image-preview-title">附件图片</strong>
+      <div class="feedback-image-preview-actions">
+        <a id="feedback-image-preview-download" class="btn btn-primary btn-sm" download>下载</a>
+        <button type="button" class="icon-btn" onclick="closeFeedbackImagePreview()" title="关闭">×</button>
+      </div>
+    </div>
+    <div class="feedback-image-preview-body">
+      <img id="feedback-image-preview-img" alt="反馈附件图片预览">
+    </div>
+  </div>
+</div>
+
+<div id="app-dialog-overlay" class="hidden" data-testid="app-dialog" onclick="closeAppDialogFromBackdrop(event)">
+  <div class="modal app-dialog" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title" onclick="event.stopPropagation()">
+    <h3 id="app-dialog-title">提示</h3>
+    <p id="app-dialog-message" class="app-dialog-message" data-testid="app-dialog-message"></p>
+    <input id="app-dialog-input" class="app-dialog-input hidden" type="text" data-testid="app-dialog-input">
+    <div class="modal-footer">
+      <button id="app-dialog-cancel" type="button" class="btn btn-ghost" data-testid="app-dialog-cancel" onclick="resolveAppDialog(false)">取消</button>
+      <button id="app-dialog-confirm" type="button" class="btn btn-primary" data-testid="app-dialog-confirm" onclick="resolveAppDialog(true)">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI Drawer -->
+<div id="ai-drawer" class="ai-drawer hidden">
+  <div id="ai-drawer-handle" class="ai-drawer-handle" onmousedown="AI._resizeStart(event)"></div>
+  <div class="ai-drawer-header">
+    <span class="ai-drawer-title">AI 助手</span>
+    <select id="ai-session-select" class="ai-session-select" onchange="AI._switchSession(this.value)"><option>新会话</option></select>
+    <span id="ai-ws-label" class="ai-drawer-ws"></span>
+    <span id="ai-status" class="ai-status">就绪</span>
+    <button class="ai-drawer-close" onclick="AI.toggle()" title="收起 (Ctrl+J)">×</button>
+  </div>
+  <div id="ai-body" class="ai-body">
+    <div class="ai-welcome"><p><strong>你好！我是 BLM AI 助手</strong></p><p>读取/分析工作区 · 建模引导 · 文档导入 · 技能管理</p><p class="ai-honesty-note">我会坦诚说明能力边界——不知道的绝不会编造。</p></div>
+  </div>
+  <div class="ai-input-row">
+    <textarea id="ai-input" class="ai-input" rows="1" placeholder="输入问题或任务... (Enter发送, Shift+Enter换行)"
+      onkeydown="AI._onKey(event)"></textarea>
+    <button onclick="AI.send()" class="ai-send-btn" id="ai-send-btn">发送</button>
+    <button onclick="AI.stop()" class="ai-stop-btn hidden" id="ai-stop-btn">停止</button>
+  </div>
+</div>
+
+<script src="state.js?v=67"></script>
+<script src="api.js?v=67"></script>
+<script src="collab.js?v=67"></script>
+<script src="core/dom.js?v=69"></script>
+<script src="core/actions.js?v=69"></script>
+<script src="shared/ui.js?v=69"></script>
+<script src="shared/document-queries.js?v=69"></script>
+<script src="workbenches/panorama/panorama-model.js?v=69"></script>
+<script src="workbenches/panorama/panorama-workbench.js?v=69"></script>
+<script src="workbenches/process/process-legacy.js?v=70"></script>
+<script src="workbenches/process/process-workbench.js?v=69"></script>
+<script src="workbenches/component/component-legacy.js?v=70"></script>
+<script src="workbenches/component/component-workbench.js?v=69"></script>
+<script src="workbenches/orchestration/orchestration-workbench.js?v=69"></script>
+<script src="workbenches/role/role-workbench.js?v=69"></script>
+<script src="workbenches/knowledge/knowledge-workbench.js?v=69"></script>
+<script src="workbenches/entity/entity-legacy.js?v=70"></script>
+<script src="workbenches/entity/entity-workbench.js?v=69"></script>
+<script src="render.js?v=67"></script>
+<script src="domain.js?v=67"></script>
+<script src="process.js?v=67"></script>
+<script src="entity.js?v=67"></script>
+<script src="preview.js?v=67"></script>
+<script src="manual.js?v=67"></script>
+<script src="app.js?v=68"></script>
+<script src="ai_api.js?v=68"></script>
+<script src="ai.js?v=68"></script>
+<script src="vendor/mermaid.min.js?v=67"></script>
+<script src="vendor/marked.umd.js?v=67"></script>
+<script>
+  if (window.mermaid) {
+    window.mermaidLib = window.mermaid;
+    window.mermaid.initialize({ startOnLoad: false, theme: 'default' });
+  }
+  if (window.marked) {
+    window.markedLib = window.marked;
+  }
+</script>
+

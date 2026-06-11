@@ -1,0 +1,25 @@
+<section class="workbench">
+  <header class="workbench-header">
+    <h1>应用编排台</h1>
+    <p>技术经理和前端研发定义页面入口、前端接口需求，以及接口后的后端任务链路。</p>
+  </header>
+
+  <div class="grid">
+    <article class="panel">
+      <h2>页面 / 原型引用</h2>
+      <ul class="list">
+        @for (process of document().processes; track process.uid) {
+          <li>{{ process.name }} <span class="muted">{{ process.nodes.length }} 个用户步骤来源</span></li>
+        }
+      </ul>
+    </article>
+    <article class="panel">
+      <h2>前端接口需求</h2>
+      <ul class="list">
+        @for (task of document().taskDefinitions; track task.uid) {
+          <li>{{ task.name }} <span class="muted">由应用接口编排引用</span></li>
+        }
+      </ul>
+    </article>
+  </div>
+</section>
