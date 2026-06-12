@@ -283,7 +283,9 @@ function render() {
   renderToolbar();
   const manualMode = S.ui.tab === 'manual';
   const feedbackMode = S.ui.tab === 'feedback';
+  const noDocMode = !S.doc && !manualMode && !feedbackMode;
   document.body.classList.toggle('manual-shell', manualMode || feedbackMode);
+  document.body.classList.toggle('no-doc-shell', noDocMode);
   if (manualMode) {
     document.getElementById('tab-bar').innerHTML = '';
     if (typeof renderManualTab === 'function') renderManualTab();
@@ -396,8 +398,7 @@ function renderToolbar() {
 }
 
 function renderNoDoc() {
-  document.getElementById('sidebar-content').innerHTML =
-    `<div class="sb-empty" style="padding:20px 12px;line-height:1.8">新建或打开文档<br>开始建模</div>`;
+  document.getElementById('sidebar-content').innerHTML = '';
   document.getElementById('tab-bar').innerHTML='';
   document.getElementById('tab-content').innerHTML=`
     <div class="empty-state">

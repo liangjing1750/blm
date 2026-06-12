@@ -48,6 +48,10 @@ test('Angular legacy port loads the old BLM shell and workbench tabs', async ({ 
   await page.goto('/');
 
   await expect(page.locator('#toolbar')).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/no-doc-shell/);
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await expect(page.locator('#sb-toggle-wrap')).toBeHidden();
+  await expect(page.locator('#tab-content')).toContainText('BLM（Business Language Modeling）业务语言建模');
   await expect(page.getByTestId('toolbar-new-button')).toHaveCount(1);
   await page.locator('#dd-file').hover();
   await page.locator('#dd-file .tbar-dd-btn').click();
@@ -139,6 +143,8 @@ test('panorama workbench hosts old value-domain panorama as a separate tab', asy
   await expect(page.getByTestId('stage-editor-open')).toBeVisible();
   await page.getByTestId('stage-editor-open').click();
   await expect(page.getByTestId('stage-editor-hide')).toBeVisible();
+  await expect(page.getByTestId('matrix-column-name').first()).toBeVisible();
+  await expect(page.getByTestId('matrix-lane-name').first()).toBeVisible();
 
   const columnNameCount = await page.getByTestId('matrix-column-name').count();
   const laneNameCount = await page.getByTestId('matrix-lane-name').count();

@@ -9,7 +9,13 @@ async function createDocument(request, name, doc) {
 
 async function openDocument(page, name, options = {}) {
   const { expandSidebar = true } = options;
-  await page.getByTestId('toolbar-open-button').click();
+  const emptyOpenButton = page.locator('.empty-state button').filter({ hasText: /打开|鎵撳紑/ });
+  if (await emptyOpenButton.count()) {
+    await emptyOpenButton.first().click();
+  } else {
+    await page.locator('#dd-file .tbar-dd-btn').click();
+    await page.getByTestId('toolbar-open-button').click();
+  }
   await page.locator('.file-list-item').filter({ hasText: name }).first().click();
   await expect(page.getByTestId('current-file-name')).toHaveText(name);
   if (expandSidebar && await page.locator('#sidebar.sb-collapsed').count()) {

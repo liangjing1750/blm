@@ -1,10 +1,12 @@
 import { DOCUMENT } from '@angular/common';
 import { ApplicationRef, ComponentRef, EnvironmentInjector, Inject, Injectable, createComponent } from '@angular/core';
 import { ValueDomainWorkbenchComponent } from '../../workbenches/panorama/value-domain-workbench.component';
+import { RoleWorkbenchComponent } from '../../workbenches/role/role-workbench';
 
 declare global {
   interface Window {
     BlmAngularMounts?: {
+      mountRoleWorkbench: (hostId: string) => void;
       mountValueDomain: (hostId: string) => void;
       setValueDomainEditing: (hostId: string, editing: boolean) => void;
       unmount: (hostId: string) => void;
@@ -24,6 +26,7 @@ export class AngularLegacyMounts {
 
   expose(): void {
     window.BlmAngularMounts = {
+      mountRoleWorkbench: (hostId: string) => this.mountRoleWorkbench(hostId),
       mountValueDomain: (hostId: string) => this.mountValueDomain(hostId),
       setValueDomainEditing: (hostId: string, editing: boolean) => this.setValueDomainEditing(hostId, editing),
       unmount: (hostId: string) => this.unmount(hostId),
@@ -35,6 +38,18 @@ export class AngularLegacyMounts {
     if (!host) return;
     this.unmount(hostId);
     const componentRef = createComponent(ValueDomainWorkbenchComponent, {
+      environmentInjector: this.environmentInjector,
+      hostElement: host,
+    });
+    this.appRef.attachView(componentRef.hostView);
+    this.mounts.set(hostId, componentRef);
+  }
+
+  mountRoleWorkbench(hostId: string): void {
+    const host = this.documentRef.querySelector<HTMLElement>(`#${hostId}`);
+    if (!host) return;
+    this.unmount(hostId);
+    const componentRef = createComponent(RoleWorkbenchComponent, {
       environmentInjector: this.environmentInjector,
       hostElement: host,
     });

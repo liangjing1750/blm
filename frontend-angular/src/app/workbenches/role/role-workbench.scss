@@ -1,0 +1,130 @@
+.role-angular-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.role-angular-head h3 {
+  margin: 0 0 4px;
+}
+
+.role-angular-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.role-mode-toggle {
+  margin-right: 0;
+}
+
+.role-light-card .role-create-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 2fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 2px;
+}
+
+.role-light-card .role-light-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.role-light-card .role-light-group-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.role-light-card .role-light-group-custom {
+  min-width: 0;
+}
+
+.role-light-card .role-light-group-custom:not(.hidden) {
+  display: inline-flex;
+}
+
+.role-light-card .role-light-group-custom:not(.hidden) + .btn {
+  margin-left: 0;
+}
+
+.role-angular-map {
+  display: grid;
+  grid-template-columns: 280px minmax(360px, 1fr);
+  gap: 18px;
+  min-width: 760px;
+}
+
+.role-angular-lane {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.role-angular-lane h4 {
+  margin: 0;
+  color: #0f2f63;
+  font-size: 13px;
+}
+
+.process-lane {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.process-lane h4 {
+  grid-column: 1 / -1;
+}
+
+.role-light-card .proc-role-detail {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.role-light-card .proc-role-view {
+  padding: 10px 14px 14px;
+}
+
+.role-light-card .proc-role-map-panel {
+  flex: 1 1 100%;
+  max-width: none;
+}
+
+.role-light-card .role-usecase-map-wrap {
+  height: min(560px, calc(100vh - 260px));
+  min-height: 420px;
+  overflow: auto;
+  background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+}
+
+.role-light-card .role-usecase-role,
+.role-light-card .role-usecase-process {
+  border-color: #93c5fd;
+  background: #fff;
+  color: #0f2f63;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, .08);
+}
+
+.role-light-card .role-usecase-role.active,
+.role-light-card .role-usecase-process.linked {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, .16);
+}
+
+.role-usecase-process-context,
+.role-usecase-process-stage {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}

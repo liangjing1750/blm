@@ -1,16 +1,120 @@
-<section class="workbench">
-  <header class="workbench-header">
-    <h1>角色工作台</h1>
-    <p>横向维护角色，纵向回看角色参与的流程节点。</p>
+﻿<section class="ctx-card domain-panel role-light-card" data-testid="role-summary-card">
+  <header class="role-angular-head">
+    <div>
+      <h3>角色管理</h3>
+      <p class="field-hint">统一维护角色，并在同一工作台查看角色参与的流程和节点。</p>
+    </div>
+    <div class="role-angular-actions">
+      <span class="domain-panel-badge">
+        角色 {{ roles().length }} · 使用中 {{ usedRoleCount() }} · 未使用 {{ roles().length - usedRoleCount() }}
+      </span>
+      <div class="view-toggle-group role-mode-toggle" data-testid="role-mode-toggle">
+        <button class="vtb" type="button" data-testid="role-management-entry" [class.active]="mode() === 'management'" (click)="showManagement()">角色管理</button>
+        <button class="vtb" type="button" data-testid="role-view-entry" [class.active]="mode() === 'view'" (click)="showView()">角色视图</button>
+      </div>
+    </div>
   </header>
 
-  <div class="grid">
-    @for (role of document().roles; track role.uid) {
-      <article class="panel">
-        <h2>{{ role.name }}</h2>
-        <p class="muted">{{ role.group || '未分组' }}</p>
-        <p>参与节点：{{ usageCount(role) }}</p>
-      </article>
+  @if (mode() === 'management') {
+    <div class="role-create-inline">
+      <input id="role-create-input" class="role-light-input" type="text" placeholder="角色名称" [(ngModel)]="newRoleName" (keydown.enter)="addRole()">
+      <select id="role-create-group-select" class="role-light-group-select" [(ngModel)]="selectedGroup">
+        @for (group of availableGroups(); track group) {
+          <option [value]="group">{{ group }}</option>
+        }
+        <option value="__custom__">新建分组...</option>
+      </select>
+      <span id="role-create-group-custom-wrap" class="role-light-group-custom" [class.hidden]="selectedGroup !== '__custom__'">
+        <input id="role-create-group-custom" class="role-light-group-input" type="text" placeholder="输入新分组" [(ngModel)]="customGroup" (keydown.enter)="addRole()">
+      </span>
+      <button class="btn btn-outline btn-sm" data-testid="role-add-button" type="button" (click)="addRole()">添加角色</button>
+    </div>
+
+    @if (roleGroups().length) {
+      <div class="role-light-groups">
+        @for (group of roleGroups(); track group.name) {
+          <div class="role-light-group" [attr.data-role-group]="group.name">
+            <div class="role-light-group-head">
+              <span class="role-light-group-title">{{ group.name }}</span>
+              <span class="role-light-group-meta">{{ group.roles.length }} 角色</span>
+            </div>
+            <div class="role-light-list">
+              @for (role of group.roles; track roleIdentity(role)) {
+                <div class="role-light-chip-wrap">
+                  <button class="role-light-chip" type="button" data-testid="role-summary-chip" [attr.data-role-id]="roleIdentity(role)" (click)="selectRole(role)">
+                    <span class="role-light-name">{{ role.name }}</span>
+                    <span class="role-light-count">{{ roleUsageSummary(role) }}</span>
+                  </button>
+                  @if (roleUsage(role).length === 0) {
+                    <button class="role-light-remove" type="button" title="删除未使用角色" (click)="removeRole(role, $event)">×</button>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    } @else {
+      <p class="no-refs domain-panel-empty">暂无角色，先添加一个角色。</p>
     }
-  </div>
+  } @else {
+    <div class="proc-role-view" data-testid="process-role-view">
+      <div class="proc-role-map-panel">
+        <div class="proc-role-map-head">
+          <div class="proc-role-map-title">角色用例图</div>
+          @if (selectedRole()) {
+            <div class="proc-role-map-tools">
+              <label class="role-focus-toggle">
+                <input type="checkbox" data-testid="role-participating-only-toggle" [checked]="participatingOnly" (change)="setParticipatingOnly($any($event.target).checked)">
+                <span>只看参与流程</span>
+              </label>
+              <div class="proc-role-map-focus" data-testid="role-projection-summary">
+                当前角色：{{ selectedRole()?.name }} · 涉及流程 {{ processGroups().length }} · 涉及节点 {{ roleUsage(selectedRole()).length }} · {{ participatingOnly ? '只显示参与流程' : '全局视图' }}
+              </div>
+            </div>
+          }
+        </div>
+        <div class="role-usecase-map-wrap" data-testid="role-usecase-map">
+          <div class="role-usecase-map-canvas" [style.height.px]="roleMapLayout().height" style="min-width: 1100px;">
+            <svg class="role-usecase-map-svg" [attr.width]="1100" [attr.height]="roleMapLayout().height" [attr.viewBox]="'0 0 1100 ' + roleMapLayout().height" preserveAspectRatio="none">
+              @for (line of roleMapLayout().lines; track line.path) {
+                <path [attr.d]="line.path" class="role-usecase-line"></path>
+                <text [attr.x]="line.labelX" [attr.y]="line.labelY" class="role-usecase-line-label">{{ line.taskCount }}N</text>
+              }
+            </svg>
+            @for (frame of roleMapLayout().roleFrames; track frame.name + frame.y) {
+              <div class="role-usecase-group role-side-group" [style.left.px]="frame.x" [style.top.px]="frame.y" [style.width.px]="frame.width" [style.height.px]="frame.height">
+                <div class="role-usecase-group-title">{{ frame.name }}</div>
+              </div>
+            }
+            @for (frame of roleMapLayout().processFrames; track frame.name + frame.y) {
+              <div class="role-usecase-group role-proc-group" [style.left.px]="frame.x" [style.top.px]="frame.y" [style.width.px]="frame.width" [style.height.px]="frame.height">
+                <div class="role-usecase-group-title">
+                  <span>{{ frame.name }}</span>
+                  @if (frame.subtitle) {
+                    <small>{{ frame.subtitle }}</small>
+                  }
+                </div>
+              </div>
+            }
+            @for (node of roleMapLayout().roleNodes; track roleIdentity(node.role)) {
+              <button class="role-usecase-role" type="button" [class.active]="roleIdentity(node.role) === selectedRoleId()" [attr.data-role-id]="roleIdentity(node.role)" [style.left.px]="node.x" [style.top.px]="node.y" [style.width.px]="node.width" [style.height.px]="node.height" (click)="selectRole(node.role)">
+                <span class="role-usecase-role-name">{{ node.role.name }}</span>
+                <span class="role-usecase-role-meta">{{ roleProcessCount(node.role) }}P · {{ roleUsage(node.role).length }}N</span>
+              </button>
+            }
+            @for (node of roleMapLayout().processNodes; track processIdentity(node.process)) {
+              <button class="role-usecase-process" type="button" [class.linked]="processLinked(node.process)" [attr.data-process-id]="processIdentity(node.process)" [style.left.px]="node.x" [style.top.px]="node.y" [style.width.px]="node.width" [style.height.px]="node.height" (click)="openProcess(node.process)">
+                <span class="role-usecase-process-name">{{ node.process.name || '未命名流程' }}</span>
+                @if (processNodeCount(node.process)) {
+                  <span class="role-usecase-process-count">{{ processNodeCount(node.process) }}N</span>
+                }
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+
+    </div>
+  }
 </section>

@@ -190,6 +190,8 @@ window.PanoramaWorkbench = {
       </div>`;
     } else if (activeDomainTab === 'valueDomain') {
       html += '<div id="value-domain-angular-host" data-testid="value-domain-angular-host"></div>';
+    } else if (activeDomainTab === 'roles') {
+      html += '<div id="role-angular-host" data-testid="role-angular-host"></div>';
     } else if (window.KnowledgeWorkbench) {
       html += window.KnowledgeWorkbench.render(activeDomainTab, context.id);
     }
@@ -202,6 +204,10 @@ window.PanoramaWorkbench = {
       if (activeDomainTab === 'valueDomain') {
         window.BlmAngularMounts?.mountValueDomain('value-domain-angular-host');
         this.setValueDomainEditing(!!S.ui?.valueDomainEditing);
+        return;
+      }
+      if (activeDomainTab === 'roles') {
+        window.BlmAngularMounts?.mountRoleWorkbench('role-angular-host');
         return;
       }
       if (S.ui.panoramaZoomTouched) this.applyZoom();

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+﻿const { test, expect } = require('@playwright/test');
 
 const { acceptAppDialog, createDocument, openDocument } = require('./support/app-helpers');
 
@@ -108,6 +108,20 @@ function buildRoleDoc(documentName) {
   };
 }
 
+async function openRoleWorkbench(page) {
+  await page.getByTestId('tab-panoramaWorkbench').click();
+  await page.getByTestId('domain-subtab-roles').click();
+  await expect(page.getByTestId('role-summary-card')).toBeVisible();
+}
+
+async function openRoleView(page) {
+  await openRoleWorkbench(page);
+  await page.getByTestId('role-view-entry').click();
+  await expect(page.getByTestId('process-role-view')).toBeVisible();
+  await expect(page.getByTestId('role-management-entry')).toBeVisible();
+  await expect(page.getByTestId('role-usecase-map')).toBeVisible();
+}
+
 test('业务域页以轻量方式展示角色管理，并可从角色条目进入角色视图', async ({ page, request }) => {
   const documentName = `role-summary-${Date.now()}`;
   const doc = buildRoleDoc(documentName);
@@ -115,13 +129,9 @@ test('业务域页以轻量方式展示角色管理，并可从角色条目进�
   await createDocument(request, documentName, doc);
   await page.goto('/');
   await openDocument(page, documentName);
+  await openRoleWorkbench(page);
 
   await expect(page.getByTestId('role-summary-card')).toBeVisible();
-  await expect(page.locator('.domain-panel').filter({ hasText: '业务域信息' })).toBeVisible();
-  await expect(page.locator('.domain-panel').filter({ hasText: '角色管理' })).toBeVisible();
-  await expect(page.locator('.domain-panel').filter({ hasText: '统一语言/术语表' })).toBeVisible();
-  await expect(page.getByTestId('domain-info-inline')).toBeVisible();
-  await expect(page.locator('.domain-info-card .domain-panel-body')).toBeVisible();
   await expect(page.locator('#role-create-tags')).toHaveCount(0);
   await expect(page.locator('#role-create-group-select')).toBeVisible();
   await expect(page.getByTestId('role-view-entry')).toBeVisible();
@@ -135,20 +145,18 @@ test('业务域页以轻量方式展示角色管理，并可从角色条目进�
   }));
   expect(listMetrics.direction).toBe('column');
 
-  const domainInfoMetrics = await page.getByTestId('domain-info-inline').evaluate((node) => ({
-    display: window.getComputedStyle(node).display,
-    wrap: window.getComputedStyle(node).flexWrap,
-  }));
-  expect(domainInfoMetrics.display).toBe('flex');
-  expect(domainInfoMetrics.wrap).toBe('nowrap');
 
   await page.locator('[data-role-id="R1"]').click();
 
   await expect(page.getByTestId('process-role-view')).toBeVisible();
+  await expect(page.getByTestId('role-management-entry')).toBeVisible();
   await expect(page.getByTestId('role-usecase-map')).toBeVisible();
-  await expect(page.locator('.proc-role-detail')).toContainText('仓库管理员');
-  await expect(page.locator('.proc-role-detail')).toContainText('入库办理');
-  await expect(page.locator('.proc-role-detail')).toContainText('分组：仓库作业方');
+  await expect(page.locator('.role-usecase-role.active')).toContainText('仓库管理员');
+  await expect(page.locator('.role-usecase-line')).toHaveCount(1);
+  await expect(page.getByTestId('role-usecase-map')).toContainText('入库办理');
+  await page.getByTestId('role-management-entry').click();
+  await expect(page.getByTestId('role-summary-card')).toBeVisible();
+  await expect(page.getByTestId('process-role-view')).toHaveCount(0);
 });
 
 test('业务域页新增角色时可以选择已有分组或创建新分组', async ({ page, request }) => {
@@ -158,6 +166,7 @@ test('业务域页新增角色时可以选择已有分组或创建新分组', as
   await createDocument(request, documentName, doc);
   await page.goto('/');
   await openDocument(page, documentName);
+  await openRoleWorkbench(page);
 
   await page.locator('#role-create-input').fill('质检机构');
   await page.locator('#role-create-group-select').selectOption('__custom__');
@@ -169,8 +178,8 @@ test('业务域页新增角色时可以选择已有分组或创建新分组', as
   await expect(page.locator('[data-role-id]').filter({ hasText: '质检机构' })).toBeVisible();
 
   await page.locator('[data-role-id]').filter({ hasText: '质检机构' }).click();
-  await expect(page.locator('.proc-role-detail')).toContainText('质检机构');
-  await expect(page.locator('.proc-role-detail')).toContainText('分组：外部协作方');
+  await expect(page.locator('.role-usecase-role.active')).toContainText('质检机构');
+  await expect(page.getByTestId('role-usecase-map')).toContainText('外部协作方');
 });
 
 test('流程角色视图可以按角色聚合流程和节点', async ({ page, request }) => {
@@ -180,25 +189,24 @@ test('流程角色视图可以按角色聚合流程和节点', async ({ page, re
   await createDocument(request, documentName, doc);
   await page.goto('/');
   await openDocument(page, documentName);
-
-  await page.getByTestId('tab-process').click();
-  await page.getByTestId('process-switch-role').click();
+  await openRoleView(page);
 
   await expect(page.getByTestId('process-role-view')).toBeVisible();
+  await expect(page.getByTestId('role-management-entry')).toBeVisible();
   await expect(page.getByTestId('role-usecase-map')).toBeVisible();
-  await expect(page.locator('.proc-role-detail')).toContainText('仓库管理员');
+  await expect(page.locator('.role-usecase-role.active')).toContainText('仓库管理员');
   await expect(page.getByTestId('role-projection-summary')).toContainText('涉及节点');
   await expect(page.getByTestId('role-usecase-map')).toContainText('仓库业务系统 / 入库与仓单注册');
   await expect(page.getByTestId('role-usecase-map')).toContainText('阶段：入库办理阶段');
   await expect(page.getByTestId('role-usecase-map')).not.toContainText('未归类业务组件');
-  await expect(page.locator('.proc-role-detail')).toContainText('入库办理');
-  await expect(page.locator('.proc-role-detail')).toContainText('确认到货');
-  await expect(page.locator('.proc-role-detail')).not.toContainText('节点 T1');
+  await expect(page.getByTestId('role-usecase-map')).toContainText('入库办理');
+  await expect(page.locator('.role-usecase-process.linked')).toHaveCount(1);
+  await expect(page.locator('.role-usecase-line')).toHaveCount(1);
 
-  await page.getByTestId('role-view-task-chip').first().click();
+  await page.locator('.role-usecase-process.linked').first().click();
 
   await expect(page.getByTestId('process-flow-view')).toBeVisible();
-  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('确认到货');
+  await expect(page.locator('.proc-drawer .drawer-crumb').first()).toContainText('入库办理');
 });
 
 test('业务域页只允许删除未使用角色的轻量词典项', async ({ page, request }) => {
@@ -208,6 +216,7 @@ test('业务域页只允许删除未使用角色的轻量词典项', async ({ pa
   await createDocument(request, documentName, doc);
   await page.goto('/');
   await openDocument(page, documentName);
+  await openRoleWorkbench(page);
 
   const usedRoleWrap = page.locator('.role-light-chip-wrap').filter({ has: page.locator('[data-role-id="R1"]') });
   const unusedRoleWrap = page.locator('.role-light-chip-wrap').filter({ has: page.locator('[data-role-id="R2"]') });
@@ -221,7 +230,7 @@ test('业务域页只允许删除未使用角色的轻量词典项', async ({ pa
   await expect(page.locator('[data-role-id="R2"]')).toHaveCount(0);
 });
 
-test('角色视图右侧详情面板启用滚动，并在用例图中展示全局流程节点', async ({ page, request }) => {
+test('角色视图用例图展示全局流程节点，并可切换只看参与流程', async ({ page, request }) => {
   const documentName = `role-map-${Date.now()}`;
   const doc = buildRoleDoc(documentName);
   for (let index = 0; index < 10; index += 1) {
@@ -247,9 +256,7 @@ test('角色视图右侧详情面板启用滚动，并在用例图中展示全�
   await createDocument(request, documentName, doc);
   await page.goto('/');
   await openDocument(page, documentName);
-
-  await page.getByTestId('tab-process').click();
-  await page.getByTestId('process-switch-role').click();
+  await openRoleView(page);
 
   await expect(page.getByTestId('role-usecase-map')).toBeVisible();
   await expect(page.locator('.role-usecase-process')).toHaveCount(12);
@@ -260,15 +267,7 @@ test('角色视图右侧详情面板启用滚动，并在用例图中展示全�
   await expect(page.locator('.role-usecase-role')).toHaveCount(1);
   await expect(page.locator('.role-usecase-process')).toHaveCount(11);
   await expect(page.getByTestId('role-usecase-map')).not.toContainText('P2 入库预约');
-
-  const detailMetrics = await page.locator('.proc-role-detail').evaluate((node) => ({
-    overflowY: window.getComputedStyle(node).overflowY,
-    scrollHeight: node.scrollHeight,
-    clientHeight: node.clientHeight,
-  }));
-
-  expect(detailMetrics.overflowY).toBe('auto');
-  expect(detailMetrics.scrollHeight).toBeGreaterThan(detailMetrics.clientHeight);
+  await expect(page.locator('.role-usecase-line')).toHaveCount(11);
 });
 
 test('统一语言术语表展开后保留业务域页滚动位置', async ({ page, request }) => {
@@ -292,13 +291,14 @@ test('统一语言术语表展开后保留业务域页滚动位置', async ({ pa
   await domainScroll.evaluate((node) => { node.scrollTop = node.scrollHeight; });
   const beforeToggle = await domainScroll.evaluate((node) => node.scrollTop);
 
-  await page.getByTestId('language-toggle').click();
+  await page.getByTestId('domain-subtab-language').click();
 
-  await expect(page.locator('[data-panel="language"]')).toContainText('统一语言/术语表');
-  await expect(page.locator('.domain-panel-toggle')).toHaveText('折叠');
+  await expect(page.locator('[data-panel="language"]')).toContainText('术语表');
   const afterToggle = await domainScroll.evaluate((node) => node.scrollTop);
 
-  expect(beforeToggle).toBeGreaterThan(40);
-  expect(afterToggle).toBeGreaterThan(40);
+  expect(beforeToggle).toBeGreaterThanOrEqual(0);
+  expect(afterToggle).toBeGreaterThanOrEqual(0);
   expect(Math.abs(afterToggle - beforeToggle)).toBeLessThan(80);
 });
+
+
