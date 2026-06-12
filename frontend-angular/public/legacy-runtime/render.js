@@ -305,6 +305,8 @@ function render() {
   else if (t === 'processWorkbench')       window.ProcessWorkbench ? window.ProcessWorkbench.render() : renderBizDomainTab();
   else if (t === 'constructWorkbench')     window.ComponentWorkbench ? window.ComponentWorkbench.render() : renderBizComponentTab();
   else if (t === 'orchestrationWorkbench') window.OrchestrationWorkbench ? window.OrchestrationWorkbench.render() : renderAppArchTab();
+  else if (t === 'legacyDomainInfo')       renderLegacyDomainInfoTab();
+  else if (t === 'legacyEntityDiagram')    renderLegacyEntityDiagramTab();
   else if (t === 'preview')                renderPreviewTab();
   else                                     renderDomainTab();
   } // end if(S.doc) else block
@@ -1492,6 +1494,8 @@ function normalizeMainTabId(mainTabId) {
     bizDomain: 'processWorkbench',
     bizComponent: 'constructWorkbench',
     appArch: 'orchestrationWorkbench',
+    domain: 'legacyDomainInfo',
+    data: 'legacyEntityDiagram',
   };
   return aliasMap[mainTabId] || mainTabId || 'panoramaWorkbench';
 }
@@ -1505,6 +1509,8 @@ function switchMainTab(mainTabId) {
     processWorkbench: 'process',
     constructWorkbench: 'data',
     orchestrationWorkbench: 'domain',
+    legacyDomainInfo: 'domain',
+    legacyEntityDiagram: 'data',
     preview: 'preview',
   };
   S.ui.tab = legacyMap[normalizedMainTabId] || normalizedMainTabId;
@@ -1517,6 +1523,8 @@ function renderTabBar() {
     { id: 'processWorkbench',  label: '流程工作台' },
     { id: 'constructWorkbench', label: '构件工作台' },
     { id: 'orchestrationWorkbench', label: '应用编排台' },
+    { id: 'legacyDomainInfo', label: '业务域信息' },
+    { id: 'legacyEntityDiagram', label: '实体图' },
     { id: 'preview', label: '预览导出' },
   ];
   const activeTab = normalizeMainTabId(S.ui.mainTab || 'panoramaWorkbench');
@@ -1606,4 +1614,27 @@ function renderBizComponentTab() {
 function renderAppArchTab() {
   if (window.OrchestrationWorkbench) return window.OrchestrationWorkbench.render();
   if (typeof renderAppArchitectureTab === 'function') renderAppArchitectureTab();
+}
+function renderLegacyDomainInfoTab() {
+  S.ui.tab = 'domain';
+  const context = typeof getSelectedDomainInfoContext === 'function'
+    ? getSelectedDomainInfoContext()
+    : { id: 'all', label: '全部业务域' };
+  const modelCard = typeof renderSubDomainMapCard === 'function'
+    ? renderSubDomainMapCard(context.id || 'all', context.label || '全部业务域')
+    : '<p class="no-refs domain-panel-empty">业务组件管理入口未加载。</p>';
+  const dialog = typeof renderBusinessModelDialog === 'function' ? renderBusinessModelDialog() : '';
+  BLMCore.dom.setHtml('tab-content', `<div class="domain-scroll" data-testid="domain-scroll">
+    <div class="ctx-card domain-panel">
+      <h3>业务域信息</h3>
+      <p class="field-hint">旧版业务域信息入口：用于维护业务组件，并从组件继续进入构件、实体和任务定义。</p>
+    </div>
+    ${modelCard}
+  </div>${dialog}`);
+}
+function renderLegacyEntityDiagramTab() {
+  S.ui.tab = 'data';
+  S.ui.dataView = S.ui.dataView || 'relation';
+  if (window.EntityWorkbench) return window.EntityWorkbench.render();
+  if (typeof renderDataTab === 'function') renderDataTab();
 }

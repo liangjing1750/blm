@@ -6,6 +6,7 @@ declare global {
   interface Window {
     BlmAngularMounts?: {
       mountValueDomain: (hostId: string) => void;
+      setValueDomainEditing: (hostId: string, editing: boolean) => void;
       unmount: (hostId: string) => void;
     };
   }
@@ -24,6 +25,7 @@ export class AngularLegacyMounts {
   expose(): void {
     window.BlmAngularMounts = {
       mountValueDomain: (hostId: string) => this.mountValueDomain(hostId),
+      setValueDomainEditing: (hostId: string, editing: boolean) => this.setValueDomainEditing(hostId, editing),
       unmount: (hostId: string) => this.unmount(hostId),
     };
   }
@@ -38,6 +40,12 @@ export class AngularLegacyMounts {
     });
     this.appRef.attachView(componentRef.hostView);
     this.mounts.set(hostId, componentRef);
+  }
+
+  setValueDomainEditing(hostId: string, editing: boolean): void {
+    const current = this.mounts.get(hostId);
+    if (!(current?.instance instanceof ValueDomainWorkbenchComponent)) return;
+    current.instance.setEditingFromShell(editing);
   }
 
   unmount(hostId: string): void {

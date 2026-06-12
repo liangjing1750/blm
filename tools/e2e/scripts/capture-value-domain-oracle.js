@@ -165,12 +165,12 @@ async function setVisualState(page, nextState) {
   const editorHide = page.getByTestId('stage-editor-hide');
 
   if (nextState === 'view') {
-    if (await editorHide.count()) await editorHide.click();
+    if (await editorHide.count() && await editorHide.isVisible()) await editorHide.click();
     await page.waitForTimeout(120);
     return;
   }
 
-  if (await editorOpen.count()) await editorOpen.click();
+  if (await editorOpen.count() && await editorOpen.isVisible()) await editorOpen.click();
   await page.waitForTimeout(120);
 
   if (nextState === 'dialog') {

@@ -142,6 +142,10 @@ export class ValueDomainWorkbenchComponent {
     this.editing.set(editing);
   }
 
+  setEditingFromShell(editing: boolean): void {
+    this.setEditing(editing);
+  }
+
   protected addColumn(afterId = ''): void {
     this.actions.addColumn(afterId);
     this.refresh();

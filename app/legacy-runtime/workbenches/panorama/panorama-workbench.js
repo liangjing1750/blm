@@ -9,6 +9,18 @@ window.PanoramaWorkbench = {
     this.render();
   },
 
+  setValueDomainEditing(editing) {
+    if (S.ui) S.ui.valueDomainEditing = !!editing;
+    window.BlmAngularMounts?.setValueDomainEditing('value-domain-angular-host', !!editing);
+    this.syncValueDomainActions();
+  },
+
+  syncValueDomainActions() {
+    const editing = !!S.ui?.valueDomainEditing;
+    document.querySelector('[data-testid="stage-editor-open"]')?.classList.toggle('hidden', editing);
+    document.querySelector('[data-testid="stage-editor-hide"]')?.classList.toggle('hidden', !editing);
+  },
+
   toggleStageEditor(forceOpen = null) {
     const nextCollapsed = forceOpen === null
       ? S.ui.stageEditorCollapsed === false
@@ -166,8 +178,12 @@ window.PanoramaWorkbench = {
       { id: 'language', label: '术语字典' },
       { id: 'rules', label: '规则条目' },
     ];
+    const valueDomainActions = activeDomainTab === 'valueDomain'
+      ? `<button class="btn btn-outline btn-sm ${S.ui?.valueDomainEditing ? 'hidden' : ''}" type="button" data-testid="stage-editor-open" onclick="PanoramaWorkbench.setValueDomainEditing(true)">打开编辑</button>
+        <button class="btn btn-ghost-sm ${S.ui?.valueDomainEditing ? '' : 'hidden'}" type="button" data-testid="stage-editor-hide" onclick="PanoramaWorkbench.setValueDomainEditing(false)">关闭编辑</button>`
+      : '';
     let html = `<div class="domain-scroll ${activeDomainTab === 'valueDomain' ? 'value-domain-scroll' : ''}" data-testid="domain-scroll">
-      ${BLMShared.ui.renderSubTabs(tabs, activeDomainTab, 'switchDomainTab', 'domain-subtab')}`;
+      ${BLMShared.ui.renderSubTabs(tabs, activeDomainTab, 'switchDomainTab', 'domain-subtab', { actionsHtml: valueDomainActions })}`;
     if (activeDomainTab === 'panorama') {
       html += `<div class="ctx-card domain-panel domain-info-card">
         <div class="domain-panel-body domain-info-card-body">${this.renderMap(context.id)}</div>
@@ -185,6 +201,7 @@ window.PanoramaWorkbench = {
     requestAnimationFrame(() => {
       if (activeDomainTab === 'valueDomain') {
         window.BlmAngularMounts?.mountValueDomain('value-domain-angular-host');
+        this.setValueDomainEditing(!!S.ui?.valueDomainEditing);
         return;
       }
       if (S.ui.panoramaZoomTouched) this.applyZoom();

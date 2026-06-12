@@ -7334,10 +7334,8 @@ function renderProcessTab() {
   let h=`<div class="proc-view-toolbar">
     <div class="proc-view-toolbar-main" ${toolbarOffset ? `style="margin-right:${toolbarOffset}px"` : ''}>
       <div class="view-toggle-group">
-        <button class="vtb ${panoramaActive?'active':''}" data-testid="process-switch-panorama" onclick="openStagePanorama()">全景视图</button>
-        <button class="vtb ${stageDetailActive?'active':''}" data-testid="process-switch-stage" onclick="openStageDetail()">阶段视图</button>
+        <button class="vtb ${stageDetailActive || panoramaActive ? 'active' : ''}" data-testid="process-switch-stage" onclick="openStageDetail()">阶段视图</button>
         <button class="vtb ${flowViewActive?'active':''}" data-testid="process-switch-card" onclick="openProcessFlowView()">流程视图</button>
-        <button class="vtb ${view==='role'?'active':''}" data-testid="process-switch-role" onclick="window.RoleWorkbench.openRoleProjection()">角色视图</button>
       </div>
       <div class="proc-view-actions">${toolbarActions}</div>
     </div>

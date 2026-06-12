@@ -1723,6 +1723,135 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .toolbar-help {
   flex: 0 0 auto;
 }
+.workbench-subtab-shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.workbench-subtab-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.component-demo-scroll,
+.orchestration-demo-scroll {
+  padding: 12px 18px 24px;
+}
+.demo-panel {
+  margin-top: 14px;
+}
+.demo-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.demo-panel-head h3 {
+  margin: 0 0 4px;
+}
+.demo-count {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+}
+.demo-table th,
+.demo-table td {
+  font-size: 12px;
+}
+.demo-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.demo-mini-card {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+.demo-mini-card strong {
+  color: #0f2f63;
+  font-size: 14px;
+}
+.demo-mini-card span {
+  color: #475569;
+  font-size: 12px;
+}
+.demo-mini-card em {
+  color: #2563eb;
+  font-size: 11px;
+  font-style: normal;
+}
+.demo-handoff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.demo-handoff > div {
+  min-height: 140px;
+  padding: 14px;
+  border: 1px dashed #bfdbfe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+.demo-handoff h4 {
+  margin: 0 0 10px;
+  color: #0f2f63;
+  font-size: 13px;
+}
+.demo-handoff span {
+  display: inline-flex;
+  margin: 0 8px 8px 0;
+  padding: 5px 9px;
+  color: #1e40af;
+  font-size: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+}
+.orchestration-panel .demo-flow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 18px;
+  overflow-x: auto;
+}
+.demo-flow-node {
+  flex: 0 0 auto;
+  min-width: 128px;
+  padding: 10px 14px;
+  color: #0f2f63;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+.demo-flow-node.strong {
+  color: #fff;
+  border-color: #2563eb;
+  background: #2563eb;
+}
+.demo-flow-arrow {
+  flex: 0 0 auto;
+  color: #60a5fa;
+  font-weight: 700;
+}
 .view-toggle-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-right: 4px; }
 .vtb {
   padding: 4px 14px; border: none; background: #fff;
@@ -4585,6 +4714,10 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 .domain-scroll.value-domain-scroll > .view-toggle-group {
   flex: 0 0 auto;
   margin: 0 20px 0 !important;
+}
+.domain-scroll.value-domain-scroll > .workbench-subtab-shell {
+  flex: 0 0 auto;
+  margin: 0 20px 0;
 }
 .domain-scroll.value-domain-scroll > #value-domain-angular-host {
   flex: 1 1 auto;
