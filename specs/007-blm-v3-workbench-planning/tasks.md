@@ -101,26 +101,28 @@
 - [x] 定向测试通过：`python -m unittest tests.test_frontend_structure.FrontendStructureTests.test_split_scripts_exist tests.test_frontend_structure.FrontendStructureTests.test_split_scripts_pass_node_syntax_check tests.test_frontend_structure.FrontendStructureTests.test_workbench_target_architecture_boundaries`。
 - [x] 用户要求完成 4 个小优化后提交代码。
 
-## T3 流程工作台概念实体 UX
+## T3 全景工作台价值流与业务域视图归位
 
-确认状态：待用户确认。
+确认状态：已开发，待用户验收。
 
 修改范围：
 
-- 预计涉及流程节点、用户步骤、表单、实体展示区域。
-- 优先复用现有 `entities`、forms、attachments。
-- 不新增完整页面模型。
+- 全景工作台新增 `价值流与业务域` tab。
+- `全景视图` 只保留当前查看效果，不增加编辑模式。
+- `价值流与业务域` tab 由 Angular 组件接管，不再调用旧流程工作台“全景视图”渲染函数。
+- 暂不删除旧入口，待全景工作台能力稳定后再清理。
+- 不改后端数据模型。
 
 目标：
 
-- 概念实体贴着流程、用户步骤、表单、原型说明展示。
-- 产品经理只维护名称、业务含义和来源说明。
-- 明确“界面不等于表单”。
+- 全景工作台成为全景、角色、术语、规则以及价值流/业务域的主入口。
+- 价值流、业务域、阶段归属和矩阵编辑先落成 Angular island，后续再继续补齐旧视图细节。
+- 流程工作台后续只保留阶段视图、流程视图。
 
 测试思路：
 
-- 先写结构测试或用户旅程验证概念实体入口。
-- 验证字段、状态、关系不出现在产品经理主流程中。
+- 结构测试锁定全景工作台新增 `价值流与业务域` tab，并挂载 Angular 组件。
+- Playwright 冒烟验证用户能在全景工作台进入 `价值流与业务域` tab，并打开 Angular 编辑器。
 
 ## T3-R 角色管理与角色视图工作台重构
 

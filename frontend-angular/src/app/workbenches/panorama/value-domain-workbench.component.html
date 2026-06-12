@@ -1,0 +1,150 @@
+<section class="value-domain" data-testid="value-domain-angular">
+  <div class="value-domain-actions">
+    @if (editing()) {
+      <button class="btn btn-ghost-sm" type="button" data-testid="stage-editor-hide" (click)="setEditing(false)">关闭编辑</button>
+    } @else {
+      <button class="btn btn-outline btn-sm" type="button" data-testid="stage-editor-open" (click)="setEditing(true)">打开编辑</button>
+    }
+  </div>
+
+  <div class="stage-workbench" data-testid="value-domain-stage-view">
+    <div class="stage-main-shell">
+      <div class="stage-main">
+        <div class="stage-card">
+          <div class="value-domain-matrix" data-testid="value-domain-matrix" [class.is-editing]="editing()" [style.grid-template-columns]="gridTemplateColumns()">
+            <div class="value-domain-corner">业务域 / 价值流</div>
+            @for (column of columns(); track column.id; let columnIndex = $index) {
+              <div class="value-domain-head" [class.is-editing]="editing()" data-testid="value-stream-header">
+                @if (editing()) {
+                  <div class="matrix-cell-actions">
+                    <button class="matrix-mini-btn" type="button" data-testid="matrix-column-add-after" (click)="addColumn(column.id)" title="新增右侧价值流">＋</button>
+                    <button class="matrix-mini-btn" type="button" data-testid="matrix-column-move-left" (click)="moveColumn(column, -1)" [disabled]="columnIndex === 0" title="左移">←</button>
+                    <button class="matrix-mini-btn" type="button" data-testid="matrix-column-move-right" (click)="moveColumn(column, 1)" [disabled]="columnIndex === columns().length - 1" title="右移">→</button>
+                    <button class="matrix-mini-btn danger" type="button" data-testid="matrix-column-delete" (click)="removeColumn(column)" [disabled]="columns().length <= 1" title="删除价值流">×</button>
+                  </div>
+                  <label class="matrix-edit-field">
+                    <span class="matrix-field-caption" data-testid="matrix-field-caption">价值链环节</span>
+                    <input class="matrix-inline-input" type="text" data-testid="matrix-column-badge" aria-label="价值链环节" placeholder="价值链环节" [value]="column.badge || ''" (input)="setColumn(column, 'badge', $any($event.target).value)">
+                  </label>
+                  <label class="matrix-edit-field">
+                    <span class="matrix-field-caption" data-testid="matrix-field-caption">环节定义/说明</span>
+                    <input class="matrix-inline-input" type="text" data-testid="matrix-column-name" aria-label="环节定义/说明" placeholder="环节定义/说明" [value]="column.name || ''" (input)="setColumn(column, 'name', $any($event.target).value)">
+                  </label>
+                  <label class="matrix-edit-field">
+                    <span class="matrix-field-caption" data-testid="matrix-field-caption">创造价值</span>
+                    <input class="matrix-inline-input" type="text" data-testid="matrix-column-scope" aria-label="创造价值" placeholder="创造价值" [value]="column.scope || ''" (input)="setColumn(column, 'scope', $any($event.target).value)">
+                  </label>
+                } @else {
+                  @if (column.badge) {
+                    <span class="value-stream-lane-badge">{{ column.badge }}</span>
+                  }
+                  <strong>{{ column.name || column.id }}</strong>
+                  @if (column.scope) {
+                    <span>{{ column.scope }}</span>
+                  }
+                }
+              </div>
+            }
+
+            @for (lane of lanes(); track lane.id; let laneIndex = $index) {
+              <div class="value-domain-lane" [class.is-editing]="editing()">
+                @if (editing()) {
+                  <div class="matrix-cell-actions">
+                    <button class="matrix-mini-btn" type="button" data-testid="matrix-lane-add-after" (click)="addLane(lane.id)" title="新增下方业务域">＋</button>
+                    <button class="matrix-mini-btn" type="button" data-testid="matrix-lane-move-up" (click)="moveLane(lane, -1)" [disabled]="laneIndex === 0" title="上移">↑</button>
+                    <button class="matrix-mini-btn" type="button" data-testid="matrix-lane-move-down" (click)="moveLane(lane, 1)" [disabled]="laneIndex === lanes().length - 1" title="下移">↓</button>
+                    <button class="matrix-mini-btn danger" type="button" data-testid="matrix-lane-delete" (click)="removeLane(lane)" [disabled]="lanes().length <= 1" title="删除业务域">×</button>
+                  </div>
+                  <label class="matrix-edit-field">
+                    <span class="matrix-field-caption" data-testid="matrix-field-caption">标签</span>
+                    <input class="matrix-inline-input" type="text" data-testid="matrix-lane-badge" aria-label="业务域标签" placeholder="标签" [value]="lane.badge || ''" (input)="setLane(lane, 'badge', $any($event.target).value)">
+                  </label>
+                  <label class="matrix-edit-field">
+                    <span class="matrix-field-caption" data-testid="matrix-field-caption">正文</span>
+                    <input class="matrix-inline-input" type="text" data-testid="matrix-lane-name" aria-label="业务域名称" placeholder="正文" [value]="lane.name || ''" (input)="setLane(lane, 'name', $any($event.target).value)">
+                  </label>
+                  <label class="matrix-edit-field">
+                    <span class="matrix-field-caption" data-testid="matrix-field-caption">备注</span>
+                    <input class="matrix-inline-input" type="text" data-testid="matrix-lane-note" aria-label="业务域说明" placeholder="备注" [value]="lane.note || ''" (input)="setLane(lane, 'note', $any($event.target).value)">
+                  </label>
+                } @else {
+                  @if (lane.badge) {
+                    <span class="value-stream-lane-badge">{{ lane.badge }}</span>
+                  }
+                  <strong>{{ lane.name || lane.id }}</strong>
+                  @if (lane.note) {
+                    <span>{{ lane.note }}</span>
+                  }
+                }
+              </div>
+
+              @for (column of columns(); track column.id) {
+                <div class="value-domain-cell" data-testid="value-domain-cell" [class.is-drag-target]="isDragTarget(lane.id, column.id)" [attr.data-lane-id]="lane.id" [attr.data-column-id]="column.id">
+                  @if (editing()) {
+                    <div class="cell-edit-head">
+                      <label class="matrix-edit-field matrix-edit-field-short">
+                        <span class="matrix-field-caption" data-testid="matrix-field-caption">标签</span>
+                        <input class="matrix-inline-input" type="text" data-testid="panorama-cell-status" aria-label="单元格状态" placeholder="标签" [value]="cell(lane.id, column.id).status || ''" (input)="setCell(cell(lane.id, column.id), 'status', $any($event.target).value)">
+                      </label>
+                      <label class="matrix-edit-field">
+                        <span class="matrix-field-caption" data-testid="matrix-field-caption">备注</span>
+                        <input class="matrix-inline-input" type="text" data-testid="panorama-cell-text" aria-label="单元格说明" placeholder="备注" [value]="cell(lane.id, column.id).text || ''" (input)="setCell(cell(lane.id, column.id), 'text', $any($event.target).value)">
+                      </label>
+                    </div>
+                  }
+
+                  @if (!editing()) {
+                    @if (cell(lane.id, column.id).status) {
+                      <div class="value-stream-cell-status">{{ cell(lane.id, column.id).status }}</div>
+                    }
+                    @if (cell(lane.id, column.id).text) {
+                      <div class="value-stream-cell-text">{{ cell(lane.id, column.id).text }}</div>
+                    }
+                  }
+
+                  <div class="value-stream-stage-board" data-testid="value-stream-stage-board" [ngStyle]="stageBoardStyle(cellStages(lane.id, column.id))">
+                    @for (stage of cellStages(lane.id, column.id); track stageId(stage); let stageIndex = $index) {
+                      <div class="stage-graph-node stage-kind stage-matrix-stage" [class.is-editing]="editing()" [class.is-renaming]="renamingStageId() === stageId(stage)" data-testid="value-domain-stage-card" [attr.data-node-id]="stageId(stage)" [ngStyle]="stageStyle(stage, stageIndex)" (mousedown)="startStageDrag(stage, $event)" (dblclick)="startStageRename(stage, $event)">
+                        @if (renamingStageId() === stageId(stage)) {
+                          <input class="stage-name-inline-input" type="text" data-testid="stage-name-inline-input" [value]="stage.name || ''" (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()" (keydown.enter)="finishStageRename(stage, $any($event.target).value)" (keydown.escape)="cancelStageRename()" (blur)="finishStageRename(stage, $any($event.target).value)" autofocus>
+                        } @else {
+                          <span class="stage-graph-node-title">{{ stage.name || stageId(stage) }}</span>
+                          @if (processCount(stage) > 0) {
+                            <span class="stage-node-count" aria-label="流程数量">{{ processCount(stage) }}</span>
+                          }
+                        }
+                        @if (editing()) {
+                          <button class="matrix-stage-delete" type="button" data-testid="matrix-stage-delete" (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation(); removeStage(stage)" title="删除阶段">×</button>
+                        }
+                      </div>
+                    }
+                    @if (editing()) {
+                      <span class="stage-drag-slot-overlay" [ngStyle]="dragOverlayStyle(lane.id, column.id)"></span>
+                      <button class="matrix-stage-add" type="button" data-testid="stage-overview-add-button" (click)="addStageInCell(lane.id, column.id)">＋ 阶段</button>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  @if (stageDialog(); as dialog) {
+    <div class="stage-dialog-backdrop" data-testid="stage-dialog-backdrop">
+      <section class="stage-dialog" role="dialog" aria-modal="true" aria-labelledby="stage-dialog-title">
+        <h3 id="stage-dialog-title">新增业务阶段</h3>
+        <label class="stage-dialog-field">
+          <span>请输入业务阶段名称</span>
+          <input type="text" data-testid="stage-dialog-name" [value]="dialog.name" (input)="setDialogName($any($event.target).value)" (keydown.enter)="confirmStageDialog()" autofocus>
+        </label>
+        <div class="stage-dialog-actions">
+          <button class="btn btn-outline btn-sm" type="button" data-testid="stage-dialog-cancel" (click)="closeStageDialog()">取消</button>
+          <button class="btn btn-primary btn-sm" type="button" data-testid="stage-dialog-confirm" (click)="confirmStageDialog()">确定</button>
+        </div>
+      </section>
+    </div>
+  }
+</section>

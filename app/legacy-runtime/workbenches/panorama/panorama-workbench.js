@@ -9,6 +9,14 @@ window.PanoramaWorkbench = {
     this.render();
   },
 
+  toggleStageEditor(forceOpen = null) {
+    const nextCollapsed = forceOpen === null
+      ? S.ui.stageEditorCollapsed === false
+      : !forceOpen;
+    S.ui.stageEditorCollapsed = nextCollapsed;
+    this.render();
+  },
+
   setCapabilitySelection(capabilityId) {
     S.ui.panoramaCapabilityId = S.ui.panoramaCapabilityId === capabilityId ? '' : capabilityId;
     this.render();
@@ -153,16 +161,19 @@ window.PanoramaWorkbench = {
     const activeDomainTab = S.ui.domainTab || 'panorama';
     const tabs = [
       { id: 'panorama', label: '全景视图' },
-      { id: 'roles', label: '角色管理' },
-      { id: 'language', label: '统一语言' },
+      { id: 'valueDomain', label: '价值流与业务域' },
+      { id: 'roles', label: '角色视图' },
+      { id: 'language', label: '术语字典' },
       { id: 'rules', label: '规则条目' },
     ];
-    let html = `<div class="domain-scroll" data-testid="domain-scroll">
+    let html = `<div class="domain-scroll ${activeDomainTab === 'valueDomain' ? 'value-domain-scroll' : ''}" data-testid="domain-scroll">
       ${BLMShared.ui.renderSubTabs(tabs, activeDomainTab, 'switchDomainTab', 'domain-subtab')}`;
     if (activeDomainTab === 'panorama') {
       html += `<div class="ctx-card domain-panel domain-info-card">
         <div class="domain-panel-body domain-info-card-body">${this.renderMap(context.id)}</div>
       </div>`;
+    } else if (activeDomainTab === 'valueDomain') {
+      html += '<div id="value-domain-angular-host" data-testid="value-domain-angular-host"></div>';
     } else if (window.KnowledgeWorkbench) {
       html += window.KnowledgeWorkbench.render(activeDomainTab, context.id);
     }
@@ -172,6 +183,10 @@ window.PanoramaWorkbench = {
     initAutoResize();
     BLMCore.dom.restoreScroll('.domain-scroll', options.scrollTop);
     requestAnimationFrame(() => {
+      if (activeDomainTab === 'valueDomain') {
+        window.BlmAngularMounts?.mountValueDomain('value-domain-angular-host');
+        return;
+      }
       if (S.ui.panoramaZoomTouched) this.applyZoom();
       else this.fitZoom();
     });

@@ -156,6 +156,40 @@ class FrontendStructureTests(unittest.TestCase):
         for area in ["panorama", "process", "component", "orchestration", "entity", "knowledge", "role"]:
             self.assertIn(f"id: '{area}'", status_text)
 
+    def test_panorama_workbench_value_domain_tab_mounts_angular_component(self):
+        panorama_file = ANGULAR_DIR / "public" / "legacy-runtime" / "workbenches" / "panorama" / "panorama-workbench.js"
+        process_file = ANGULAR_DIR / "public" / "legacy-runtime" / "workbenches" / "process" / "process-legacy.js"
+        angular_mount_file = ANGULAR_APP_DIR / "core" / "legacy" / "angular-legacy-mounts.ts"
+        value_domain_component = ANGULAR_APP_DIR / "workbenches" / "panorama" / "value-domain-workbench.component.ts"
+        value_domain_template = ANGULAR_APP_DIR / "workbenches" / "panorama" / "value-domain-workbench.component.html"
+        panorama_text = panorama_file.read_text("utf-8")
+        process_text = process_file.read_text("utf-8")
+        mount_text = angular_mount_file.read_text("utf-8")
+        component_text = value_domain_component.read_text("utf-8")
+        template_text = value_domain_template.read_text("utf-8")
+
+        self.assertIn("{ id: 'panorama', label: '全景视图' }", panorama_text)
+        self.assertIn("{ id: 'valueDomain', label: '价值流与业务域' }", panorama_text)
+        self.assertIn("{ id: 'roles', label: '角色视图' }", panorama_text)
+        self.assertIn("{ id: 'language', label: '术语字典' }", panorama_text)
+        self.assertIn("{ id: 'rules', label: '规则条目' }", panorama_text)
+        self.assertNotIn("label: '角色管理'", panorama_text)
+        self.assertNotIn("label: '统一语言'", panorama_text)
+        self.assertNotIn("panorama-view-mode-view", panorama_text)
+        self.assertNotIn("panorama-view-mode-edit", panorama_text)
+        self.assertIn("value-domain-angular-host", panorama_text)
+        self.assertIn("mountValueDomain", panorama_text)
+        self.assertNotIn("renderStagePanoramaLegacyView", panorama_text)
+        self.assertNotIn("function renderStagePanoramaLegacyView", process_text)
+        self.assertIn("BlmAngularMounts", mount_text)
+        self.assertIn("ValueDomainWorkbenchComponent", mount_text)
+        self.assertIn("data-testid=\"value-domain-angular\"", template_text)
+        self.assertIn("data-testid=\"stage-editor-open\"", template_text)
+        self.assertNotIn("window.S", component_text)
+        self.assertNotIn("markModified", component_text)
+        self.assertNotIn("showAppConfirm", component_text)
+        self.assertIn("createValueDomainLegacyAdapter", component_text)
+
     def test_legacy_runtime_assets_are_declared_in_angular_source_order(self):
         manifest_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.manifest.ts"
         bootstrap_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.bootstrap.ts"

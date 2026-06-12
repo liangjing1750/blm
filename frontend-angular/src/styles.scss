@@ -4575,6 +4575,23 @@ input.step-type-custom { width: 88px; flex-shrink: 0; font-size: 12px; }
 
 /* ─── 业务域 Tab ─────────────────────────────────────────── */
 .domain-scroll { flex: 1; overflow-y: auto; padding: 7px 14px 20px 20px; }
+.domain-scroll.value-domain-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 7px 0 0;
+  min-width: 0;
+}
+.domain-scroll.value-domain-scroll > .view-toggle-group {
+  flex: 0 0 auto;
+  margin: 0 20px 0 !important;
+}
+.domain-scroll.value-domain-scroll > #value-domain-angular-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
 .domain-subtab-bar {
   display: flex; gap: 0; margin-bottom: 16px;
   border-bottom: 1px solid #e2e8f0;

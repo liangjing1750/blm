@@ -1,0 +1,94 @@
+// 模块意图：这里定义“价值流与业务域矩阵”的最小数据契约，供 legacy 适配层和 Angular 组件共用。
+export interface ValueDomainDocument {
+  panorama?: {
+    columns?: ValueDomainColumn[];
+    lanes?: ValueDomainLane[];
+    cells?: ValueDomainCell[];
+  };
+  processes?: Array<{ id?: string; uid?: string }>;
+  stages?: ValueDomainStage[];
+  stageLinks?: Array<{ fromStageUid?: string; toStageUid?: string }>;
+  stageFlowRefs?: Array<{ id?: string; stageUid?: string; processUid?: string }>;
+  stageFlowLinks?: Array<{ stageUid?: string; fromRefUid?: string; toRefUid?: string }>;
+}
+
+export interface ValueDomainColumn {
+  id: string;
+  name?: string;
+  badge?: string;
+  scope?: string;
+}
+
+export interface ValueDomainLane {
+  id: string;
+  name?: string;
+  badge?: string;
+  note?: string;
+}
+
+export interface ValueDomainCell {
+  laneUid?: string;
+  columnUid?: string;
+  laneId?: string;
+  columnId?: string;
+  status?: string;
+  text?: string;
+}
+
+export interface ValueDomainStage {
+  id?: string;
+  uid?: string;
+  name?: string;
+  subDomain?: string;
+  panoramaColumnUid?: string;
+  panoramaLaneUid?: string;
+  panoramaSlot?: ValueDomainStageSlot | null;
+  panoramaPos?: { x?: number; y?: number } | null;
+}
+
+export interface ValueDomainModel {
+  columns: ValueDomainColumn[];
+  lanes: ValueDomainLane[];
+  cells: ValueDomainCell[];
+}
+
+// 关键流程：阶段在矩阵中不只属于某个单元格，还可以落在单元格内的精确槽位。
+export interface ValueDomainStageSlot {
+  row: number;
+  col: number;
+}
+
+// 边界细节：默认列/行只用于空文档兜底，不能改变后端文档模型的持久化结构。
+export function ensureValueDomainModel(document: ValueDomainDocument, nextId: (prefix: string) => string): ValueDomainModel {
+  document.panorama ??= {};
+  document.panorama.columns ??= [];
+  document.panorama.lanes ??= [];
+  document.panorama.cells ??= [];
+  if (!document.panorama.columns.length) {
+    document.panorama.columns.push({ id: nextId('panorama-column'), name: '默认价值流', badge: '', scope: '' });
+  }
+  if (!document.panorama.lanes.length) {
+    document.panorama.lanes.push({ id: nextId('panorama-lane'), name: '默认业务域', badge: '', note: '' });
+  }
+  return document.panorama as ValueDomainModel;
+}
+
+export function ensureValueDomainStages(document: ValueDomainDocument): ValueDomainStage[] {
+  if (!Array.isArray(document.stages)) document.stages = [];
+  return document.stages;
+}
+
+export function getValueDomainStageId(stage: ValueDomainStage): string {
+  return String(stage.id || stage.uid || '');
+}
+
+export function findOrCreateValueDomainCell(model: ValueDomainModel, laneId: string, columnId: string): ValueDomainCell {
+  let cell = model.cells.find((item) => (
+    (item.laneUid || item.laneId) === laneId && (item.columnUid || item.columnId) === columnId
+  ));
+  if (!cell) {
+    cell = { laneUid: laneId, columnUid: columnId, status: '', text: '' };
+    model.cells.push(cell);
+  }
+  return cell;
+}
