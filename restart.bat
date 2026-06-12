@@ -30,7 +30,7 @@ echo Done.
 
 echo.
 echo [3/3] Starting BLM server...
-start "BLM_Server" python blm.py
+start "BLM_Server" python blm.py serve
 echo.
 echo Server started on port 8081 (admin 8091).
 echo.
