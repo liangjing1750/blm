@@ -192,8 +192,8 @@ window.PanoramaWorkbench = {
       html += '<div id="value-domain-angular-host" data-testid="value-domain-angular-host"></div>';
     } else if (activeDomainTab === 'roles') {
       html += '<div id="role-angular-host" data-testid="role-angular-host"></div>';
-    } else if (window.KnowledgeWorkbench) {
-      html += window.KnowledgeWorkbench.render(activeDomainTab, context.id);
+    } else if (activeDomainTab === 'language' || activeDomainTab === 'rules') {
+      html += '<div id="knowledge-angular-host" data-testid="knowledge-angular-host"></div>';
     }
     html += '</div>';
     html += renderBusinessModelDialog();
@@ -208,6 +208,10 @@ window.PanoramaWorkbench = {
       }
       if (activeDomainTab === 'roles') {
         window.BlmAngularMounts?.mountRoleWorkbench('role-angular-host');
+        return;
+      }
+      if (activeDomainTab === 'language' || activeDomainTab === 'rules') {
+        window.BlmAngularMounts?.mountKnowledgeWorkbench('knowledge-angular-host', activeDomainTab);
         return;
       }
       if (S.ui.panoramaZoomTouched) this.applyZoom();

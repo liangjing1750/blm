@@ -33,6 +33,42 @@ function buildSmokeDocument(name) {
   };
 }
 
+function buildKnowledgeDocument(name) {
+  const doc = buildSmokeDocument(name);
+  doc.language = [
+    { term: '现货仓单', definition: '平台内记录仓储实物状态的仓单。' },
+  ];
+  doc.processes = [
+    {
+      uid: 'P1',
+      name: '入库办理',
+      tasks: [
+        {
+          uid: 'T1',
+          name: '确认到货',
+          businessRules: [
+            { uid: 'BR1', name: '前置条件', content: '预约通过且货物到库。' },
+          ],
+        },
+      ],
+    },
+    {
+      uid: 'P2',
+      name: '出库办理',
+      tasks: [
+        {
+          uid: 'T2',
+          name: '核对出库指令',
+          businessRules: [
+            { uid: 'BR2', name: '授权校验', content: '出库前必须确认授权关系。' },
+          ],
+        },
+      ],
+    },
+  ];
+  return doc;
+}
+
 test('Angular legacy port loads the old BLM shell and workbench tabs', async ({ page, request }) => {
   const errors = [];
   page.on('console', (message) => {
@@ -166,4 +202,39 @@ test('panorama workbench hosts old value-domain panorama as a separate tab', asy
     hasDraftHooks: Boolean(window.S?.collab || window.queueCollabSnapshotSync),
   }));
   expect(editState.modified).toBe(true);
+});
+
+test('panorama knowledge tabs are rendered by Angular without editing the data model', async ({ page, request }) => {
+  const documentName = `panorama-knowledge-${Date.now()}`;
+  await createDocument(request, documentName, buildKnowledgeDocument(documentName));
+
+  await page.goto('/');
+  await page.locator('#dd-file .tbar-dd-btn').click();
+  await page.getByTestId('toolbar-open-button').click();
+  await page.locator('.file-list-item').filter({ hasText: documentName }).first().click();
+  await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
+
+  await page.getByTestId('tab-panoramaWorkbench').click();
+  await page.getByTestId('domain-subtab-language').click();
+  await expect(page.getByTestId('knowledge-angular-host')).toBeVisible();
+  await expect(page.getByTestId('knowledge-language-panel')).toBeVisible();
+  await expect(page.getByTestId('knowledge-term-name').first()).toHaveValue('现货仓单');
+  await page.getByTestId('knowledge-term-add').click();
+  await expect(page.getByTestId('knowledge-language-item')).toHaveCount(2);
+  await page.getByTestId('knowledge-term-name').last().fill('担保品');
+  await page.getByTestId('knowledge-term-description').last().fill('业务中用于担保的资产或权益。');
+  await expect(page.getByTestId('knowledge-term-name').last()).toHaveValue('担保品');
+
+  await page.getByTestId('domain-subtab-rules').click();
+  await expect(page.getByTestId('knowledge-angular-host')).toBeVisible();
+  await expect(page.getByTestId('knowledge-rules-panel')).toBeVisible();
+  await expect(page.getByTestId('knowledge-function-item')).toHaveCount(2);
+  await expect(page.getByTestId('knowledge-rule-row')).toContainText('前置条件');
+  await expect(page.getByTestId('knowledge-rule-row')).toContainText('入库办理');
+  await page.getByTestId('knowledge-function-item').filter({ hasText: '出库办理' }).click();
+  await expect(page.getByTestId('knowledge-rule-row')).toContainText('授权校验');
+  await page.getByTestId('knowledge-rule-search').fill('预约');
+  await expect(page.getByTestId('knowledge-rules-empty')).toBeVisible();
+  await page.getByTestId('knowledge-rule-search').fill('授权');
+  await expect(page.getByTestId('knowledge-rule-row')).toContainText('授权校验');
 });

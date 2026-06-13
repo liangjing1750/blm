@@ -2,12 +2,14 @@ import { DOCUMENT } from '@angular/common';
 import { ApplicationRef, ComponentRef, EnvironmentInjector, Inject, Injectable, createComponent } from '@angular/core';
 import { ValueDomainWorkbenchComponent } from '../../workbenches/panorama/value-domain-workbench.component';
 import { RoleWorkbenchComponent } from '../../workbenches/role/role-workbench';
+import { KnowledgeWorkbenchComponent } from '../../workbenches/knowledge/knowledge-workbench';
 
 declare global {
   interface Window {
     BlmAngularMounts?: {
       mountRoleWorkbench: (hostId: string) => void;
       mountValueDomain: (hostId: string) => void;
+      mountKnowledgeWorkbench: (hostId: string, tabId: string) => void;
       setValueDomainEditing: (hostId: string, editing: boolean) => void;
       unmount: (hostId: string) => void;
     };
@@ -28,6 +30,7 @@ export class AngularLegacyMounts {
     window.BlmAngularMounts = {
       mountRoleWorkbench: (hostId: string) => this.mountRoleWorkbench(hostId),
       mountValueDomain: (hostId: string) => this.mountValueDomain(hostId),
+      mountKnowledgeWorkbench: (hostId: string, tabId: string) => this.mountKnowledgeWorkbench(hostId, tabId),
       setValueDomainEditing: (hostId: string, editing: boolean) => this.setValueDomainEditing(hostId, editing),
       unmount: (hostId: string) => this.unmount(hostId),
     };
@@ -53,6 +56,19 @@ export class AngularLegacyMounts {
       environmentInjector: this.environmentInjector,
       hostElement: host,
     });
+    this.appRef.attachView(componentRef.hostView);
+    this.mounts.set(hostId, componentRef);
+  }
+
+  mountKnowledgeWorkbench(hostId: string, tabId: string): void {
+    const host = this.documentRef.querySelector<HTMLElement>(`#${hostId}`);
+    if (!host) return;
+    this.unmount(hostId);
+    const componentRef = createComponent(KnowledgeWorkbenchComponent, {
+      environmentInjector: this.environmentInjector,
+      hostElement: host,
+    });
+    componentRef.instance.setTabFromShell(tabId);
     this.appRef.attachView(componentRef.hostView);
     this.mounts.set(hostId, componentRef);
   }

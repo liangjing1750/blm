@@ -1,25 +1,143 @@
-<section class="workbench">
-  <header class="workbench-header">
-    <h1>知识工作台</h1>
-    <p>维护术语、规则条目和业务语言共识。</p>
-  </header>
+<section class="knowledge-workbench" data-testid="knowledge-angular">
+  @if (activeTab() === 'language') {
+    <article class="knowledge-panel" data-testid="knowledge-language-panel">
+      <header class="knowledge-panel-head">
+        <div>
+          <h2>术语字典</h2>
+          <p>维护当前模型中的业务术语，先解决统一叫法和解释口径。</p>
+        </div>
+        <div class="knowledge-actions">
+          <span class="knowledge-count" data-testid="knowledge-language-count">术语 {{ terms().length }}</span>
+          <button class="knowledge-secondary" type="button" data-testid="knowledge-term-toggle" (click)="toggleTermsCollapsed()">
+            {{ termsCollapsed() ? '展开' : '折叠' }}
+          </button>
+          <button class="knowledge-primary" type="button" data-testid="knowledge-term-add" (click)="addTerm()">新增术语</button>
+        </div>
+      </header>
 
-  <div class="grid">
-    <article class="panel">
-      <h2>术语</h2>
-      <ul class="list">
-        @for (term of document().terms; track term.uid) {
-          <li>{{ term.name }} <span class="muted">{{ term.desc }}</span></li>
-        }
-      </ul>
+      @if (!termsCollapsed() && terms().length) {
+        <div class="knowledge-term-list" data-testid="knowledge-language-list">
+          @for (term of terms(); track term.id; let index = $index) {
+            <div class="knowledge-term-row" data-testid="knowledge-language-item">
+              <label aria-label="术语名称">
+                <input
+                  type="text"
+                  [ngModel]="term.name"
+                  data-testid="knowledge-term-name"
+                  (ngModelChange)="updateTerm(index, 'name', $event)"
+                />
+              </label>
+              <label aria-label="定义说明">
+                <input
+                  type="text"
+                  [ngModel]="term.description"
+                  data-testid="knowledge-term-description"
+                  (ngModelChange)="updateTerm(index, 'description', $event)"
+                />
+              </label>
+              <div class="knowledge-row-actions">
+                <button type="button" title="在下方新增" data-testid="knowledge-term-add-after" (click)="addTermAfter(index)">+</button>
+                <button type="button" title="上移" data-testid="knowledge-term-move-up" [disabled]="index === 0" (click)="moveTerm(index, -1)">↑</button>
+                <button type="button" title="下移" data-testid="knowledge-term-move-down" [disabled]="index === terms().length - 1" (click)="moveTerm(index, 1)">↓</button>
+                <button class="is-danger" type="button" title="删除" data-testid="knowledge-term-remove" (click)="removeTerm(index)">×</button>
+              </div>
+            </div>
+          }
+        </div>
+      } @else if (!termsCollapsed()) {
+        <div class="knowledge-empty" data-testid="knowledge-language-empty">
+          暂无术语。可以先把业务负责人反复提到的名词放进来，后续再做术语分类和引用关系。
+        </div>
+      }
     </article>
-    <article class="panel">
-      <h2>规则条目</h2>
-      <ul class="list">
-        @for (rule of document().rules; track rule.uid) {
-          <li>{{ rule.name }} <span class="muted">{{ rule.desc }}</span></li>
-        }
-      </ul>
+  } @else {
+    <article class="knowledge-panel" data-testid="knowledge-rules-panel">
+      <header class="knowledge-panel-head">
+        <div>
+          <h2>规则条目</h2>
+          <p>把流程视为功能，把节点规则视为功能规则，先选功能再定位规则。</p>
+        </div>
+        <div class="knowledge-actions">
+          <span class="knowledge-count" data-testid="knowledge-rules-count">规则 {{ rules().length }}</span>
+          <button class="knowledge-secondary" type="button" data-testid="knowledge-rules-toggle" (click)="toggleRulesCollapsed()">
+            {{ rulesCollapsed() ? '展开' : '折叠' }}
+          </button>
+        </div>
+      </header>
+
+      @if (!rulesCollapsed() && functions().length) {
+        <div class="knowledge-rule-browser" data-testid="knowledge-rule-browser">
+          <aside class="knowledge-function-list" aria-label="功能列表">
+            <div class="knowledge-search">
+              <label for="rule-keyword">规则检索</label>
+              <input
+                id="rule-keyword"
+                type="search"
+                placeholder="搜索规则、节点或内容"
+                [ngModel]="ruleKeyword()"
+                data-testid="knowledge-rule-search"
+                (ngModelChange)="setRuleKeyword($event)"
+              />
+            </div>
+            <div class="knowledge-function-scroll">
+              @for (item of functions(); track item.id) {
+                <button
+                  class="knowledge-function"
+                  type="button"
+                  data-testid="knowledge-function-item"
+                  [class.is-active]="selectedFunction()?.id === item.id"
+                  (click)="selectFunction(item.id)"
+                >
+                  <strong>{{ item.name }}</strong>
+                  <span>{{ item.description || '暂无功能说明' }}</span>
+                  <em>{{ item.ruleCount }} 条规则 / {{ item.nodeCount }} 个节点</em>
+                </button>
+              }
+            </div>
+          </aside>
+
+          <section class="knowledge-rule-results" data-testid="knowledge-rule-results">
+            <div class="knowledge-rule-title">
+              <div>
+                <h3>{{ selectedFunction()?.name || '全部功能' }}</h3>
+                <p>{{ selectedFunction()?.description || '查看该功能下节点沉淀出来的业务规则。' }}</p>
+              </div>
+              <span>{{ filteredRules().length }} 条</span>
+            </div>
+
+            @if (filteredRules().length) {
+              <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
+                @for (rule of filteredRules(); track rule.id) {
+                  <article class="knowledge-rule-card" data-testid="knowledge-rule-row">
+                    <div class="knowledge-rule-main">
+                      <strong>{{ rule.name }}</strong>
+                      <p>{{ rule.content || '暂无内容' }}</p>
+                    </div>
+                    <div class="knowledge-rule-meta">
+                      <span>{{ rule.nodeName }}</span>
+                      <em>{{ rule.processName }}</em>
+                    </div>
+                  </article>
+                }
+              </div>
+            } @else {
+              <div class="knowledge-empty" data-testid="knowledge-rules-empty">
+                当前筛选下没有规则。可以换一个功能，或调整检索关键词。
+              </div>
+            }
+          </section>
+        </div>
+      } @else if (!rulesCollapsed()) {
+        <div class="knowledge-empty" data-testid="knowledge-rules-empty">
+          暂无流程功能。规则仍在流程节点内维护，这里只做按功能汇总查看。
+        </div>
+      }
+
+      @if (topLevelRules().length) {
+        <div class="knowledge-note" data-testid="knowledge-top-rules-note">
+          检测到旧顶层规则 {{ topLevelRules().length }} 条，本页暂不编辑，后续统一梳理数据归属。
+        </div>
+      }
     </article>
-  </div>
+  }
 </section>

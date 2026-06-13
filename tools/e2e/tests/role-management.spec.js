@@ -293,7 +293,8 @@ test('统一语言术语表展开后保留业务域页滚动位置', async ({ pa
 
   await page.getByTestId('domain-subtab-language').click();
 
-  await expect(page.locator('[data-panel="language"]')).toContainText('术语表');
+  await expect(page.getByTestId('knowledge-angular-host')).toBeVisible();
+  await expect(page.getByTestId('knowledge-language-panel')).toContainText('术语字典');
   const afterToggle = await domainScroll.evaluate((node) => node.scrollTop);
 
   expect(beforeToggle).toBeGreaterThanOrEqual(0);
