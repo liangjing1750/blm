@@ -333,6 +333,11 @@ export class RoleWorkbenchComponent {
     this.legacy().S!.ui!['roleWorkbenchMode'] = 'view';
   }
 
+  protected toggleMode(): void {
+    if (this.mode() === 'view') this.showManagement();
+    else this.showView();
+  }
+
   protected addRole(): void {
     const name = (this.newRoleName || '新角色').trim();
     const group = this.selectedGroup === '__custom__' ? this.customGroup.trim() : this.selectedGroup;

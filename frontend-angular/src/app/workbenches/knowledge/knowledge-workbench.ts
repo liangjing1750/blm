@@ -81,7 +81,7 @@ interface FunctionView {
 })
 export class KnowledgeWorkbenchComponent {
   // 模块意图：术语和规则 tab 先完成 Angular 独立渲染；字典数据模型暂不新增写入能力。
-  protected readonly activeTab = signal<'language' | 'rules'>('language');
+  protected readonly activeTab = signal<'termManagement' | 'dictionaryManagement' | 'rules'>('termManagement');
   protected readonly selectedFunctionId = signal('');
   protected readonly ruleKeyword = signal('');
   protected readonly termsCollapsed = signal(false);
@@ -89,7 +89,9 @@ export class KnowledgeWorkbenchComponent {
   protected readonly version = signal(0);
 
   setTabFromShell(tabId: string): void {
-    this.activeTab.set(tabId === 'rules' ? 'rules' : 'language');
+    if (tabId === 'rules') this.activeTab.set('rules');
+    else if (tabId === 'dictionaryManagement') this.activeTab.set('dictionaryManagement');
+    else this.activeTab.set('termManagement');
     if (tabId === 'rules' && !this.selectedFunctionId()) {
       this.selectedFunctionId.set(this.functions()[0]?.id || '');
     }

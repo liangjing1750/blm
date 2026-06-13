@@ -116,9 +116,10 @@ async function openRoleWorkbench(page) {
 
 async function openRoleView(page) {
   await openRoleWorkbench(page);
+  await expect(page.getByTestId('role-view-entry')).toHaveText('查看角色参与流程');
   await page.getByTestId('role-view-entry').click();
   await expect(page.getByTestId('process-role-view')).toBeVisible();
-  await expect(page.getByTestId('role-management-entry')).toBeVisible();
+  await expect(page.getByTestId('role-management-entry')).toHaveText('切换角色管理');
   await expect(page.getByTestId('role-usecase-map')).toBeVisible();
 }
 
@@ -134,7 +135,7 @@ test('业务域页以轻量方式展示角色管理，并可从角色条目进�
   await expect(page.getByTestId('role-summary-card')).toBeVisible();
   await expect(page.locator('#role-create-tags')).toHaveCount(0);
   await expect(page.locator('#role-create-group-select')).toBeVisible();
-  await expect(page.getByTestId('role-view-entry')).toBeVisible();
+  await expect(page.getByTestId('role-view-entry')).toHaveText('查看角色参与流程');
   await expect(page.locator('[data-role-group="仓库作业方"]')).toBeVisible();
   await expect(page.locator('[data-role-group="业务参与方"]')).toBeVisible();
   await expect(page.locator('[data-role-id="R1"]')).toContainText('仓库管理员');
@@ -149,7 +150,7 @@ test('业务域页以轻量方式展示角色管理，并可从角色条目进�
   await page.locator('[data-role-id="R1"]').click();
 
   await expect(page.getByTestId('process-role-view')).toBeVisible();
-  await expect(page.getByTestId('role-management-entry')).toBeVisible();
+  await expect(page.getByTestId('role-management-entry')).toHaveText('切换角色管理');
   await expect(page.getByTestId('role-usecase-map')).toBeVisible();
   await expect(page.locator('.role-usecase-role.active')).toContainText('仓库管理员');
   await expect(page.locator('.role-usecase-line')).toHaveCount(1);
@@ -192,7 +193,7 @@ test('流程角色视图可以按角色聚合流程和节点', async ({ page, re
   await openRoleView(page);
 
   await expect(page.getByTestId('process-role-view')).toBeVisible();
-  await expect(page.getByTestId('role-management-entry')).toBeVisible();
+  await expect(page.getByTestId('role-management-entry')).toHaveText('切换角色管理');
   await expect(page.getByTestId('role-usecase-map')).toBeVisible();
   await expect(page.locator('.role-usecase-role.active')).toContainText('仓库管理员');
   await expect(page.getByTestId('role-projection-summary')).toContainText('涉及节点');
@@ -291,10 +292,10 @@ test('统一语言术语表展开后保留业务域页滚动位置', async ({ pa
   await domainScroll.evaluate((node) => { node.scrollTop = node.scrollHeight; });
   const beforeToggle = await domainScroll.evaluate((node) => node.scrollTop);
 
-  await page.getByTestId('domain-subtab-language').click();
+  await page.getByTestId('domain-subtab-termManagement').click();
 
   await expect(page.getByTestId('knowledge-angular-host')).toBeVisible();
-  await expect(page.getByTestId('knowledge-language-panel')).toContainText('术语字典');
+  await expect(page.getByTestId('knowledge-language-panel')).toContainText('术语管理');
   const afterToggle = await domainScroll.evaluate((node) => node.scrollTop);
 
   expect(beforeToggle).toBeGreaterThanOrEqual(0);

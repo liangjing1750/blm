@@ -6,6 +6,7 @@ window.PanoramaWorkbench = {
 
   switchTab(tabId) {
     S.ui.domainTab = tabId;
+    if (tabId === 'roles' && S.ui) S.ui.roleWorkbenchMode = 'management';
     this.render();
   },
 
@@ -174,8 +175,9 @@ window.PanoramaWorkbench = {
     const tabs = [
       { id: 'panorama', label: '全景视图' },
       { id: 'valueDomain', label: '价值流与业务域' },
-      { id: 'roles', label: '角色视图' },
-      { id: 'language', label: '术语字典' },
+      { id: 'roles', label: '角色管理' },
+      { id: 'termManagement', label: '术语管理' },
+      { id: 'dictionaryManagement', label: '字典管理' },
       { id: 'rules', label: '规则条目' },
     ];
     const valueDomainActions = activeDomainTab === 'valueDomain'
@@ -192,7 +194,7 @@ window.PanoramaWorkbench = {
       html += '<div id="value-domain-angular-host" data-testid="value-domain-angular-host"></div>';
     } else if (activeDomainTab === 'roles') {
       html += '<div id="role-angular-host" data-testid="role-angular-host"></div>';
-    } else if (activeDomainTab === 'language' || activeDomainTab === 'rules') {
+    } else if (activeDomainTab === 'termManagement' || activeDomainTab === 'dictionaryManagement' || activeDomainTab === 'rules') {
       html += '<div id="knowledge-angular-host" data-testid="knowledge-angular-host"></div>';
     }
     html += '</div>';
@@ -210,7 +212,7 @@ window.PanoramaWorkbench = {
         window.BlmAngularMounts?.mountRoleWorkbench('role-angular-host');
         return;
       }
-      if (activeDomainTab === 'language' || activeDomainTab === 'rules') {
+      if (activeDomainTab === 'termManagement' || activeDomainTab === 'dictionaryManagement' || activeDomainTab === 'rules') {
         window.BlmAngularMounts?.mountKnowledgeWorkbench('knowledge-angular-host', activeDomainTab);
         return;
       }

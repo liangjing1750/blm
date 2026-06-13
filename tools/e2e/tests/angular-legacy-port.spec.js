@@ -66,6 +66,21 @@ function buildKnowledgeDocument(name) {
       ],
     },
   ];
+  for (let index = 0; index < 32; index += 1) {
+    doc.processes[1].tasks[0].businessRules.push({
+      uid: `BR2-${index}`,
+      name: `授权校验${index + 1}`,
+      content: `出库前必须确认授权关系、客户状态、仓单状态和操作留痕。第 ${index + 1} 条。`,
+    });
+  }
+  for (let index = 0; index < 24; index += 1) {
+    doc.processes.push({
+      uid: `PX${index}`,
+      name: `会员信息维护${index + 1}`,
+      outcome: '形成会员信息维护结果并记录留痕',
+      tasks: [],
+    });
+  }
   return doc;
 }
 
@@ -166,8 +181,9 @@ test('panorama workbench hosts old value-domain panorama as a separate tab', asy
   await page.getByTestId('tab-panoramaWorkbench').click();
   await expect(page.getByTestId('domain-subtab-panorama')).toHaveText('全景视图');
   await expect(page.getByTestId('domain-subtab-valueDomain')).toHaveText('价值流与业务域');
-  await expect(page.getByTestId('domain-subtab-roles')).toHaveText('角色视图');
-  await expect(page.getByTestId('domain-subtab-language')).toHaveText('术语字典');
+  await expect(page.getByTestId('domain-subtab-roles')).toHaveText('角色管理');
+  await expect(page.getByTestId('domain-subtab-termManagement')).toHaveText('术语管理');
+  await expect(page.getByTestId('domain-subtab-dictionaryManagement')).toHaveText('字典管理');
   await expect(page.getByTestId('domain-subtab-rules')).toHaveText('规则条目');
 
   await expect(page.getByTestId('panorama-business-map')).toBeVisible();
@@ -215,7 +231,7 @@ test('panorama knowledge tabs are rendered by Angular without editing the data m
   await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
 
   await page.getByTestId('tab-panoramaWorkbench').click();
-  await page.getByTestId('domain-subtab-language').click();
+  await page.getByTestId('domain-subtab-termManagement').click();
   await expect(page.getByTestId('knowledge-angular-host')).toBeVisible();
   await expect(page.getByTestId('knowledge-language-panel')).toBeVisible();
   await expect(page.getByTestId('knowledge-term-name').first()).toHaveValue('现货仓单');
@@ -225,16 +241,30 @@ test('panorama knowledge tabs are rendered by Angular without editing the data m
   await page.getByTestId('knowledge-term-description').last().fill('业务中用于担保的资产或权益。');
   await expect(page.getByTestId('knowledge-term-name').last()).toHaveValue('担保品');
 
+  await page.getByTestId('domain-subtab-dictionaryManagement').click();
+  await expect(page.getByTestId('knowledge-dictionary-panel')).toBeVisible();
+  await expect(page.getByTestId('knowledge-dictionary-empty')).toContainText('字典管理后续单独设计');
+
   await page.getByTestId('domain-subtab-rules').click();
   await expect(page.getByTestId('knowledge-angular-host')).toBeVisible();
   await expect(page.getByTestId('knowledge-rules-panel')).toBeVisible();
-  await expect(page.getByTestId('knowledge-function-item')).toHaveCount(2);
-  await expect(page.getByTestId('knowledge-rule-row')).toContainText('前置条件');
-  await expect(page.getByTestId('knowledge-rule-row')).toContainText('入库办理');
+  await expect(page.getByTestId('knowledge-function-item')).toHaveCount(26);
+  await expect(page.getByTestId('knowledge-rule-row').first()).toContainText('前置条件');
+  await expect(page.getByTestId('knowledge-rule-row').first()).toContainText('入库办理');
   await page.getByTestId('knowledge-function-item').filter({ hasText: '出库办理' }).click();
-  await expect(page.getByTestId('knowledge-rule-row')).toContainText('授权校验');
+  await expect(page.getByTestId('knowledge-rule-row').filter({ hasText: '授权校验' }).first()).toBeVisible();
+  const functionOverflow = await page.locator('.knowledge-function-scroll').evaluate((node) => ({
+    horizontal: node.scrollWidth >= node.clientWidth,
+    vertical: node.scrollHeight > node.clientHeight,
+  }));
+  expect(functionOverflow.vertical).toBe(true);
+  const ruleOverflow = await page.getByTestId('knowledge-rules-table').evaluate((node) => ({
+    horizontal: node.scrollWidth > node.clientWidth,
+    vertical: node.scrollHeight > node.clientHeight,
+  }));
+  expect(ruleOverflow).toEqual({ horizontal: true, vertical: true });
   await page.getByTestId('knowledge-rule-search').fill('预约');
   await expect(page.getByTestId('knowledge-rules-empty')).toBeVisible();
   await page.getByTestId('knowledge-rule-search').fill('授权');
-  await expect(page.getByTestId('knowledge-rule-row')).toContainText('授权校验');
+  await expect(page.getByTestId('knowledge-rule-row').filter({ hasText: '授权校验' }).first()).toBeVisible();
 });

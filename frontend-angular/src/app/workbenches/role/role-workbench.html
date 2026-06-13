@@ -1,17 +1,14 @@
 ﻿<section class="ctx-card domain-panel role-light-card" data-testid="role-summary-card">
   <header class="role-angular-head">
-    <div>
-      <h3>角色管理</h3>
-      <p class="field-hint">统一维护角色，并在同一工作台查看角色参与的流程和节点。</p>
-    </div>
+    <button class="btn btn-outline btn-sm role-mode-action" type="button"
+      [attr.data-testid]="mode() === 'view' ? 'role-management-entry' : 'role-view-entry'"
+      (click)="toggleMode()">
+      {{ mode() === 'view' ? '切换角色管理' : '查看角色参与流程' }}
+    </button>
     <div class="role-angular-actions">
       <span class="domain-panel-badge">
         角色 {{ roles().length }} · 使用中 {{ usedRoleCount() }} · 未使用 {{ roles().length - usedRoleCount() }}
       </span>
-      <div class="view-toggle-group role-mode-toggle" data-testid="role-mode-toggle">
-        <button class="vtb" type="button" data-testid="role-management-entry" [class.active]="mode() === 'management'" (click)="showManagement()">角色管理</button>
-        <button class="vtb" type="button" data-testid="role-view-entry" [class.active]="mode() === 'view'" (click)="showView()">角色视图</button>
-      </div>
     </div>
   </header>
 

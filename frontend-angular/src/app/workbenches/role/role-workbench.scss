@@ -1,13 +1,13 @@
 .role-angular-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
 }
 
-.role-angular-head h3 {
-  margin: 0 0 4px;
+.role-mode-action {
+  flex: 0 0 auto;
 }
 
 .role-angular-actions {
@@ -16,10 +16,6 @@
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.role-mode-toggle {
-  margin-right: 0;
 }
 
 .role-light-card .role-create-inline {

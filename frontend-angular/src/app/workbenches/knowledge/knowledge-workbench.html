@@ -1,9 +1,9 @@
 <section class="knowledge-workbench" data-testid="knowledge-angular">
-  @if (activeTab() === 'language') {
+  @if (activeTab() === 'termManagement') {
     <article class="knowledge-panel" data-testid="knowledge-language-panel">
       <header class="knowledge-panel-head">
         <div>
-          <h2>术语字典</h2>
+          <h2>术语管理</h2>
           <p>维护当前模型中的业务术语，先解决统一叫法和解释口径。</p>
         </div>
         <div class="knowledge-actions">
@@ -16,7 +16,7 @@
       </header>
 
       @if (!termsCollapsed() && terms().length) {
-        <div class="knowledge-term-list" data-testid="knowledge-language-list">
+        <div class="knowledge-term-list workbench-scroll-frame workbench-scroll-body" data-testid="knowledge-language-list">
           @for (term of terms(); track term.id; let index = $index) {
             <div class="knowledge-term-row" data-testid="knowledge-language-item">
               <label aria-label="术语名称">
@@ -50,6 +50,19 @@
         </div>
       }
     </article>
+  } @else if (activeTab() === 'dictionaryManagement') {
+    <article class="knowledge-panel" data-testid="knowledge-dictionary-panel">
+      <header class="knowledge-panel-head">
+        <div>
+          <h2>字典管理</h2>
+          <p>用于维护枚举、分类、码表等可复用字典。当前先保留入口。</p>
+        </div>
+        <span class="knowledge-count" data-testid="knowledge-dictionary-count">占位</span>
+      </header>
+      <div class="knowledge-empty" data-testid="knowledge-dictionary-empty">
+        字典管理后续单独设计数据模型和维护方式，本轮只先明确入口。
+      </div>
+    </article>
   } @else {
     <article class="knowledge-panel" data-testid="knowledge-rules-panel">
       <header class="knowledge-panel-head">
@@ -79,7 +92,7 @@
                 (ngModelChange)="setRuleKeyword($event)"
               />
             </div>
-            <div class="knowledge-function-scroll">
+            <div class="knowledge-function-scroll workbench-scroll-body">
               @for (item of functions(); track item.id) {
                 <button
                   class="knowledge-function"
@@ -106,17 +119,21 @@
             </div>
 
             @if (filteredRules().length) {
-              <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
+              <div class="knowledge-rule-list workbench-scroll-frame workbench-scroll-body" data-testid="knowledge-rules-table">
+                <div class="knowledge-rule-head" aria-hidden="true">
+                  <span>规则</span>
+                  <span>节点</span>
+                  <span>功能</span>
+                  <span>内容摘要</span>
+                </div>
                 @for (rule of filteredRules(); track rule.id) {
                   <article class="knowledge-rule-card" data-testid="knowledge-rule-row">
-                    <div class="knowledge-rule-main">
+                    <div class="knowledge-rule-name">
                       <strong>{{ rule.name }}</strong>
-                      <p>{{ rule.content || '暂无内容' }}</p>
                     </div>
-                    <div class="knowledge-rule-meta">
-                      <span>{{ rule.nodeName }}</span>
-                      <em>{{ rule.processName }}</em>
-                    </div>
+                    <span class="knowledge-rule-cell">{{ rule.nodeName }}</span>
+                    <span class="knowledge-rule-cell">{{ rule.processName }}</span>
+                    <p>{{ rule.content || '暂无内容' }}</p>
                   </article>
                 }
               </div>

@@ -41,7 +41,6 @@
 .knowledge-secondary {
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 700;
   padding: 0 11px;
 }
 
@@ -50,11 +49,6 @@
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   display: inline-flex;
-}
-
-.knowledge-primary,
-.knowledge-secondary {
-  cursor: pointer;
 }
 
 .knowledge-primary {
@@ -69,10 +63,7 @@
 }
 
 .knowledge-term-list {
-  border: 1px solid #dbe7f5;
-  border-radius: 10px;
   max-height: min(520px, calc(100vh - 245px));
-  overflow: auto;
 }
 
 .knowledge-term-row {
@@ -108,7 +99,6 @@
   border: 1px solid #c8d8ea;
   border-radius: 7px;
   font: inherit;
-  font-size: 13px;
   height: 28px;
   padding: 4px 8px;
   width: 100%;
@@ -124,7 +114,6 @@
   background: #fff;
   border: 1px solid #bfd7f5;
   border-radius: 7px;
-  font-size: 13px;
   font-weight: 700;
   height: 28px;
 }
@@ -142,11 +131,10 @@
 
 .knowledge-rule-browser {
   border: 1px solid #dbe7f5;
-  border-radius: 10px;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  height: min(560px, calc(100vh - 250px));
-  min-height: 360px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  height: min(460px, calc(100vh - 220px));
+  min-height: 320px;
   overflow: hidden;
 }
 
@@ -155,23 +143,22 @@
   border-right: 1px solid #dbe7f5;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .knowledge-search {
   border-bottom: 1px solid #dbe7f5;
-  padding: 11px;
-}
-
-.knowledge-function-scroll,
-.knowledge-rule-results {
-  overflow: auto;
+  padding: 8px;
 }
 
 .knowledge-function-scroll {
   display: grid;
-  gap: 7px;
-  padding: 10px;
+  gap: 6px;
+  max-height: 360px;
+  min-height: 0;
+  padding: 8px;
 }
 
 .knowledge-function {
@@ -179,15 +166,15 @@
   border: 1px solid #d5e3f5;
   border-radius: 9px;
   display: grid;
-  gap: 3px;
-  padding: 9px 10px;
+  gap: 2px;
+  min-height: 56px;
+  padding: 7px 9px;
   text-align: left;
 }
 
 .knowledge-function.is-active {
   background: #eaf3ff;
   border-color: #5b9bff;
-  box-shadow: inset 3px 0 0 #2f7df6;
 }
 
 .knowledge-function strong {
@@ -207,8 +194,11 @@
 
 .knowledge-rule-results {
   background: #fff;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: 12px;
+  overflow: hidden;
+  padding: 10px;
 }
 
 .knowledge-rule-title {
@@ -218,56 +208,63 @@
 .knowledge-rule-title span {
   background: #eff6ff;
   border-radius: 999px;
-  font-size: 12px;
   font-weight: 700;
   padding: 5px 9px;
 }
 
 .knowledge-rule-list {
+  flex: 1;
+  min-height: 0;
+}
+
+.knowledge-rule-head,
+.knowledge-rule-card {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(180px, 240px) minmax(130px, 170px) minmax(160px, 220px) minmax(320px, 1fr);
+  min-width: 1120px;
+}
+
+.knowledge-rule-head {
+  background: #f6f9fd;
+  border-bottom: 1px solid #dbe7f5;
+  font-size: 12px;
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.knowledge-rule-head span,
+.knowledge-rule-card > * {
+  border-right: 1px solid #edf3fb;
+  padding: 7px 9px;
 }
 
 .knowledge-rule-card {
-  background: #f8fbff;
-  border: 1px solid #d7e7fb;
-  border-radius: 9px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
-  padding: 10px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e4edf8;
 }
 
-.knowledge-rule-main strong {
+.knowledge-rule-card:last-child {
+  border-bottom: 0;
+}
+
+.knowledge-rule-name strong {
   font-size: 14px;
 }
 
-.knowledge-rule-main p {
+.knowledge-rule-card p,
+.knowledge-rule-cell {
   font-size: 12px;
   line-height: 1.5;
-  margin: 4px 0 0;
+  margin: 0;
 }
 
-.knowledge-rule-meta {
-  display: grid;
-  gap: 5px;
-  justify-items: end;
-}
-
-.knowledge-rule-meta span,
-.knowledge-rule-meta em {
-  background: #fff;
-  border: 1px solid #dbe7f5;
-  border-radius: 999px;
-  font-size: 12px;
-  max-width: 100%;
+.knowledge-rule-cell,
+.knowledge-rule-card p {
   overflow: hidden;
-  padding: 3px 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.knowledge-rule-meta em {
-  font-style: normal;
 }
 
 .knowledge-empty,
