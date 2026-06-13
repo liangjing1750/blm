@@ -7348,8 +7348,9 @@ function renderProcessTab() {
   }
 
   if(view==='stage') {
-    h += renderStageWorkbench();
+    h += '<div id="process-stage-angular-host" data-testid="process-stage-angular-host"></div>';
     document.getElementById('tab-content').innerHTML = h;
+    requestAnimationFrame(() => window.BlmAngularMounts?.mountProcessStageWorkbench('process-stage-angular-host'));
     return;
   }
 

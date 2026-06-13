@@ -195,6 +195,29 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertNotIn("showAppConfirm", component_text)
         self.assertIn("createValueDomainLegacyAdapter", component_text)
 
+    def test_process_stage_view_mounts_angular_component(self):
+        process_workbench_file = ANGULAR_DIR / "public" / "legacy-runtime" / "workbenches" / "process" / "process-workbench.js"
+        process_legacy_file = ANGULAR_DIR / "public" / "legacy-runtime" / "workbenches" / "process" / "process-legacy.js"
+        angular_mount_file = ANGULAR_APP_DIR / "core" / "legacy" / "angular-legacy-mounts.ts"
+        stage_component = ANGULAR_APP_DIR / "workbenches" / "process" / "stage" / "process-stage-workbench.component.ts"
+        stage_template = ANGULAR_APP_DIR / "workbenches" / "process" / "stage" / "process-stage-workbench.component.html"
+
+        workbench_text = process_workbench_file.read_text("utf-8")
+        legacy_text = process_legacy_file.read_text("utf-8")
+        mount_text = angular_mount_file.read_text("utf-8")
+        component_text = stage_component.read_text("utf-8")
+        template_text = stage_template.read_text("utf-8")
+
+        self.assertIn("S.ui.stageViewMode = 'detail'", workbench_text)
+        self.assertIn("process-stage-angular-host", legacy_text)
+        self.assertIn("mountProcessStageWorkbench", legacy_text)
+        self.assertIn("ProcessStageWorkbenchComponent", mount_text)
+        self.assertIn("data-testid=\"process-stage-view\"", template_text)
+        self.assertIn("data-testid=\"stage-panorama-graph\"", template_text)
+        self.assertIn("data-testid=\"stage-detail-graph\"", template_text)
+        self.assertNotIn("window.S", component_text)
+        self.assertIn("createProcessStageLegacyAdapter", component_text)
+
     def test_legacy_runtime_assets_are_declared_in_angular_source_order(self):
         manifest_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.manifest.ts"
         bootstrap_file = ANGULAR_APP_DIR / "legacy-runtime" / "legacy-runtime.bootstrap.ts"

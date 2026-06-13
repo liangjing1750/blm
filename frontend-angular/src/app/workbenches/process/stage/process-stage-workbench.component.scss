@@ -1,0 +1,29 @@
+// 模块意图：阶段视图继续复用 legacy 的核心 class，本文件只补 Angular 渲染需要的局部边界。
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.value-stream-scroll {
+  max-height: calc(100vh - 190px);
+  overflow: scroll;
+  scrollbar-gutter: stable;
+}
+
+.value-stream-matrix {
+  min-width: max-content;
+}
+
+.stage-flow-node-group-editor {
+  left: -20px;
+  top: 132px;
+  width: 104px;
+}
+
+.stage-flow-node-actions {
+  z-index: 2;
+}
+
+.stage-flow-link-remove {
+  z-index: 4;
+}

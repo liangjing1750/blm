@@ -1,0 +1,183 @@
+<div class="stage-workbench" data-testid="process-stage-view">
+  <div class="stage-main-shell workbench-scroll-body">
+    <div class="stage-main">
+      <div class="stage-card">
+        @if (mode() === 'detail') {
+          @if (currentStage(); as stage) {
+            <div class="stage-compact-head" data-testid="stage-compact-head">
+              <button class="btn btn-ghost-sm" type="button" (click)="openPanorama()">业务全景</button>
+              <span class="stage-breadcrumb-sep">/</span>
+              <div class="stage-card-title" data-testid="stage-detail-title">
+                @if (renamingStageId() === stageId(stage)) {
+                  <input
+                    class="stage-name-inline-input stage-detail-name-text"
+                    data-testid="stage-name-inline-input"
+                    [ngModel]="stage.name || stageId(stage)"
+                    (blur)="finishStageRename(stage, $any($event.target).value)"
+                    (keydown.enter)="finishStageRename(stage, $any($event.target).value)"
+                    (keydown.escape)="renamingStageId.set('')"
+                    autofocus
+                  />
+                } @else {
+                  <span class="stage-detail-name-text" title="双击修改阶段名称" (dblclick)="startStageRename(stage, $event)">
+                    {{ stage.name || stageId(stage) }}
+                  </span>
+                }
+                <span class="stage-detail-title-suffix"> · 阶段详情</span>
+              </div>
+            </div>
+
+            <div class="stage-graph stage-flow-guide" [class.is-editing]="editing()" data-testid="stage-detail-graph">
+              @if (editing()) {
+                <div class="stage-flow-canvas-tools" data-testid="stage-flow-canvas-tools">
+                  <div class="stage-flow-domain-readonly" data-testid="stage-business-domain-readonly">
+                    <span>所属业务域</span>
+                    <strong>{{ businessDomainLabel(stage) }}</strong>
+                  </div>
+                  <div class="stage-flow-tool-group stage-flow-node-tools">
+                    <select data-testid="stage-process-select" (change)="addExistingProcess($any($event.target).value); $any($event.target).value = ''">
+                      <option value="">选择已有流程加入当前阶段...</option>
+                      @for (process of availableProcesses(); track adapter.processId(process)) {
+                        <option [value]="adapter.processId(process)">{{ process.name || '未命名流程' }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
+              }
+              @if (flowNodes().length) {
+                <div class="stage-graph-zoom-shell stage-flow-zoom-shell" [ngStyle]="flowBoardStyle()">
+                  <div class="stage-graph-zoom-target" [ngStyle]="flowBoardStyle()">
+                    <div class="stage-graph-board stage-flow-board" [ngStyle]="flowBoardStyle()">
+                      @if (editing()) {
+                        <button class="stage-flow-board-add" type="button" data-testid="stage-flow-node-add-button" (click)="addProcess()">+ 流程</button>
+                      }
+                      @for (group of flowGroups(); track group.id) {
+                        <div
+                          class="stage-flow-group-box"
+                          [class.is-drag-target]="isGroupDragTarget(group)"
+                          data-testid="stage-flow-group"
+                          [attr.data-flow-group]="group.label"
+                          [style.left.px]="group.x"
+                          [style.top.px]="group.y"
+                          [style.width.px]="group.w"
+                          [style.height.px]="group.h"
+                        >
+                          <div class="stage-flow-group-title">{{ group.label }}</div>
+                        </div>
+                      }
+                      <svg class="stage-graph-svg" [attr.width]="flowBoardStyle()['width']" [attr.height]="flowBoardStyle()['height']" aria-hidden="true">
+                        <defs>
+                          <marker id="stage-flow-arrow-angular" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+                            <path d="M0,0 L0,8 L8,4 z" fill="#52677f"></path>
+                          </marker>
+                        </defs>
+                        @for (link of flowLinks(); track link.link.id || link.link.uid) {
+                          <path class="stage-graph-link stage-flow-link" [attr.d]="link.path" fill="none" stroke="#52677f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#stage-flow-arrow-angular)"></path>
+                        }
+                      </svg>
+                      @if (editing()) {
+                        @for (link of flowLinks(); track link.link.id || link.link.uid) {
+                          <button class="stage-flow-link-remove" type="button" data-testid="stage-process-link-remove-button" [style.left.px]="(link.from.x + link.to.x) / 2" [style.top.px]="link.from.y + 52" (click)="removeLink(link)">×</button>
+                        }
+                      }
+                      @for (node of flowNodes(); track node.id) {
+                        <div
+                          class="stage-graph-node process-kind stage-flow-node"
+                          [class.is-editable]="editing()"
+                          [class.is-link-source]="draftLinkFromRefId() === node.id"
+                          [class.is-link-target]="draftLinkFromRefId() && draftLinkFromRefId() !== node.id"
+                          data-testid="stage-graph-node"
+                          [attr.data-node-id]="node.id"
+                          [attr.data-process-id]="node.processId"
+                          [ngStyle]="flowNodeStyle(node)"
+                          (mousedown)="startFlowNodeDrag(node, $event)"
+                        >
+                          @if (editing()) {
+                            <textarea class="stage-flow-name-input" data-testid="stage-flow-name-input" [attr.data-process-id]="node.processId" [ngModel]="node.label" (ngModelChange)="setProcessName(node, $event)" (mousedown)="$event.stopPropagation()"></textarea>
+                            <div class="stage-flow-node-actions" (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()">
+                              <button class="stage-quick-btn" type="button" data-testid="stage-member-view-button" (click)="openProcess(node)">↗</button>
+                              @if (draftLinkFromRefId() === node.id) {
+                                <button class="stage-quick-btn warning" type="button" data-testid="stage-flow-link-cancel-button" (click)="cancelLink()">↺</button>
+                              } @else if (draftLinkFromRefId()) {
+                                <button class="stage-quick-btn success" type="button" data-testid="stage-flow-link-target-button" (click)="completeLink(node)">↦</button>
+                              } @else {
+                                <button class="stage-quick-btn" type="button" data-testid="stage-flow-link-source-button" (click)="beginLink(node)">→</button>
+                              }
+                              <button class="stage-quick-btn danger" type="button" data-testid="stage-member-remove-button" (click)="removeProcess(node)">−</button>
+                              <button class="stage-quick-btn danger" type="button" data-testid="stage-member-delete-button" (click)="deleteProcess(node)">×</button>
+                            </div>
+                            <div class="stage-flow-node-group-editor" data-testid="stage-flow-node-group-editor" (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()">
+                              <span>分组</span>
+                              <input data-testid="stage-flow-node-group-input" [attr.data-process-id]="node.processId" [ngModel]="node.group" (ngModelChange)="setProcessGroup(node, $event)" />
+                              <button type="button" title="清空分组" aria-label="清空分组" (click)="clearProcessGroup(node)">×</button>
+                            </div>
+                          } @else {
+                            <span class="stage-flow-node-title">{{ node.label }}</span>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+                </div>
+              } @else {
+                <div class="diag-empty stage-flow-empty" data-testid="stage-detail-graph-empty">
+                  <span>当前阶段还没有流程。打开编辑后，可直接在图上新增流程。</span>
+                  @if (editing()) {
+                    <button class="btn btn-outline btn-sm" type="button" data-testid="stage-flow-node-add-button" (click)="addProcess()">+ 新流程</button>
+                  }
+                </div>
+              }
+            </div>
+          }
+        } @else {
+          <div class="stage-graph value-stream-graph" data-testid="stage-panorama-graph">
+            <div class="value-stream-scroll-wrap" data-testid="value-stream-scroll-wrap">
+              <div class="value-stream-scroll workbench-scroll-body" data-testid="value-stream-scroll">
+                <div class="value-stream-matrix" [class.is-editing]="editing()" data-testid="value-stream-matrix" [attr.data-editing]="editing() ? 'true' : 'false'">
+                  <div class="value-stream-header-row" [style.grid-template-columns]="gridTemplateColumns()">
+                    <div class="value-stream-axis">业务域 / 价值流</div>
+                    @for (column of columns(); track column.id) {
+                      <div class="value-stream-header" data-testid="value-stream-header">
+                        <strong>{{ column.name || column.id }}</strong>
+                        @if (column.scope) { <span>{{ column.scope }}</span> }
+                      </div>
+                    }
+                  </div>
+                  <div class="value-stream-body">
+                    @for (lane of lanes(); track lane.id) {
+                      <div class="value-stream-row" data-testid="value-stream-row" [style.grid-template-columns]="gridTemplateColumns()">
+                        <div class="value-stream-lane">
+                          @if (lane.badge) { <span class="value-stream-lane-badge">{{ lane.badge }}</span> }
+                          <strong>{{ lane.name || lane.id }}</strong>
+                          @if (lane.note) { <span>{{ lane.note }}</span> }
+                        </div>
+                        @for (column of columns(); track column.id) {
+                          <div class="value-stream-cell" [class.has-stages]="cellStages(lane.id, column.id).length" [class.is-editing]="editing()" [attr.data-cell-id]="lane.id + '::' + column.id" [attr.data-lane-id]="lane.id" [attr.data-column-id]="column.id">
+                            <div class="value-stream-stage-board" data-testid="value-stream-stage-board" [ngStyle]="stageBoardStyle(cellStages(lane.id, column.id))">
+                              @for (stage of cellStages(lane.id, column.id); track stageId(stage); let stageIndex = $index) {
+                                <div class="stage-graph-node stage-kind stage-matrix-stage" role="button" tabindex="0" data-testid="stage-graph-node" [attr.data-node-id]="stageId(stage)" [attr.data-flow-count]="adapter.processCount(stageId(stage))" [ngStyle]="stageStyle(stage, stageIndex)" (click)="openStage(stage)" (dblclick)="startStageRename(stage, $event)">
+                                  @if (renamingStageId() === stageId(stage)) {
+                                    <input class="stage-name-inline-input stage-graph-node-title" data-testid="stage-name-inline-input" [ngModel]="stage.name || stageId(stage)" (blur)="finishStageRename(stage, $any($event.target).value)" (keydown.enter)="finishStageRename(stage, $any($event.target).value)" />
+                                  } @else {
+                                    <span class="stage-graph-node-title">{{ stage.name || stageId(stage) }}</span>
+                                  }
+                                  @if (adapter.processCount(stageId(stage)) > 0) {
+                                    <span class="stage-node-count">{{ adapter.processCount(stageId(stage)) }}</span>
+                                  }
+                                </div>
+                              }
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+</div>
