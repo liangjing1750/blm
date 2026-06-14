@@ -91,6 +91,7 @@
                           [attr.data-process-id]="node.processId"
                           [ngStyle]="flowNodeStyle(node)"
                           (mousedown)="startFlowNodeDrag(node, $event)"
+                          (click)="!editing() && openProcess(node)"
                         >
                           @if (editing()) {
                             <textarea class="stage-flow-name-input" data-testid="stage-flow-name-input" [attr.data-process-id]="node.processId" [ngModel]="node.label" (ngModelChange)="setProcessName(node, $event)" (mousedown)="$event.stopPropagation()"></textarea>

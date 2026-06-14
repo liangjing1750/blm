@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const DEFAULT_PROC_ROLE_COLOR = {
   fill: '#ffffff',
@@ -400,7 +400,6 @@ function handleRichTextKeydown(event, editor) {
     }
   }
 }
-
 function applyRichTextCommand(button, command) {
   const field = button?.closest?.('.rich-text-field') || button?.closest?.('.task-detail-field');
   const editor = field?.querySelector?.('.rich-text-editor');
@@ -568,7 +567,15 @@ function openProcessEditor(procId, taskId = null) {
   S.ui.procView = 'list';
   S.ui.procId = procId || S.ui.procId;
   S.ui.taskId = taskId || null;
-  render();
+  renderProcessTab();
+}
+
+function openProcessEditorLegacy(procId, taskId = null) {
+  S.ui.tab = 'process';
+  S.ui.procView = 'listLegacy';
+  S.ui.procId = procId || S.ui.procId;
+  S.ui.taskId = taskId || null;
+  renderProcessTab();
 }
 
 function getProcessFlowGraph(proc) {
@@ -1923,7 +1930,7 @@ function renderProcSwimlaneFlow(containerId, proc, onClickMap) {
 }
 
 function startProcessFlowItemDrag(procId, containerId, kind, key, event) {
-  if (containerId !== 'proc-diagram') return;
+  if (containerId !== 'proc-diagram' && containerId !== 'process-editor-diagram') return;
   const proc = S.doc?.processes?.find((item) => item.id === procId);
   if (!proc || !key) return;
   event.stopPropagation();
@@ -1975,7 +1982,7 @@ function onProcessFlowItemDrag(event) {
 }
 
 function startProcessFlowLaneDrag(procId, containerId, laneKey, event) {
-  if (containerId !== 'proc-diagram') return;
+  if (containerId !== 'proc-diagram' && containerId !== 'process-editor-diagram') return;
   const proc = S.doc?.processes?.find((item) => item.id === procId);
   if (!proc || !laneKey) return;
   event.preventDefault();
@@ -5997,258 +6004,6 @@ function getValueStreamMatrixBaseWidth(model, editing = false, groupedStages = n
   return axisMin + columnWidths.reduce((sum, width) => sum + width, 0);
 }
 
-function renderStagePanoramaMatrixMarkup({ nodes, links, emptyText = '暂无内容', testId = 'stage-graph' }) {
-  const model = getPanoramaModel(S.doc);
-  const linkedStageIds = new Set();
-  links.forEach((link) => {
-    linkedStageIds.add(link.from);
-    linkedStageIds.add(link.to);
-  });
-  const indexedNodes = nodes.map((node, index) => ({
-    ...node,
-    _valueStreamIndex: index,
-    _linked: linkedStageIds.has(node.id),
-  }));
-  const editing = isStagePanoramaEditing();
-  const groupedStages = groupStagesByPanoramaCell(indexedNodes, model, false);
-  const gridStyle = getValueStreamGridStyle(model, editing, groupedStages);
-  const zoom = getStageGraphZoom();
-  const matrixBaseWidth = getValueStreamMatrixBaseWidth(model, editing, groupedStages);
-  const matrixStyle = `width:max(100%, ${matrixBaseWidth}px);min-width:${matrixBaseWidth}px;zoom:${editing ? zoom : 1}`;
-  const hScrollWidth = Math.ceil(matrixBaseWidth * (editing ? zoom : 1));
-  return `<div class="stage-graph value-stream-graph" data-testid="${testId}">
-    <div class="value-stream-scroll-wrap" data-testid="value-stream-scroll-wrap">
-      <div class="value-stream-scroll" data-testid="value-stream-scroll" onscroll="syncValueStreamHScrollFromContent(this)">
-      <div class="value-stream-matrix${editing ? ' is-editing' : ''}" data-testid="value-stream-matrix" data-editing="${editing ? 'true' : 'false'}" style="${matrixStyle}">
-        <div class="value-stream-header-row" style="${gridStyle}">
-          <div class="value-stream-axis">业务域 / 价值流</div>
-          ${model.columns.map((column, index) => renderMatrixHeaderCell(column, index, model.columns.length, editing)).join('')}
-        </div>
-        <div class="value-stream-body">
-          ${model.lanes.map((lane, index) => `<div class="value-stream-row" data-testid="value-stream-row" data-lane-id="${esc(lane.id)}" style="${gridStyle}">
-            ${renderMatrixLaneCell(lane, index, model.lanes.length, editing)}
-            ${model.columns.map((column) => renderValueStreamCell(lane, column, getPanoramaCell(model, lane.id, column.id), groupedStages.get(`${lane.id}::${column.id}`) || [], editing)).join('')}
-          </div>`).join('')}
-        </div>
-      </div>
-      </div>
-      <div class="value-stream-hscroll" data-testid="value-stream-hscroll" onscroll="syncValueStreamContentFromHScroll(this)">
-        <div style="width:${hScrollWidth}px;height:1px"></div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderStageFlowCanvasTools(stageItem, processRefs) {
-  const stage = stageItem && !stageItem.virtual ? findStage(stageItem.id, S.doc) : null;
-  if (!stage) {
-    return `<div class="stage-flow-canvas-tools is-muted" data-testid="stage-flow-canvas-tools">
-      <span>未设置业务阶段仅用于承接待归类流程，不能维护阶段内连线。</span>
-    </div>`;
-  }
-  const allProcesses = S.doc.processes || [];
-  const availableProcesses = allProcesses.filter((proc) => (
-    !getProcessStageRefs(getProcessIdentity(proc), S.doc).some((ref) => ref.stageUid === stage.id)
-  ));
-  const businessDomain = getStageBusinessDomainLabel(stage);
-  return `<div class="stage-flow-canvas-tools" data-testid="stage-flow-canvas-tools">
-    <div class="stage-flow-domain-readonly" data-testid="stage-business-domain-readonly">
-      <span>所属业务域</span>
-      <strong>${esc(businessDomain)}</strong>
-    </div>
-    <div class="stage-flow-tool-group stage-flow-node-tools">
-      <select data-testid="stage-process-select" id="stage-process-select" onchange="addProcessToStage('${esc(stage.id)}',this.value);this.value=''">
-        <option value="">选择已有流程加入当前阶段...</option>
-        ${availableProcesses.map((proc) => `<option value="${esc(getProcessIdentity(proc))}">${esc(proc.name || '未命名流程')}</option>`).join('')}
-      </select>
-    </div>
-  </div>`;
-}
-
-function renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText = '暂无内容', testId = 'stage-graph', editing = false, processRefs = [] }) {
-  const showTools = editing && stageItem;
-  const canEditStage = editing && stageItem && !stageItem.virtual;
-  if (!nodes.length) {
-    return `<div class="stage-graph stage-flow-guide${editing ? ' is-editing' : ''}" data-testid="${testId}">
-      ${showTools ? renderStageFlowCanvasTools(stageItem, processRefs) : ''}
-      <div class="diag-empty stage-flow-empty" data-testid="${testId}-empty">
-        <span>${emptyText}</span>
-        ${canEditStage ? `<button class="btn btn-outline btn-sm" type="button" data-testid="stage-flow-node-add-button" onclick="addStageFlowNode('${esc(stageItem.id)}')">+ 新流程</button>` : ''}
-      </div>
-    </div>`;
-  }
-  const graph = buildStageFlowGuideLayout(nodes, links, { includeNodeGroupEditors: canEditStage });
-  const zoom = getStageGraphZoom();
-  const zoomedW = Math.max(240, Math.round(graph.boardW * zoom));
-  const zoomedH = Math.max(180, Math.round(graph.boardH * zoom));
-  const draftFromRefId = canEditStage ? getStageFlowLinkDraft(stageItem.id) : '';
-  return `<div class="stage-graph stage-flow-guide${editing ? ' is-editing' : ''}" data-testid="${testId}">
-    ${showTools ? renderStageFlowCanvasTools(stageItem, processRefs) : ''}
-    <div class="stage-graph-zoom-shell stage-flow-zoom-shell" style="width:${zoomedW}px;height:${zoomedH}px">
-      <div class="stage-graph-zoom-target" style="width:${graph.boardW}px;height:${graph.boardH}px;transform:scale(${zoom});transform-origin:0 0;">
-        <div class="stage-graph-board stage-flow-board" style="width:${graph.boardW}px;height:${graph.boardH}px">
-          ${canEditStage ? `<button class="stage-flow-board-add" type="button" data-testid="stage-flow-node-add-button"
-            onmousedown="event.stopPropagation()" onclick="event.stopPropagation();addStageFlowNode('${esc(stageItem.id)}')">+ 流程</button>` : ''}
-          ${graph.groups.map((group) => `<div class="stage-flow-group-box" data-testid="stage-flow-group" aria-label="流程分组"
-              data-process-ids="${esc((group.processIds || []).join('|'))}"
-              data-flow-group="${esc(group.label || '')}"
-              style="left:${group.x}px;top:${group.y}px;width:${group.w}px;height:${group.h}px">
-              <div class="stage-flow-group-title${group.label ? '' : ' is-placeholder'}">${esc(group.label || '未分组')}</div>
-            </div>`).join('')}
-          <svg class="stage-graph-svg" width="${graph.boardW}" height="${graph.boardH}" viewBox="0 0 ${graph.boardW} ${graph.boardH}" aria-hidden="true">
-            <defs>
-              <marker id="stage-flow-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
-                <path d="M0,0 L0,8 L8,4 z" fill="#52677f"></path>
-              </marker>
-            </defs>
-            ${graph.links.map((link) => `<path class="stage-graph-link stage-flow-link"
-              data-link-from="${esc(link.from)}" data-link-to="${esc(link.to)}"
-              d="${link.path}" fill="none" stroke="#52677f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#stage-flow-arrow)"></path>`).join('')}
-          </svg>
-          ${canEditStage ? graph.links.map((link) => {
-            const fromPos = graph.positions[link.from];
-            const toPos = graph.positions[link.to];
-            if (!fromPos || !toPos || !link.id) return '';
-            const actionPos = getStageFlowLinkActionPosition(fromPos, toPos);
-            return `<button class="stage-flow-link-remove" type="button" data-testid="stage-process-link-remove-button"
-              data-link-from="${esc(link.from)}" data-link-to="${esc(link.to)}"
-              title="删除连线" aria-label="删除连线"
-              style="left:${actionPos.x}px;top:${actionPos.y}px"
-              onmousedown="event.stopPropagation()" onclick="event.stopPropagation();removeStageProcessLink('${esc(stageItem.id)}','${esc(link.id)}')">×</button>`;
-          }).join('') : ''}
-          ${nodes.map((node) => {
-            const pos = graph.positions[node.id];
-            const procId = node.processUid || '';
-            if (canEditStage) {
-              const isDraftSource = draftFromRefId === node.id;
-              const isDraftTarget = draftFromRefId && draftFromRefId !== node.id;
-              const linkButton = isDraftSource
-                ? `<button class="stage-quick-btn warning" type="button" data-testid="stage-flow-link-cancel-button" title="取消连线" aria-label="取消连线" onclick="clearStageFlowLinkDraft()">↺</button>`
-                : (isDraftTarget
-                  ? `<button class="stage-quick-btn success" type="button" data-testid="stage-flow-link-target-button" title="连到这里" aria-label="连到这里" onclick="S.ui.stageFlowLinkDraft=null;addStageProcessLinkBetweenRefs('${esc(stageItem.id)}','${esc(draftFromRefId)}','${esc(node.id)}')">↦</button>`
-                  : `<button class="stage-quick-btn" type="button" data-testid="stage-flow-link-source-button" title="从这里连线" aria-label="从这里连线" onclick="startStageFlowLinkDraft('${esc(stageItem.id)}','${esc(node.id)}')">→</button>`);
-              return `<div class="stage-graph-node process-kind stage-flow-node is-editable${isDraftSource ? ' is-link-source' : ''}${isDraftTarget ? ' is-link-target' : ''}" data-node-id="${esc(node.id)}" data-testid="stage-graph-node" data-process-id="${esc(procId)}"
-                onmousedown="startStageNodeDrag('stage-ref','${esc(node.id)}',event)"
-                oncontextmenu="showSidebarProcessContextMenu('${esc(procId)}',event)"
-                style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
-                <textarea class="stage-flow-name-input" data-testid="stage-flow-name-input" data-process-id="${esc(procId)}" aria-label="流程名称" placeholder="新流程"
-                  onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"
-                  oninput="setProc('${esc(procId)}','name',this.value);renderSidebar()">${esc(node.name || '')}</textarea>
-                <div class="stage-flow-node-actions" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
-                  <button class="stage-quick-btn" type="button" data-testid="stage-member-view-button" title="查看流程" aria-label="查看流程" onclick="navigate('process',{procId:'${esc(procId)}',taskId:null})">↗</button>
-                  ${linkButton}
-                  <button class="stage-quick-btn danger" type="button" data-testid="stage-member-remove-button" title="移出阶段" aria-label="移出阶段" onclick="removeProcessFromStage('${esc(stageItem.id)}','${esc(procId)}')">−</button>
-                  <button class="stage-quick-btn danger" type="button" data-testid="stage-member-delete-button" title="删除流程" aria-label="删除流程" onclick="removeProcess('${esc(procId)}')">×</button>
-                </div>
-              </div>`;
-            }
-            return `<div class="stage-graph-node process-kind stage-flow-node" data-node-id="${esc(node.id)}" data-testid="stage-graph-node" data-process-id="${esc(procId)}"
-              onmousedown="startStageNodeDrag('stage-ref','${esc(node.id)}',event)"
-              oncontextmenu="showSidebarProcessContextMenu('${esc(procId)}',event)"
-              style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
-              <span class="stage-flow-node-title">${esc(node.label)}</span>
-            </div>`;
-          }).join('')}
-          ${canEditStage ? nodes.map((node) => renderStageFlowNodeGroupEditor(node, graph.positions[node.id])).join('') : ''}
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderStageGraphMarkup({ nodes, links, kind = 'stage', emptyText = '暂无内容', testId = 'stage-graph', stageItem = null, editing = false, processRefs = [] }) {
-  if (kind === 'stage') {
-    return renderStagePanoramaMatrixMarkup({ nodes, links, emptyText, testId });
-  }
-  if (kind === 'stage-ref') {
-    return renderStageFlowGuideMarkup({ stageItem, nodes, links, emptyText, testId, editing, processRefs });
-  }
-  if (!nodes.length) return `<div class="diag-empty" data-testid="${testId}-empty">${emptyText}</div>`;
-  const graph = buildStageGraphLayout(nodes, links, kind);
-  const focusedStageId = kind === 'stage' ? String(S.ui.stageLinkFocusId || '').trim() : '';
-  const zoom = getStageGraphZoom();
-  const zoomedW = Math.max(240, Math.round(graph.boardW * zoom));
-  const zoomedH = Math.max(180, Math.round(graph.boardH * zoom));
-  return `<div class="stage-graph" data-testid="${testId}">
-    <div class="stage-graph-zoom-shell" style="width:${zoomedW}px;height:${zoomedH}px">
-      <div class="stage-graph-zoom-target" style="width:${graph.boardW}px;height:${graph.boardH}px;transform:scale(${zoom});transform-origin:0 0;">
-        <div class="stage-graph-board" style="width:${graph.boardW}px;height:${graph.boardH}px">
-          <svg class="stage-graph-svg" width="${graph.boardW}" height="${graph.boardH}" viewBox="0 0 ${graph.boardW} ${graph.boardH}" aria-hidden="true">
-            <defs>
-              <marker id="stage-graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
-                <path d="M0,0 L0,8 L8,4 z" fill="#64748b"></path>
-              </marker>
-            </defs>
-            ${graph.links.map((link) => {
-              const related = focusedStageId && (link.from === focusedStageId || link.to === focusedStageId);
-              const muted = focusedStageId && !related;
-              return `<path class="stage-graph-link${related ? ' is-related' : ''}${muted ? ' is-muted' : ''}"
-                data-link-from="${esc(link.from)}" data-link-to="${esc(link.to)}"
-                d="${link.path}" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#stage-graph-arrow)"></path>`;
-            }).join('')}
-          </svg>
-          ${nodes.map((node) => {
-            const pos = graph.positions[node.id];
-            const selected = focusedStageId && node.id === focusedStageId;
-            return `<button class="stage-graph-node ${kind==='stage'?'stage-kind':'process-kind'}${selected ? ' is-selected' : ''}" type="button"
-              data-node-id="${esc(node.id)}" data-testid="stage-graph-node"
-              onmousedown="startStageNodeDrag('${kind}','${esc(node.id)}',event)"
-              style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px">
-              <span class="stage-graph-node-title">${esc(node.label)}</span>
-              ${node.meta ? `<span class="stage-graph-node-meta">${esc(node.meta)}</span>` : ''}
-            </button>`;
-          }).join('')}
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function buildStagePanoramaGraphData() {
-  const stageItems = getStageItems(S.doc).filter((stage) => !stage.virtual);
-  const nodes = stageItems.map((stage) => {
-    const processRefs = getStageProcessRefs(stage.id, S.doc);
-    const searchText = processRefs.map((ref) => {
-      const proc = getStageRefProcess(ref, S.doc);
-      const taskNames = getProcNodes(proc).map((task) => task.name || '').join(' ');
-      return `${proc?.name || ''} ${proc?.subDomain || ''} ${proc?.flowGroup || ''} ${taskNames}`;
-    }).join(' ');
-    return {
-      id: stage.id,
-      label: stage.name || stage.id,
-      meta: stage.subDomain || '',
-      searchText,
-      _processCount: processRefs.length,
-      stage,
-    };
-  });
-  const stageIdSet = new Set(stageItems.map((stage) => stage.id));
-  const links = getStageLinks(S.doc)
-    .filter((link) => stageIdSet.has(link.fromStageUid) && stageIdSet.has(link.toStageUid))
-    .map((link) => ({ from: link.fromStageUid, to: link.toStageUid }));
-  return { nodes, links };
-}
-
-function buildStageDetailGraphData(stageId) {
-  const processRefs = getStageProcessRefs(stageId, S.doc);
-  const processes = processRefs.map((ref) => getStageRefProcess(ref, S.doc)).filter(Boolean);
-  const nodes = processRefs.map((ref) => {
-      const proc = getStageRefProcess(ref, S.doc);
-    return {
-      id: ref.id,
-      label: proc ? (proc.name || '未命名流程') : '失效流程引用',
-      name: proc?.name || '',
-      meta: '',
-      group: proc?.flowGroup || '',
-      processUid: getProcessIdentity(proc) || ref.processUid,
-    };
-  });
-  const links = getStageFlowLinks(S.doc)
-    .filter((link) => link.stageUid === stageId)
-    .map((link) => ({ id: link.id, from: link.fromRefUid, to: link.toRefUid }));
-  return { nodes, links, processes, processRefs };
-}
-
 function renderStageLinkEditor(stageItems) {
   const realStages = stageItems.filter((stage) => !stage.virtual);
   const links = getStageLinks(S.doc);
@@ -6518,53 +6273,6 @@ function renderStageDrawer(stageItem) {
       ${renderStageProcessLinkEditor(stage, processRefs)}
       `}
     </div>
-  </div>`;
-}
-
-function renderStageWorkbench() {
-  ensureStageSelection();
-  const stageItem = getCurrentStageItem();
-  const showDetail = S.ui.stageViewMode === 'detail' && stageItem;
-  const showEditor = S.ui.stageEditorCollapsed === false;
-  const showDrawer = false;
-  const editorOffset = 0;
-  const panoramaGraph = buildStagePanoramaGraphData();
-  const detailGraph = stageItem ? buildStageDetailGraphData(stageItem.id) : { nodes: [], links: [], processes: [], processRefs: [] };
-  const detailStageName = showDetail
-    ? renderStageNameInlineEditor(stageItem.id, stageItem.name || stageItem.id, showEditor && !stageItem.virtual, 'stage-detail-name-text')
-    : '';
-  const detailHeader = showDetail ? `<div class="stage-compact-head" data-testid="stage-compact-head">
-    <button class="btn btn-ghost-sm" type="button" onclick="openStagePanorama()">业务全景</button>
-    <span class="stage-breadcrumb-sep">/</span>
-    <div class="stage-card-title" data-testid="stage-detail-title">${detailStageName}<span class="stage-detail-title-suffix"> · 阶段详情</span></div>
-  </div>` : '';
-  return `<div class="stage-workbench" data-testid="process-stage-view">
-    <div class="stage-main-shell" style="margin-right:${editorOffset}px">
-      <div class="stage-main">
-        <div class="stage-card">
-          ${detailHeader}
-          ${showDetail
-            ? renderStageGraphMarkup({
-                nodes: detailGraph.nodes,
-                links: detailGraph.links,
-                kind: 'stage-ref',
-                emptyText: '当前阶段还没有流程。打开编辑后，可直接在图上新增流程。',
-                testId: 'stage-detail-graph',
-                stageItem,
-                editing: showEditor,
-                processRefs: detailGraph.processRefs,
-              })
-            : renderStageGraphMarkup({
-                nodes: panoramaGraph.nodes,
-                links: panoramaGraph.links,
-                kind: 'stage',
-                emptyText: '暂无业务阶段，先新建一个阶段。',
-                testId: 'stage-panorama-graph',
-              })}
-        </div>
-      </div>
-    </div>
-    ${showDrawer ? renderStageDrawer(stageItem || { id: UNASSIGNED_STAGE_ID, name: UNASSIGNED_STAGE_NAME, virtual: true, subDomain: '' }) : ''}
   </div>`;
 }
 
@@ -7097,7 +6805,25 @@ function openProcessFlowView(navOptions = {}) {
   S.ui.procView = 'flow';
   S.ui.procId = procId || null;
   S.ui.taskId = taskId;
-  render();
+  renderProcessTab();
+}
+
+function openProcessFlowLegacyView(navOptions = {}) {
+  const proc = currentProc() || S.doc?.processes?.[0] || null;
+  const procId = getProcessIdentity(proc);
+  const taskId = getProcessFlowShowTasks() ? getDefaultTaskIdForProc(proc) : null;
+  queueUiNavigationHistoryFor((next) => {
+    next.tab = 'process';
+    next.procView = 'flowLegacy';
+    next.procId = procId || null;
+    next.taskId = taskId;
+    return next;
+  }, navOptions);
+  S.ui.tab = 'process';
+  S.ui.procView = 'flowLegacy';
+  S.ui.procId = procId || null;
+  S.ui.taskId = taskId;
+  renderProcessTab();
 }
 
 function selectProcessFlow(procId) {
@@ -7291,6 +7017,7 @@ function renderProcessTab() {
   const panoramaActive = view === 'stage' && (S.ui.stageViewMode || 'panorama') === 'panorama';
   const stageDetailActive = view === 'stage' && S.ui.stageViewMode === 'detail';
   const flowViewActive = view === 'flow' || view === 'list';
+  const flowLegacyActive = view === 'flowLegacy';
   const stageEditing = view === 'stage' && S.ui.stageEditorCollapsed === false;
   const displayProc = proc || procs[0] || null;
   if ((view === 'flow' || view === 'list') && getProcessFlowShowTasks() && displayProc && !task) {
@@ -7303,7 +7030,16 @@ function renderProcessTab() {
     renderProcessTab();
     return;
   }
-  const toolbarOffset = view === 'list' && proc
+  if (view !== 'flowLegacy' && view !== 'listLegacy' && view !== 'role') {
+    if ((view === 'flow' || view === 'list') && displayProc && !S.ui.procId) {
+      S.ui.procId = getProcessIdentity(displayProc);
+    }
+    document.getElementById('tab-content').innerHTML = '<div id="process-workbench-angular-host" data-testid="process-workbench-angular-host"></div>';
+    requestAnimationFrame(() => window.BlmAngularMounts?.mountProcessWorkbenchShell('process-workbench-angular-host'));
+    return;
+  }
+  const editorLegacyActive = view === 'listLegacy';
+  const toolbarOffset = (view === 'list' || view === 'listLegacy') && proc
     ? getDrawerWidth('process')
     : 0;
   const helpText = panoramaActive
@@ -7327,7 +7063,7 @@ function renderProcessTab() {
     (panoramaActive || stageDetailActive) ? (stageEditing
       ? '<button class="btn btn-ghost-sm" type="button" data-testid="stage-editor-hide" onclick="toggleStageEditorDrawer(false)">关闭编辑</button>'
       : '<button class="btn btn-outline btn-sm" type="button" data-testid="stage-editor-open" onclick="toggleStageEditorDrawer(true)">打开编辑</button>') : '',
-    view === 'flow' && displayProc ? `<button class="btn btn-outline btn-sm" type="button" data-testid="process-editor-open" onclick="openProcessEditor('${esc(getProcessIdentity(displayProc))}',${task ? `'${esc(task.id)}'` : 'null'})">打开编辑</button>` : '',
+    (view === 'flow' || view === 'flowLegacy') && displayProc ? `<button class="btn btn-outline btn-sm" type="button" data-testid="process-editor-open" onclick="openProcessEditor('${esc(getProcessIdentity(displayProc))}',${task ? `'${esc(task.id)}'` : 'null'})">打开编辑</button>` : '',
   ].filter(Boolean).join('');
 
   /* ── 视图切换工具栏 ── */
@@ -7336,6 +7072,8 @@ function renderProcessTab() {
       <div class="view-toggle-group">
         <button class="vtb ${stageDetailActive || panoramaActive ? 'active' : ''}" data-testid="process-switch-stage" onclick="openStageDetail()">阶段视图</button>
         <button class="vtb ${flowViewActive?'active':''}" data-testid="process-switch-card" onclick="openProcessFlowView()">流程视图</button>
+        <button class="vtb ${flowLegacyActive ? 'active' : ''}" data-testid="process-switch-flow-legacy" onclick="openProcessFlowLegacyView()">流程旧版</button>
+        <button class="vtb ${editorLegacyActive ? 'active' : ''}" data-testid="process-switch-editor-legacy" onclick="openProcessEditorLegacy('${esc(getProcessIdentity(displayProc) || '')}',${task ? `'${esc(task.id)}'` : 'null'})">流程编辑旧版</button>
       </div>
       <div class="proc-view-actions">${toolbarActions}</div>
     </div>
@@ -7347,15 +7085,7 @@ function renderProcessTab() {
     return;
   }
 
-  if(view==='stage') {
-    h += '<div id="process-stage-angular-host" data-testid="process-stage-angular-host"></div>';
-    document.getElementById('tab-content').innerHTML = h;
-    requestAnimationFrame(() => window.BlmAngularMounts?.mountProcessStageWorkbench('process-stage-angular-host'));
-    return;
-  }
-
-  /* ══ 流程视图 ══ */
-  if(view==='flow') {
+  if(view==='flowLegacy') {
     if (displayProc && !S.ui.procId) S.ui.procId = getProcessIdentity(displayProc);
     h+=renderProcessFlowStage(displayProc, { editing: false, task });
     const tabContent = document.getElementById('tab-content');
@@ -7591,6 +7321,19 @@ function renderProcessTab() {
 /* 仅刷新流程图，不重建整个 DOM（输入框连续输入时用） */
 function renderProcDiagramNow() {
   const proc=currentProc(); if(!proc) return;
+  if (document.getElementById('process-editor-diagram')) {
+    const clickMap = {};
+    for (const node of getProcNodes(proc)) {
+      clickMap[node.id] = () => {
+        S.ui.taskId = node.id;
+        if (window.BlmAngularMounts?.mountProcessWorkbenchShell) {
+          renderProcessTab();
+        }
+      };
+    }
+    renderProcFlow('process-editor-diagram', proc, clickMap);
+    return;
+  }
   renderProcessFlowDiagram(proc, currentTask());
 }
 

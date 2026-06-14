@@ -12,7 +12,7 @@ import {
   ensureValueDomainStages,
   findOrCreateValueDomainCell,
   getValueDomainStageId,
-} from './value-domain/value-domain-model';
+} from '../../core/document/value-domain-model';
 
 interface StageDialogState {
   laneId: string;

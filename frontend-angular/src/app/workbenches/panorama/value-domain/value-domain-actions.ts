@@ -9,7 +9,7 @@ import {
   ensureValueDomainStages,
   findOrCreateValueDomainCell,
   getValueDomainStageId,
-} from './value-domain-model';
+} from '../../../core/document/value-domain-model';
 
 // 模块意图：所有会修改文档的数据操作集中在这里，Angular 组件只负责展示和事件转发。
 export interface ValueDomainActionsOptions {

@@ -1,5 +1,5 @@
 import { createValueDomainActions } from './value-domain-actions';
-import { ValueDomainDocument } from './value-domain-model';
+import { ValueDomainDocument } from '../../../core/document/value-domain-model';
 
 function createHarness(document: ValueDomainDocument = {}) {
   const events: string[] = [];

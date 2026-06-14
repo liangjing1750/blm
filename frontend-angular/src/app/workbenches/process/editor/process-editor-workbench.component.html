@@ -1,0 +1,376 @@
+@if (currentProcess(); as process) {
+  <div
+    class="process-editor-shell"
+    data-testid="process-editor-workbench"
+    [style.grid-template-columns]="'minmax(0, calc(100% - ' + drawerWidth() + 'px)) ' + drawerWidth() + 'px'"
+  >
+    <section class="process-flow-view is-swimlane" data-testid="process-editor-flow-view">
+      <div class="process-flow-card has-tasklevel">
+        <div class="process-flow-head">
+          <div class="process-flow-actions">
+            <span>流程结构</span>
+            <strong>{{ process.name || '未命名流程' }}</strong>
+          </div>
+        </div>
+        <div class="drawer-diag process-main-diag process-editor-main-diag" data-testid="process-editor-diagram-scroll">
+          <div
+            class="process-editor-canvas"
+            data-testid="process-editor-graph"
+            [style.width.px]="graphCanvasWidth(process)"
+            [style.height.px]="graphCanvasHeight(process)"
+            [style.zoom]="graphZoom()"
+          >
+            <div class="diagram-floating-tools">
+              <button type="button" title="放大" data-testid="process-editor-zoom-in" (click)="nudgeGraphZoom(0.1)">+</button>
+              <button type="button" title="重置" data-testid="process-editor-zoom-reset" (click)="resetGraphZoom()">◎</button>
+              <button type="button" title="缩小" data-testid="process-editor-zoom-out" (click)="nudgeGraphZoom(-0.1)">−</button>
+            </div>
+            @for (lane of graphLanes(process); track lane.name) {
+              <div class="process-editor-lane-band" [style.top.px]="lane.top" [style.height.px]="lane.height">
+                <div class="process-editor-role-lane">{{ lane.name }}</div>
+              </div>
+            }
+            <svg class="process-editor-edges" [attr.width]="graphCanvasWidth(process)" [attr.height]="graphCanvasHeight(process)">
+              <defs>
+                <marker id="process-editor-arrow-task" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                </marker>
+              </defs>
+              @for (edge of graphEdges(process, currentTask()); track edge.id) {
+                <path class="process-editor-edge" [attr.d]="edge.d"></path>
+                @if (edge.label) {
+                  <text class="process-editor-edge-label" [attr.x]="edge.labelX" [attr.y]="edge.labelY">{{ edge.label }}</text>
+                }
+              }
+            </svg>
+            @for (node of graphNodes(process, currentTask()); track node.id) {
+              @if (node.kind === 'start' || node.kind === 'end') {
+                <div class="process-editor-terminal" [class.is-end]="node.kind === 'end'" [style.left.px]="node.x" [style.top.px]="node.y">{{ node.name }}</div>
+              } @else if (node.kind === 'gateway') {
+                <div class="process-editor-gateway" [style.left.px]="node.x" [style.top.px]="node.y"><span>{{ node.name }}</span></div>
+              } @else {
+                <button
+                  class="process-editor-node"
+                  [class.active]="node.selected"
+                  type="button"
+                  data-testid="process-editor-node"
+                  [style.left.px]="node.x"
+                  [style.top.px]="node.y"
+                  (click)="selectTask(node.task || null)"
+                >
+                  <strong>{{ node.name }}</strong>
+                  <small>{{ node.role || '未分配角色' }}</small>
+                </button>
+              }
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="proc-drawer open process-editor-drawer" data-testid="process-editor-drawer" [style.width.px]="drawerWidth()">
+      <div class="drawer-resize-handle" data-testid="process-drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
+      <div class="drawer-head">
+        <div class="drawer-crumb">
+          @if (currentTask(); as task) {
+            <button class="drawer-crumb-proc" type="button" data-testid="process-editor-back-process" (click)="selectTask(null)">{{ process.name || '未命名流程' }}</button>
+            <span class="dc-sep">›</span>
+            <span>节点 {{ task.name || '未命名节点' }}</span>
+          } @else {
+            <span>{{ process.name || '未命名流程' }}</span>
+          }
+        </div>
+        <div class="drawer-actions">
+          <button class="drawer-close" type="button" data-testid="process-editor-close" (click)="closeEditor()" title="关闭编辑">×</button>
+        </div>
+      </div>
+
+      <div class="drawer-body">
+        <div class="form-grid process-editor-summary-grid">
+          <div class="field-group">
+            <label>流程名称</label>
+            <input type="text" data-testid="process-name-input" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
+          </div>
+          <div class="field-group">
+            <label>涉及业务阶段</label>
+            <div class="proc-stage-ref-list" data-testid="process-stage-refs">
+              @for (stage of stageRefs(process); track stage.id) {
+                <button class="proc-stage-ref-chip" type="button" (click)="openStage(stage.id)">{{ stage.name }}</button>
+              } @empty {
+                <span class="no-refs">暂无关联阶段</span>
+              }
+            </div>
+          </div>
+        </div>
+
+        @if (currentTask(); as task) {
+          <div class="form-section" data-testid="process-task-lite-panel">
+            <div class="section-toolbar">
+              <h4>当前节点</h4>
+            </div>
+            <div class="form-grid">
+              <div class="field-group field-group-wide">
+                <label>节点名称</label>
+                <input type="text" data-testid="process-task-name-input" [ngModel]="task.name || ''" (ngModelChange)="setTaskField(task, 'name', $event)" />
+              </div>
+              <div class="field-group field-group-wide">
+                <label>选择角色</label>
+                <div class="task-role-checkboxes" data-testid="process-task-role-select">
+                  @for (role of roles(); track roleId(role)) {
+                    <label>
+                      <input type="checkbox" [checked]="taskRoleIds(task).includes(roleId(role))" (change)="setTaskRoleIds(task, $any($event.target).checked ? taskRoleIds(task).concat([roleId(role)]) : taskRoleIds(task).filter(id => id !== roleId(role)))" />
+                      <span>{{ role.name || roleId(role) }}</span>
+                    </label>
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section" data-testid="process-user-step-section">
+            <div class="section-toolbar">
+              <h4>用户步骤</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-user-step-add" (click)="addUserStep(task)">+ 步骤</button>
+            </div>
+            <div class="process-editor-list-grid">
+              @for (step of userSteps(task); track step.id || step.uid || $index; let index = $index) {
+                <div class="flow-routing-row process-editor-compact-row" data-testid="process-user-step-row">
+                  <input type="text" [ngModel]="step.name || ''" (ngModelChange)="setUserStep(task, index, $event)" placeholder="用户步骤" />
+                  <div class="flow-row-actions">
+                    <button type="button" title="在下方添加步骤" (click)="addUserStep(task)">+</button>
+                    <button type="button" title="上移" (click)="moveUserStep(task, index, -1)">↑</button>
+                    <button type="button" title="下移" (click)="moveUserStep(task, index, 1)">↓</button>
+                    <button type="button" title="删除" (click)="removeUserStep(task, index)">×</button>
+                  </div>
+                </div>
+              } @empty {
+                <p class="field-hint">暂无用户步骤；可先添加用户在该节点完成的动作。</p>
+              }
+            </div>
+          </div>
+
+          <div class="form-section" data-testid="process-form-section">
+            <div class="section-toolbar">
+              <h4>表单与字段</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-form-add" (click)="addForm(task)">+ 表单</button>
+            </div>
+            @for (form of forms(task); track form.id || form.uid || $index) {
+              <div class="process-editor-form-card" data-testid="process-form-card">
+                <div class="flow-routing-row process-editor-compact-row">
+                  <input type="text" [ngModel]="form.name || ''" (ngModelChange)="setFormName(task, form, $event)" placeholder="表单名称" />
+                  <div class="flow-row-actions">
+                    <button type="button" title="添加字段" (click)="addFormField(form)">+ 字段</button>
+                    <button type="button" title="删除表单" (click)="removeForm(task, form)">×</button>
+                  </div>
+                </div>
+                @for (field of fields(form); track field.id || field.uid || $index) {
+                  <div class="flow-routing-row process-editor-field-row" data-testid="process-form-field-row">
+                    <input type="text" [ngModel]="field.name || ''" (ngModelChange)="setFormField(field, 'name', $event)" placeholder="字段名称" />
+                    <select [ngModel]="field.type || 'text'" (ngModelChange)="setFormField(field, 'type', $event)">
+                      <option value="text">文本</option>
+                      <option value="number">数字</option>
+                      <option value="date">日期</option>
+                      <option value="select">选项</option>
+                      <option value="file">附件</option>
+                    </select>
+                    <label class="compact-check">
+                      <input type="checkbox" [checked]="field.required" (change)="setFormFieldRequired(field, $any($event.target).checked)" />
+                      <span>必填</span>
+                    </label>
+                    <div class="flow-row-actions">
+                      <button type="button" title="删除字段" (click)="removeFormField(form, field)">×</button>
+                    </div>
+                  </div>
+                } @empty {
+                  <p class="field-hint">暂无字段；点击“+ 字段”维护表单输入项。</p>
+                }
+              </div>
+            } @empty {
+              <p class="field-hint">暂无表单；可先添加该节点涉及的界面表单。</p>
+            }
+          </div>
+
+          <div class="form-section" data-testid="process-entity-op-section">
+            <div class="section-toolbar">
+              <h4>实体操作</h4>
+            </div>
+            <div class="process-editor-entity-add">
+              <select [(ngModel)]="selectedEntityId">
+                <option value="">选择实体</option>
+                @for (entity of availableEntities(task); track entityId(entity)) {
+                  <option [value]="entityId(entity)">{{ entity.name || entityId(entity) }}</option>
+                }
+              </select>
+              <button class="btn btn-outline btn-sm" type="button" (click)="addSelectedEntity(task)">+ 实体</button>
+            </div>
+            @for (item of task.entity_ops || []; track entityOpId(item)) {
+              <div class="flow-routing-row process-editor-entity-row" data-testid="process-entity-op-row">
+                <strong>{{ entityName(entityOpId(item)) }}</strong>
+                <div class="entity-op-checks">
+                  @for (op of entityOps; track op) {
+                    <label>
+                      <input type="checkbox" [checked]="hasEntityOp(task, entityOpId(item), op)" (change)="toggleEntityOp(task, entityOpId(item), op, $any($event.target).checked)" />
+                      <span>{{ op }}</span>
+                    </label>
+                  }
+                </div>
+                <div class="flow-row-actions">
+                  <button type="button" title="删除实体操作" (click)="removeEntityOp(task, entityOpId(item))">×</button>
+                </div>
+              </div>
+            } @empty {
+              <p class="field-hint">暂无实体操作；可记录该节点对逻辑实体的 C/R/U/D 使用。</p>
+            }
+          </div>
+
+          <div class="form-section" data-testid="process-task-definition-section">
+            <div class="section-toolbar">
+              <h4>后端任务</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-task-definition-add" (click)="addTaskDefinition(task)">+ 任务</button>
+            </div>
+            @for (definition of taskDefinitions(task); track definition.id || definition.uid || $index) {
+              <div class="flow-routing-row process-editor-task-definition-row" data-testid="process-task-definition-row">
+                <input type="text" [ngModel]="definition.name || ''" (ngModelChange)="setTaskDefinition(definition, 'name', $event)" placeholder="任务名称" />
+                <input type="text" [ngModel]="definition.target || ''" (ngModelChange)="setTaskDefinition(definition, 'target', $event)" placeholder="目标/服务" />
+                <input type="text" [ngModel]="definition.address || ''" (ngModelChange)="setTaskDefinition(definition, 'address', $event)" placeholder="地址" />
+                <div class="flow-row-actions">
+                  <button type="button" title="删除任务" (click)="removeTaskDefinition(task, definition)">×</button>
+                </div>
+              </div>
+            } @empty {
+              <p class="field-hint">暂无后端任务；可记录后续构件或接口承接点。</p>
+            }
+          </div>
+
+          <div class="form-section" data-testid="process-business-rule-section">
+            <div class="section-toolbar">
+              <h4>业务规则</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-business-rule-add" (click)="addBusinessRule(task)">+ 规则</button>
+            </div>
+            @for (rule of businessRules(task); track businessRuleKey(rule, $index); let index = $index) {
+              <div class="flow-routing-row process-editor-compact-row" data-testid="process-business-rule-row">
+                <input type="text" [ngModel]="businessRuleValue(rule)" (ngModelChange)="setBusinessRule(task, index, $event)" placeholder="规则内容" />
+                <div class="flow-row-actions">
+                  <button type="button" title="删除规则" (click)="removeBusinessRule(task, index)">×</button>
+                </div>
+              </div>
+            } @empty {
+              <p class="field-hint">暂无业务规则；可记录节点规则或校验条件。</p>
+            }
+          </div>
+        } @else {
+          <div class="form-grid">
+            <div class="field-group">
+              <label>触发条件</label>
+              <input type="text" data-testid="process-trigger-input" [ngModel]="process.trigger || ''" (ngModelChange)="setProcessField('trigger', $event)" />
+            </div>
+            <div class="field-group">
+              <label>预期结果</label>
+              <input type="text" data-testid="process-outcome-input" [ngModel]="process.outcome || ''" (ngModelChange)="setProcessField('outcome', $event)" />
+            </div>
+          </div>
+
+          <div class="form-section" data-testid="process-routing-section">
+            <div class="section-toolbar">
+              <h4>节点</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-flow-add-node" (click)="addTask()">+ 节点</button>
+            </div>
+            <div class="process-editor-routing-grid">
+              @for (node of tasks(process); track taskId(node)) {
+                <div class="flow-routing-row" data-testid="process-flow-node-row">
+                  <input type="text" [ngModel]="node.name || ''" (ngModelChange)="setTaskField(node, 'name', $event)" placeholder="节点名称" />
+                  <select class="task-role-multi compact" data-testid="process-node-role-select" [ngModel]="taskRoleIds(node)[0] || node.role || ''" (ngModelChange)="setTaskRoleIds(node, $event ? [$event] : [])">
+                    <option value="">选择角色</option>
+                    @for (role of roles(); track roleId(role)) {
+                      <option [value]="roleId(role)">{{ role.name || roleId(role) }}</option>
+                    }
+                  </select>
+                  <div class="flow-row-actions">
+                    <button class="flow-enter-action" type="button" title="进入节点编辑" (click)="selectTask(node)">→</button>
+                    <button type="button" title="在下方添加节点" (click)="addTask(taskId(node))">+</button>
+                    <button type="button" title="上移" (click)="moveTask(taskId(node), -1)">↑</button>
+                    <button type="button" title="下移" (click)="moveTask(taskId(node), 1)">↓</button>
+                    <button type="button" title="删除" (click)="removeTask(taskId(node))">×</button>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="form-section" data-testid="process-gateway-section">
+            <div class="section-toolbar">
+              <h4>分支</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-flow-add-gateway" (click)="addGateway()">+ 分支</button>
+            </div>
+            @for (gateway of gateways(process); track gatewayId(gateway)) {
+              <div class="flow-routing-row" data-testid="process-flow-gateway-row">
+                <input type="text" [ngModel]="gateway.title || ''" (ngModelChange)="setGateway(gateway, 'title', $event)" placeholder="分支名称" />
+                <select [ngModel]="gateway.role_id || ''" (ngModelChange)="setGateway(gateway, 'role_id', $event)">
+                  <option value="">选择角色</option>
+                  @for (role of roles(); track roleId(role)) {
+                    <option [value]="roleId(role)">{{ role.name || roleId(role) }}</option>
+                  }
+                </select>
+                <div class="flow-row-actions">
+                  <button type="button" title="在下方添加分支" (click)="addGateway(gatewayId(gateway))">+</button>
+                  <button type="button" title="上移" (click)="moveGateway(gatewayId(gateway), -1)">↑</button>
+                  <button type="button" title="下移" (click)="moveGateway(gatewayId(gateway), 1)">↓</button>
+                  <button type="button" title="删除" (click)="removeGateway(gatewayId(gateway))">×</button>
+                </div>
+              </div>
+            } @empty {
+              <p class="field-hint">暂无分支；当一个节点需要多个下游时，可先添加分支。</p>
+            }
+          </div>
+
+          <div class="form-section" data-testid="process-edge-section">
+            <div class="section-toolbar">
+              <h4>连线</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-flow-add-edge" (click)="addEdge()">+ 连线</button>
+            </div>
+            <div class="process-editor-routing-grid">
+              @for (edge of edges(process); track edgeId(edge)) {
+                <div class="flow-routing-row flow-edge-row" data-testid="process-flow-edge-row">
+                  <select [ngModel]="edge.from || ''" (ngModelChange)="setEdge(edge, 'from', $event)">
+                    <option value="">起点</option>
+                    @for (option of flowNodeOptions(process, 'from'); track option.id) {
+                      <option [value]="option.id">{{ option.label }}</option>
+                    }
+                  </select>
+                  <span>→</span>
+                  <select [ngModel]="edge.to || ''" (ngModelChange)="setEdge(edge, 'to', $event)">
+                    <option value="">终点</option>
+                    @for (option of flowNodeOptions(process, 'to'); track option.id) {
+                      <option [value]="option.id">{{ option.label }}</option>
+                    }
+                  </select>
+                  <input type="text" [ngModel]="edge.label || edge.condition || ''" (ngModelChange)="setEdge(edge, 'label', $event)" placeholder="连线说明，如：通过" />
+                  <div class="flow-row-actions">
+                    <button type="button" title="在下方添加连线" (click)="addEdge(edgeId(edge))">+</button>
+                    <button type="button" title="上移" (click)="moveEdge(edgeId(edge), -1)">↑</button>
+                    <button type="button" title="下移" (click)="moveEdge(edgeId(edge), 1)">↓</button>
+                    <button type="button" title="删除" (click)="removeEdge(edgeId(edge))">×</button>
+                  </div>
+                </div>
+              } @empty {
+                <p class="field-hint">暂无连线；开始和结束只在连线中选择，不作为独立元素新增。</p>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="form-section" data-testid="process-prototype-section">
+          <div class="section-toolbar">
+            <h4>流程原型/附件<span class="section-count">{{ prototypeCount(process) }}项</span></h4>
+          </div>
+          <div class="prototype-upload-row" data-testid="proc-prototype-upload">
+            <input type="file" [id]="prototypeInputId(process)" data-testid="proc-prototype-input" multiple />
+            <button class="btn btn-outline btn-sm" type="button" data-testid="proc-prototype-upload-button" (click)="uploadPrototypeFiles(process)">上传附件</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+} @else {
+  <div class="diag-empty" data-testid="process-editor-empty">暂无流程。</div>
+}

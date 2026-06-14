@@ -1,0 +1,427 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+// 模块意图：沿用 legacy 二级 tab 的视觉协议，只把结构所有权迁入 Angular 壳层。
+.process-shell {
+  min-width: 0;
+}
+
+.process-shell .proc-view-toolbar {
+  background: #fff;
+}
+
+.process-shell .proc-view-toolbar-main {
+  align-items: center;
+}
+
+// 模块意图：流程编辑器仍在从 legacy 迁移到 Angular；这里先由壳层承载一个轻量编辑态，保证入口切换不再触发旧渲染死循环。
+.process-editor-shell-lite {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(520px, 650px);
+  gap: 18px;
+  width: 100%;
+  min-height: calc(100vh - 132px);
+  padding: 16px 18px;
+  background: #eef2f7;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+// 关键流程：左侧先保留流程图占位，右侧抽屉继续承接流程基础信息；后续完整编辑器恢复时只替换这个过渡区。
+.process-editor-shell-lite .process-flow-view {
+  min-width: 0;
+  min-height: 360px;
+}
+
+.process-editor-shell-lite .process-flow-card {
+  height: 100%;
+  min-height: 360px;
+  border: 1px solid #d8e4f2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  overflow: auto;
+}
+
+.process-editor-shell-lite .diag-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.process-lite-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.process-lite-head strong {
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.process-lite-node-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 14px;
+  min-height: 320px;
+  padding: 22px;
+}
+
+.process-lite-node {
+  display: grid;
+  gap: 4px;
+  width: 156px;
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #0f3b70;
+  cursor: pointer;
+  text-align: center;
+}
+
+.process-lite-node.active {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, .16);
+}
+
+.process-lite-node span {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.process-lite-node strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.process-lite-node small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+// 边界细节：不能复用 legacy 的 fixed 抽屉样式，否则 Angular 壳层切换时会遮挡或被判定为 hidden。
+.process-editor-shell-lite .process-editor-drawer {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 360px;
+  max-height: calc(100vh - 164px);
+  border: 1px solid #d8e4f2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  transform: none;
+  visibility: visible;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.process-editor-shell-lite .drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.process-editor-shell-lite .drawer-crumb {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.process-editor-shell-lite .drawer-subtitle {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.process-editor-shell-lite .drawer-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.process-editor-shell-lite .drawer-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.process-editor-mode-tabs {
+  display: inline-flex;
+  width: fit-content;
+  overflow: hidden;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.process-editor-mode-tabs button {
+  min-width: 88px;
+  height: 32px;
+  border: 0;
+  border-right: 1px solid #dbeafe;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.process-editor-mode-tabs button:last-child {
+  border-right: 0;
+}
+
+.process-editor-mode-tabs button.active {
+  background: #3b82f6 !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+.process-editor-mode-tabs button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.process-lite-summary-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.process-lite-summary-row label,
+.process-stage-inline {
+  display: grid;
+  gap: 8px;
+}
+
+.process-lite-summary-row span,
+.process-stage-inline > span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.process-lite-summary-row input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d2deec;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.process-lite-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.process-lite-form-compact label:first-child {
+  grid-column: auto;
+}
+
+.process-lite-form label,
+.process-lite-section {
+  display: grid;
+  gap: 8px;
+}
+
+.process-lite-form span,
+.process-lite-section h4 {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.process-lite-form input,
+.process-lite-section input,
+.process-lite-section select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d2deec;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.process-lite-section .task-role-multi {
+  min-height: 38px;
+  height: auto;
+  padding: 7px 10px;
+}
+
+.task-role-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid #d2deec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.task-role-checkboxes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #0f3b70;
+  font-size: 12px;
+}
+
+.process-lite-form label:first-child {
+  grid-column: 1 / -1;
+}
+
+.process-lite-form.process-lite-form-compact label:first-child {
+  grid-column: auto;
+}
+
+.process-lite-section {
+  padding: 12px;
+  border: 1px solid #d8e4f2;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.process-lite-section .section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.process-lite-section .section-count {
+  margin-left: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.process-editor-routing-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.flow-routing-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #d8e4f2;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.flow-edge-row {
+  grid-template-columns: minmax(112px, 1fr) auto minmax(112px, 1fr);
+}
+
+.flow-edge-row input,
+.flow-edge-row .flow-row-actions {
+  grid-column: 1 / -1;
+}
+
+.flow-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.flow-row-actions button,
+.process-lite-section button,
+#proc-prototype-upload button {
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.flow-enter-action {
+  font-weight: 700;
+}
+
+.proc-stage-ref-list {
+  display: flex;
+  min-height: 46px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d7e4f3;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.proc-stage-ref-chip {
+  min-width: 58px;
+  padding: 6px 12px;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.no-refs,
+.field-hint {
+  color: #64748b;
+  font-size: 13px;
+}
+
+[data-testid="proc-prototype-upload"] {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed #d8e4f2;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.process-lite-section p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}

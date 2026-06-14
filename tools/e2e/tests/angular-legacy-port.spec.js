@@ -258,7 +258,8 @@ test('process stage view is rendered by Angular and keeps stage editing actions'
   await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
 
   await page.getByTestId('tab-processWorkbench').click();
-  await expect(page.getByTestId('process-stage-angular-host')).toBeVisible();
+  await expect(page.getByTestId('process-workbench-angular-host')).toBeVisible();
+  await expect(page.getByTestId('process-workbench-angular')).toBeVisible();
   await expect(page.getByTestId('process-stage-view')).toBeVisible();
   await expect(page.getByTestId('stage-detail-graph')).toBeVisible();
   await expect(page.getByTestId('stage-panorama-graph')).toHaveCount(0);
@@ -327,10 +328,144 @@ test('process workbench main tab resets old panorama state to stage detail', asy
   await page.getByTestId('tab-panoramaWorkbench').click();
   await page.getByTestId('tab-processWorkbench').click();
 
-  await expect(page.getByTestId('process-stage-angular-host')).toBeVisible();
+  await expect(page.getByTestId('process-workbench-angular-host')).toBeVisible();
+  await expect(page.getByTestId('process-workbench-angular')).toBeVisible();
   await expect(page.getByTestId('stage-detail-graph')).toBeVisible();
   await expect(page.getByTestId('stage-panorama-graph')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.S.ui.stageViewMode)).toBe('detail');
+});
+
+test('process stage card opens process editor from detail view', async ({ page, request }) => {
+  const documentName = `process-stage-card-open-${Date.now()}`;
+  await createDocument(request, documentName, buildStageSmokeDocument(documentName));
+
+  await page.goto('/');
+  await page.locator('#dd-file .tbar-dd-btn').click();
+  await page.getByTestId('toolbar-open-button').click();
+  await page.locator('.file-list-item').filter({ hasText: documentName }).first().click();
+  await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
+
+  await page.getByTestId('tab-processWorkbench').click();
+  const firstProcessId = await page.getByTestId('stage-graph-node').first().getAttribute('data-process-id');
+  expect(firstProcessId).toBeTruthy();
+  await page.getByTestId('stage-graph-node').first().click();
+  await expect(page.getByTestId('process-editor-workbench')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.S.ui.procView)).toBe('list');
+  await expect.poll(() => page.evaluate(() => window.S.ui.procId)).toBe(firstProcessId);
+});
+
+test('process flow view is rendered by Angular host', async ({ page, request }) => {
+  const documentName = `process-flow-angular-${Date.now()}`;
+  const doc = buildStageSmokeDocument(documentName);
+  doc.entities = [{ id: 'E1', uid: 'E1', name: '客户' }];
+  doc.processes[0].nodes = [
+    { id: 'T1', name: '提交申请', role: '业务人员', description: '录入基础信息', entity_ops: [{ entity_id: 'E1', ops: ['C', 'R'] }] },
+    { id: 'T2', name: '审核资料', role: '审核人员', description: '确认材料完整', entity_ops: [{ entity_id: 'E1', ops: ['R'] }] },
+  ];
+  await createDocument(request, documentName, doc);
+
+  await page.goto('/');
+  await page.locator('#dd-file .tbar-dd-btn').click();
+  await page.getByTestId('toolbar-open-button').click();
+  await page.locator('.file-list-item').filter({ hasText: documentName }).first().click();
+  await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
+
+  await page.getByTestId('tab-processWorkbench').click();
+  await page.getByTestId('process-switch-card').click();
+  await expect(page.getByTestId('process-workbench-angular')).toBeVisible();
+  await expect(page.getByTestId('process-flow-view')).toBeVisible();
+  await expect(page.getByTestId('process-flow-node')).toHaveCount(2);
+  await expect(page.getByTestId('process-flow-zoom-in')).toHaveCount(0);
+  await expect(page.getByTestId('process-flow-zoom-reset')).toHaveCount(0);
+  await expect(page.getByTestId('process-flow-attachment-panel')).toHaveCount(0);
+  await page.getByTestId('process-flow-open-attachments').click();
+  await expect(page.getByTestId('process-flow-attachment-panel')).toBeVisible();
+  await page.getByLabel('关闭附件').click();
+  await expect(page.getByTestId('process-flow-attachment-panel')).toHaveCount(0);
+  await expect.poll(() => page.getByTestId('process-flow-canvas-shell').evaluate((el) => ({
+    horizontal: el.scrollWidth > el.clientWidth,
+    boundedHeight: el.clientHeight <= window.innerHeight - 180,
+  }))).toEqual({ horizontal: true, boundedHeight: true });
+  await expect(page.getByTestId('process-flow-name-input')).toHaveValue(doc.processes[0].name);
+  await page.getByTestId('process-flow-name-input').fill('流程视图新版');
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].name)).toBe('流程视图新版');
+  await page.getByTestId('process-flow-add-node').click();
+  await expect(page.getByTestId('process-flow-node')).toHaveCount(3);
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].nodes.length)).toBe(3);
+  await page.getByTestId('process-flow-add-gateway').click();
+  await expect(page.locator('.flow-gateway')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].flow.nodes.length)).toBe(1);
+  await expect(page.getByTestId('process-flow-canvas')).toHaveCSS('zoom', '1');
+  await page.dispatchEvent('[data-testid="process-flow-canvas-shell"]', 'wheel', { deltaY: -120, ctrlKey: true });
+  await expect(page.getByTestId('process-flow-canvas')).toHaveCSS('zoom', '1.1');
+});
+
+test('process editor is rendered by Angular and keeps node editing sections', async ({ page, request }) => {
+  const consoleErrors = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => {
+    consoleErrors.push(error.message);
+  });
+  const documentName = `process-editor-angular-${Date.now()}`;
+  const doc = buildStageSmokeDocument(documentName);
+  doc.entities = [{ id: 'E1', uid: 'E1', name: '客户' }, { id: 'E2', uid: 'E2', name: '申请单' }];
+  doc.roles = [
+    { id: '业务人员', uid: '业务人员', name: '业务人员', group: '业务参与方' },
+    { id: '审核人员', uid: '审核人员', name: '审核人员', group: '监管与审核方' },
+  ];
+  doc.processes[0].trigger = '客户发起申请';
+  doc.processes[0].outcome = '完成会员开户';
+  doc.processes[0].nodes = [
+    {
+      id: 'T1',
+      uid: 'T1',
+      name: '提交申请',
+      role: '业务人员',
+      description: '录入基础信息',
+      userSteps: [{ id: 'US1', uid: 'US1', name: '填写客户资料', note: '', type: 'input' }],
+      forms: [{ id: 'F1', uid: 'F1', name: '开户申请表', fields: [{ id: 'FF1', uid: 'FF1', name: '客户名称', type: 'text', required: true }] }],
+      entity_ops: [{ entity_uid: 'E1', ops: ['C', 'R'] }],
+      orchestrationTasks: [{ id: 'OT1', uid: 'OT1', name: '提交申请接口', target: 'POST /applications', address: '/api/applications' }],
+      businessRules: [{ id: 'BR1', uid: 'BR1', name: '规则1', content: '客户名称不能为空' }],
+    },
+    { id: 'T2', uid: 'T2', name: '审核资料', role: '审核人员', userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+  ];
+  doc.processes[0].flow = {
+    version: 2,
+    orientation: 'horizontal',
+    nodes: [{ id: 'B1', uid: 'B1', kind: 'gateway', gatewayType: 'exclusive', title: '资料是否完整', role_id: 'R2' }],
+    edges: [
+      { id: 'L1', uid: 'L1', from: 'START', to: 'T1', label: '' },
+      { id: 'L2', uid: 'L2', from: 'T1', to: 'B1', label: '提交后' },
+      { id: 'L3', uid: 'L3', from: 'B1', to: 'T2', label: '完整' },
+      { id: 'L4', uid: 'L4', from: 'T2', to: 'END', label: '' },
+    ],
+  };
+  await createDocument(request, documentName, doc);
+
+  await page.goto('/');
+  await page.locator('#dd-file .tbar-dd-btn').click();
+  await page.getByTestId('toolbar-open-button').click();
+  await page.locator('.file-list-item').filter({ hasText: documentName }).first().click();
+  await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
+
+  await page.getByTestId('tab-processWorkbench').click();
+  await page.getByTestId('process-switch-node').click();
+  await expect.poll(() => consoleErrors, { message: '浏览器控制台不应出现流程编辑运行时错误' }).toEqual([]);
+  await expect(page.getByTestId('process-workbench-angular')).toBeVisible();
+  await expect(page.getByTestId('process-editor-workbench')).toBeVisible();
+  await expect(page.getByTestId('process-name-input')).toHaveValue(doc.processes[0].name);
+  await expect(page.getByTestId('process-editor-node')).toHaveCount(2);
+  await expect(page.getByTestId('process-stage-refs')).toBeVisible();
+  await expect(page.getByTestId('proc-prototype-upload')).toBeVisible();
+  await expect(page.getByTestId('proc-prototype-upload-button')).toBeVisible();
+  await page.getByTestId('process-editor-node').first().click();
+  await page.getByTestId('process-task-name-input').fill('提交申请更新');
+  await expect(page.getByTestId('process-editor-graph')).toContainText('提交申请更新');
+  await page.getByTestId('process-editor-zoom-in').click();
+  await expect(page.getByTestId('process-editor-graph')).toHaveCSS('zoom', '1.1');
 });
 
 test('panorama knowledge tabs are rendered by Angular without editing the data model', async ({ page, request }) => {

@@ -1,6 +1,6 @@
 import { ValueDomainActions, createValueDomainActions } from './value-domain-actions';
 import { ValueDomainDraftPort } from './value-domain-draft-port';
-import { ValueDomainDocument } from './value-domain-model';
+import { ValueDomainDocument } from '../../../core/document/value-domain-model';
 
 interface LegacyWindow {
   S?: {

@@ -1,0 +1,287 @@
+import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import {
+  LegacyFlowEdge,
+  LegacyFlowGateway,
+  LegacyProcess,
+  LegacyProcessNode,
+  LegacyRole,
+  createProcessEditorLegacyAdapter,
+} from '../editor/process-editor-legacy-adapter';
+import { ProcessEditorWorkbenchComponent } from '../editor/process-editor-workbench.component';
+import { ProcessFlowWorkbenchComponent } from '../flow/process-flow-workbench.component';
+import { ProcessStageWorkbenchComponent } from '../stage/process-stage-workbench.component';
+import {
+  ProcessShellView,
+  ProcessWorkbenchShellLegacyAdapter,
+  createProcessWorkbenchShellLegacyAdapter,
+} from './process-workbench-shell-legacy-adapter';
+
+@Component({
+  selector: 'app-process-workbench-shell',
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    ProcessStageWorkbenchComponent,
+    ProcessFlowWorkbenchComponent,
+    ProcessEditorWorkbenchComponent,
+  ],
+  templateUrl: './process-workbench-shell.component.html',
+  styleUrl: './process-workbench-shell.component.scss',
+})
+export class ProcessWorkbenchShellComponent implements OnDestroy {
+  // 模块意图：流程工作台壳层统一管理二级 tab 和工作台切换，避免 legacy renderProcessTab 继续生成页面结构。
+  protected readonly version = signal(0);
+  protected readonly adapter: ProcessWorkbenchShellLegacyAdapter = createProcessWorkbenchShellLegacyAdapter();
+  protected readonly editorAdapter = createProcessEditorLegacyAdapter();
+  protected readonly viewState = signal<ProcessShellView>(this.adapter.view());
+  private lastObservedView = this.adapter.view();
+  private readonly syncTimer = window.setInterval(() => this.syncExternalView(), 120);
+
+  protected view(): ProcessShellView {
+    this.version();
+    return this.adapter.view();
+  }
+
+  ngOnDestroy(): void {
+    window.clearInterval(this.syncTimer);
+  }
+
+  protected hasProcess(): boolean {
+    this.version();
+    return this.adapter.processes().length > 0;
+  }
+
+  protected currentProcess(): LegacyProcess | null {
+    this.version();
+    return this.editorAdapter.currentProcess();
+  }
+
+  protected currentTask(): LegacyProcessNode | null {
+    this.version();
+    return this.editorAdapter.currentTask();
+  }
+
+  protected isNodeEditor(): boolean {
+    return !!this.currentTask();
+  }
+
+  protected tasks(): LegacyProcessNode[] {
+    this.version();
+    return this.editorAdapter.tasks(this.editorAdapter.currentProcess());
+  }
+
+  protected processTitle(): string {
+    const process = this.currentProcess();
+    return process?.name || '未命名流程';
+  }
+
+  protected taskRole(task: { role?: string; role_id?: string; roleIds?: string[] }): string {
+    if (Array.isArray(task.roleIds) && task.roleIds.length) return task.roleIds.join('、');
+    return task.role || task.role_id || '未分配角色';
+  }
+
+  protected processId(process: LegacyProcess | null | undefined): string {
+    return this.editorAdapter.processId(process);
+  }
+
+  protected taskId(task: LegacyProcessNode | null | undefined): string {
+    return this.editorAdapter.taskId(task);
+  }
+
+  protected roles(): LegacyRole[] {
+    this.version();
+    return this.editorAdapter.roles();
+  }
+
+  protected roleId(role: LegacyRole): string {
+    return String(role.id || role.uid || '');
+  }
+
+  protected taskRoleIds(task: LegacyProcessNode): string[] {
+    this.version();
+    return this.editorAdapter.taskRoleIds(task);
+  }
+
+  protected stageRefs(process: LegacyProcess) {
+    this.version();
+    return this.editorAdapter.stageRefs(process);
+  }
+
+  protected gateways(process: LegacyProcess): LegacyFlowGateway[] {
+    this.version();
+    return this.editorAdapter.gateways(process);
+  }
+
+  protected gatewayId(gateway: LegacyFlowGateway): string {
+    return String(gateway.id || gateway.uid || '');
+  }
+
+  protected edges(process: LegacyProcess): LegacyFlowEdge[] {
+    this.version();
+    return this.editorAdapter.edges(process);
+  }
+
+  protected edgeId(edge: LegacyFlowEdge): string {
+    return String(edge.id || edge.uid || '');
+  }
+
+  protected flowNodeOptions(process: LegacyProcess, side: 'from' | 'to') {
+    this.version();
+    return this.editorAdapter.flowNodeOptions(process, side);
+  }
+
+  protected prototypeInputId(process: LegacyProcess): string {
+    return `proc-prototype-input-${this.processId(process).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  }
+
+  protected prototypeCount(process: LegacyProcess): number {
+    this.version();
+    return this.editorAdapter.prototypeFiles(process).length;
+  }
+
+  protected setProcessField(field: 'name' | 'trigger' | 'outcome', value: string): void {
+    this.editorAdapter.setProcessField(field, value);
+    this.refresh();
+  }
+
+  protected setTaskField(task: LegacyProcessNode, field: 'name' | 'role' | 'description', value: string): void {
+    this.editorAdapter.setTaskField(task, field, value);
+    this.refresh();
+  }
+
+  protected setTaskRoleIds(task: LegacyProcessNode, roleIds: string[]): void {
+    this.editorAdapter.setTaskRoleIds(task, roleIds);
+    this.refresh();
+  }
+
+  protected toggleTaskRole(task: LegacyProcessNode, roleId: string, checked: boolean): void {
+    const current = this.taskRoleIds(task).filter((item) => item !== roleId);
+    if (checked) current.push(roleId);
+    this.setTaskRoleIds(task, current);
+  }
+
+  protected selectTask(task: LegacyProcessNode | null): void {
+    this.editorAdapter.selectTask(task ? this.taskId(task) : null);
+    this.refresh();
+  }
+
+  protected addTask(afterTaskId?: string): void {
+    this.editorAdapter.addTask(afterTaskId);
+    this.refresh();
+  }
+
+  protected removeTask(taskId: string): void {
+    this.editorAdapter.removeTask(taskId);
+    this.refresh();
+  }
+
+  protected moveTask(taskId: string, delta: number): void {
+    this.editorAdapter.moveTask(taskId, delta);
+    this.refresh();
+  }
+
+  protected addGateway(afterGatewayId?: string): void {
+    this.editorAdapter.addGateway(afterGatewayId);
+    this.refresh();
+  }
+
+  protected setGateway(gateway: LegacyFlowGateway, field: 'title' | 'role_id', value: string): void {
+    this.editorAdapter.setGateway(gateway, field, value);
+    this.refresh();
+  }
+
+  protected moveGateway(gatewayId: string, delta: number): void {
+    this.editorAdapter.moveGateway(gatewayId, delta);
+    this.refresh();
+  }
+
+  protected removeGateway(gatewayId: string): void {
+    this.editorAdapter.removeGateway(gatewayId);
+    this.refresh();
+  }
+
+  protected addEdge(afterEdgeId?: string): void {
+    this.editorAdapter.addEdge(afterEdgeId);
+    this.refresh();
+  }
+
+  protected setEdge(edge: LegacyFlowEdge, field: 'from' | 'to' | 'label', value: string): void {
+    this.editorAdapter.setEdge(edge, field, value);
+    this.refresh();
+  }
+
+  protected moveEdge(edgeId: string, delta: number): void {
+    this.editorAdapter.moveEdge(edgeId, delta);
+    this.refresh();
+  }
+
+  protected removeEdge(edgeId: string): void {
+    this.editorAdapter.removeEdge(edgeId);
+    this.refresh();
+  }
+
+  protected uploadPrototypeFiles(process: LegacyProcess): void {
+    this.editorAdapter.uploadPrototypeFiles(this.processId(process), this.prototypeInputId(process));
+    this.refresh();
+  }
+
+  protected stageEditing(): boolean {
+    this.version();
+    return this.adapter.stageEditing();
+  }
+
+  protected openStage(): void {
+    this.adapter.openStage();
+    this.viewState.set('stage');
+    this.refresh();
+  }
+
+  protected openFlow(): void {
+    this.adapter.openFlow();
+    this.viewState.set('flow');
+    this.refresh();
+  }
+
+  protected openNode(taskId: string | null = null): void {
+    if (taskId) this.editorAdapter.selectTask(taskId);
+    this.adapter.openNode();
+    this.viewState.set('node');
+    this.refresh();
+  }
+
+  protected openEditor(processId: string | null = null, taskId: string | null = null): void {
+    this.viewState.set('editor');
+    this.adapter.openEditor(processId, taskId);
+    this.refresh();
+  }
+
+  protected setStageEditing(editing: boolean): void {
+    this.adapter.setStageEditing(editing);
+    this.refresh();
+  }
+
+  protected openFlowLegacy(): void {
+    this.adapter.openFlowLegacy();
+  }
+
+  protected openEditorLegacy(): void {
+    this.adapter.openEditorLegacy();
+  }
+
+  protected refresh(): void {
+    this.version.update((value) => value + 1);
+  }
+
+  private syncExternalView(): void {
+    // 边界细节：迁移期仍有少量 legacy 入口会直接改 S.ui.procView，
+    // Angular 壳层需要主动同步，否则会出现状态已是 list、界面仍停在流程图的割裂。
+    const current = this.adapter.view();
+    if (current === this.lastObservedView) return;
+    this.lastObservedView = current;
+    this.viewState.set(current);
+    this.refresh();
+  }
+}

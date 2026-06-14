@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, EventEmitter, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyProcess,
@@ -63,6 +63,7 @@ export class ProcessStageWorkbenchComponent {
   protected readonly dragState = signal<FlowDragState | null>(null);
 
   protected readonly adapter: ProcessStageLegacyAdapter = createProcessStageLegacyAdapter();
+  @Output() readonly processEditorRequested = new EventEmitter<string>();
   private readonly stageSlotWidth = 184;
   private readonly stageSlotHeight = 38;
   private readonly stageBoardPad = 8;
@@ -318,7 +319,7 @@ export class ProcessStageWorkbenchComponent {
   }
 
   protected openProcess(node: FlowNode): void {
-    if (node.processId) this.adapter.openProcess(node.processId);
+    if (node.processId) this.processEditorRequested.emit(node.processId);
   }
 
   protected beginLink(node: FlowNode): void {

@@ -1,0 +1,170 @@
+<div class="process-flow-view redesigned" data-testid="process-flow-view">
+  @if (currentProcess(); as process) {
+    <section class="process-flow-frame">
+      <header class="process-flow-topbar" data-testid="process-flow-basic-fields">
+        <select class="stage-select" data-testid="process-flow-stage-select" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
+          @for (stage of stages(); track stageId(stage)) {
+            <option [value]="stageId(stage)">{{ stageName(stage) }}</option>
+          }
+        </select>
+        <select class="process-select" data-testid="process-flow-select" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
+          @for (item of processesForCurrentStage(); track processId(item)) {
+            <option [value]="processId(item)">{{ item.name || '\u672a\u547d\u540d\u6d41\u7a0b' }}</option>
+          }
+        </select>
+        <label class="compact-field name-field">
+          <span>&#x540d;&#x79f0;</span>
+          <input type="text" data-testid="process-flow-name-input" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
+        </label>
+        <label class="compact-field">
+          <span>&#x89e6;&#x53d1;</span>
+          <input type="text" data-testid="process-flow-trigger-input" [ngModel]="process.trigger || ''" (ngModelChange)="setProcessField('trigger', $event)" />
+        </label>
+        <label class="compact-field">
+          <span>&#x7ed3;&#x679c;</span>
+          <input type="text" data-testid="process-flow-outcome-input" [ngModel]="process.outcome || ''" (ngModelChange)="setProcessField('outcome', $event)" />
+        </label>
+      </header>
+
+      <section class="process-flow-body">
+        <section class="process-flow-canvas-shell" data-testid="process-flow-canvas-shell" (wheel)="onCanvasWheel($event)">
+          <div class="process-flow-side-tools">
+            <button type="button" data-testid="process-flow-add-node" title="&#x65b0;&#x589e;&#x8282;&#x70b9;" (click)="addTask()"><b>+</b><span>&#x8282;&#x70b9;</span></button>
+            <button type="button" data-testid="process-flow-add-gateway" title="&#x65b0;&#x589e;&#x7f51;&#x5173;" (click)="addGateway()"><b>&#x25c7;</b><span>&#x7f51;&#x5173;</span></button>
+            <button type="button" data-testid="process-flow-open-attachments" title="&#x6d41;&#x7a0b;&#x9644;&#x4ef6;" (click)="attachmentDrawerOpen.set(true)"><b>+</b><span>&#x9644;&#x4ef6;</span></button>
+            @if (connectingFromId()) {
+              <button type="button" data-testid="process-flow-cancel-connect" title="&#x53d6;&#x6d88;&#x8fde;&#x7ebf;" (click)="connectingFromId.set('')"><b>!</b><span>&#x53d6;&#x6d88;</span></button>
+            }
+            @if (selectedElementId()) {
+              <button class="danger" type="button" data-testid="process-flow-delete-selected" title="&#x5220;&#x9664;&#x9009;&#x4e2d;" (click)="removeSelected(process)"><b>x</b><span>&#x5220;&#x9664;</span></button>
+            }
+          </div>
+
+          <div class="process-flow-canvas" data-testid="process-flow-canvas" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
+            @for (lane of lanes(process); track lane.id) {
+              <div class="flow-lane" [style.top.px]="lane.top" [style.height.px]="lane.height" (dragover)="$event.preventDefault()" (drop)="onLaneDrop($event, lane)">
+                <div class="flow-lane-title">{{ lane.name }}</div>
+              </div>
+            }
+
+            <svg class="flow-edges" [attr.width]="canvasWidth(process)" [attr.height]="canvasHeight(process)">
+              <defs>
+                <marker id="process-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                </marker>
+              </defs>
+              @for (edge of flowEdges(process); track edge.id) {
+                <path class="flow-edge-hit" [attr.d]="edge.d" (click)="$event.stopPropagation(); selectElement(edge.id)"></path>
+                <path class="flow-edge" [class.active]="selectedElementId() === edge.id" [attr.d]="edge.d" (click)="$event.stopPropagation(); selectElement(edge.id)"></path>
+                @if (edge.label) {
+                  <text class="flow-edge-label" [attr.x]="edge.labelX" [attr.y]="edge.labelY">{{ edge.label }}</text>
+                }
+              }
+              @if (previewEdge(process); as edge) {
+                <path class="flow-edge preview" [attr.d]="edge.d"></path>
+              }
+            </svg>
+
+            @for (node of flowNodes(process); track node.id) {
+              @if (node.kind === 'start' || node.kind === 'end') {
+                <button class="flow-terminal" [class.active]="selectedElementId() === node.id" [class.connecting]="connectingFromId() === node.id" [class.is-end]="node.kind === 'end'" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.id) : selectElement(node.id)">{{ node.name }}</button>
+              } @else if (node.kind === 'gateway') {
+                <button class="flow-gateway" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)"><span>{{ node.name }}</span></button>
+              } @else {
+                <button class="flow-node" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)">
+                  @if (node.shared) { <span class="shared-badge">&#x5171;&#x4eab;</span> }
+                  <strong>{{ node.name }}</strong>
+                  <small>{{ node.role || '\u672a\u5206\u914d\u89d2\u8272' }}</small>
+                </button>
+              }
+              @if (selectedElementId() === node.baseId || selectedElementId() === node.id) {
+                <div class="flow-connect-box" [style.left.px]="node.x - 4" [style.top.px]="node.y - 4" [style.width.px]="node.width + 8" [style.height.px]="node.height + 8" (click)="$event.stopPropagation()">
+                  @for (anchor of connectAnchors(node); track anchor.id) {
+                    <button type="button" class="connect-anchor" [class]="anchor.side" [style.left.px]="anchor.x - node.x" [style.top.px]="anchor.y - node.y" (click)="startConnectFromAnchor($event, node.baseId)">+</button>
+                  }
+                </div>
+              }
+            }
+
+            @if (selectedNode(process); as node) {
+              <div class="flow-inline-panel" data-testid="process-flow-inline-panel" [style.left.px]="node.x" [style.top.px]="node.y + node.height + 12" (click)="$event.stopPropagation()">
+                @if (node.task) {
+                  <label><span>&#x8282;&#x70b9;&#x540d;&#x79f0;</span><input type="text" [ngModel]="node.task.name || ''" (ngModelChange)="setTaskName(node.task, $event)" /></label>
+                  <label>
+                    <span>&#x5173;&#x8054;&#x89d2;&#x8272;</span>
+                    <select multiple (change)="setTaskRolesFromSelect(node.task, $event.target)">
+                      @for (role of roles(); track roleId(role)) { <option [value]="roleId(role)" [selected]="taskRoleIds(node.task).includes(roleId(role))">{{ role.name || roleId(role) }}</option> }
+                    </select>
+                  </label>
+                  <div class="inline-panel-actions">
+                    <button type="button" data-testid="process-flow-open-node-view" (click)="openNodeView(node)">&#x8fdb;&#x5165;&#x8282;&#x70b9;&#x89c6;&#x56fe;</button>
+                  </div>
+                } @else if (node.gateway) {
+                  <label><span>&#x7f51;&#x5173;&#x540d;&#x79f0;</span><input type="text" [ngModel]="node.gateway.title || ''" (ngModelChange)="setGateway(node.gateway, 'title', $event)" /></label>
+                  <label>
+                    <span>&#x5173;&#x8054;&#x89d2;&#x8272;</span>
+                    <select [ngModel]="node.gateway.role_id || ''" (ngModelChange)="setGateway(node.gateway, 'role_id', $event)">
+                      <option value="">&#x672a;&#x5206;&#x914d;&#x89d2;&#x8272;</option>
+                      @for (role of roles(); track roleId(role)) { <option [value]="roleId(role)">{{ role.name || roleId(role) }}</option> }
+                    </select>
+                  </label>
+                  <div class="inline-panel-actions"></div>
+                } @else {
+                  <div class="inline-panel-actions"></div>
+                }
+              </div>
+            }
+
+            @if (selectedEdge(process); as edge) {
+              <div class="flow-edge-panel" data-testid="process-flow-edge-panel" (click)="$event.stopPropagation()">
+                <select [ngModel]="edge.from || ''" (ngModelChange)="setEdge(edge, 'from', $event)">
+                  @for (option of flowNodeOptions(process, 'from'); track option.id) { <option [value]="option.id">{{ option.label }}</option> }
+                </select>
+                <span>?</span>
+                <select [ngModel]="edge.to || ''" (ngModelChange)="setEdge(edge, 'to', $event)">
+                  @for (option of flowNodeOptions(process, 'to'); track option.id) { <option [value]="option.id">{{ option.label }}</option> }
+                </select>
+                <input type="text" [ngModel]="edge.label || edge.condition || ''" (ngModelChange)="setEdge(edge, 'label', $event)" placeholder="&#x8fde;&#x7ebf;&#x8bf4;&#x660e;" />
+              </div>
+            }
+          </div>
+        </section>
+
+        @if (attachmentDrawerOpen()) {
+          <aside class="process-attachment-drawer" data-testid="process-flow-attachment-panel">
+            <div class="attachment-panel-head"><strong>&#x6d41;&#x7a0b;&#x539f;&#x578b;/&#x9644;&#x4ef6;</strong><span>{{ prototypeCount(process) }}&#x9879;</span><button type="button" aria-label="&#x5173;&#x95ed;&#x9644;&#x4ef6;" (click)="attachmentDrawerOpen.set(false)">x</button></div>
+            <input type="file" [id]="prototypeInputId(process)" data-testid="proc-prototype-input" multiple (change)="uploadPrototypeFilesImmediately(process)" />
+            <label class="attachment-add-button" [for]="prototypeInputId(process)">+ &#x6dfb;&#x52a0;&#x9644;&#x4ef6;</label>
+            <div class="attachment-list">
+              @for (file of prototypeFiles(process); track file.uid || file.id || $index; let index = $index) {
+                <div class="attachment-card" data-testid="proc-prototype-item">
+                  <div class="attachment-card-meta"><strong>{{ prototypeFileName(file, index) }}</strong><span>{{ prototypeMeta(file) }}</span><small>{{ prototypeKind(file) }}</small></div>
+                  <div class="attachment-card-actions">
+                    <button type="button" data-testid="proc-prototype-toggle" (click)="togglePrototypeVersions(process, file)">{{ isPrototypeExpanded(process, file) ? '\u6536\u8d77' : '\u5c55\u5f00' }}&#x7248;&#x672c;</button>
+                    @if (canPreviewPrototype(file)) { <button type="button" data-testid="proc-prototype-open" (click)="openPrototype(process, file)">&#x67e5;&#x770b;</button> }
+                    <button type="button" data-testid="proc-prototype-download" (click)="downloadPrototype(process, file)">&#x4e0b;&#x8f7d;</button>
+                    <button type="button" data-testid="proc-prototype-remove" (click)="removePrototype(process, file)">&#x5220;&#x9664;</button>
+                  </div>
+                  @if (isPrototypeExpanded(process, file) && file.versions?.length) {
+                    <div class="attachment-version-list" data-testid="proc-prototype-version-list">
+                      @for (version of file.versions; track version.uid || $index) {
+                        <div class="attachment-version-item" data-testid="proc-prototype-version-item">
+                          <div><strong>v{{ version.number || $index + 1 }}{{ version.uid === file.versionUid ? ' \u00b7 \u5f53\u524d\u5f15\u7528' : '' }}</strong><span>{{ version.uploadedAt || '\u672a\u8bb0\u5f55\u4e0a\u4f20\u65f6\u95f4' }}</span></div>
+                          <div>@if (canPreviewPrototype(file, version)) { <button type="button" data-testid="proc-prototype-version-open" (click)="openPrototype(process, file, version)">&#x67e5;&#x770b;</button> }<button type="button" data-testid="proc-prototype-version-download" (click)="downloadPrototype(process, file, version)">&#x4e0b;&#x8f7d;</button></div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              } @empty {
+                <div class="attachment-empty">&#x6682;&#x65e0;&#x9644;&#x4ef6;</div>
+              }
+            </div>
+          </aside>
+        }
+      </section>
+    </section>
+  } @else {
+    <div class="diag-empty" data-testid="process-flow-empty">&#x6682;&#x65e0;&#x6d41;&#x7a0b;&#x3002;&#x8bf7;&#x5148;&#x5728;&#x9636;&#x6bb5;&#x89c6;&#x56fe;&#x65b0;&#x589e;&#x6d41;&#x7a0b;&#x3002;</div>
+  }
+</div>

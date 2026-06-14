@@ -1,4 +1,4 @@
-import { ValueDomainColumn, ValueDomainLane, ensureValueDomainModel } from '../../panorama/value-domain/value-domain-model';
+import { ValueDomainColumn, ValueDomainLane, ensureValueDomainModel } from '../../../core/document/value-domain-model';
 
 export interface LegacyStage {
   uid?: string;

@@ -1,0 +1,36 @@
+<div class="process-shell" data-testid="process-workbench-angular">
+  <div class="proc-view-toolbar">
+    <div class="proc-view-toolbar-main">
+      <div class="view-toggle-group">
+        <button class="vtb" [class.active]="view() === 'stage'" type="button" data-testid="process-switch-stage" (click)="openStage()">阶段视图</button>
+        <button class="vtb" [class.active]="view() === 'flow'" type="button" data-testid="process-switch-card" (click)="openFlow()">流程视图</button>
+        <button class="vtb" [class.active]="view() === 'node'" type="button" data-testid="process-switch-node" (click)="openNode()">节点视图</button>
+        <button class="vtb" type="button" data-testid="process-switch-flow-legacy" (click)="openFlowLegacy()">流程旧版</button>
+        <button class="vtb" type="button" data-testid="process-switch-editor-legacy" (click)="openEditorLegacy()">流程编辑旧版</button>
+      </div>
+      <div class="proc-view-actions">
+        <span class="inline-help toolbar-help" tabindex="0" data-testid="process-view-help" data-tip="流程工作台只保留阶段视图和流程视图；旧版入口用于迁移期截图对比。">?</span>
+        @if (view() === 'stage') {
+          @if (stageEditing()) {
+            <button class="btn btn-ghost-sm" type="button" data-testid="stage-editor-hide" (click)="setStageEditing(false)">关闭编辑</button>
+          } @else {
+            <button class="btn btn-outline btn-sm" type="button" data-testid="stage-editor-open" (click)="setStageEditing(true)">打开编辑</button>
+          }
+        }
+        @if (view() === 'editor') {
+          <button class="btn btn-ghost-sm" type="button" data-testid="process-editor-back-flow" (click)="openFlow()">关闭编辑</button>
+        }
+      </div>
+    </div>
+  </div>
+
+  @if (view() === 'stage') {
+    <app-process-stage-workbench (processEditorRequested)="openEditor($event)" />
+  } @else if (view() === 'flow') {
+    <app-process-flow-workbench (taskEditorRequested)="openNode($event)" />
+  } @else if (view() === 'node') {
+    <app-process-editor-workbench />
+  } @else {
+    <app-process-editor-workbench />
+  }
+</div>

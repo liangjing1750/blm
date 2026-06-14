@@ -9,7 +9,7 @@ export interface WorkbenchMigrationRecord {
 
 export const WORKBENCH_MIGRATION_STATUS: WorkbenchMigrationRecord[] = [
   { id: 'panorama', label: '全景工作台', status: 'legacy', owner: '总负责人 / 产品经理' },
-  { id: 'process', label: '流程工作台', status: 'legacy', owner: '产品经理' },
+  { id: 'process', label: '流程工作台', status: 'hybrid', owner: '产品经理' },
   { id: 'component', label: '构件工作台', status: 'legacy', owner: '后端研发' },
   { id: 'orchestration', label: '应用编排台', status: 'legacy', owner: '技术经理 / 前端研发' },
   { id: 'entity', label: '实体工作台', status: 'legacy', owner: '后端研发' },
