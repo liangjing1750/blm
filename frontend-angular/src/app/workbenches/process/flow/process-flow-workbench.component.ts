@@ -31,6 +31,7 @@ interface FlowCanvasNode {
 
 interface FlowCanvasEdge {
   id: string;
+  baseId: string;
   label: string;
   d: string;
   labelX: number;
@@ -73,6 +74,7 @@ export class ProcessFlowWorkbenchComponent {
   protected readonly version = signal(0);
   protected readonly selectedElementId = signal<string>('');
   protected readonly connectingFromId = signal<string>('');
+  protected readonly rolePickerOpen = signal(false);
   protected readonly selectedStageId = signal<string>('');
   protected readonly attachmentDrawerOpen = signal(false);
   protected readonly zoomValue = signal(1);
@@ -87,6 +89,7 @@ export class ProcessFlowWorkbenchComponent {
   protected readonly graphStartX = 146;
   protected readonly graphNodeStartX = 198;
   protected readonly columnGap = 168;
+  private readonly lanePalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#16a34a'];
 
   @Output() readonly taskEditorRequested = new EventEmitter<string>();
 
@@ -167,6 +170,11 @@ export class ProcessFlowWorkbenchComponent {
   protected taskRoleIds(task: LegacyProcessNode): string[] {
     const ids = this.adapter.taskRoleIds(task);
     return ids.length ? ids : [task.role_id || task.role || ''].filter(Boolean);
+  }
+
+  protected taskRoleSummary(task: LegacyProcessNode): string {
+    const names = this.taskRoleIds(task).map((roleId) => this.roleName(roleId)).filter(Boolean);
+    return names.length ? names.join('、') : '选择执行角色';
   }
 
   protected currentStageId(): string {
@@ -266,8 +274,8 @@ export class ProcessFlowWorkbenchComponent {
           shared: Boolean(task && visibleRoleNames.length > 1),
           x: x + offset.dx,
           y: baseY + offset.dy,
-          width: kind === 'gateway' ? 54 : this.nodeWidth,
-          height: kind === 'gateway' ? 54 : this.nodeHeight,
+          width: kind === 'gateway' ? 86 : this.nodeWidth,
+          height: kind === 'gateway' ? 76 : this.nodeHeight,
           task,
           gateway,
         };
@@ -275,30 +283,51 @@ export class ProcessFlowWorkbenchComponent {
     });
   }
 
+  protected laneColor(laneName: string): string {
+    // 模块意图：角色颜色只服务于流程图识别，不写入文档模型，避免引入新的持久化字段。
+    const names = this.currentProcess() ? this.lanes(this.currentProcess()!).map((lane) => lane.name) : [];
+    const index = Math.max(0, names.indexOf(laneName || ''));
+    return this.lanePalette[index % this.lanePalette.length];
+  }
+
+  protected inlinePanelLeft(process: LegacyProcess, node: FlowCanvasNode): number {
+    // 关键流程：优先放在节点右侧，其次放在左侧，减少遮挡当前泳道图元素。
+    const panelWidth = 270;
+    const right = node.x + node.width + 14;
+    if (right + panelWidth < this.canvasWidth(process) - 16) return right;
+    return Math.max(this.laneTitleWidth + 12, node.x - panelWidth - 14);
+  }
+
+  protected inlinePanelTop(process: LegacyProcess, node: FlowCanvasNode): number {
+    const panelHeight = node.task ? 210 : 150;
+    const below = node.y + node.height + 12;
+    if (below + panelHeight < this.canvasHeight(process) - 12) return below;
+    return Math.max(12, node.y - panelHeight - 12);
+  }
+
   protected flowEdges(process: LegacyProcess): FlowCanvasEdge[] {
-    const nodes = new Map<string, FlowCanvasNode>();
-    for (const node of this.flowNodes(process)) {
-      if (!nodes.has(node.baseId)) nodes.set(node.baseId, node);
-    }
-    return this.edges(process)
-      .map((edge, index) => {
-        const from = nodes.get(String(edge.from || ''));
-        const to = nodes.get(String(edge.to || ''));
-        if (!from || !to) return null;
+    // 关键流程：共享节点会渲染为多个角色实例，连线必须连接所有实例，而不是只连第一个。
+    const nodes = this.flowNodes(process);
+    return this.edges(process).flatMap((edge, index) => {
+      const fromNodes = nodes.filter((node) => node.baseId === String(edge.from || ''));
+      const toNodes = nodes.filter((node) => node.baseId === String(edge.to || ''));
+      if (!fromNodes.length || !toNodes.length) return [];
+      return fromNodes.flatMap((from, fromIndex) => toNodes.map((to, toIndex) => {
         const startX = from.x + from.width;
         const startY = from.y + from.height / 2;
         const endX = to.x;
         const endY = to.y + to.height / 2;
         const midX = Math.max(startX + 24, Math.round((startX + endX) / 2));
         return {
-          id: this.edgeId(edge) || `edge-${index}`,
-          label: String(edge.label || edge.condition || ''),
+          id: `${this.edgeId(edge) || `edge-${index}`}::${from.id}::${to.id}`,
+          baseId: this.edgeId(edge) || `edge-${index}`,
+          label: fromIndex === 0 && toIndex === 0 ? String(edge.label || edge.condition || '') : '',
           d: `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`,
           labelX: midX + 6,
           labelY: (startY + endY) / 2 - 8,
         };
-      })
-      .filter((edge): edge is FlowCanvasEdge => Boolean(edge));
+      }));
+    });
   }
 
   protected previewEdge(process: LegacyProcess): FlowCanvasEdge | null {
@@ -310,7 +339,7 @@ export class ProcessFlowWorkbenchComponent {
     const startX = from.x + from.width;
     const startY = from.y + from.height / 2;
     const midX = Math.max(startX + 24, Math.round((startX + point.x) / 2));
-    return { id: 'preview', label: '', d: `M ${startX} ${startY} H ${midX} V ${point.y} H ${point.x}`, labelX: 0, labelY: 0 };
+    return { id: 'preview', baseId: 'preview', label: '', d: `M ${startX} ${startY} H ${midX} V ${point.y} H ${point.x}`, labelX: 0, labelY: 0 };
   }
 
   protected connectAnchors(node: FlowCanvasNode): FlowAnchor[] {
@@ -429,6 +458,7 @@ export class ProcessFlowWorkbenchComponent {
 
   protected selectElement(id: string): void {
     this.selectedElementId.set(id);
+    this.rolePickerOpen.set(false);
   }
 
   protected setProcessField(field: 'name' | 'trigger' | 'outcome', value: string): void {
@@ -455,6 +485,15 @@ export class ProcessFlowWorkbenchComponent {
     const select = target as HTMLSelectElement | null;
     const roleIds = select ? Array.from(select.selectedOptions).map((option) => option.value).filter(Boolean) : [];
     this.flowModel.setTaskRoleIds(task, roleIds);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected toggleTaskRole(task: LegacyProcessNode, roleId: string, checked: boolean): void {
+    const current = new Set(this.taskRoleIds(task));
+    if (checked) current.add(roleId);
+    else current.delete(roleId);
+    this.flowModel.setTaskRoleIds(task, [...current]);
     this.adapter.touch();
     this.refresh();
   }
@@ -524,6 +563,7 @@ export class ProcessFlowWorkbenchComponent {
   protected clearCanvasSelection(): void {
     this.selectedElementId.set('');
     this.connectingFromId.set('');
+    this.rolePickerOpen.set(false);
     this.previewPoint.set(null);
   }
 

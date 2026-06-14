@@ -2,16 +2,22 @@
   @if (currentProcess(); as process) {
     <section class="process-flow-frame">
       <header class="process-flow-topbar" data-testid="process-flow-basic-fields">
-        <select class="stage-select" data-testid="process-flow-stage-select" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
-          @for (stage of stages(); track stageId(stage)) {
-            <option [value]="stageId(stage)">{{ stageName(stage) }}</option>
-          }
-        </select>
-        <select class="process-select" data-testid="process-flow-select" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
-          @for (item of processesForCurrentStage(); track processId(item)) {
-            <option [value]="processId(item)">{{ item.name || '\u672a\u547d\u540d\u6d41\u7a0b' }}</option>
-          }
-        </select>
+        <label class="compact-field select-field">
+          <span>阶段</span>
+          <select class="stage-select" data-testid="process-flow-stage-select" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
+            @for (stage of stages(); track stageId(stage)) {
+              <option [value]="stageId(stage)">{{ stageName(stage) }}</option>
+            }
+          </select>
+        </label>
+        <label class="compact-field select-field">
+          <span>流程</span>
+          <select class="process-select" data-testid="process-flow-select" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
+            @for (item of processesForCurrentStage(); track processId(item)) {
+              <option [value]="processId(item)">{{ item.name || '\u672a\u547d\u540d\u6d41\u7a0b' }}</option>
+            }
+          </select>
+        </label>
         <label class="compact-field name-field">
           <span>&#x540d;&#x79f0;</span>
           <input type="text" data-testid="process-flow-name-input" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
@@ -31,7 +37,7 @@
           <div class="process-flow-side-tools">
             <button type="button" data-testid="process-flow-add-node" title="&#x65b0;&#x589e;&#x8282;&#x70b9;" (click)="addTask()"><b>+</b><span>&#x8282;&#x70b9;</span></button>
             <button type="button" data-testid="process-flow-add-gateway" title="&#x65b0;&#x589e;&#x7f51;&#x5173;" (click)="addGateway()"><b>&#x25c7;</b><span>&#x7f51;&#x5173;</span></button>
-            <button type="button" data-testid="process-flow-open-attachments" title="&#x6d41;&#x7a0b;&#x9644;&#x4ef6;" (click)="attachmentDrawerOpen.set(true)"><b>+</b><span>&#x9644;&#x4ef6;</span></button>
+            <button type="button" data-testid="process-flow-open-attachments" title="&#x6d41;&#x7a0b;&#x9644;&#x4ef6;" (click)="attachmentDrawerOpen.set(true)"><b class="tool-file-icon">□</b><span>&#x9644;&#x4ef6;</span></button>
             @if (connectingFromId()) {
               <button type="button" data-testid="process-flow-cancel-connect" title="&#x53d6;&#x6d88;&#x8fde;&#x7ebf;" (click)="connectingFromId.set('')"><b>!</b><span>&#x53d6;&#x6d88;</span></button>
             }
@@ -42,7 +48,7 @@
 
           <div class="process-flow-canvas" data-testid="process-flow-canvas" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
             @for (lane of lanes(process); track lane.id) {
-              <div class="flow-lane" [style.top.px]="lane.top" [style.height.px]="lane.height" (dragover)="$event.preventDefault()" (drop)="onLaneDrop($event, lane)">
+              <div class="flow-lane" [style.--lane-color]="laneColor(lane.name)" [style.top.px]="lane.top" [style.height.px]="lane.height" (dragover)="$event.preventDefault()" (drop)="onLaneDrop($event, lane)">
                 <div class="flow-lane-title">{{ lane.name }}</div>
               </div>
             }
@@ -54,8 +60,8 @@
                 </marker>
               </defs>
               @for (edge of flowEdges(process); track edge.id) {
-                <path class="flow-edge-hit" [attr.d]="edge.d" (click)="$event.stopPropagation(); selectElement(edge.id)"></path>
-                <path class="flow-edge" [class.active]="selectedElementId() === edge.id" [attr.d]="edge.d" (click)="$event.stopPropagation(); selectElement(edge.id)"></path>
+                <path class="flow-edge-hit" [attr.d]="edge.d" (click)="$event.stopPropagation(); selectElement(edge.baseId)"></path>
+                <path class="flow-edge" [class.active]="selectedElementId() === edge.baseId" [attr.d]="edge.d" (click)="$event.stopPropagation(); selectElement(edge.baseId)"></path>
                 @if (edge.label) {
                   <text class="flow-edge-label" [attr.x]="edge.labelX" [attr.y]="edge.labelY">{{ edge.label }}</text>
                 }
@@ -69,16 +75,16 @@
               @if (node.kind === 'start' || node.kind === 'end') {
                 <button class="flow-terminal" [class.active]="selectedElementId() === node.id" [class.connecting]="connectingFromId() === node.id" [class.is-end]="node.kind === 'end'" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.id) : selectElement(node.id)">{{ node.name }}</button>
               } @else if (node.kind === 'gateway') {
-                <button class="flow-gateway" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)"><span>{{ node.name }}</span></button>
+                <button class="flow-gateway" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)"><span>{{ node.name }}</span></button>
               } @else {
-                <button class="flow-node" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)">
+                <button class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)">
                   @if (node.shared) { <span class="shared-badge">&#x5171;&#x4eab;</span> }
                   <strong>{{ node.name }}</strong>
                   <small>{{ node.role || '\u672a\u5206\u914d\u89d2\u8272' }}</small>
                 </button>
               }
               @if (selectedElementId() === node.baseId || selectedElementId() === node.id) {
-                <div class="flow-connect-box" [style.left.px]="node.x - 4" [style.top.px]="node.y - 4" [style.width.px]="node.width + 8" [style.height.px]="node.height + 8" (click)="$event.stopPropagation()">
+                <div class="flow-connect-box" [style.left.px]="node.x - 2" [style.top.px]="node.y - 2" [style.width.px]="node.width + 4" [style.height.px]="node.height + 4" (click)="$event.stopPropagation()">
                   @for (anchor of connectAnchors(node); track anchor.id) {
                     <button type="button" class="connect-anchor" [class]="anchor.side" [style.left.px]="anchor.x - node.x" [style.top.px]="anchor.y - node.y" (click)="startConnectFromAnchor($event, node.baseId)">+</button>
                   }
@@ -87,14 +93,29 @@
             }
 
             @if (selectedNode(process); as node) {
-              <div class="flow-inline-panel" data-testid="process-flow-inline-panel" [style.left.px]="node.x" [style.top.px]="node.y + node.height + 12" (click)="$event.stopPropagation()">
+              <div class="flow-inline-panel" data-testid="process-flow-inline-panel" [style.left.px]="inlinePanelLeft(process, node)" [style.top.px]="inlinePanelTop(process, node)" (click)="$event.stopPropagation()">
                 @if (node.task) {
                   <label><span>&#x8282;&#x70b9;&#x540d;&#x79f0;</span><input type="text" [ngModel]="node.task.name || ''" (ngModelChange)="setTaskName(node.task, $event)" /></label>
-                  <label>
-                    <span>&#x5173;&#x8054;&#x89d2;&#x8272;</span>
-                    <select multiple (change)="setTaskRolesFromSelect(node.task, $event.target)">
-                      @for (role of roles(); track roleId(role)) { <option [value]="roleId(role)" [selected]="taskRoleIds(node.task).includes(roleId(role))">{{ role.name || roleId(role) }}</option> }
-                    </select>
+                  <label class="flow-role-combo">
+                    <span>执行角色</span>
+                    <button type="button" class="flow-role-trigger" [class.has-value]="taskRoleIds(node.task).length" (click)="$event.stopPropagation(); rolePickerOpen.set(!rolePickerOpen())">
+                      <span>{{ taskRoleSummary(node.task) }}</span>
+                      <b>⌄</b>
+                    </button>
+                    @if (rolePickerOpen()) {
+                      <div class="flow-role-menu" (click)="$event.stopPropagation()">
+                        <strong>执行角色</strong>
+                        @for (role of roles(); track roleId(role)) {
+                          <label class="flow-role-option">
+                            <input type="checkbox" [checked]="taskRoleIds(node.task).includes(roleId(role))" (change)="toggleTaskRole(node.task, roleId(role), $any($event.target).checked)" />
+                            <span>{{ role.name || roleId(role) }}</span>
+                          </label>
+                        }
+                        <div class="flow-role-menu-footer">
+                          <button type="button" (click)="rolePickerOpen.set(false)">完成</button>
+                        </div>
+                      </div>
+                    }
                   </label>
                   <div class="inline-panel-actions">
                     <button type="button" data-testid="process-flow-open-node-view" (click)="openNodeView(node)">&#x8fdb;&#x5165;&#x8282;&#x70b9;&#x89c6;&#x56fe;</button>
