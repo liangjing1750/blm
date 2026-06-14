@@ -8,8 +8,11 @@
       <div class="process-flow-card has-tasklevel">
         <div class="process-flow-head">
           <div class="process-flow-actions">
-            <span>流程结构</span>
-            <strong>{{ process.name || '未命名流程' }}</strong>
+            <span>节点上下文</span>
+            <strong>{{ currentTask()?.name || process.name || '未命名流程' }}</strong>
+            @if (currentTask()) {
+              <em>正在维护节点级内容</em>
+            }
           </div>
         </div>
         <div class="drawer-diag process-main-diag process-editor-main-diag" data-testid="process-editor-diagram-scroll">
@@ -86,6 +89,31 @@
       </div>
 
       <div class="drawer-body">
+        @if (currentTask(); as task) {
+          <section class="node-editor-hero" data-testid="process-node-editor-hero">
+            <div>
+              <span>节点视图</span>
+              <h3>{{ task.name || '未命名节点' }}</h3>
+              <p>{{ taskRoleSummary(task) }}</p>
+            </div>
+            <div class="node-editor-metrics">
+              <b>{{ userSteps(task).length }}<small>步骤</small></b>
+              <b>{{ forms(task).length }}<small>表单</small></b>
+              <b>{{ task.entity_ops?.length || 0 }}<small>实体</small></b>
+              <b>{{ taskDefinitions(task).length }}<small>任务</small></b>
+              <b>{{ businessRules(task).length }}<small>规则</small></b>
+            </div>
+          </section>
+        } @else {
+          <section class="node-editor-hero is-empty" data-testid="process-node-editor-hero">
+            <div>
+              <span>节点视图</span>
+              <h3>请选择一个流程节点</h3>
+              <p>节点视图用于维护用户步骤、表单字段、实体操作、后端任务和业务规则。</p>
+            </div>
+          </section>
+        }
+
         <div class="form-grid process-editor-summary-grid">
           <div class="field-group">
             <label>流程名称</label>

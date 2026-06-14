@@ -279,6 +279,11 @@ export class ProcessEditorWorkbenchComponent {
     return this.adapter.taskRoleIds(task);
   }
 
+  protected taskRoleSummary(task: LegacyProcessNode): string {
+    const names = this.taskRoleIds(task).map((roleId) => this.displayRoleName(roleId)).filter(Boolean);
+    return names.length ? names.join('、') : '未分配角色';
+  }
+
   protected setTaskRoleIds(task: LegacyProcessNode, roleIds: string[]): void {
     this.adapter.setTaskRoleIds(task, roleIds);
     this.refresh();
