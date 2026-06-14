@@ -11943,7 +11943,7 @@ button.fb-attachment-item {
   min-width: 100%;
   border: 1px solid #d8e4f2;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
   background:
     linear-gradient(90deg, #f8fbff 0 116px, transparent 116px),
     #fff;
@@ -12108,8 +12108,8 @@ button.fb-attachment-item {
   font-weight: 800;
 }
 
-.flow-connect-box{position:absolute;z-index:18;border:1px dashed #60a5fa;border-radius:8px;pointer-events:none}
-.connect-anchor{position:absolute;display:grid;width:14px;height:14px;transform:translate(-50%,-50%);place-items:center;border:1px solid #93c5fd;border-radius:999px;background:#fff;color:#2563eb;cursor:crosshair;font-size:11px;font-weight:800;line-height:1;pointer-events:auto}
+.flow-connect-box{position:absolute;z-index:18;border:1px dashed #60a5fa;border-radius:6px;pointer-events:none}
+.connect-anchor{position:absolute;display:grid;width:11px;height:11px;transform:translate(-50%,-50%);place-items:center;border:1px solid #93c5fd;border-radius:999px;background:#fff;color:#2563eb;cursor:crosshair;font-size:9px;font-weight:800;line-height:1;pointer-events:auto}
 
 .flow-node {
   display: grid;
@@ -12148,6 +12148,10 @@ button.fb-attachment-item {
   color: #0f172a;
   font-size: 13px;
   font-weight: 700;
+}
+
+.flow-terminal:not(.is-end) {
+  flex-direction: row-reverse;
 }
 
 .flow-terminal::before {
@@ -12227,7 +12231,7 @@ button.fb-attachment-item {
 .flow-inline-panel,
 .flow-edge-panel {
   position: absolute;
-  z-index: 40;
+  z-index: 120;
   display: grid;
   gap: 8px;
   width: 270px;
@@ -12284,7 +12288,7 @@ button.fb-attachment-item {
   left: 0;
   right: 0;
   top: calc(100% + 4px);
-  z-index: 60;
+  z-index: 140;
   display: grid;
   gap: 8px;
   padding: 10px;

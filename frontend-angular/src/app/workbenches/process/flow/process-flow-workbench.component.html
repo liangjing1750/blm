@@ -27,7 +27,7 @@
           <input type="text" data-testid="process-flow-trigger-input" [ngModel]="process.trigger || ''" (ngModelChange)="setProcessField('trigger', $event)" />
         </label>
         <label class="compact-field">
-          <span>&#x7ed3;&#x679c;</span>
+          <span>&#x9884;&#x671f;</span>
           <input type="text" data-testid="process-flow-outcome-input" [ngModel]="process.outcome || ''" (ngModelChange)="setProcessField('outcome', $event)" />
         </label>
       </header>
@@ -86,7 +86,7 @@
               @if (selectedElementId() === node.baseId || selectedElementId() === node.id) {
                 <div class="flow-connect-box" [style.left.px]="node.x - 2" [style.top.px]="node.y - 2" [style.width.px]="node.width + 4" [style.height.px]="node.height + 4" (click)="$event.stopPropagation()">
                   @for (anchor of connectAnchors(node); track anchor.id) {
-                    <button type="button" class="connect-anchor" [class]="anchor.side" [style.left.px]="anchor.x - node.x" [style.top.px]="anchor.y - node.y" (click)="startConnectFromAnchor($event, node.baseId)">+</button>
+                    <button type="button" class="connect-anchor" [class]="anchor.side" [style.left.px]="anchor.x - node.x" [style.top.px]="anchor.y - node.y" (pointerdown)="startConnectFromAnchor($event, node.baseId)" (click)="startConnectFromAnchor($event, node.baseId)">+</button>
                   }
                 </div>
               }

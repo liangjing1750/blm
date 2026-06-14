@@ -248,6 +248,10 @@ export class ProcessFlowWorkbenchComponent {
       const x = kind === 'start' ? this.graphStartX : this.graphNodeStartX + graphIndex * this.columnGap;
       if (kind === 'start' || kind === 'end') {
         const offset = this.flowOffset(process, id);
+        const terminalHeight = 24;
+        const terminalWidth = 44;
+        const laneCenterY = this.laneHeight / 2 - terminalHeight / 2;
+        const clamped = this.clampNodePosition(process, id, x + offset.dx, laneCenterY + offset.dy, terminalWidth, terminalHeight, '');
         return [{
           id,
           baseId: id,
@@ -255,16 +259,19 @@ export class ProcessFlowWorkbenchComponent {
           name: id === 'START' ? '\u5f00\u59cb' : '\u7ed3\u675f',
           role: '',
           shared: false,
-          x: x + offset.dx,
-          y: 54 + offset.dy,
-          width: 44,
-          height: 24,
+          x: clamped.x,
+          y: clamped.y,
+          width: terminalWidth,
+          height: terminalHeight,
         }];
       }
       return visibleRoleNames.map((roleName, roleIndex) => {
         const laneIndex = laneMap.get(roleName) ?? 0;
         const offset = this.flowOffset(process, id);
         const baseY = laneIndex * this.laneHeight + (kind === 'gateway' ? 42 : 54);
+        const width = kind === 'gateway' ? 86 : this.nodeWidth;
+        const height = kind === 'gateway' ? 76 : this.nodeHeight;
+        const clamped = this.clampNodePosition(process, id, x + offset.dx, baseY + offset.dy, width, height, roleName);
         return {
           id: `${id}::${roleName || roleIndex}`,
           baseId: id,
@@ -272,10 +279,10 @@ export class ProcessFlowWorkbenchComponent {
           name: task?.name || gateway?.title || (kind === 'gateway' ? '\u7f51\u5173' : '\u672a\u547d\u540d\u8282\u70b9'),
           role: roleName,
           shared: Boolean(task && visibleRoleNames.length > 1),
-          x: x + offset.dx,
-          y: baseY + offset.dy,
-          width: kind === 'gateway' ? 86 : this.nodeWidth,
-          height: kind === 'gateway' ? 76 : this.nodeHeight,
+          x: clamped.x,
+          y: clamped.y,
+          width,
+          height,
           task,
           gateway,
         };
@@ -352,7 +359,7 @@ export class ProcessFlowWorkbenchComponent {
   }
 
   protected selectedNode(process: LegacyProcess): FlowCanvasNode | null {
-    return this.flowNodes(process).find((node) => node.baseId === this.selectedElementId()) || null;
+    return this.flowNodes(process).find((node) => node.baseId === this.selectedElementId() && node.kind !== 'start' && node.kind !== 'end') || null;
   }
 
   protected selectedEdge(process: LegacyProcess): LegacyFlowEdge | null {
@@ -546,6 +553,7 @@ export class ProcessFlowWorkbenchComponent {
   }
 
   protected startConnectFromAnchor(event: MouseEvent, nodeId: string): void {
+    event.preventDefault();
     event.stopPropagation();
     this.connectingFromId.set(nodeId);
     this.selectedElementId.set(nodeId);
@@ -681,8 +689,6 @@ export class ProcessFlowWorkbenchComponent {
     }
     this.dragState.set(null);
     this.selectedElementId.set(drag.nodeId);
-    const currentNode = node || this.flowNodes(process).find((item) => item.baseId === drag.nodeId);
-    if (moved && drag.task && currentNode) this.syncTaskLaneAfterDrag(process, drag.task, currentNode);
     this.refresh();
   }
 
@@ -749,7 +755,30 @@ export class ProcessFlowWorkbenchComponent {
       const laneCenter = lane.top + lane.height / 2 - current.height / 2;
       if (Math.abs(nextY - laneCenter) <= threshold) nextY = laneCenter;
     }
-    return { x: nextX, y: nextY };
+    return this.clampNodePosition(process, current.baseId, nextX, nextY, current.width, current.height, current.role);
+  }
+
+  private clampNodePosition(process: LegacyProcess, nodeId: string, x: number, y: number, width: number, height: number, roleName: string): { x: number; y: number } {
+    // Module intent: every rendered element must stay inside the swimlane canvas; snapping may align, but it may not push nodes outside the diagram.
+    const minX = nodeId === 'START' ? this.laneTitleWidth + 18 : this.laneTitleWidth + 24;
+    const maxX = Math.max(minX, this.canvasWidth(process) - width - 24);
+    const laneBottom = this.lanes(process).length * this.laneHeight;
+    let minY = 12;
+    let maxY = Math.max(minY, laneBottom - height - 12);
+
+    // Boundary detail: task nodes are locked to their own role lane. Moving across lanes would silently rewrite modeling responsibility.
+    if (roleName) {
+      const lane = this.lanes(process).find((item) => item.name === roleName);
+      if (lane) {
+        minY = lane.top + 10;
+        maxY = Math.max(minY, lane.top + lane.height - height - 10);
+      }
+    }
+
+    return {
+      x: Math.min(maxX, Math.max(minX, x)),
+      y: Math.min(maxY, Math.max(minY, y)),
+    };
   }
 
   private collapsePrototypeVersions(process: LegacyProcess): void {
@@ -763,19 +792,6 @@ export class ProcessFlowWorkbenchComponent {
     this.attachmentDrawerOpen.set(true);
     this.refresh();
   }
-
-  private syncTaskLaneAfterDrag(process: LegacyProcess, task: LegacyProcessNode, node: FlowCanvasNode): void {
-    const currentNode = this.flowNodes(process).find((item) => item.id === node.id || item.baseId === node.baseId) || node;
-    const centerY = currentNode.y + currentNode.height / 2;
-    const target = this.lanes(process).find((lane) => centerY >= lane.top && centerY <= lane.top + lane.height);
-    if (!target || target.name === node.role) return;
-    const role = this.roles().find((item) => item.name === target.name || this.roleId(item) === target.name);
-    if (role) {
-      this.flowModel.setTaskRoleIds(task, [this.roleId(role)]);
-      this.adapter.touch();
-    }
-  }
-
 
   private inferGatewayLane(process: LegacyProcess, gatewayId: string): string {
     const edge = this.edges(process).find((item) => String(item.to || '') === gatewayId)
