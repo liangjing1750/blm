@@ -12558,3 +12558,138 @@ button.fb-attachment-item {
   font-size: 11px;
   font-weight: 700;
 }
+
+/* Process node editor polish: keep node-level maintenance visually separate from flow-level editing. */
+.process-editor-drawer .process-editor-summary-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(160px, .72fr);
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e2ecf7;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.process-editor-drawer .process-editor-summary-grid .field-group {
+  gap: 4px;
+}
+
+.process-editor-drawer .process-editor-summary-grid label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.process-editor-drawer .process-editor-summary-grid input,
+.process-editor-drawer .process-editor-summary-grid .proc-stage-ref-list {
+  min-height: 34px;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.process-editor-drawer .process-editor-summary-grid .proc-stage-ref-list {
+  padding: 5px 8px;
+}
+
+.process-editor-drawer .process-editor-summary-grid .proc-stage-ref-chip {
+  min-width: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.process-editor-drawer [data-testid="process-task-lite-panel"] {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.process-editor-drawer [data-testid="process-task-lite-panel"] .form-grid {
+  grid-template-columns: minmax(0, .92fr) minmax(180px, 1.08fr);
+}
+
+.process-editor-drawer [data-testid="process-task-lite-panel"] .field-group-wide {
+  grid-column: auto;
+}
+
+.process-editor-drawer [data-testid="process-task-lite-panel"] input {
+  min-height: 36px;
+  font-weight: 700;
+}
+
+.process-editor-drawer .form-section {
+  margin-top: 10px;
+  border-radius: 12px;
+}
+
+.process-editor-drawer .form-section .section-toolbar {
+  min-height: 30px;
+}
+
+.process-editor-drawer .form-section .section-toolbar h4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.process-editor-drawer .form-section .section-toolbar h4::before {
+  content: "";
+  width: 6px;
+  height: 14px;
+  border-radius: 999px;
+  background: #3b82f6;
+}
+
+.process-editor-drawer .process-editor-list-grid,
+.process-editor-drawer .process-editor-routing-grid {
+  gap: 8px;
+}
+
+.process-editor-drawer .process-editor-compact-row,
+.process-editor-drawer .process-editor-field-row,
+.process-editor-drawer .process-editor-entity-row,
+.process-editor-drawer .process-editor-task-definition-row {
+  min-height: 38px;
+  padding: 6px;
+  border-color: #d7e4f3;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.process-editor-drawer .process-editor-compact-row input,
+.process-editor-drawer .process-editor-field-row input,
+.process-editor-drawer .process-editor-field-row select,
+.process-editor-drawer .process-editor-entity-add select,
+.process-editor-drawer .process-editor-task-definition-row input {
+  min-height: 32px;
+  font-size: 13px;
+}
+
+.process-editor-drawer .flow-row-actions button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.process-editor-drawer .task-role-checkboxes {
+  min-height: 36px;
+  max-height: 118px;
+  padding: 6px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.process-editor-drawer .task-role-checkboxes label {
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.process-editor-drawer .task-role-checkboxes label:has(input:checked) {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
