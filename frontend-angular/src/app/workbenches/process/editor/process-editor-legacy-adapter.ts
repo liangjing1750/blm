@@ -27,13 +27,30 @@ export interface LegacyFormField {
   name?: string;
   type?: string;
   required?: boolean;
+  note?: string;
+  entity_field?: string;
+}
+
+export interface LegacyTaskFormSection {
+  id?: string;
+  uid?: string;
+  name?: string;
+  note?: string;
+  entity_id?: string;
+  entityId?: string;
+  fields?: LegacyFormField[];
 }
 
 export interface LegacyTaskForm {
   id?: string;
   uid?: string;
   name?: string;
+  note?: string;
+  purpose?: string;
+  entity_id?: string;
+  entityId?: string;
   fields?: LegacyFormField[];
+  sections?: LegacyTaskFormSection[];
 }
 
 export interface LegacyEntityOp {

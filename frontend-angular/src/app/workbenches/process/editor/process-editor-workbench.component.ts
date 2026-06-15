@@ -7,6 +7,7 @@ import {
   LegacyProcessNode,
   LegacyTaskDefinition,
   LegacyTaskForm,
+  LegacyTaskFormSection,
   LegacyFormField,
   LegacyUserStep,
   LegacyBusinessRule,
@@ -300,12 +301,28 @@ export class ProcessEditorWorkbenchComponent {
 
   protected forms(task: LegacyProcessNode): LegacyTaskForm[] {
     task.forms ||= [];
+    // 模块意图：节点视图负责把旧版扁平表单升级为“表单-分组-字段”的维护界面。
+    // 关键流程：读取表单时统一规范化，后续模板和操作方法只面对稳定结构。
+    // 边界细节：仍同步回 form.fields，保证尚未迁移的统计和导出逻辑不失效。
+    task.forms.forEach((form, index) => this.normalizeForm(form, index));
     return task.forms;
   }
 
   protected fields(form: LegacyTaskForm): LegacyFormField[] {
-    form.fields ||= [];
-    return form.fields;
+    return this.sections(form).flatMap((section) => section.fields || []);
+  }
+
+  protected sections(form: LegacyTaskForm): LegacyTaskFormSection[] {
+    this.normalizeForm(form, 0);
+    return form.sections || [];
+  }
+
+  protected formFieldCount(form: LegacyTaskForm): number {
+    return this.sections(form).reduce((sum, section) => sum + (section.fields || []).length, 0);
+  }
+
+  protected taskFieldCount(task: LegacyProcessNode): number {
+    return this.forms(task).reduce((sum, form) => sum + this.formFieldCount(form), 0);
   }
 
   protected userSteps(task: LegacyProcessNode): LegacyUserStep[] {
@@ -324,6 +341,10 @@ export class ProcessEditorWorkbenchComponent {
 
   protected businessRuleValue(rule: LegacyBusinessRule | string): string {
     return typeof rule === 'string' ? rule : String(rule.content || rule.name || '');
+  }
+
+  protected businessRuleName(rule: LegacyBusinessRule | string, index: number): string {
+    return typeof rule === 'string' ? `规则${index + 1}` : String(rule.name || `规则${index + 1}`);
   }
 
   protected entityName(entityId: string): string {
@@ -492,7 +513,16 @@ export class ProcessEditorWorkbenchComponent {
   }
 
   protected addForm(task: LegacyProcessNode): void {
-    this.adapter.addForm(task);
+    task.forms ||= [];
+    const id = this.nextLocalId('F', task.forms);
+    task.forms.push({
+      id,
+      uid: id,
+      name: `表单${task.forms.length + 1}`,
+      purpose: '',
+      sections: [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: '', fields: [] }],
+    });
+    this.adapter.touch();
     this.refresh();
   }
 
@@ -506,13 +536,82 @@ export class ProcessEditorWorkbenchComponent {
     this.refresh();
   }
 
-  protected addFormField(form: LegacyTaskForm): void {
-    this.adapter.addFormField(form);
+  protected duplicateForm(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    task.forms ||= [];
+    const clone = structuredClone(form);
+    const id = this.nextLocalId('F', task.forms);
+    clone.id = id;
+    clone.uid = id;
+    clone.name = `${form.name || '表单'} 副本`;
+    this.sections(clone).forEach((section, sectionIndex) => {
+      const sectionId = `SEC${Date.now()}${sectionIndex}`;
+      section.id = sectionId;
+      section.uid = sectionId;
+      (section.fields || []).forEach((field, fieldIndex) => {
+        const fieldId = `FLD${Date.now()}${sectionIndex}${fieldIndex}`;
+        field.id = fieldId;
+        field.uid = fieldId;
+      });
+    });
+    const index = task.forms.indexOf(form);
+    task.forms.splice(index >= 0 ? index + 1 : task.forms.length, 0, clone);
+    this.adapter.touch();
     this.refresh();
   }
 
-  protected setFormField(field: LegacyFormField, key: 'name' | 'type', value: string): void {
-    this.adapter.setFormField(field, key, value);
+  protected setFormPurpose(form: LegacyTaskForm, value: string): void {
+    form.purpose = value;
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected addFormSection(form: LegacyTaskForm, afterSection?: LegacyTaskFormSection): void {
+    const sections = this.sections(form);
+    const id = this.nextLocalId('SEC', sections);
+    const section: LegacyTaskFormSection = { id, uid: id, name: `分组${sections.length + 1}`, note: '', entity_id: '', fields: [] };
+    const index = afterSection ? sections.indexOf(afterSection) : -1;
+    sections.splice(index >= 0 ? index + 1 : sections.length, 0, section);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected moveFormSection(form: LegacyTaskForm, section: LegacyTaskFormSection, delta: number): void {
+    const sections = this.sections(form);
+    const index = sections.indexOf(section);
+    const nextIndex = index + delta;
+    if (index < 0 || nextIndex < 0 || nextIndex >= sections.length) return;
+    [sections[index], sections[nextIndex]] = [sections[nextIndex], sections[index]];
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected removeFormSection(form: LegacyTaskForm, section: LegacyTaskFormSection): void {
+    const sections = this.sections(form);
+    if (sections.length <= 1) return;
+    form.sections = sections.filter((item) => item !== section);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected setFormSection(section: LegacyTaskFormSection, key: 'name' | 'note' | 'entity_id', value: string): void {
+    section[key] = value;
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected addFormField(section: LegacyTaskFormSection, afterField?: LegacyFormField): void {
+    section.fields ||= [];
+    const id = this.nextLocalId('FLD', section.fields);
+    const field: LegacyFormField = { id, uid: id, name: '', type: 'Text', required: false, entity_field: '', note: '' };
+    const index = afterField ? section.fields.indexOf(afterField) : -1;
+    section.fields.splice(index >= 0 ? index + 1 : section.fields.length, 0, field);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected setFormField(field: LegacyFormField, key: 'name' | 'type' | 'note' | 'entity_field', value: string): void {
+    field[key] = value;
+    this.adapter.touch();
     this.refresh();
   }
 
@@ -521,8 +620,19 @@ export class ProcessEditorWorkbenchComponent {
     this.refresh();
   }
 
-  protected removeFormField(form: LegacyTaskForm, field: LegacyFormField): void {
-    this.adapter.removeFormField(form, field);
+  protected moveFormField(section: LegacyTaskFormSection, field: LegacyFormField, delta: number): void {
+    section.fields ||= [];
+    const index = section.fields.indexOf(field);
+    const nextIndex = index + delta;
+    if (index < 0 || nextIndex < 0 || nextIndex >= section.fields.length) return;
+    [section.fields[index], section.fields[nextIndex]] = [section.fields[nextIndex], section.fields[index]];
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected removeFormField(section: LegacyTaskFormSection, field: LegacyFormField): void {
+    section.fields = (section.fields || []).filter((item) => item !== field);
+    this.adapter.touch();
     this.refresh();
   }
 
@@ -551,6 +661,27 @@ export class ProcessEditorWorkbenchComponent {
     this.refresh();
   }
 
+  protected setBusinessRuleName(task: LegacyProcessNode, index: number, value: string): void {
+    task.businessRules ||= [];
+    const current = task.businessRules[index];
+    if (!current || typeof current === 'string') {
+      task.businessRules[index] = { id: `BR${index + 1}`, uid: `BR${index + 1}`, name: value, content: typeof current === 'string' ? current : '' };
+    } else {
+      current.name = value;
+    }
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected moveBusinessRule(task: LegacyProcessNode, index: number, delta: number): void {
+    task.businessRules ||= [];
+    const nextIndex = index + delta;
+    if (index < 0 || nextIndex < 0 || nextIndex >= task.businessRules.length) return;
+    [task.businessRules[index], task.businessRules[nextIndex]] = [task.businessRules[nextIndex], task.businessRules[index]];
+    this.adapter.touch();
+    this.refresh();
+  }
+
   protected removeBusinessRule(task: LegacyProcessNode, index: number): void {
     this.adapter.removeBusinessRule(task, index);
     this.refresh();
@@ -558,5 +689,47 @@ export class ProcessEditorWorkbenchComponent {
 
   protected refresh(): void {
     this.version.update((value) => value + 1);
+  }
+
+  private normalizeForm(form: LegacyTaskForm, index: number): void {
+    // 模块意图：兼容旧文档中的 flat fields，同时支撑新版分组编辑。
+    // 关键流程：缺少 sections 时创建默认分组，把既有 fields 原样挂进去。
+    // 边界细节：不要删除 form.fields，它仍是跨工作台和历史数据的兼容出口。
+    form.id ||= form.uid || `F${index + 1}`;
+    form.uid ||= form.id;
+    if (!Array.isArray(form.sections)) {
+      form.sections = [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: form.entity_id || form.entityId || '', fields: form.fields || [] }];
+    }
+    if (!form.sections.length) {
+      form.sections.push({ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: form.entity_id || form.entityId || '', fields: [] });
+    }
+    form.sections.forEach((section, sectionIndex) => {
+      section.id ||= section.uid || `SEC${sectionIndex + 1}`;
+      section.uid ||= section.id;
+      section.name ||= `分组${sectionIndex + 1}`;
+      section.note ||= '';
+      section.entity_id = String(section.entity_id || section.entityId || form.entity_id || form.entityId || '').trim();
+      section.fields ||= [];
+      section.fields.forEach((field, fieldIndex) => {
+        field.id ||= field.uid || `FLD${fieldIndex + 1}`;
+        field.uid ||= field.id;
+        field.type ||= 'Text';
+        field.note ||= '';
+        field.entity_field ||= '';
+      });
+    });
+    form.fields = form.sections.flatMap((section) => section.fields || []);
+  }
+
+  private nextLocalId(prefix: string, items: Array<{ id?: string; uid?: string }>): string {
+    // 模块意图：前端草稿内生成稳定局部 ID，避免新增项在同一轮编辑中互相覆盖。
+    // 关键流程：优先按当前集合长度递增，冲突时继续寻找空位。
+    // 边界细节：这里不承担后端全局 ID 语义，保存/同步仍由外层文档机制处理。
+    const used = new Set(items.map((item) => String(item.id || item.uid || '')));
+    for (let index = items.length + 1; index < items.length + 200; index += 1) {
+      const id = `${prefix}${index}`;
+      if (!used.has(id)) return id;
+    }
+    return `${prefix}${Date.now()}`;
   }
 }
