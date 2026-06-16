@@ -2,6 +2,7 @@
   <div class="proc-view-toolbar">
     <div class="proc-view-toolbar-main">
       <div class="view-toggle-group">
+        <button class="vtb" [class.active]="view() === 'valueDomain'" type="button" data-testid="process-switch-value-domain" (click)="openValueDomain()">价值流视图</button>
         <button class="vtb" [class.active]="view() === 'stage'" type="button" data-testid="process-switch-stage" (click)="openStage()">阶段视图</button>
         <button class="vtb" [class.active]="view() === 'flow'" type="button" data-testid="process-switch-card" (click)="openFlow()">流程视图</button>
         <button class="vtb" [class.active]="view() === 'node'" type="button" data-testid="process-switch-node" (click)="openNode()">节点视图</button>
@@ -22,7 +23,9 @@
     </div>
   </div>
 
-  @if (view() === 'stage') {
+  @if (view() === 'valueDomain') {
+    <app-value-domain-workbench />
+  } @else if (view() === 'stage') {
     <app-process-stage-workbench (processEditorRequested)="openEditor($event)" />
   } @else if (view() === 'flow') {
     <app-process-flow-workbench (taskEditorRequested)="openNode($event)" />

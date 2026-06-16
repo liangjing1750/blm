@@ -12,6 +12,7 @@ import {
 import { ProcessEditorWorkbenchComponent } from '../editor/process-editor-workbench.component';
 import { ProcessFlowWorkbenchComponent } from '../flow/process-flow-workbench.component';
 import { ProcessStageWorkbenchComponent } from '../stage/process-stage-workbench.component';
+import { ValueDomainWorkbenchComponent } from '../value-domain/value-domain-workbench.component';
 import {
   ProcessShellView,
   ProcessWorkbenchShellLegacyAdapter,
@@ -27,6 +28,7 @@ import {
     ProcessStageWorkbenchComponent,
     ProcessFlowWorkbenchComponent,
     ProcessEditorWorkbenchComponent,
+    ValueDomainWorkbenchComponent,
   ],
   templateUrl: './process-workbench-shell.component.html',
   styleUrl: './process-workbench-shell.component.scss',
@@ -236,6 +238,15 @@ export class ProcessWorkbenchShellComponent implements OnDestroy {
   protected openStage(): void {
     this.adapter.openStage();
     this.viewState.set('stage');
+    this.refresh();
+  }
+
+  protected openValueDomain(): void {
+    // 模块意图：价值流视图属于流程建模的上游边界，用流程壳层承载，复用现有 Angular 价值流组件。
+    // 关键流程：只切换 S.ui.procView，不重新实现矩阵数据操作，避免两个入口维护同一份价值流模型。
+    // 边界细节：这里不触碰流程、节点选择状态之外的数据模型，确保迁移入口不改变已有文档结构。
+    this.adapter.openValueDomain();
+    this.viewState.set('valueDomain');
     this.refresh();
   }
 

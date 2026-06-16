@@ -156,39 +156,53 @@ class FrontendStructureTests(unittest.TestCase):
         for area in ["panorama", "process", "component", "orchestration", "entity", "knowledge", "role"]:
             self.assertIn(f"id: '{area}'", status_text)
 
-    def test_panorama_workbench_value_domain_tab_mounts_angular_component(self):
+    def test_value_domain_view_is_owned_by_process_workbench(self):
         panorama_file = ANGULAR_DIR / "public" / "legacy-runtime" / "workbenches" / "panorama" / "panorama-workbench.js"
         process_file = ANGULAR_DIR / "public" / "legacy-runtime" / "workbenches" / "process" / "process-legacy.js"
         angular_mount_file = ANGULAR_APP_DIR / "core" / "legacy" / "angular-legacy-mounts.ts"
-        value_domain_component = ANGULAR_APP_DIR / "workbenches" / "panorama" / "value-domain-workbench.component.ts"
-        value_domain_template = ANGULAR_APP_DIR / "workbenches" / "panorama" / "value-domain-workbench.component.html"
+        value_domain_component = ANGULAR_APP_DIR / "workbenches" / "process" / "value-domain" / "value-domain-workbench.component.ts"
+        value_domain_template = ANGULAR_APP_DIR / "workbenches" / "process" / "value-domain" / "value-domain-workbench.component.html"
+        process_shell_component = ANGULAR_APP_DIR / "workbenches" / "process" / "shell" / "process-workbench-shell.component.ts"
+        process_shell_template = ANGULAR_APP_DIR / "workbenches" / "process" / "shell" / "process-workbench-shell.component.html"
+        process_shell_adapter = ANGULAR_APP_DIR / "workbenches" / "process" / "shell" / "process-workbench-shell-legacy-adapter.ts"
         panorama_text = panorama_file.read_text("utf-8")
         process_text = process_file.read_text("utf-8")
         mount_text = angular_mount_file.read_text("utf-8")
         component_text = value_domain_component.read_text("utf-8")
         template_text = value_domain_template.read_text("utf-8")
+        shell_component_text = process_shell_component.read_text("utf-8")
+        shell_template_text = process_shell_template.read_text("utf-8")
+        shell_adapter_text = process_shell_adapter.read_text("utf-8")
 
         self.assertIn("{ id: 'panorama', label: '全景视图' }", panorama_text)
-        self.assertIn("{ id: 'valueDomain', label: '价值流与业务域' }", panorama_text)
+        self.assertNotIn("{ id: 'valueDomain', label: '价值流与业务域' }", panorama_text)
         self.assertIn("{ id: 'roles', label: '角色管理' }", panorama_text)
         self.assertIn("{ id: 'termManagement', label: '术语管理' }", panorama_text)
         self.assertIn("{ id: 'dictionaryManagement', label: '字典管理' }", panorama_text)
         self.assertIn("{ id: 'rules', label: '规则条目' }", panorama_text)
+        self.assertIn("panorama-open-edit-menu", panorama_text)
+        self.assertIn("openValueDomainEditor", panorama_text)
+        self.assertIn("openComponentConstructEditor", panorama_text)
         self.assertNotIn("label: '角色视图'", panorama_text)
         self.assertNotIn("label: '术语字典'", panorama_text)
         self.assertNotIn("label: '统一语言'", panorama_text)
         self.assertNotIn("panorama-view-mode-view", panorama_text)
         self.assertNotIn("panorama-view-mode-edit", panorama_text)
-        self.assertIn("value-domain-angular-host", panorama_text)
-        self.assertIn("mountValueDomain", panorama_text)
-        self.assertIn("setValueDomainEditing", panorama_text)
-        self.assertIn("actionsHtml: valueDomainActions", panorama_text)
+        self.assertNotIn("setValueDomainEditing", panorama_text)
+        self.assertNotIn("value-domain-angular-host", panorama_text)
+        self.assertNotIn("actionsHtml: valueDomainActions", panorama_text)
         self.assertNotIn("renderStagePanoramaLegacyView", panorama_text)
         self.assertNotIn("function renderStagePanoramaLegacyView", process_text)
         self.assertIn("BlmAngularMounts", mount_text)
         self.assertIn("setValueDomainEditing", mount_text)
         self.assertIn("ValueDomainWorkbenchComponent", mount_text)
         self.assertIn("data-testid=\"value-domain-angular\"", template_text)
+        self.assertIn("data-testid=\"value-domain-editor-open\"", template_text)
+        self.assertIn("data-testid=\"process-switch-value-domain\"", shell_template_text)
+        self.assertIn("<app-value-domain-workbench", shell_template_text)
+        self.assertIn("ValueDomainWorkbenchComponent", shell_component_text)
+        self.assertIn("openValueDomain", shell_adapter_text)
+        self.assertIn("'valueDomain'", shell_adapter_text)
         self.assertNotIn("data-testid=\"stage-editor-open\"", template_text)
         self.assertNotIn("window.S", component_text)
         self.assertNotIn("markModified", component_text)

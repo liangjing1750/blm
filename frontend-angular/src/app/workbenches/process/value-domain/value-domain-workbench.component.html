@@ -1,4 +1,12 @@
 <section class="value-domain" data-testid="value-domain-angular">
+  <div class="value-domain-toolbar">
+    <span class="value-domain-toolbar-title">价值流视图</span>
+    @if (editing()) {
+      <button class="btn btn-ghost-sm" type="button" data-testid="value-domain-editor-hide" (click)="setEditing(false)">关闭编辑</button>
+    } @else {
+      <button class="btn btn-outline btn-sm" type="button" data-testid="value-domain-editor-open" (click)="setEditing(true)">打开编辑</button>
+    }
+  </div>
   <div class="stage-workbench" data-testid="value-domain-stage-view">
     <div class="stage-main-shell">
       <div class="stage-main">

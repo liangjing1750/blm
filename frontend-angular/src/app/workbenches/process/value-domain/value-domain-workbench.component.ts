@@ -1,6 +1,6 @@
 ﻿import { CommonModule } from '@angular/common';
 import { Component, signal } from '@angular/core';
-import { createValueDomainLegacyAdapter } from './value-domain/value-domain-legacy-adapter';
+import { createValueDomainLegacyAdapter } from './value-domain-legacy-adapter';
 import {
   ValueDomainCell,
   ValueDomainColumn,
@@ -12,7 +12,7 @@ import {
   ensureValueDomainStages,
   findOrCreateValueDomainCell,
   getValueDomainStageId,
-} from '../../core/document/value-domain-model';
+} from '../../../core/document/value-domain-model';
 
 interface StageDialogState {
   laneId: string;

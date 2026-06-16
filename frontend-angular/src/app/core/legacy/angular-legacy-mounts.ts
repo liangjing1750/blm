@@ -1,6 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { ApplicationRef, ComponentRef, EnvironmentInjector, Inject, Injectable, createComponent } from '@angular/core';
-import { ValueDomainWorkbenchComponent } from '../../workbenches/panorama/value-domain-workbench.component';
+import { ValueDomainWorkbenchComponent } from '../../workbenches/process/value-domain/value-domain-workbench.component';
 import { RoleWorkbenchComponent } from '../../workbenches/role/role-workbench';
 import { KnowledgeWorkbenchComponent } from '../../workbenches/knowledge/knowledge-workbench';
 import { ProcessFlowWorkbenchComponent } from '../../workbenches/process/flow/process-flow-workbench.component';

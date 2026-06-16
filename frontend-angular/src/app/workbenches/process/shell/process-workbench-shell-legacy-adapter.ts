@@ -20,7 +20,7 @@ interface LegacyWindow {
   openProcessEditorLegacy?: (processId: string, taskId?: string | null) => void;
 }
 
-export type ProcessShellView = 'stage' | 'flow' | 'node' | 'editor';
+export type ProcessShellView = 'valueDomain' | 'stage' | 'flow' | 'node' | 'editor';
 
 export interface ProcessWorkbenchShellLegacyAdapter {
   ui(): NonNullable<LegacyState['ui']>;
@@ -32,6 +32,7 @@ export interface ProcessWorkbenchShellLegacyAdapter {
   taskId(task: LegacyProcessNode | null | undefined): string;
   view(): ProcessShellView;
   stageEditing(): boolean;
+  openValueDomain(): void;
   openStage(): void;
   openFlow(): void;
   openNode(): void;
@@ -88,7 +89,10 @@ export function createProcessWorkbenchShellLegacyAdapter(
     // 关键流程：切换视图时只改 S.ui，子工作台通过各自 adapter 读取同一个状态，避免同级组件直接依赖。
     // 边界细节：不在这里调用 renderProcessTab，防止壳层切换又被 legacy 重新生成。
     ui().tab = 'process';
-    if (view === 'stage') {
+    if (view === 'valueDomain') {
+      ui().procView = 'valueDomain';
+      ui().taskId = null;
+    } else if (view === 'stage') {
       ui().procView = 'stage';
       ui().stageViewMode = 'detail';
       ui().taskId = null;
@@ -120,12 +124,16 @@ export function createProcessWorkbenchShellLegacyAdapter(
     view() {
       const raw = ui().procView || 'stage';
       if (raw === 'list') return 'editor';
+      if (raw === 'valueDomain') return 'valueDomain';
       if (raw === 'node') return 'node';
       if (raw === 'flow') return 'flow';
       return 'stage';
     },
     stageEditing() {
       return (ui().procView || 'stage') === 'stage' && ui().stageEditorCollapsed === false;
+    },
+    openValueDomain() {
+      setNormalView('valueDomain');
     },
     openStage() {
       setNormalView('stage');

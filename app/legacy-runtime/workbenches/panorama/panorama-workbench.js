@@ -10,16 +10,18 @@ window.PanoramaWorkbench = {
     this.render();
   },
 
-  setValueDomainEditing(editing) {
-    if (S.ui) S.ui.valueDomainEditing = !!editing;
-    window.BlmAngularMounts?.setValueDomainEditing('value-domain-angular-host', !!editing);
-    this.syncValueDomainActions();
+  openValueDomainEditor() {
+    S.ui.mainTab = 'processWorkbench';
+    S.ui.tab = 'process';
+    S.ui.procView = 'valueDomain';
+    if (typeof render === 'function') render();
   },
 
-  syncValueDomainActions() {
-    const editing = !!S.ui?.valueDomainEditing;
-    document.querySelector('[data-testid="stage-editor-open"]')?.classList.toggle('hidden', editing);
-    document.querySelector('[data-testid="stage-editor-hide"]')?.classList.toggle('hidden', !editing);
+  openComponentConstructEditor() {
+    S.ui.mainTab = 'constructWorkbench';
+    S.ui.tab = 'data';
+    S.ui.componentTab = 'constructs';
+    if (typeof render === 'function') render();
   },
 
   toggleStageEditor(forceOpen = null) {
@@ -174,24 +176,26 @@ window.PanoramaWorkbench = {
     const activeDomainTab = S.ui.domainTab || 'panorama';
     const tabs = [
       { id: 'panorama', label: '全景视图' },
-      { id: 'valueDomain', label: '价值流与业务域' },
       { id: 'roles', label: '角色管理' },
       { id: 'termManagement', label: '术语管理' },
       { id: 'dictionaryManagement', label: '字典管理' },
       { id: 'rules', label: '规则条目' },
     ];
-    const valueDomainActions = activeDomainTab === 'valueDomain'
-      ? `<button class="btn btn-outline btn-sm ${S.ui?.valueDomainEditing ? 'hidden' : ''}" type="button" data-testid="stage-editor-open" onclick="PanoramaWorkbench.setValueDomainEditing(true)">打开编辑</button>
-        <button class="btn btn-ghost-sm ${S.ui?.valueDomainEditing ? '' : 'hidden'}" type="button" data-testid="stage-editor-hide" onclick="PanoramaWorkbench.setValueDomainEditing(false)">关闭编辑</button>`
+    const panoramaActions = activeDomainTab === 'panorama'
+      ? `<details class="panorama-edit-menu" data-testid="panorama-open-edit-menu">
+          <summary class="btn btn-outline btn-sm">打开编辑</summary>
+          <div class="panorama-edit-menu-list">
+            <button type="button" data-testid="panorama-open-value-domain" onclick="PanoramaWorkbench.openValueDomainEditor()">进入价值流与业务域维护</button>
+            <button type="button" data-testid="panorama-open-component-editor" onclick="PanoramaWorkbench.openComponentConstructEditor()">进入业务组件与构件维护</button>
+          </div>
+        </details>`
       : '';
-    let html = `<div class="domain-scroll ${activeDomainTab === 'valueDomain' ? 'value-domain-scroll' : ''}" data-testid="domain-scroll">
-      ${BLMShared.ui.renderSubTabs(tabs, activeDomainTab, 'switchDomainTab', 'domain-subtab', { actionsHtml: valueDomainActions })}`;
+    let html = `<div class="domain-scroll" data-testid="domain-scroll">
+      ${BLMShared.ui.renderSubTabs(tabs, activeDomainTab, 'switchDomainTab', 'domain-subtab', { actionsHtml: panoramaActions })}`;
     if (activeDomainTab === 'panorama') {
       html += `<div class="ctx-card domain-panel domain-info-card">
         <div class="domain-panel-body domain-info-card-body">${this.renderMap(context.id)}</div>
       </div>`;
-    } else if (activeDomainTab === 'valueDomain') {
-      html += '<div id="value-domain-angular-host" data-testid="value-domain-angular-host"></div>';
     } else if (activeDomainTab === 'roles') {
       html += '<div id="role-angular-host" data-testid="role-angular-host"></div>';
     } else if (activeDomainTab === 'termManagement' || activeDomainTab === 'dictionaryManagement' || activeDomainTab === 'rules') {
@@ -203,11 +207,6 @@ window.PanoramaWorkbench = {
     initAutoResize();
     BLMCore.dom.restoreScroll('.domain-scroll', options.scrollTop);
     requestAnimationFrame(() => {
-      if (activeDomainTab === 'valueDomain') {
-        window.BlmAngularMounts?.mountValueDomain('value-domain-angular-host');
-        this.setValueDomainEditing(!!S.ui?.valueDomainEditing);
-        return;
-      }
       if (activeDomainTab === 'roles') {
         window.BlmAngularMounts?.mountRoleWorkbench('role-angular-host');
         return;
