@@ -1,294 +1,371 @@
 @if (currentProcess(); as process) {
   @if (currentTask(); as task) {
-    <div class="node-workbench-page" data-testid="process-editor-workbench">
-      <section class="node-context-panel" data-testid="process-editor-flow-view">
-        <div class="node-context-head">
-          <div>
-            <span>流程上下文</span>
-            <strong>{{ process.name || '未命名流程' }}</strong>
-          </div>
-          <button type="button" data-testid="process-editor-close" (click)="closeEditor()">关闭</button>
+    <div class="node-workbench-page node-workbench-page--directory" data-testid="process-editor-workbench">
+      <aside class="node-directory-panel" data-testid="process-editor-flow-view">
+        <div class="node-directory-filter">
+          <label class="node-filter-field node-filter-field--stage">
+            <span>阶段</span>
+            <select [ngModel]="currentStageId(process)" (ngModelChange)="selectStage($event)">
+              @for (stage of allStages(); track stage.id) {
+                <option [value]="stage.id">{{ stage.name }}</option>
+              } @empty {
+                <option value="">暂无阶段</option>
+              }
+            </select>
+          </label>
+          <label class="node-filter-field node-filter-field--process">
+            <span>流程</span>
+            <select [ngModel]="processId(process)" (ngModelChange)="selectProcess($event)">
+              @for (item of processes(); track processId(item)) {
+                <option [value]="processId(item)">{{ item.name || '未命名流程' }}</option>
+              }
+            </select>
+          </label>
         </div>
-        <div class="drawer-diag process-main-diag process-editor-main-diag" data-testid="process-editor-diagram-scroll">
-          <div
-            class="process-editor-canvas"
-            data-testid="process-editor-graph"
-            [style.width.px]="graphCanvasWidth(process)"
-            [style.height.px]="graphCanvasHeight(process)"
-            [style.zoom]="graphZoom()"
-          >
-            <div class="diagram-floating-tools">
-              <button type="button" title="放大" data-testid="process-editor-zoom-in" (click)="nudgeGraphZoom(0.1)">+</button>
-              <button type="button" title="重置" data-testid="process-editor-zoom-reset" (click)="resetGraphZoom()">◎</button>
-              <button type="button" title="缩小" data-testid="process-editor-zoom-out" (click)="nudgeGraphZoom(-0.1)">−</button>
-            </div>
-            @for (lane of graphLanes(process); track lane.name) {
-              <div class="process-editor-lane-band" [style.top.px]="lane.top" [style.height.px]="lane.height">
-                <div class="process-editor-role-lane">{{ lane.name }}</div>
+        <div class="node-directory-list" data-testid="process-editor-graph">
+          @for (item of nodeDirectory(); track item.id) {
+            <section class="node-directory-group node-directory-group--nodes">
+              <h4>节点</h4>
+              <div class="node-directory-items">
+                @for (node of item.tasks; track taskId(node); let index = $index) {
+                  <button
+                    type="button"
+                    class="node-directory-item"
+                    data-testid="process-editor-node"
+                    [class.active]="taskId(node) === taskId(task)"
+                    (click)="selectTask(node)"
+                  >
+                    <span>{{ index + 1 }}</span>
+                    <b>{{ node.name || '未命名节点' }}</b>
+                    <small>{{ taskRoleSummary(node) }}</small>
+                    @if (taskId(node) === taskId(task)) {
+                      <em>正在编辑</em>
+                    }
+                  </button>
+                }
+              </div>
+            </section>
+          } @empty {
+            <p class="node-empty">当前流程暂无节点。</p>
+          }
+        </div>
+      </aside>
+
+      <section class="node-editor-main node-editor-main--node" data-testid="process-editor-drawer">
+        <header class="node-editor-canopy">
+          <div class="node-basic-strip node-basic-strip--three">
+            <label class="node-top-field node-top-field--input">
+              <span>节点名称</span>
+              <input type="text" data-testid="process-task-name-input" [ngModel]="task.name || ''" (ngModelChange)="setTaskField(task, 'name', $event)" />
+            </label>
+            <button class="node-top-field node-top-field--link" type="button" data-testid="process-node-flow-link" (click)="openProcessFlow(processId(process))">
+              <span>所属流程</span>
+              <strong>{{ process.name || '未命名流程' }}</strong>
+            </button>
+            @if (primaryStage(process); as stage) {
+              <button class="node-top-field node-top-field--link" type="button" data-testid="process-stage-refs" (click)="openStage(stage.id)">
+                <span>所属阶段</span>
+                <strong>{{ stage.name }}</strong>
+              </button>
+            } @else {
+              <div class="node-top-field node-top-field--empty" data-testid="process-stage-refs">
+                <span>所属阶段</span>
+                <strong>暂无关联阶段</strong>
               </div>
             }
-            <svg class="process-editor-edges" [attr.width]="graphCanvasWidth(process)" [attr.height]="graphCanvasHeight(process)">
-              <defs>
-                <marker id="process-editor-arrow-task" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
-                </marker>
-              </defs>
-              @for (edge of graphEdges(process, task); track edge.id) {
-                <path class="process-editor-edge" [attr.d]="edge.d"></path>
-                @if (edge.label) {
-                  <text class="process-editor-edge-label" [attr.x]="edge.labelX" [attr.y]="edge.labelY">{{ edge.label }}</text>
-                }
-              }
-            </svg>
-            @for (node of graphNodes(process, task); track node.id) {
-              @if (node.kind === 'start' || node.kind === 'end') {
-                <div class="process-editor-terminal" [class.is-end]="node.kind === 'end'" [style.left.px]="node.x" [style.top.px]="node.y">{{ node.name }}</div>
-              } @else if (node.kind === 'gateway') {
-                <div class="process-editor-gateway" [style.left.px]="node.x" [style.top.px]="node.y"><span>{{ node.name }}</span></div>
-              } @else {
+            <input class="node-hidden-process-input" type="text" data-testid="process-name-input" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
+          </div>
+          <div class="node-progress-guide" data-testid="process-node-progress-guide">
+            <div class="node-progress-track"><span [style.width.%]="nodeCompletion(task)"></span></div>
+            <div class="node-progress-steps">
+              @for (item of anchorItems(task); track item.id; let index = $index) {
                 <button
-                  class="process-editor-node"
-                  [class.active]="node.selected"
                   type="button"
-                  data-testid="process-editor-node"
-                  [style.left.px]="node.x"
-                  [style.top.px]="node.y"
-                  (click)="selectTask(node.task || null)"
+                  class="node-progress-step"
+                  [class.done]="item.count > 0"
+                  [class.active]="activeNodeSection() === item.id"
+                  [ngClass]="'tone-' + item.tone"
+                  (click)="scrollToNodeSection(item.id)"
                 >
-                  <strong>{{ node.name }}</strong>
-                  <small>{{ node.role || '未分配角色' }}</small>
+                  <span>{{ index + 1 }}</span>
+                  <b>{{ item.label }}</b>
+                  <em>{{ item.count }}</em>
                 </button>
               }
-            }
-          </div>
-        </div>
-      </section>
-
-      <section class="node-editor-main" data-testid="process-editor-drawer">
-        <header class="node-editor-title">
-          <div>
-            <span>节点视图</span>
-            <h3>{{ task.name || '未命名节点' }}</h3>
-            <p>{{ process.name || '未命名流程' }} · {{ taskRoleSummary(task) }}</p>
-          </div>
-          <div class="node-editor-metrics">
-            <b>{{ userSteps(task).length }}<small>步骤</small></b>
-            <b>{{ forms(task).length }}<small>表单</small></b>
-            <b>{{ taskFieldCount(task) }}<small>字段</small></b>
-            <b>{{ businessRules(task).length }}<small>规则</small></b>
+            </div>
           </div>
         </header>
 
-        <div class="node-editor-scroll">
-          <section class="node-editor-card node-basic-card" data-testid="process-task-lite-panel">
+        <div class="node-editor-scroll node-editor-scroll--body">
+          <section #nodeSection class="node-editor-card node-basic-card node-editor-card--role" id="node-role-section" data-testid="process-task-lite-panel">
             <div class="node-section-head">
-              <div><span>01</span><h4>节点定义</h4></div>
+              <div><h4>办理角色</h4><span class="node-count-pill">已选 {{ taskRoleIds(task).length }} 个</span></div>
+              <button class="btn btn-ghost-sm node-fold-btn" type="button" (click)="roleCollapsed.set(!roleCollapsed())">{{ roleCollapsed() ? '选择更多角色' : '完成选择' }} <span>›</span></button>
             </div>
-            <div class="node-basic-grid">
-              <label>
-                <span>节点名称</span>
-                <input type="text" data-testid="process-task-name-input" [ngModel]="task.name || ''" (ngModelChange)="setTaskField(task, 'name', $event)" />
-              </label>
-              <label>
-                <span>执行角色</span>
-                <div class="node-role-checks" data-testid="process-task-role-select">
-                  @for (role of roles(); track roleId(role)) {
-                    <label>
-                      <input type="checkbox" [checked]="taskRoleIds(task).includes(roleId(role))" (change)="setTaskRoleIds(task, $any($event.target).checked ? taskRoleIds(task).concat([roleId(role)]) : taskRoleIds(task).filter(id => id !== roleId(role)))" />
-                      <span>{{ role.name || roleId(role) }}</span>
-                    </label>
-                  }
-                </div>
-              </label>
+            <div class="node-selected-chip-row">
+              @for (role of selectedRoles(task); track roleId(role)) {
+                <span>{{ role.name || roleId(role) }}</span>
+              } @empty {
+                <span class="is-empty">尚未选择办理角色</span>
+              }
             </div>
-            <div class="node-context-chips">
-              <span>所属流程</span>
-              <input type="text" data-testid="process-name-input" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
-              <div class="proc-stage-ref-list" data-testid="process-stage-refs">
-                @for (stage of stageRefs(process); track stage.id) {
-                  <button class="proc-stage-ref-chip" type="button" (click)="openStage(stage.id)">{{ stage.name }}</button>
-                } @empty {
-                  <span class="no-refs">暂无关联阶段</span>
+            @if (!roleCollapsed()) {
+              <div class="node-role-checks node-role-checks--picker" data-testid="process-task-role-select">
+                @for (role of roles(); track roleId(role)) {
+                  <label>
+                    <input type="checkbox" [checked]="taskRoleIds(task).includes(roleId(role))" (change)="setTaskRoleIds(task, $any($event.target).checked ? taskRoleIds(task).concat([roleId(role)]) : taskRoleIds(task).filter(id => id !== roleId(role)))" />
+                    <span>{{ role.name || roleId(role) }}</span>
+                  </label>
                 }
               </div>
-            </div>
+              <div class="node-role-picker-footer">
+                <button class="btn btn-primary btn-sm" type="button" (click)="finishRoleSelection()">完成</button>
+              </div>
+            }
           </section>
 
-          <section class="node-editor-card" data-testid="process-user-step-section">
+          <section #nodeSection class="node-editor-card node-editor-card--step" id="process-user-step-section" data-testid="process-user-step-section">
             <div class="node-section-head">
-              <div><span>02</span><h4>用户步骤</h4></div>
-              <button class="btn btn-outline btn-sm" type="button" data-testid="process-user-step-add" (click)="addUserStep(task)">+ 步骤</button>
+              <div><h4>办理步骤</h4><span class="node-count-pill">{{ userSteps(task).length }} 项</span></div>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="process-user-step-add" (click)="addUserStep(task)">+ 添加步骤</button>
             </div>
+            <p class="node-section-note">面向产品视角，描述页面上的查看、点击、填写、提交等用户动作。</p>
             <div class="node-step-list">
               @for (step of userSteps(task); track step.id || step.uid || $index; let index = $index) {
-                <div class="node-step-row" data-testid="process-user-step-row">
-                  <span class="node-step-index">{{ index + 1 }}</span>
-                  <input type="text" [ngModel]="step.name || ''" (ngModelChange)="setUserStep(task, index, $event)" placeholder="例如：查看信息、填写表单、提交申请" />
-                  <div class="node-row-actions">
-                    <button type="button" title="在下方插入步骤" (click)="addUserStep(task)">+</button>
-                    <button type="button" title="上移" [disabled]="index === 0" (click)="moveUserStep(task, index, -1)">↑</button>
-                    <button type="button" title="下移" [disabled]="index === userSteps(task).length - 1" (click)="moveUserStep(task, index, 1)">↓</button>
-                    <button type="button" title="删除" (click)="removeUserStep(task, index)">×</button>
+                <div class="node-step-row node-step-row--rich" data-testid="process-user-step-row">
+                  <div class="node-step-main-row">
+                    <span class="node-step-index">{{ index + 1 }}</span>
+                    <select class="node-step-type" [ngModel]="isCustomStepType(step.type) ? '__other__' : (step.type || '')" (ngModelChange)="setUserStepType(step, $event)">
+                      <option value="">步骤类型</option>
+                      @for (type of stepTypes; track type.value) {
+                        <option [value]="type.value">{{ type.label }}</option>
+                      }
+                    </select>
+                    @if (isCustomStepType(step.type)) {
+                      <input class="node-step-type-custom" type="text" [ngModel]="step.type || ''" (ngModelChange)="setUserStepType(step, $event)" placeholder="自定义类型" />
+                    }
+                    <textarea class="node-step-name" rows="1" [ngModel]="step.name || ''" (input)="autoGrow($any($event.target)); setUserStepName(task, index, $any($event.target).value)" placeholder="步骤简称"></textarea>
+                    <div class="node-row-actions">
+                      <button type="button" title="在下方插入步骤" (click)="addUserStep(task)">+</button>
+                      <button type="button" title="上移" [disabled]="index === 0" (click)="moveUserStep(task, index, -1)">↑</button>
+                      <button type="button" title="下移" [disabled]="index === userSteps(task).length - 1" (click)="moveUserStep(task, index, 1)">↓</button>
+                      <button type="button" title="删除" (click)="removeUserStep(task, index)">×</button>
+                    </div>
                   </div>
+                  @if (isStepDetailOpen(step, index)) {
+                    <div class="node-rich-editor node-rich-editor--content">
+                      <span class="node-rich-label">步骤详细描述</span>
+                      <div class="node-rich-toolbar-row">
+                        <div class="node-rich-toolbar">
+                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'bold')"><b>B</b></button>
+                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'insertUnorderedList')">•</button>
+                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'insertOrderedList')">1.</button>
+                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'outdent')">←</button>
+                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'indent')">→</button>
+                        </div>
+                        <span class="node-rich-shortcuts">Ctrl+B 加粗 · Ctrl+0 无序 · Ctrl+1 有序 · Ctrl+2 有序多级 · Tab 右移 · Shift+Tab 左移</span>
+                      </div>
+                      <div #stepNoteEditor class="node-rich-content" contenteditable="true" data-placeholder="步骤详细描述" [innerHTML]="richTextHtml(step.note)" (input)="setUserStepNote(step, richTextValue($event))" (keydown)="handleRichTextKeydown($event, stepNoteEditor)"></div>
+                    </div>
+                  } @else {
+                    <button class="btn btn-ghost-sm node-rich-add node-rich-add--step" type="button" (click)="openStepDetail(step, index)">+ 步骤详细描述</button>
+                  }
                 </div>
               } @empty {
-                <p class="node-empty">暂无用户步骤。先按人在页面上的办理顺序写下来。</p>
+                <p class="node-empty">暂无办理步骤。先按人在页面上的办理顺序写下来。</p>
               }
             </div>
           </section>
 
-          <section class="node-editor-card" data-testid="process-form-section">
+          <section #nodeSection class="node-editor-card node-editor-card--material" id="process-material-section" data-testid="process-material-section">
             <div class="node-section-head">
-              <div><span>03</span><h4>表单定义</h4></div>
-              <button class="btn btn-outline btn-sm" type="button" data-testid="process-form-add" (click)="addForm(task)">+ 表单</button>
+              <div><h4>办理材料</h4><span class="node-count-pill">{{ forms(task).length }} 个表单</span></div>
             </div>
-            <p class="node-section-note">表单只记录节点办理时需要采集或展示的数据；界面原型仍由流程附件或后续应用编排表达。</p>
-            <div class="node-form-list">
-              @for (form of forms(task); track form.id || form.uid || $index; let formIndex = $index) {
-                <article class="node-form-card" data-testid="process-form-card">
-                  <div class="node-form-head">
-                    <span>F{{ formIndex + 1 }}</span>
-                    <input type="text" [ngModel]="form.name || ''" (ngModelChange)="setFormName(task, form, $event)" placeholder="表单名称" />
-                    <small>{{ formFieldCount(form) }} 字段</small>
-                    <button type="button" data-testid="task-form-duplicate" title="复制表单" (click)="duplicateForm(task, form)">复制</button>
-                    <button type="button" title="删除表单" (click)="removeForm(task, form)">×</button>
-                  </div>
-                  <input class="node-form-purpose" type="text" [ngModel]="form.purpose || ''" (ngModelChange)="setFormPurpose(form, $event)" placeholder="表单用途，例如：新增、详情、列表、输出说明" />
-                  <div class="node-form-sections">
-                    @for (section of sections(form); track section.id || section.uid || $index; let sectionIndex = $index) {
-                      <div class="node-form-section" data-testid="task-form-section-card">
-                        <div class="node-form-section-head">
-                          <input data-testid="task-form-section-name" type="text" [ngModel]="section.name || ''" (ngModelChange)="setFormSection(section, 'name', $event)" placeholder="分组名称" />
-                          <input data-testid="task-form-section-note" type="text" [ngModel]="section.note || ''" (ngModelChange)="setFormSection(section, 'note', $event)" placeholder="分组说明" />
-                          <select data-testid="task-form-section-entity" [ngModel]="section.entity_id || ''" (ngModelChange)="setFormSection(section, 'entity_id', $event)">
-                            <option value="">不绑定实体</option>
-                            @for (entity of entities(); track entityId(entity)) {
-                              <option [value]="entityId(entity)">{{ entity.name || entityId(entity) }}</option>
-                            }
-                          </select>
-                          <div class="node-row-actions">
-                            <button type="button" data-testid="task-form-section-add-after" title="插入分组" (click)="addFormSection(form, section)">+</button>
-                            <button type="button" data-testid="task-form-section-move-up" title="上移" [disabled]="sectionIndex === 0" (click)="moveFormSection(form, section, -1)">↑</button>
-                            <button type="button" data-testid="task-form-section-move-down" title="下移" [disabled]="sectionIndex === sections(form).length - 1" (click)="moveFormSection(form, section, 1)">↓</button>
-                            <button type="button" data-testid="task-form-section-delete" title="删除分组" [disabled]="sections(form).length <= 1" (click)="removeFormSection(form, section)">×</button>
-                          </div>
-                        </div>
-                        <div class="node-field-table">
-                          <div class="node-field-head"><span>字段</span><span>类型</span><span>必填</span><span>实体字段</span><span>说明</span><span></span></div>
-                          @for (field of section.fields || []; track field.id || field.uid || $index; let fieldIndex = $index) {
-                            <div class="node-field-row" data-testid="process-form-field-row">
-                              <input type="text" [ngModel]="field.name || ''" (ngModelChange)="setFormField(field, 'name', $event)" placeholder="字段名称" />
-                              <select [ngModel]="field.type || 'Text'" (ngModelChange)="setFormField(field, 'type', $event)">
-                                <option value="Text">文本</option>
-                                <option value="Number">数字</option>
-                                <option value="Date">日期</option>
-                                <option value="Select">选项</option>
-                                <option value="File">附件</option>
-                              </select>
-                              <label class="node-required-check"><input type="checkbox" [checked]="field.required" (change)="setFormFieldRequired(field, $any($event.target).checked)" /></label>
-                              <input type="text" [ngModel]="field.entity_field || ''" (ngModelChange)="setFormField(field, 'entity_field', $event)" placeholder="实体字段" />
-                              <input type="text" [ngModel]="field.note || ''" (ngModelChange)="setFormField(field, 'note', $event)" placeholder="校验或展示说明" />
-                              <div class="node-row-actions">
-                                <button type="button" title="插入字段" (click)="addFormField(section, field)">+</button>
-                                <button type="button" title="上移" [disabled]="fieldIndex === 0" (click)="moveFormField(section, field, -1)">↑</button>
-                                <button type="button" title="下移" [disabled]="fieldIndex === (section.fields || []).length - 1" (click)="moveFormField(section, field, 1)">↓</button>
-                                <button type="button" title="删除字段" (click)="removeFormField(section, field)">×</button>
-                              </div>
+            <div class="node-material-tabs">
+              <button type="button" [class.active]="materialTab() === 'forms'" (click)="materialTab.set('forms')">表单 {{ forms(task).length }}</button>
+              <button type="button" [class.active]="materialTab() === 'attachments'" (click)="materialTab.set('attachments')">附件 {{ prototypeCount(process) }}</button>
+            </div>
+            @if (materialTab() === 'forms') {
+              <div class="node-form-list" data-testid="process-form-section">
+                <div class="node-section-head node-sub-section-head">
+                  <div><h4>表单模型</h4><span class="node-count-pill">{{ forms(task).length }} 个表单</span></div>
+                  <button class="btn btn-outline btn-sm" type="button" data-testid="process-form-add" (click)="addForm(task)">+ 表单</button>
+                </div>
+                <p class="node-section-note node-form-model-note">表单是用户查看、填写和提交的材料载体。这里先站在用户和产品视角描述材料形式，不和技术上的数据实体绑定。</p>
+                @for (form of forms(task); track form.id || form.uid || $index; let formIndex = $index) {
+                  <article class="task-form-card node-task-form-card" data-testid="process-form-card">
+                    <div class="task-form-card-head">
+                      <span class="task-form-index">F{{ formIndex + 1 }}</span>
+                      <input type="text" data-testid="task-form-name" [ngModel]="form.name || ''" (ngModelChange)="setFormName(task, form, $event)" placeholder="表单名称，如：仓库管理列表" />
+                      <span class="task-form-field-count">{{ formFieldCount(form) }} 字段</span>
+                      <button class="step-action" type="button" data-testid="task-form-duplicate" title="复制完整表单" (click)="duplicateForm(task, form)">⧉</button>
+                      <button class="step-del" type="button" title="删除表单" (click)="removeForm(task, form)">×</button>
+                    </div>
+                    <input class="task-form-purpose" type="text" data-testid="task-form-purpose" [ngModel]="form.purpose || ''" (ngModelChange)="setFormPurpose(form, $event)" placeholder="表单用途，如：筛选、列表、新增、详情、输出说明" />
+                    <div class="task-form-sections">
+                      @for (section of sections(form); track section.id || section.uid || $index; let sectionIndex = $index) {
+                        <div class="task-form-section-card" data-testid="task-form-section-card">
+                          <div class="task-form-section-head">
+                            <input data-testid="task-form-section-name" type="text" [ngModel]="section.name || ''" (ngModelChange)="setFormSection(section, 'name', $event)" placeholder="分组名称" />
+                            <input data-testid="task-form-section-note" type="text" [ngModel]="section.note || ''" (ngModelChange)="setFormSection(section, 'note', $event)" placeholder="分组说明" />
+                            <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-field-add" (click)="addFormField(section)">+ 字段</button>
+                            <div class="step-actions task-form-inline-actions">
+                              <button class="step-action" type="button" data-testid="task-form-section-add-after" title="插入分组" (click)="addFormSection(form, section)">+</button>
+                              <button class="step-action" type="button" data-testid="task-form-section-move-up" title="上移" [disabled]="sectionIndex === 0" (click)="moveFormSection(form, section, -1)">↑</button>
+                              <button class="step-action" type="button" data-testid="task-form-section-move-down" title="下移" [disabled]="sectionIndex === sections(form).length - 1" (click)="moveFormSection(form, section, 1)">↓</button>
+                              <button class="step-del" type="button" data-testid="task-form-section-delete" title="删除分组" [disabled]="sections(form).length <= 1" (click)="removeFormSection(form, section)">×</button>
                             </div>
-                          } @empty {
-                            <p class="node-empty">当前分组暂无字段。</p>
+                          </div>
+                          @if ((section.fields || []).length) {
+                            <div class="task-form-field-table-wrap">
+                              <table class="task-form-field-table">
+                                <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                                <tbody>
+                                  @for (field of section.fields || []; track field.id || field.uid || $index; let fieldIndex = $index) {
+                                    <tr class="task-form-field-row" data-testid="process-form-field-row">
+                                      <td><input type="text" data-testid="task-form-field-name" [ngModel]="field.name || ''" (ngModelChange)="setFormField(field, 'name', $event)" placeholder="字段名称" /></td>
+                                      <td>
+                                        <select data-testid="task-form-field-type" [ngModel]="field.type || 'Text'" (ngModelChange)="setFormField(field, 'type', $event)">
+                                          @for (type of formFieldTypes; track type.value) {
+                                            <option [value]="type.value">{{ type.label }}</option>
+                                          }
+                                        </select>
+                                      </td>
+                                      <td class="task-form-required-cell"><input type="checkbox" data-testid="task-form-field-required" [checked]="field.required" (change)="setFormFieldRequired(field, $any($event.target).checked)" /></td>
+                                      <td><textarea class="auto-resize" rows="1" data-testid="task-form-field-note" [ngModel]="field.note || ''" (input)="autoGrow($any($event.target)); setFormField(field, 'note', $any($event.target).value)" placeholder="校验规则 / 展示说明"></textarea></td>
+                                      <td class="task-form-action-cell">
+                                        <div class="step-actions task-form-inline-actions">
+                                          <button class="step-action" type="button" title="插入字段" (click)="addFormField(section, field)">+</button>
+                                          <button class="step-action" type="button" title="上移" [disabled]="fieldIndex === 0" (click)="moveFormField(section, field, -1)">↑</button>
+                                          <button class="step-action" type="button" title="下移" [disabled]="fieldIndex === (section.fields || []).length - 1" (click)="moveFormField(section, field, 1)">↓</button>
+                                          <button class="step-del" type="button" title="删除字段" (click)="removeFormField(section, field)">×</button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          } @else {
+                            <p class="no-refs task-form-empty">分组 {{ sectionIndex + 1 }} 暂无字段</p>
                           }
                         </div>
-                        <button class="btn btn-ghost-sm node-add-field" type="button" data-testid="task-form-field-add" (click)="addFormField(section)">+ 字段</button>
-                      </div>
+                      }
+                    </div>
+                    <button class="btn btn-ghost-sm task-form-section-add" type="button" data-testid="task-form-section-add" (click)="addFormSection(form)">+ 添加分组</button>
+                  </article>
+                } @empty {
+                  <p class="node-empty">暂无表单定义。需要采集或展示数据时再添加。</p>
+                }
+              </div>
+            } @else {
+              <div class="node-attachment-panel" data-testid="process-prototype-section">
+                <div class="node-section-head node-sub-section-head">
+                  <div><h4>附件</h4></div>
+                  <span class="node-count-pill">{{ prototypeCount(process) }} 项</span>
+                </div>
+                @if (prototypeFiles(process).length) {
+                  <div class="prototype-file-list node-prototype-file-list" data-testid="proc-prototype-list">
+                    @for (file of prototypeFiles(process); track prototypeFileId(file)) {
+                      <article class="prototype-file-item node-prototype-file-item" data-testid="proc-prototype-item">
+                        <div class="prototype-file-meta">
+                          <strong class="prototype-file-name">{{ file.name || '未命名附件' }}</strong>
+                          <span class="prototype-file-version">{{ prototypeVersionSummary(file) }}</span>
+                          <span class="prototype-file-kind">{{ prototypeKind(file) }}</span>
+                        </div>
+                        <div class="prototype-file-actions">
+                          <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-toggle" (click)="togglePrototypeVersions(process, file)">展开版本</button>
+                          @if (canPreviewPrototype(file)) {
+                            <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-open" (click)="openPrototype(process, file)">查看</button>
+                          }
+                          <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-download" (click)="downloadPrototype(process, file)">下载</button>
+                          <button class="btn btn-ghost-sm prototype-file-remove" type="button" data-testid="proc-prototype-remove" (click)="removePrototype(process, file)">删除</button>
+                        </div>
+                        @if (isPrototypeExpanded(process, file) && file.versions?.length) {
+                          <div class="prototype-version-list" data-testid="proc-prototype-version-list">
+                            @for (version of file.versions || []; track version.uid || version.name || $index) {
+                              <div class="prototype-version-item" data-testid="proc-prototype-version-item">
+                                <div class="prototype-version-meta">
+                                  <strong class="prototype-version-label">v{{ version.number || $index + 1 }}{{ version.uid === file.versionUid ? ' · 当前引用' : '' }}</strong>
+                                  <span class="prototype-version-time">{{ version.uploadedAt || '未记录上传时间' }}</span>
+                                </div>
+                                <div class="prototype-version-actions">
+                                  @if (canPreviewPrototype(file, version)) {
+                                    <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-open" (click)="openPrototype(process, file, version.uid || '')">查看</button>
+                                  }
+                                  <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-download" (click)="downloadPrototype(process, file, version.uid || '')">下载</button>
+                                </div>
+                              </div>
+                            }
+                          </div>
+                        }
+                      </article>
                     }
                   </div>
-                  <button class="btn btn-ghost-sm node-add-section" type="button" data-testid="task-form-section-add" (click)="addFormSection(form)">+ 添加分组</button>
-                </article>
-              } @empty {
-                <p class="node-empty">暂无表单定义。需要采集或展示数据时再添加。</p>
-              }
-            </div>
+                }
+                <div class="prototype-upload-row node-material-upload" data-testid="proc-prototype-upload">
+                  <input type="file" [id]="prototypeInputId(process)" data-testid="proc-prototype-input" multiple />
+                  <button class="btn btn-outline btn-sm" type="button" data-testid="proc-prototype-upload-button" (click)="uploadPrototypeFiles(process)">上传附件</button>
+                </div>
+                @if (!prototypeFiles(process).length) {
+                  <p class="node-empty">上传后的流程原型、图片、PDF 或文档会在这里形成附件卡片。</p>
+                }
+              </div>
+            }
           </section>
 
-          <section class="node-editor-card" data-testid="process-business-rule-section">
+          <section #nodeSection class="node-editor-card node-editor-card--rule" id="process-business-rule-section" data-testid="process-business-rule-section">
             <div class="node-section-head">
-              <div><span>04</span><h4>业务规则</h4></div>
-              <button class="btn btn-outline btn-sm" type="button" data-testid="process-business-rule-add" (click)="addBusinessRule(task)">+ 规则</button>
+              <div><h4>办理规则</h4><span class="node-count-pill">{{ businessRules(task).length }} 条规则</span></div>
+              <div class="node-section-actions">
+                <button class="btn btn-outline btn-sm" type="button" (click)="addCommonBusinessRules(task)">补常用项</button>
+                <button class="btn btn-outline btn-sm" type="button" data-testid="process-business-rule-add" (click)="addBusinessRule(task)">+ 添加规则</button>
+              </div>
             </div>
+            <p class="node-section-note">用于结构化沉淀前置条件、后置条件、输入、输出、交互规则和非功能需求。</p>
             <div class="node-rule-list">
               @for (rule of businessRules(task); track businessRuleKey(rule, $index); let index = $index) {
                 <div class="node-rule-card" data-testid="process-business-rule-row">
                   <div class="node-rule-head">
                     <span>R{{ index + 1 }}</span>
-                    <input type="text" [ngModel]="businessRuleName(rule, index)" (ngModelChange)="setBusinessRuleName(task, index, $event)" placeholder="规则名称" />
+                    <textarea class="node-rule-name-textarea" rows="1" [ngModel]="businessRuleName(rule, index)" (input)="autoGrow($any($event.target)); setBusinessRuleName(task, index, $any($event.target).value)" [placeholder]="businessRuleNamePlaceholder(rule, index)"></textarea>
                     <div class="node-row-actions">
                       <button type="button" title="上移" [disabled]="index === 0" (click)="moveBusinessRule(task, index, -1)">↑</button>
                       <button type="button" title="下移" [disabled]="index === businessRules(task).length - 1" (click)="moveBusinessRule(task, index, 1)">↓</button>
                       <button type="button" title="删除规则" (click)="removeBusinessRule(task, index)">×</button>
                     </div>
                   </div>
-                  <textarea [ngModel]="businessRuleValue(rule)" (ngModelChange)="setBusinessRule(task, index, $event)" placeholder="规则内容，例如：前置条件、校验规则、输出规则、异常处理"></textarea>
+                  @if (isRuleDetailOpen(rule, index)) {
+                    <div class="node-rich-editor node-rich-editor--content">
+                      <span class="node-rich-label">规则详细描述</span>
+                      <div class="node-rich-toolbar-row">
+                        <div class="node-rich-toolbar">
+                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'bold')"><b>B</b></button>
+                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'insertUnorderedList')">•</button>
+                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'insertOrderedList')">1.</button>
+                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'outdent')">←</button>
+                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'indent')">→</button>
+                        </div>
+                        <span class="node-rich-shortcuts">Ctrl+B 加粗 · Ctrl+0 无序 · Ctrl+1 有序 · Ctrl+2 有序多级 · Tab 右移 · Shift+Tab 左移</span>
+                      </div>
+                      <div #ruleEditor class="node-rich-content" contenteditable="true" [attr.data-placeholder]="businessRuleContentPlaceholder(rule, index)" [innerHTML]="richTextHtml(businessRuleValue(rule))" (input)="setBusinessRule(task, index, richTextValue($event))" (keydown)="handleRichTextKeydown($event, ruleEditor)"></div>
+                    </div>
+                  } @else {
+                    <button class="btn btn-ghost-sm node-rich-add" type="button" (click)="openRuleDetail(rule, index)">+ 规则详细描述</button>
+                  }
                 </div>
               } @empty {
-                <p class="node-empty">暂无业务规则。</p>
+                <p class="node-empty">暂无办理规则。</p>
               }
             </div>
           </section>
-
-          <section class="node-editor-card node-advanced-card">
-            <details open>
-              <summary>高级信息：实体操作、后端任务、流程附件</summary>
-              <div class="node-advanced-grid">
-                <div data-testid="process-entity-op-section">
-                  <h4>实体操作</h4>
-                  <div class="process-editor-entity-add">
-                    <select [(ngModel)]="selectedEntityId">
-                      <option value="">选择实体</option>
-                      @for (entity of availableEntities(task); track entityId(entity)) {
-                        <option [value]="entityId(entity)">{{ entity.name || entityId(entity) }}</option>
-                      }
-                    </select>
-                    <button class="btn btn-outline btn-sm" type="button" (click)="addSelectedEntity(task)">+ 实体</button>
-                  </div>
-                </div>
-                <div data-testid="process-task-definition-section">
-                  <h4>后端任务</h4>
-                  <button class="btn btn-outline btn-sm" type="button" data-testid="process-task-definition-add" (click)="addTaskDefinition(task)">+ 任务</button>
-                </div>
-                <div data-testid="process-prototype-section">
-                  <h4>流程原型/附件 <span>{{ prototypeCount(process) }}项</span></h4>
-                  <div class="prototype-upload-row" data-testid="proc-prototype-upload">
-                    <input type="file" [id]="prototypeInputId(process)" data-testid="proc-prototype-input" multiple />
-                    <button class="btn btn-outline btn-sm" type="button" data-testid="proc-prototype-upload-button" (click)="uploadPrototypeFiles(process)">上传附件</button>
-                  </div>
-                </div>
-              </div>
-            </details>
-          </section>
         </div>
       </section>
-
-      <aside class="node-editor-aside">
-        <div class="node-aside-card">
-          <strong>节点概览</strong>
-          <button type="button" (click)="addUserStep(task)">+ 步骤</button>
-          <button type="button" (click)="addForm(task)">+ 表单</button>
-          <button type="button" (click)="addBusinessRule(task)">+ 规则</button>
-        </div>
-        <div class="node-aside-card">
-          <strong>建模顺序</strong>
-          <span>1. 谁来办</span>
-          <span>2. 办哪些动作</span>
-          <span>3. 需要哪些数据</span>
-          <span>4. 有哪些约束</span>
-        </div>
-      </aside>
     </div>
   } @else {
     <div class="node-workbench-empty" data-testid="process-editor-workbench">
       <h3>请选择一个流程节点</h3>
-      <p>节点视图用于维护节点名称、相关角色、用户步骤、表单定义和业务规则。</p>
+      <p>节点视图用于维护办理角色、办理步骤、办理材料和办理规则。</p>
       <button type="button" data-testid="process-editor-close" (click)="closeEditor()">返回流程视图</button>
     </div>
   }

@@ -4969,6 +4969,19 @@ function applyLocatorToUi(params) {
   }
 }
 
+function clearStartupLocatorFromUrl() {
+  // 模块意图：启动定位链接失效时，清掉 URL 中的文档定位参数，避免刷新后反复触发同一个 404。
+  const url = new URL(window.location.href);
+  // 关键流程：只移除文档恢复相关参数，保留当前 Angular 路径和其他查询参数。
+  url.searchParams.delete('doc');
+  url.searchParams.delete('at');
+  if (url.hash) {
+    url.hash = '';
+  }
+  // 边界细节：这里不新增历史记录，用户点击返回时不应再次回到失效链接。
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+}
+
 async function openStartupLocatorIfPresent() {
   const params = getStartupLinkParams();
   const docName = String(params.get('doc') || '').trim();
@@ -4985,6 +4998,12 @@ async function openStartupLocatorIfPresent() {
     document = await api.load(docName);
   }
   if (document?.error) {
+    if (document.error === 'not found') {
+      clearStartupLocatorFromUrl();
+      showAppToast(`链接中的文档“${docName}”不存在，已回到首页。`);
+      render();
+      return false;
+    }
     showAppAlert(document.error);
     return false;
   }

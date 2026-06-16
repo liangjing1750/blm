@@ -1897,6 +1897,36 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(storage.load("Legacy")["meta"]["title"], "Legacy")
 
 
+class StaticSpaFallbackTests(unittest.TestCase):
+    def test_frontend_deep_link_refresh_returns_index_html(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            app_dir = root / "app"
+            workspace_dir = root / "workspace"
+            app_dir.mkdir()
+            workspace_dir.mkdir()
+            (app_dir / "index.html").write_text("<!doctype html><title>BLM SPA</title>", encoding="utf-8")
+            storage = WorkspaceStorage(workspace_dir)
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/process/node-view"
+                ) as response:
+                    body = response.read().decode("utf-8")
+                    status = response.status
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(status, 200)
+        self.assertIn("BLM SPA", body)
+
+
 class MergeApiTests(unittest.TestCase):
     def test_document_normalize_returns_migrated_document(self):
         with tempfile.TemporaryDirectory() as temp_dir:

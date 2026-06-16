@@ -246,7 +246,18 @@ export class ProcessWorkbenchShellComponent implements OnDestroy {
   }
 
   protected openNode(taskId: string | null = null): void {
-    if (taskId) this.editorAdapter.selectTask(taskId);
+    // 模块意图：节点视图是“维护节点详情”的入口，直接进入时必须落到一个真实节点上。
+    // 关键流程：优先沿用当前流程；如果当前流程没有节点，则选择第一个有节点的流程。
+    // 边界细节：打开新文档后 S.ui.procId 可能沿用旧值或指向空流程，不能让用户先回流程视图再手动选择。
+    const current = this.editorAdapter.currentProcess();
+    const process = (current && this.editorAdapter.tasks(current).length ? current : null)
+      || this.editorAdapter.processes().find((item) => this.editorAdapter.tasks(item).length)
+      || current
+      || this.editorAdapter.processes()[0]
+      || null;
+    if (process) this.editorAdapter.selectProcess(this.editorAdapter.processId(process));
+    const targetTaskId = taskId || this.editorAdapter.taskId(this.editorAdapter.currentTask()) || this.editorAdapter.taskId(this.editorAdapter.tasks(process)[0]);
+    if (targetTaskId) this.editorAdapter.selectTask(targetTaskId);
     this.adapter.openNode();
     this.viewState.set('node');
     this.refresh();
@@ -261,14 +272,6 @@ export class ProcessWorkbenchShellComponent implements OnDestroy {
   protected setStageEditing(editing: boolean): void {
     this.adapter.setStageEditing(editing);
     this.refresh();
-  }
-
-  protected openFlowLegacy(): void {
-    this.adapter.openFlowLegacy();
-  }
-
-  protected openEditorLegacy(): void {
-    this.adapter.openEditorLegacy();
   }
 
   protected refresh(): void {

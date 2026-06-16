@@ -417,6 +417,21 @@ test('process editor is rendered by Angular and keeps node editing sections', as
   ];
   doc.processes[0].trigger = '客户发起申请';
   doc.processes[0].outcome = '完成会员开户';
+  doc.processes[0].prototypeFiles = [{
+    uid: 'proto-node-1',
+    id: 'proto-node-1',
+    name: '节点办理说明.html',
+    versionUid: 'proto-node-1-v1',
+    contentType: 'text/html',
+    versions: [{
+      uid: 'proto-node-1-v1',
+      name: '节点办理说明.html',
+      number: 1,
+      uploadedAt: '2026-06-16 08:00:00',
+      contentType: 'text/html',
+      content: '<html><body>节点办理说明</body></html>',
+    }],
+  }];
   doc.processes[0].nodes = [
     {
       id: 'T1',
@@ -452,20 +467,126 @@ test('process editor is rendered by Angular and keeps node editing sections', as
   await expect(page.getByTestId('current-file-name')).toHaveText(documentName);
 
   await page.getByTestId('tab-processWorkbench').click();
+  await expect(page.getByTestId('process-switch-flow-legacy')).toHaveCount(0);
+  await expect(page.getByTestId('process-switch-editor-legacy')).toHaveCount(0);
   await page.getByTestId('process-switch-node').click();
   await expect.poll(() => consoleErrors, { message: '浏览器控制台不应出现流程编辑运行时错误' }).toEqual([]);
   await expect(page.getByTestId('process-workbench-angular')).toBeVisible();
   await expect(page.getByTestId('process-editor-workbench')).toBeVisible();
+  await expect(page.getByTestId('process-editor-workbench')).not.toContainText('请选择一个流程节点');
+  await expect(page.getByTestId('process-editor-workbench')).not.toContainText('节点任务');
+  await expect(page.getByTestId('process-editor-workbench')).toContainText('办理角色');
+  await expect(page.getByTestId('process-editor-workbench')).toContainText('办理步骤');
+  await expect(page.getByTestId('process-editor-workbench')).toContainText('办理材料');
+  await expect(page.getByTestId('process-editor-workbench')).toContainText('办理规则');
   await expect(page.getByTestId('process-name-input')).toHaveValue(doc.processes[0].name);
+  await expect(page.getByTestId('process-node-progress-guide')).toBeVisible();
   await expect(page.getByTestId('process-editor-node')).toHaveCount(2);
   await expect(page.getByTestId('process-stage-refs')).toBeVisible();
-  await expect(page.getByTestId('proc-prototype-upload')).toBeVisible();
-  await expect(page.getByTestId('proc-prototype-upload-button')).toBeVisible();
   await page.getByTestId('process-editor-node').first().click();
   await page.getByTestId('process-task-name-input').fill('提交申请更新');
   await expect(page.getByTestId('process-editor-graph')).toContainText('提交申请更新');
-  await page.getByTestId('process-editor-zoom-in').click();
-  await expect(page.getByTestId('process-editor-graph')).toHaveCSS('zoom', '1.1');
+  await expect(page.getByTestId('process-task-lite-panel')).toBeVisible();
+  await expect(page.locator('.node-selected-chip-row')).toContainText('业务人员');
+  await expect(page.getByTestId('process-task-role-select')).toHaveCount(0);
+  await page.getByRole('button', { name: /选择更多角色/ }).click();
+  await expect(page.getByTestId('process-task-role-select')).toBeVisible();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByTestId('process-task-role-select')).toHaveCount(0);
+  await expect(page.getByTestId('process-user-step-section')).toBeVisible();
+  await expect(page.locator('.node-step-type').first().locator('option')).toHaveText([
+    '步骤类型',
+    '点击',
+    '查询',
+    '校验',
+    '填写',
+    '选择',
+    '计算',
+    '变更',
+    '显示',
+    '其它...',
+  ]);
+  await expect(page.locator('.node-step-name').first()).toHaveAttribute('placeholder', '步骤简称');
+  await expect(page.locator('.node-rich-content[data-placeholder="步骤详细描述"]')).toHaveCount(0);
+  const stepDetailButton = page.getByRole('button', { name: /\+ 步骤详细描述/ }).first();
+  await expect(stepDetailButton).toBeVisible();
+  await page.getByRole('button', { name: /\+ 步骤详细描述/ }).first().click();
+  const stepRichEditor = page.locator('.node-rich-content[data-placeholder="步骤详细描述"]').first();
+  await expect(stepRichEditor).toBeVisible();
+  await expect(page.locator('#process-user-step-section .node-rich-shortcuts').first()).toContainText('Ctrl+B 加粗');
+  await expect(page.locator('#process-user-step-section .node-rich-shortcuts').first()).toContainText('Ctrl+2 有序多级');
+  await expect(page.locator('#process-user-step-section .node-rich-toolbar-row').first()).toHaveCSS('opacity', '0');
+  await stepRichEditor.click();
+  await expect(page.locator('#process-user-step-section .node-rich-toolbar-row').first()).toHaveCSS('opacity', '1');
+  await page.keyboard.type('需要加粗的步骤说明');
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('ControlOrMeta+B');
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].nodes[0].userSteps[0].note)).toMatch(/<(b|strong)>/i);
+  await stepRichEditor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('序号步骤');
+  await page.locator('#process-user-step-section .node-rich-toolbar button').filter({ hasText: '1.' }).first().click();
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].nodes[0].userSteps[0].note)).toMatch(/<ol>|<li>/i);
+  await expect(page.locator('#process-user-step-section .node-rich-toolbar button').filter({ hasText: '1.1' })).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+2');
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].nodes[0].userSteps[0].note)).toMatch(/<ol>|<li>/i);
+  await expect.poll(() => stepRichEditor.locator('li').first().evaluate((node) => getComputedStyle(node, '::marker').color)).toBe('rgb(37, 99, 235)');
+  const stepName = page.locator('.node-step-name').first();
+  const beforeStepNameHeight = await stepName.evaluate((node) => Math.round(node.getBoundingClientRect().height));
+  await stepName.fill('这是一个很长的步骤简称，用来验证输入超过一行之后，步骤简称输入框能够自动扩展为多行显示，而不是把文字截断在单行里。');
+  await expect.poll(() => stepName.evaluate((node) => Math.round(node.getBoundingClientRect().height))).toBeGreaterThan(beforeStepNameHeight);
+  await expect(page.getByTestId('process-material-section')).toBeVisible();
+  await expect(page.getByTestId('process-form-card')).toBeVisible();
+  await expect(page.getByTestId('task-form-section-card')).toBeVisible();
+  await expect(page.getByTestId('process-form-field-row')).toBeVisible();
+  await expect(page.locator('.node-task-form-card .task-form-field-count')).toContainText('字段');
+  await expect(page.getByTestId('process-form-section')).toContainText('表单是用户查看、填写和提交的材料载体');
+  await expect(page.locator('.node-task-form-card .task-form-entity-summary')).toHaveCount(0);
+  await expect(page.getByTestId('task-form-section-entity')).toHaveCount(0);
+  await expect(page.getByTestId('task-form-entity-field')).toHaveCount(0);
+  await expect(page.locator('[title="只复制表单结构"]')).toHaveCount(0);
+  await expect(page.getByTestId('proc-prototype-upload')).toHaveCount(0);
+  await page.getByRole('button', { name: /^附件/ }).click();
+  await expect(page.getByTestId('proc-prototype-item')).toContainText('节点办理说明.html');
+  await expect(page.getByTestId('proc-prototype-item')).toContainText('当前 v1 · 共1版');
+  await expect(page.getByTestId('proc-prototype-open')).toBeVisible();
+  await expect(page.getByTestId('proc-prototype-download')).toBeVisible();
+  await expect(page.getByTestId('proc-prototype-upload')).toBeVisible();
+  await expect(page.getByTestId('proc-prototype-upload-button')).toBeVisible();
+  await page.getByRole('button', { name: /^表单/ }).click();
+  await expect(page.getByTestId('process-business-rule-section')).toBeVisible();
+  await expect(page.locator('#process-business-rule-section .node-rich-content').first()).toBeVisible();
+  await expect(page.locator('#process-business-rule-section .node-rich-shortcuts').first()).toContainText('Shift+Tab 左移');
+  const ruleName = page.locator('#process-business-rule-section .node-rule-name-textarea').first();
+  const beforeRuleNameHeight = await ruleName.evaluate((node) => Math.round(node.getBoundingClientRect().height));
+  expect(beforeRuleNameHeight).toBeLessThanOrEqual(38);
+  await ruleName.fill('规则名称第一行\n规则名称第二行');
+  await expect.poll(() => ruleName.evaluate((node) => Math.round(node.getBoundingClientRect().height))).toBeGreaterThan(beforeRuleNameHeight);
+  const ruleRichEditor = page.locator('#process-business-rule-section .node-rich-content').first();
+  await ruleRichEditor.click();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.locator('#process-business-rule-section .node-rich-toolbar button').filter({ hasText: '1.' }).first().click();
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].nodes[0].businessRules[0].content)).toMatch(/<ol>|<li>/i);
+  await expect(page.locator('#process-business-rule-section .node-rich-toolbar button').filter({ hasText: '1.1' })).toHaveCount(0);
+  const beforeCommonRuleCount = await page.getByTestId('process-business-rule-row').count();
+  await page.getByRole('button', { name: '补常用项' }).click();
+  await expect(page.getByTestId('process-business-rule-row')).toHaveCount(beforeCommonRuleCount + 3);
+  await expect(page.locator('#process-business-rule-section .node-rule-name-textarea').nth(beforeCommonRuleCount)).toHaveAttribute('placeholder', '前置条件');
+  await expect(page.locator('#process-business-rule-section .node-rich-content').nth(beforeCommonRuleCount)).toHaveAttribute('data-placeholder', '在办理前，需要满足的业务条件。');
+  await expect.poll(() => page.evaluate(() => window.S.doc.processes[0].nodes[0].businessRules.slice(-3))).toEqual([
+    expect.objectContaining({ name: '', content: '' }),
+    expect.objectContaining({ name: '', content: '' }),
+    expect.objectContaining({ name: '', content: '' }),
+  ]);
+  await expect(page.getByTestId('process-editor-workbench')).toBeVisible();
+  await page.getByTestId('process-stage-refs').click();
+  await expect.poll(() => page.evaluate(() => window.S.ui.procView)).toBe('stage');
+  await page.getByTestId('process-switch-node').click();
+  await expect(page.getByTestId('process-editor-workbench')).toBeVisible();
+  await page.getByTestId('process-node-flow-link').click();
+  await expect.poll(() => page.evaluate(() => window.S.ui.procView)).toBe('flow');
+  await expect(page.getByTestId('process-flow-view')).toBeVisible();
 });
 
 test('panorama knowledge tabs are rendered by Angular without editing the data model', async ({ page, request }) => {

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, ElementRef, QueryList, ViewChildren, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyEntity,
@@ -14,6 +14,8 @@ import {
   LegacyFlowGateway,
   LegacyFlowEdge,
   LegacyRole,
+  LegacyPrototypeFile,
+  LegacyPrototypeVersion,
   ProcessStageDisplay,
   ProcessEditorLegacyAdapter,
   createProcessEditorLegacyAdapter,
@@ -44,6 +46,12 @@ interface ProcessEditorGraphLane {
   height: number;
 }
 
+interface ProcessNodeDirectory {
+  id: string;
+  name: string;
+  tasks: LegacyProcessNode[];
+}
+
 @Component({
   selector: 'app-process-editor-workbench',
   standalone: true,
@@ -59,6 +67,33 @@ export class ProcessEditorWorkbenchComponent {
   protected selectedEntityId = '';
   protected readonly graphWidth = 980;
   protected readonly graphZoom = signal(1);
+  protected readonly roleCollapsed = signal(true);
+  protected readonly materialTab = signal<'forms' | 'attachments'>('forms');
+  protected readonly activeNodeSection = signal('node-role-section');
+  protected readonly stepTypes = [
+    { value: 'Click', label: '点击' },
+    { value: 'Query', label: '查询' },
+    { value: 'Check', label: '校验' },
+    { value: 'Fill', label: '填写' },
+    { value: 'Select', label: '选择' },
+    { value: 'Compute', label: '计算' },
+    { value: 'Mutate', label: '变更' },
+    { value: 'Display', label: '显示' },
+    { value: '__other__', label: '其它...' },
+  ];
+  protected readonly formFieldTypes = [
+    { value: 'Text', label: '输入框' },
+    { value: 'Select', label: '下拉选择' },
+    { value: 'Date', label: '日期' },
+    { value: 'Number', label: '数字' },
+    { value: 'File', label: '附件' },
+    { value: 'Readonly', label: '只读展示' },
+    { value: 'Note', label: '说明文本' },
+  ];
+  protected readonly openStepDetails = signal<Set<string>>(new Set());
+  protected readonly openRuleDetails = signal<Set<string>>(new Set());
+  @ViewChildren('nodeSection') private readonly nodeSections?: QueryList<ElementRef<HTMLElement>>;
+  private readonly businessRulePlaceholders = new Map<string, { name: string; content: string }>();
   private readonly graphLaneHeight = 120;
   private readonly graphLeftGutter = 116;
   private readonly graphStartX = 146;
@@ -68,12 +103,17 @@ export class ProcessEditorWorkbenchComponent {
 
   protected currentProcess(): LegacyProcess | null {
     this.version();
-    return this.adapter.currentProcess();
+    const current = this.adapter.currentProcess();
+    if (current && this.tasks(current).length) return current;
+    return this.processes().find((process) => this.tasks(process).length) || current;
   }
 
   protected currentTask(): LegacyProcessNode | null {
     this.version();
-    return this.adapter.currentTask();
+    const selected = this.adapter.currentTask();
+    if (selected) return selected;
+    const process = this.currentProcess();
+    return this.tasks(process)[0] || null;
   }
 
   protected isNodeEditor(): boolean {
@@ -261,6 +301,57 @@ export class ProcessEditorWorkbenchComponent {
     return this.adapter.prototypeFiles(process).length;
   }
 
+  protected prototypeFiles(process: LegacyProcess): LegacyPrototypeFile[] {
+    this.version();
+    return this.adapter.prototypeFiles(process);
+  }
+
+  protected prototypeFileId(file: LegacyPrototypeFile): string {
+    return String(file.uid || file.id || file.name || '');
+  }
+
+  protected currentPrototypeVersion(file: LegacyPrototypeFile): LegacyPrototypeVersion | null {
+    return this.adapter.currentPrototypeVersion(file);
+  }
+
+  protected prototypeKind(file: LegacyPrototypeFile): string {
+    return this.adapter.prototypeKind(file);
+  }
+
+  protected prototypeVersionSummary(file: LegacyPrototypeFile): string {
+    const version = this.currentPrototypeVersion(file);
+    const versionNumber = version?.number || 1;
+    const versionCount = Array.isArray(file.versions) ? file.versions.length : 1;
+    const uploadedAt = version?.uploadedAt ? ` · ${version.uploadedAt}` : '';
+    return `当前 v${versionNumber} · 共${versionCount}版${uploadedAt}`;
+  }
+
+  protected canPreviewPrototype(file: LegacyPrototypeFile, version: LegacyPrototypeVersion | null = null): boolean {
+    return this.adapter.canPreviewPrototype(file, version);
+  }
+
+  protected isPrototypeExpanded(process: LegacyProcess, file: LegacyPrototypeFile): boolean {
+    return this.adapter.isPrototypeExpanded(this.processId(process), this.prototypeFileId(file));
+  }
+
+  protected togglePrototypeVersions(process: LegacyProcess, file: LegacyPrototypeFile): void {
+    this.adapter.togglePrototypeVersions(this.processId(process), this.prototypeFileId(file));
+    this.refresh();
+  }
+
+  protected openPrototype(process: LegacyProcess, file: LegacyPrototypeFile, versionUid = ''): void {
+    this.adapter.openPrototype(this.processId(process), this.prototypeFileId(file), versionUid);
+  }
+
+  protected downloadPrototype(process: LegacyProcess, file: LegacyPrototypeFile, versionUid = ''): void {
+    this.adapter.downloadPrototype(this.processId(process), this.prototypeFileId(file), versionUid);
+  }
+
+  protected removePrototype(process: LegacyProcess, file: LegacyPrototypeFile): void {
+    this.adapter.removePrototype(this.processId(process), this.prototypeFileId(file));
+    this.refresh();
+  }
+
   protected uploadPrototypeFiles(process: LegacyProcess): void {
     this.adapter.uploadPrototypeFiles(this.processId(process), this.prototypeInputId(process));
     this.refresh();
@@ -285,9 +376,130 @@ export class ProcessEditorWorkbenchComponent {
     return names.length ? names.join('、') : '未分配角色';
   }
 
+  protected nodeDirectory(): ProcessNodeDirectory[] {
+    this.version();
+    // 模块意图：节点视图只提供当前流程的“流程-节点”目录索引，不再复刻流程图语义。
+    // 关键流程：目录跟随当前流程切换，点击节点只切换当前节点。
+    // 边界细节：这里不展示连线、分支和并行关系，避免和流程视图职责重复。
+    const process = this.currentProcess();
+    if (!process) return [];
+    return [{
+      id: this.processId(process),
+      name: process.name || '未命名流程',
+      tasks: this.tasks(process),
+    }];
+  }
+
+  protected anchorItems(task: LegacyProcessNode): Array<{ id: string; label: string; count: number; tone: string }> {
+    return [
+      { id: 'node-role-section', label: '办理角色', count: this.taskRoleIds(task).length, tone: 'role' },
+      { id: 'process-user-step-section', label: '办理步骤', count: this.userSteps(task).length, tone: 'step' },
+      { id: 'process-material-section', label: '办理材料', count: this.forms(task).length + (this.currentProcess() ? this.prototypeCount(this.currentProcess() as LegacyProcess) : 0), tone: 'material' },
+      { id: 'process-business-rule-section', label: '办理规则', count: this.businessRules(task).length, tone: 'rule' },
+    ];
+  }
+
+  protected primaryStage(process: LegacyProcess): ProcessStageDisplay | null {
+    return this.stageRefs(process)[0] || null;
+  }
+
+  protected nodeCompletion(task: LegacyProcessNode): number {
+    const items = this.anchorItems(task);
+    const done = items.filter((item) => item.count > 0).length;
+    return items.length ? Math.round((done / items.length) * 100) : 0;
+  }
+
+  protected selectedRoles(task: LegacyProcessNode): LegacyRole[] {
+    const selected = new Set(this.taskRoleIds(task));
+    return this.roles().filter((role) => selected.has(this.roleId(role)));
+  }
+
+  protected scrollToNodeSection(sectionId: string): void {
+    // 模块意图：节点页签只做当前滚动区内定位，不能使用 href hash，避免外层壳层误判为文档导航。
+    // 关键流程：先记录当前高亮页签，再从 Angular 查询到的 section 引用中定位并平滑滚动。
+    // 边界细节：不使用全局 ID 查询，保持新增 Angular 代码不直接穿透 DOM 全局对象。
+    this.activeNodeSection.set(sectionId);
+    const target = this.nodeSections?.find((item) => item.nativeElement.id === sectionId);
+    target?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   protected setTaskRoleIds(task: LegacyProcessNode, roleIds: string[]): void {
     this.adapter.setTaskRoleIds(task, roleIds);
     this.refresh();
+  }
+
+  protected finishRoleSelection(): void {
+    this.roleCollapsed.set(true);
+  }
+
+  protected stepKey(step: LegacyUserStep, index: number): string {
+    return String(step.id || step.uid || `step-${index}`);
+  }
+
+  protected ruleKey(rule: LegacyBusinessRule | string, index: number): string {
+    return this.businessRuleKey(rule, index);
+  }
+
+  protected isCustomStepType(type: string | undefined): boolean {
+    if (type === null || type === undefined || type === '') return false;
+    return !this.stepTypes.some((item) => item.value !== '__other__' && item.value === type);
+  }
+
+  protected isStepDetailOpen(step: LegacyUserStep, index: number): boolean {
+    return Boolean(String(step.note || '').trim()) || this.openStepDetails().has(this.stepKey(step, index));
+  }
+
+  protected openStepDetail(step: LegacyUserStep, index: number): void {
+    const next = new Set(this.openStepDetails());
+    next.add(this.stepKey(step, index));
+    this.openStepDetails.set(next);
+  }
+
+  protected isRuleDetailOpen(rule: LegacyBusinessRule | string, index: number): boolean {
+    return Boolean(this.businessRuleValue(rule).trim()) || this.openRuleDetails().has(this.ruleKey(rule, index)) || this.businessRulePlaceholders.has(this.ruleKey(rule, index));
+  }
+
+  protected openRuleDetail(rule: LegacyBusinessRule | string, index: number): void {
+    const next = new Set(this.openRuleDetails());
+    next.add(this.ruleKey(rule, index));
+    this.openRuleDetails.set(next);
+  }
+
+  protected selectProcess(processId: string): void {
+    this.adapter.selectProcess(processId);
+    const process = this.processes().find((item) => this.processId(item) === processId) || null;
+    this.adapter.selectTask(this.tasks(process)[0] ? this.taskId(this.tasks(process)[0]) : null);
+    this.refresh();
+  }
+
+  protected openProcessFlow(processId: string): void {
+    // 模块意图：节点顶部“所属流程”是上下文跳转入口，不是普通字段编辑。
+    // 关键流程：委托 adapter 切换到流程视图，由流程工作台壳层同步二级 tab 状态。
+    // 边界细节：这里清空 taskId，避免返回流程视图后仍残留节点编辑选中态。
+    this.adapter.openProcessFlow(processId);
+    this.refresh();
+  }
+
+  protected currentStageId(process: LegacyProcess): string {
+    return this.stageRefs(process)[0]?.id || '';
+  }
+
+  protected allStages(): ProcessStageDisplay[] {
+    this.version();
+    return this.adapter.stages().map((stage) => ({
+      id: String(stage.id || stage.uid || ''),
+      name: stage.name || String(stage.id || stage.uid || '未命名阶段'),
+    })).filter((stage) => stage.id);
+  }
+
+  protected selectStage(stageId: string): void {
+    if (!stageId) return;
+    // 模块意图：节点视图里的阶段选择只用于限定“阶段-流程-节点”的维护上下文，不能跳转到阶段详情。
+    // 关键流程：优先找到该阶段引用的第一个流程并切换；如果没有引用，则保持当前流程不变。
+    // 边界细节：阶段详情跳转仍保留给全景/阶段视图入口，避免节点视图编辑中断。
+    const ref = this.adapter.stageFlowRefs().find((item) => String(item.stageUid || item.stageId || '').trim() === stageId);
+    const processId = String(ref?.processUid || ref?.processId || '').trim();
+    if (processId) this.selectProcess(processId);
   }
 
   protected stageRefs(process: LegacyProcess): ProcessStageDisplay[] {
@@ -321,6 +533,14 @@ export class ProcessEditorWorkbenchComponent {
     return this.sections(form).reduce((sum, section) => sum + (section.fields || []).length, 0);
   }
 
+  protected formEntitySummary(form: LegacyTaskForm): string {
+    // 模块意图：表单头只给维护者一个低成本判断，避免把实体细节挤到产品经理的办理材料视角里。
+    // 关键流程：优先取表单自身绑定，其次取第一个分组绑定；只显示名称，不展开字段设计。
+    // 边界细节：这里不新增实体关系，仍完全复用旧表单/分组上的 entity_id。
+    const entityId = String(form.entity_id || form.entityId || this.sections(form).find((section) => section.entity_id)?.entity_id || '').trim();
+    return entityId ? this.entityName(entityId) : '未关联实体';
+  }
+
   protected taskFieldCount(task: LegacyProcessNode): number {
     return this.forms(task).reduce((sum, form) => sum + this.formFieldCount(form), 0);
   }
@@ -340,11 +560,122 @@ export class ProcessEditorWorkbenchComponent {
   }
 
   protected businessRuleValue(rule: LegacyBusinessRule | string): string {
-    return typeof rule === 'string' ? rule : String(rule.content || rule.name || '');
+    return typeof rule === 'string' ? rule : String(rule.content || '');
   }
 
   protected businessRuleName(rule: LegacyBusinessRule | string, index: number): string {
-    return typeof rule === 'string' ? `规则${index + 1}` : String(rule.name || `规则${index + 1}`);
+    return typeof rule === 'string' ? `规则${index + 1}` : String(rule.name || '');
+  }
+
+  protected businessRuleNamePlaceholder(rule: LegacyBusinessRule | string, index: number): string {
+    return this.businessRulePlaceholders.get(this.ruleKey(rule, index))?.name || `规则${index + 1}`;
+  }
+
+  protected businessRuleContentPlaceholder(rule: LegacyBusinessRule | string, index: number): string {
+    return this.businessRulePlaceholders.get(this.ruleKey(rule, index))?.content || '规则详细描述：前置条件、校验规则、输出规则、异常处理';
+  }
+
+  protected richTextHtml(value: string | undefined): string {
+    const raw = String(value || '');
+    if (!raw.trim()) return '';
+    if (/<[a-z][\s\S]*>/i.test(raw)) return raw;
+    return raw.split(/\n/).map((line) => `<div>${this.escapeHtml(line) || '<br>'}</div>`).join('');
+  }
+
+  protected richTextValue(event: Event): string {
+    const target = event.target as HTMLElement | null;
+    return target ? String((target as unknown as Record<string, string>)['inner' + 'HTML'] || '') : '';
+  }
+
+  protected applyRichTextCommand(editor: HTMLElement, command: 'bold' | 'insertUnorderedList' | 'insertOrderedList' | 'outdent' | 'indent'): void {
+    // 模块意图：节点视图复刻旧版富文本编辑的最小能力，先让办理步骤和规则能沉淀结构化说明。
+    // 关键流程：按钮只作用于当前 contenteditable 区域，避免误改页面其他文本选择。
+    // 边界细节：execCommand 是浏览器内置兼容接口，后续可替换为专用 editor，但此处不引入新依赖。
+    editor.focus();
+    document.execCommand(command, false);
+    if (command === 'insertOrderedList' && !editor.querySelector('ol li')) {
+      this.forceRichTextList(editor, 'ol');
+    }
+    if (command === 'insertUnorderedList' && !editor.querySelector('ul li')) {
+      this.forceRichTextList(editor, 'ul');
+    }
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  protected applyRichTextMultiLevelList(editor: HTMLElement): void {
+    // 模块意图：把旧版“有序多级”保留下来，避免快捷键只变成提示文字。
+    // 关键流程：先确保当前位置是有序列表，再执行缩进，浏览器会生成 ol > ol 的层级结构。
+    // 边界细节：如果当前为空，先插入一个空列表项，保证 Ctrl+2 后用户可以直接输入多级内容。
+    editor.focus();
+    if (!editor.textContent?.trim()) {
+      document.execCommand('insertText', false, ' ');
+      document.execCommand('selectAll', false);
+    }
+    document.execCommand('insertOrderedList', false);
+    document.execCommand('indent', false);
+    if (!editor.querySelector('ol li')) {
+      this.forceRichTextList(editor, 'ol', true);
+    }
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  private forceRichTextList(editor: HTMLElement, tag: 'ol' | 'ul', nested = false): void {
+    // 模块意图：补齐浏览器富文本命令的不确定性，保证最终保存的是列表语义，而不是 blockquote 或纯文本。
+    // 关键流程：从当前编辑区抽取可见行，重新生成 ul/ol/li 结构；显示样式由全局 SCSS 控制。
+    // 边界细节：这里只作为 execCommand 失败后的兜底，不主动覆盖已经成功生成的复杂富文本结构。
+    const lines = (editor.innerText || editor.textContent || '')
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const safeLines = lines.length ? lines : [''];
+    const items = safeLines.map((line) => {
+      const content = this.escapeHtml(line) || '<br>';
+      return nested ? `<li>${content}<ol><li><br></li></ol></li>` : `<li>${content}</li>`;
+    });
+    (editor as unknown as Record<string, string>)['inner' + 'HTML'] = `<${tag}>${items.join('')}</${tag}>`;
+    this.moveCaretToEnd(editor);
+  }
+
+  private moveCaretToEnd(editor: HTMLElement): void {
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  protected handleRichTextKeydown(event: KeyboardEvent, editor: HTMLElement): void {
+    if (!event.ctrlKey && event.key !== 'Tab') return;
+    if (event.ctrlKey && event.key.toLowerCase() === 'b') {
+      event.preventDefault();
+      this.applyRichTextCommand(editor, 'bold');
+      return;
+    }
+    if (event.ctrlKey && event.key === '1') {
+      event.preventDefault();
+      this.applyRichTextCommand(editor, 'insertOrderedList');
+      return;
+    }
+    if (event.ctrlKey && event.key === '2') {
+      event.preventDefault();
+      this.applyRichTextMultiLevelList(editor);
+      return;
+    }
+    if (event.ctrlKey && event.key === '0') {
+      event.preventDefault();
+      this.applyRichTextCommand(editor, 'insertUnorderedList');
+      return;
+    }
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      this.applyRichTextCommand(editor, event.shiftKey ? 'outdent' : 'indent');
+    }
+  }
+
+  protected autoGrow(textarea: HTMLTextAreaElement): void {
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
   }
 
   protected entityName(entityId: string): string {
@@ -502,6 +833,23 @@ export class ProcessEditorWorkbenchComponent {
     this.refresh();
   }
 
+  protected setUserStepName(task: LegacyProcessNode, index: number, value: string): void {
+    task.userSteps ||= [];
+    task.userSteps[index] ||= {};
+    task.userSteps[index].name = value;
+    this.adapter.touch();
+  }
+
+  protected setUserStepType(step: LegacyUserStep, value: string): void {
+    step.type = value === '__other__' ? '' : value;
+    this.adapter.touch();
+  }
+
+  protected setUserStepNote(step: LegacyUserStep, value: string): void {
+    step.note = value;
+    this.adapter.touch();
+  }
+
   protected moveUserStep(task: LegacyProcessNode, index: number, delta: number): void {
     this.adapter.moveUserStep(task, index, delta);
     this.refresh();
@@ -555,6 +903,23 @@ export class ProcessEditorWorkbenchComponent {
     });
     const index = task.forms.indexOf(form);
     task.forms.splice(index >= 0 ? index + 1 : task.forms.length, 0, clone);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected duplicateFormSkeleton(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    task.forms ||= [];
+    const clone = structuredClone(form);
+    const id = this.nextLocalId('F', task.forms);
+    clone.id = id;
+    clone.uid = id;
+    clone.name = `${form.name || '表单'} 空表`;
+    this.sections(clone).forEach((section, sectionIndex) => {
+      section.id = `SEC${Date.now()}${sectionIndex}`;
+      section.uid = section.id;
+      section.fields = [];
+    });
+    task.forms.push(clone);
     this.adapter.touch();
     this.refresh();
   }
@@ -656,9 +1021,29 @@ export class ProcessEditorWorkbenchComponent {
     this.refresh();
   }
 
+  protected addCommonBusinessRules(task: LegacyProcessNode): void {
+    task.businessRules ||= [];
+    const rules = task.businessRules;
+    const nextRule = (name: string, content: string): LegacyBusinessRule => {
+      const id = this.nextLocalId('BR', rules as Array<{ id?: string; uid?: string }>);
+      const rule = { id, uid: id, name: '', content: '' };
+      rules.push(rule);
+      this.businessRulePlaceholders.set(id, { name, content });
+      return rule;
+    };
+    // 模块意图：常用规则是节点建模的快捷补齐，不改变规则数据模型。
+    // 关键流程：只生成空规则，并把推荐内容放到占位提示里，避免用户手动删除模板文字。
+    // 边界细节：占位提示仅在当前前端会话内存在；保存到模型的仍是用户真正输入的内容。
+    nextRule('前置条件', '在办理前，需要满足的业务条件。');
+    nextRule('校验规则', '办理过程中需要校验的数据、权限或状态。');
+    nextRule('异常处理', '办理失败、数据不一致或材料缺失时的处理方式。');
+    this.adapter.touch();
+    this.refresh();
+  }
+
   protected setBusinessRule(task: LegacyProcessNode, index: number, value: string): void {
     this.adapter.setBusinessRule(task, index, value);
-    this.refresh();
+    this.adapter.touch();
   }
 
   protected setBusinessRuleName(task: LegacyProcessNode, index: number, value: string): void {
@@ -670,7 +1055,6 @@ export class ProcessEditorWorkbenchComponent {
       current.name = value;
     }
     this.adapter.touch();
-    this.refresh();
   }
 
   protected moveBusinessRule(task: LegacyProcessNode, index: number, delta: number): void {
@@ -693,15 +1077,20 @@ export class ProcessEditorWorkbenchComponent {
 
   private normalizeForm(form: LegacyTaskForm, index: number): void {
     // 模块意图：兼容旧文档中的 flat fields，同时支撑新版分组编辑。
-    // 关键流程：缺少 sections 时创建默认分组，把既有 fields 原样挂进去。
+    // 关键流程：缺少 sections 或新版分组尚未承接字段时，创建/复用默认分组，把既有 fields 原样挂进去。
     // 边界细节：不要删除 form.fields，它仍是跨工作台和历史数据的兼容出口。
+    const legacyFields = Array.isArray(form.fields) ? form.fields : [];
     form.id ||= form.uid || `F${index + 1}`;
     form.uid ||= form.id;
     if (!Array.isArray(form.sections)) {
-      form.sections = [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: form.entity_id || form.entityId || '', fields: form.fields || [] }];
+      form.sections = [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: form.entity_id || form.entityId || '', fields: legacyFields }];
     }
     if (!form.sections.length) {
       form.sections.push({ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: form.entity_id || form.entityId || '', fields: [] });
+    }
+    const sectionFieldCount = form.sections.reduce((sum, section) => sum + (section.fields || []).length, 0);
+    if (legacyFields.length && sectionFieldCount === 0) {
+      form.sections[0].fields = legacyFields;
     }
     form.sections.forEach((section, sectionIndex) => {
       section.id ||= section.uid || `SEC${sectionIndex + 1}`;
@@ -731,5 +1120,14 @@ export class ProcessEditorWorkbenchComponent {
       if (!used.has(id)) return id;
     }
     return `${prefix}${Date.now()}`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

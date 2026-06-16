@@ -5,8 +5,6 @@
         <button class="vtb" [class.active]="view() === 'stage'" type="button" data-testid="process-switch-stage" (click)="openStage()">阶段视图</button>
         <button class="vtb" [class.active]="view() === 'flow'" type="button" data-testid="process-switch-card" (click)="openFlow()">流程视图</button>
         <button class="vtb" [class.active]="view() === 'node'" type="button" data-testid="process-switch-node" (click)="openNode()">节点视图</button>
-        <button class="vtb" type="button" data-testid="process-switch-flow-legacy" (click)="openFlowLegacy()">流程旧版</button>
-        <button class="vtb" type="button" data-testid="process-switch-editor-legacy" (click)="openEditorLegacy()">流程编辑旧版</button>
       </div>
       <div class="proc-view-actions">
         <span class="inline-help toolbar-help" tabindex="0" data-testid="process-view-help" data-tip="流程工作台只保留阶段视图和流程视图；旧版入口用于迁移期截图对比。">?</span>

@@ -172,7 +172,7 @@ interface LegacyState {
     stages?: LegacyStage[];
     stageFlowRefs?: LegacyStageRef[];
   };
-  ui?: { procId?: string; taskId?: string | null; procView?: string };
+  ui?: { tab?: string; procId?: string; taskId?: string | null; procView?: string };
 }
 
 interface LegacyWindow {
@@ -206,6 +206,7 @@ export interface ProcessEditorLegacyAdapter {
   processes(): LegacyProcess[];
   processId(process: LegacyProcess | null | undefined): string;
   selectProcess(processId: string): void;
+  openProcessFlow(processId: string): void;
   taskId(task: LegacyProcessNode | null | undefined): string;
   tasks(process: LegacyProcess | null | undefined): LegacyProcessNode[];
   entities(): LegacyEntity[];
@@ -371,6 +372,13 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = wi
     selectProcess(targetProcessId) {
       ui().procId = targetProcessId;
       ui().taskId = null;
+      legacyWindow.renderSidebar?.();
+    },
+    openProcessFlow(targetProcessId) {
+      ui().tab = 'process';
+      ui().procId = targetProcessId;
+      ui().taskId = null;
+      ui().procView = 'flow';
       legacyWindow.renderSidebar?.();
     },
     taskId,
