@@ -1,0 +1,250 @@
+:host {
+  display: block;
+  min-height: 0;
+}
+
+.business-model {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: calc(100vh - 170px);
+}
+
+.business-model-head,
+.business-model-editor,
+.business-model-map {
+  border: 1px solid #d7e2ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.business-model-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.business-model-head h3 {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.business-model-head p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.business-model-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.business-model-summary span {
+  padding: 5px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.business-model-body {
+  display: grid;
+  grid-template-columns: minmax(560px, 1fr) minmax(420px, 34vw);
+  gap: 14px;
+  min-height: 0;
+}
+
+.business-model-map {
+  min-width: 0;
+  overflow: auto;
+  padding: 14px;
+  scrollbar-gutter: stable;
+}
+
+.business-model-map::-webkit-scrollbar,
+.business-model-editor::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.business-model-map::-webkit-scrollbar-thumb,
+.business-model-editor::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c7d2df;
+}
+
+.business-model-map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.business-model-map-shell {
+  min-width: 620px;
+}
+
+.domain-context-node.active {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.business-model-editor {
+  min-width: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.business-model-editor-tabs {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  padding: 2px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.business-model-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.business-model-panel-head,
+.business-model-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.business-model-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.business-model-panel-head h4,
+.business-model-section-head h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.business-model-panel-head span,
+.business-model-section-head span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.business-model-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 150px;
+  gap: 10px;
+}
+
+.business-model-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.business-model-form label.wide {
+  grid-column: 1 / -1;
+}
+
+.business-model-form span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.business-model-form input,
+.business-model-form select {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.business-model-list {
+  display: grid;
+  gap: 8px;
+}
+
+.business-model-list.compact {
+  gap: 6px;
+}
+
+.business-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.business-model-row.inline {
+  min-height: 38px;
+}
+
+.business-model-row strong,
+.business-model-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.business-model-row small,
+.business-model-row > span:last-child {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.business-model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.business-model-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.business-model-delete {
+  justify-self: stretch;
+}
+
+.business-model-empty {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed #bfdbfe;
+  border-radius: 10px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.business-model-empty.large {
+  margin-top: 30px;
+  text-align: center;
+}

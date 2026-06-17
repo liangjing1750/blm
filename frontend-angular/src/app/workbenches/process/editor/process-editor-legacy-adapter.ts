@@ -272,8 +272,12 @@ export interface ProcessEditorLegacyAdapter {
   uploadPrototypeFiles(processId: string, inputId: string): void;
 }
 
-export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = window as LegacyWindow): ProcessEditorLegacyAdapter {
-  const state = () => legacyWindow.S || {};
+export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = getAngularRuntimeState() as LegacyWindow): ProcessEditorLegacyAdapter {
+  const state = () => {
+    const direct = legacyWindow as LegacyWindow & { doc?: LegacyState['doc']; ui?: LegacyState['ui'] };
+    if (direct.doc || direct.ui) return { doc: direct.doc, ui: direct.ui };
+    return legacyWindow.S || {};
+  };
   const document = () => state().doc || {};
   const ui = () => {
     state().ui ||= {};
@@ -291,8 +295,10 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = wi
 
   const dirty = () => {
     // 边界细节：旧前端依赖 markModified 和 sidebar 刷新维护本地草稿状态，Angular 迁移不能绕过这两个副作用。
-    legacyWindow.markModified?.();
-    legacyWindow.renderSidebar?.();
+    if (legacyWindow.markModified) legacyWindow.markModified();
+    else markAngularRuntimeModified();
+    if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+    else emitRuntimeRefresh();
   };
 
   function processId(process: LegacyProcess | null | undefined): string {
@@ -372,14 +378,16 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = wi
     selectProcess(targetProcessId) {
       ui().procId = targetProcessId;
       ui().taskId = null;
-      legacyWindow.renderSidebar?.();
+      if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+      else emitRuntimeRefresh();
     },
     openProcessFlow(targetProcessId) {
       ui().tab = 'process';
       ui().procId = targetProcessId;
       ui().taskId = null;
       ui().procView = 'flow';
-      legacyWindow.renderSidebar?.();
+      if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+      else emitRuntimeRefresh();
     },
     taskId,
     tasks,
@@ -431,7 +439,8 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = wi
         }));
     },
     openStage(stageId) {
-      legacyWindow.openStageDetail?.(stageId);
+      if (legacyWindow.openStageDetail) legacyWindow.openStageDetail(stageId);
+      else navigateAngularWorkbench('process', { stageId });
     },
     prototypeFiles(process) {
       return (Array.isArray(process?.prototypeFiles) ? process.prototypeFiles : []) as LegacyPrototypeFile[];
@@ -498,10 +507,12 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = wi
     closeEditor() {
       ui().procView = 'flow';
       ui().taskId = null;
-      legacyWindow.renderProcessTab?.();
+      if (legacyWindow.renderProcessTab) legacyWindow.renderProcessTab();
+      else emitRuntimeRefresh();
     },
     touch() {
-      legacyWindow.markModified?.();
+      if (legacyWindow.markModified) legacyWindow.markModified();
+      else markAngularRuntimeModified();
     },
     setProcessField(field, value) {
       const process = currentProcess();
@@ -725,3 +736,4 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = wi
     },
   };
 }
+import { emitRuntimeRefresh, getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench } from '../../../core/runtime/angular-runtime';

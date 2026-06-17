@@ -1,4 +1,183 @@
-﻿/* The full legacy visual system is loaded globally from src/styles.scss so dynamic DOM created by the legacy runtime keeps the same appearance. */
+﻿/* 模块意图：Angular 工作壳承接顶栏和主区布局，让页面由组件模板稳定渲染。 */
 #toolbar {
   flex-shrink: 0;
+}
+
+.angular-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 20px;
+  background: #182437;
+  color: #eaf2ff;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-right: 8px;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 800;
+  color: #78b7ff;
+}
+
+.product-version {
+  font-size: 12px;
+  color: #b8c5d8;
+}
+
+.file-name {
+  color: #d8e6f8;
+  font-weight: 600;
+}
+
+.angular-main {
+  display: flex;
+  min-height: calc(100vh - 104px);
+  background: #eef2f7;
+}
+
+.angular-main.no-document {
+  justify-content: center;
+}
+
+.sidebar {
+  width: 360px;
+  min-width: 360px;
+  border-right: 1px solid #d7e1ee;
+  background: #f8fbff;
+  overflow: auto;
+}
+
+.angular-workbench {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.no-document-home {
+  width: 100%;
+  padding-top: 72px;
+  text-align: center;
+}
+
+.no-document-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.tool-placeholder {
+  margin: 28px;
+  padding: 28px;
+  border: 1px solid #cfe0f4;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(15 23 42 / 42%);
+}
+
+.modal-card {
+  position: relative;
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 48px));
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid #d6e3f2;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgb(15 23 42 / 24%);
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd8e7;
+  border-radius: 8px;
+  background: #fff;
+  color: #51627a;
+  cursor: pointer;
+}
+
+.modal-search {
+  width: 100%;
+  height: 38px;
+  margin: 12px 0;
+  padding: 0 12px;
+  border: 1px solid #cbd8e7;
+  border-radius: 8px;
+}
+
+.document-list {
+  display: grid;
+  gap: 8px;
+  max-height: 460px;
+  overflow: auto;
+}
+
+.document-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #d7e4f5;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #10213b;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document-row:hover {
+  border-color: #6aa5ff;
+  background: #eef6ff;
+}
+
+.static-row {
+  cursor: default;
+}
+
+.placeholder-copy {
+  color: #607089;
+}
+
+.angular-toast {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 1100;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #13233a;
+  color: #fff;
+  box-shadow: 0 12px 34px rgb(15 23 42 / 24%);
+}
+
+#sb-toggle-wrap {
+  display: none;
 }

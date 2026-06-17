@@ -1,0 +1,152 @@
+<section class="business-model" data-testid="business-model-angular">
+  <header class="business-model-head">
+    <div>
+      <h3>业务组件与构件</h3>
+      <p>先维护业务组件，再在组件内沉淀业务构件、实体和任务定义。</p>
+    </div>
+    <div class="business-model-summary" data-testid="business-model-summary">
+      <span>组件 {{ stats().componentCount }}</span>
+      <span>构件 {{ stats().constructCount }}</span>
+      <span>实体 {{ stats().entityCount }}</span>
+      <span>任务 {{ stats().taskCount }}</span>
+    </div>
+  </header>
+
+  <div class="business-model-body">
+    <section class="business-model-map" data-testid="business-model-card">
+      <div class="business-model-map-toolbar">
+        <div class="domain-subdomain-legend">
+          <span class="subdomain-legend core">核心 {{ coreComponents().length }}</span>
+          <span class="subdomain-legend generic">通用 {{ genericComponents().length }}</span>
+        </div>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="capability-add-button" (click)="addComponent()">＋ 组件</button>
+      </div>
+
+      <div class="domain-map-shell business-model-map-shell" data-testid="domain-subdomain-figure">
+        <span class="domain-map-region-label domain-map-region-label-core">核心</span>
+        <span class="domain-map-region-label domain-map-region-label-generic">通用</span>
+        <div class="domain-region domain-region-core" data-testid="subdomain-core-oval">
+          @for (component of coreComponents(); track componentId(component)) {
+            <button class="domain-context-node core" [class.active]="componentId(component) === componentId(selectedComponent())" type="button" data-testid="subdomain-map-node" (click)="selectComponent(component)">
+              <div class="domain-context-node-main" data-testid="business-model-capability-chip">
+                <strong>{{ component.name || '未命名业务组件' }}</strong>
+                <span class="domain-context-node-meta">{{ constructCount(component) }} 构件 · {{ taskCount(component) }} 任务定义 · {{ entityCount(component) }} 实体</span>
+              </div>
+              <span class="domain-subdomain-separator" aria-hidden="true"></span>
+            </button>
+          } @empty {
+            <span class="subdomain-map-empty">暂无核心</span>
+          }
+        </div>
+        <div class="domain-region domain-region-generic" data-testid="subdomain-generic-oval">
+          @for (component of genericComponents(); track componentId(component)) {
+            <button class="domain-context-node generic" [class.active]="componentId(component) === componentId(selectedComponent())" type="button" data-testid="subdomain-map-node" (click)="selectComponent(component)">
+              <div class="domain-context-node-main" data-testid="business-model-capability-chip">
+                <strong>{{ component.name || '未命名业务组件' }}</strong>
+                <span class="domain-context-node-meta">{{ constructCount(component) }} 构件 · {{ taskCount(component) }} 任务定义 · {{ entityCount(component) }} 实体</span>
+              </div>
+              <span class="domain-subdomain-separator" aria-hidden="true"></span>
+            </button>
+          } @empty {
+            <span class="subdomain-map-empty">暂无通用</span>
+          }
+        </div>
+      </div>
+    </section>
+
+    <aside class="business-model-editor" data-testid="business-model-editor">
+      <div class="business-model-editor-tabs">
+        <button class="seg-btn" [class.active]="mode() === 'component'" type="button" (click)="setMode('component')">组件</button>
+        <button class="seg-btn" [class.active]="mode() === 'construct'" type="button" (click)="setMode('construct')" [disabled]="!selectedConstruct()">构件</button>
+      </div>
+
+      @if (mode() === 'component' && selectedComponent(); as component) {
+        <section class="business-model-panel" data-testid="business-model-component-editor">
+          <div class="business-model-panel-head">
+            <h4>业务组件</h4>
+            <span>构件 {{ constructCount(component) }}</span>
+          </div>
+          <div class="business-model-form">
+            <label><span>组件名称</span><input data-testid="capability-name-input" [value]="component.name || ''" (input)="updateComponent(component, 'name', $any($event.target).value)"></label>
+            <label><span>组件类型</span><select data-testid="capability-kind-select" [value]="componentKind(component)" (change)="updateComponent(component, 'kind', $any($event.target).value)"><option value="core">核心组件</option><option value="generic">通用组件</option></select></label>
+            <label class="wide"><span>说明</span><input data-testid="capability-note-input" [value]="component.note || ''" (input)="updateComponent(component, 'note', $any($event.target).value)"></label>
+          </div>
+          <div class="business-model-section-head">
+            <h4>组件内构件</h4>
+            <button class="btn btn-outline btn-sm" type="button" data-testid="construct-add-button" (click)="addConstruct(component)">＋ 构件</button>
+          </div>
+          <div class="business-model-list">
+            @for (construct of constructsForSelectedComponent(); track constructId(construct)) {
+              <button class="business-model-row" type="button" data-testid="construct-open-button" (click)="selectConstruct(construct)">
+                <strong>{{ construct.name || '未命名构件' }}</strong>
+                <span>实体 {{ entitiesForConstruct(construct).length }} · 任务 {{ tasksForConstruct(construct).length }}</span>
+              </button>
+            } @empty {
+              <p class="business-model-empty">暂无构件。</p>
+            }
+          </div>
+          <div class="business-model-section-head">
+            <h4>未分组构件</h4>
+            <span>可加入当前组件</span>
+          </div>
+          <div class="business-model-list compact">
+            @for (construct of ungroupedConstructs(); track constructId(construct)) {
+              <div class="business-model-row inline">
+                <span>{{ construct.name || '未命名构件' }}</span>
+                <button class="stage-quick-btn stage-quick-btn-text" type="button" data-testid="construct-attach-button" (click)="attachConstructToSelected(construct)">加入</button>
+              </div>
+            } @empty {
+              <p class="business-model-empty">暂无未分组构件。</p>
+            }
+          </div>
+          <button class="btn btn-danger btn-sm business-model-delete" type="button" data-testid="capability-delete-button" (click)="deleteComponent(component)">删除组件</button>
+        </section>
+      }
+
+      @if (mode() === 'construct' && selectedConstruct(); as construct) {
+        <section class="business-model-panel" data-testid="business-model-construct-editor">
+          <div class="business-model-panel-head">
+            <h4>业务构件</h4>
+            <div class="business-model-panel-actions">
+              <span>实体 {{ entitiesForConstruct(construct).length }} · 任务 {{ tasksForConstruct(construct).length }}</span>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="construct-add-button" (click)="addConstruct(selectedComponent())">＋ 同组构件</button>
+            </div>
+          </div>
+          <div class="business-model-form">
+            <label><span>构件名称</span><input data-testid="construct-name-input" [value]="construct.name || ''" (input)="updateConstruct(construct, 'name', $any($event.target).value)"></label>
+            <label><span>所属组件</span><select data-testid="construct-capability-select" [value]="construct.businessComponentUid || construct.businessComponentId || ''" (change)="updateConstruct(construct, 'businessComponentUid', $any($event.target).value)"><option value="">未分组</option>@for (component of components(); track componentId(component)) { <option [value]="componentId(component)">{{ component.name || componentId(component) }}</option> }</select></label>
+            <label class="wide"><span>说明</span><input data-testid="construct-note-input" [value]="construct.note || ''" (input)="updateConstruct(construct, 'note', $any($event.target).value)"></label>
+          </div>
+          <div class="business-model-grid">
+            <div>
+              <div class="business-model-section-head"><h4>实体</h4><span>{{ entitiesForConstruct(construct).length }} 个</span></div>
+              <div class="business-model-list compact">
+                @for (entity of entitiesForConstruct(construct); track entityId(entity)) {
+                  <div class="business-model-row inline"><span>{{ entity.name || entityId(entity) }}</span><small>逻辑实体</small></div>
+                } @empty {
+                  <p class="business-model-empty">暂无实体。</p>
+                }
+              </div>
+            </div>
+            <div>
+              <div class="business-model-section-head"><h4>任务</h4><span>{{ tasksForConstruct(construct).length }} 个</span></div>
+              <div class="business-model-list compact">
+                @for (task of tasksForConstruct(construct); track taskId(task)) {
+                  <div class="business-model-row inline"><span>{{ task.name || taskId(task) }}</span><small>{{ task.type || 'Service' }}</small></div>
+                } @empty {
+                  <p class="business-model-empty">暂无任务。</p>
+                }
+              </div>
+            </div>
+          </div>
+          <div class="business-model-actions">
+            <button class="btn btn-outline btn-sm" type="button" data-testid="construct-detach-button" (click)="detachConstruct(construct)">移出组件</button>
+            <button class="btn btn-danger btn-sm" type="button" data-testid="construct-delete-button" (click)="deleteConstruct(construct)">删除构件</button>
+          </div>
+        </section>
+      } @else if (!selectedComponent()) {
+        <div class="business-model-empty large">暂无业务组件，先点击“＋ 组件”创建。</div>
+      }
+    </aside>
+  </div>
+</section>

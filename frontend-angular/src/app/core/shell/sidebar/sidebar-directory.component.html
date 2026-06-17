@@ -1,0 +1,166 @@
+<ng-container *ngIf="!collapsed(); else collapsedShell">
+  <div class="sb-section" data-testid="angular-sidebar-directory">
+    <div class="sb-domain-filter-panel">
+      <label class="sb-domain-filter-row">
+        <span>业务域</span>
+        <select
+          class="sb-domain-filter"
+          data-testid="sidebar-business-domain-filter"
+          [ngModel]="model().selectedDomainId"
+          (ngModelChange)="setBusinessDomain($event)"
+        >
+          <option value="all">全部业务域</option>
+          <option *ngFor="let domain of model().domains" [value]="domain.uid || domain.id || domain.name">
+            {{ domain.name || domain.label || domain.id }}
+          </option>
+        </select>
+      </label>
+    </div>
+
+    <div class="sb-header" data-section="process">
+      <div class="sb-header-main">
+        <span class="sb-header-title">业务统计</span>
+        <div class="sb-metrics">
+          <span *ngFor="let metric of model().metrics" class="sb-metric" [class]="'metric-' + metric.group">
+            {{ metric.label }} <b>{{ metric.value }}</b>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-directory-stack">
+      <section class="sb-directory-block sb-directory-stage">
+        <button class="sb-directory-title active" type="button" data-testid="sidebar-browse-stage">
+          流程目录
+        </button>
+        <div class="sb-process-browse" data-testid="sidebar-stage-browse">
+          <ng-container *ngFor="let stream of model().valueStreams">
+            <div class="sb-grp-head sb-value-stream-head" (click)="toggleNode(streamKey(stream))">
+              <button
+                type="button"
+                class="sb-caret"
+                [class.is-collapsed]="isCollapsedNode(streamKey(stream))"
+                [class.is-expanded]="!isCollapsedNode(streamKey(stream))"
+                (click)="$event.stopPropagation(); toggleNode(streamKey(stream))"
+              >
+                <span class="sb-caret-icon">▶</span>
+              </button>
+              <span class="sb-grp-badge">价值流</span>
+              <span class="sb-name" [title]="stream.name">{{ stream.name }}</span>
+              <span class="sb-count">{{ stream.stageCount }}</span>
+            </div>
+            <ng-container *ngIf="!isCollapsedNode(streamKey(stream))">
+              <ng-container *ngFor="let stage of stream.stages">
+                <ng-container *ngTemplateOutlet="stageBlock; context: { stage: stage }"></ng-container>
+              </ng-container>
+            </ng-container>
+          </ng-container>
+
+          <ng-container *ngFor="let stage of model().orphanStages">
+            <ng-container *ngTemplateOutlet="stageBlock; context: { stage: stage }"></ng-container>
+          </ng-container>
+
+          <div *ngIf="!model().valueStreams.length && !model().orphanStages.length" class="sb-empty">
+            当前业务域暂无阶段
+          </div>
+        </div>
+      </section>
+
+      <section class="sb-directory-block sb-directory-component">
+        <button
+          class="sb-directory-title active"
+          type="button"
+          data-testid="sidebar-browse-domain"
+          (click)="openComponentWorkbench()"
+        >
+          组件目录
+        </button>
+        <div class="sb-process-browse" data-testid="sidebar-domain-browse">
+          <ng-container *ngFor="let component of model().components">
+            <div class="sb-grp-head sb-capability-head" (click)="toggleNode(componentKey(component))">
+              <button
+                type="button"
+                class="sb-caret"
+                [class.is-collapsed]="isCollapsedNode(componentKey(component))"
+                [class.is-expanded]="!isCollapsedNode(componentKey(component))"
+                (click)="$event.stopPropagation(); toggleNode(componentKey(component))"
+              >
+                <span class="sb-caret-icon">▶</span>
+              </button>
+              <span class="sb-grp-badge">{{ component.kind === 'core' ? '核心' : '通用' }}</span>
+              <span class="sb-name" [title]="component.name">{{ component.name }}</span>
+              <span class="sb-count">{{ component.constructCount }}</span>
+            </div>
+            <div *ngIf="!isCollapsedNode(componentKey(component))" class="sb-asset-section">
+              <div class="sb-asset-head">
+                构件 <span>{{ component.constructCount }}</span>
+                <small>实体 {{ component.entityCount }} · 任务 {{ component.taskCount }}</small>
+              </div>
+              <button
+                *ngFor="let construct of component.constructs"
+                type="button"
+                class="sb-asset-item sb-asset-link"
+                data-testid="sidebar-construct-item"
+                (click)="openComponentWorkbench()"
+              >
+                <span>{{ construct.name }}</span>
+                <small>{{ construct.entityCount }}E · {{ construct.taskCount }}T</small>
+              </button>
+              <div *ngIf="!component.constructs.length" class="sb-empty sb-asset-empty">暂无构件</div>
+            </div>
+          </ng-container>
+          <div *ngIf="!model().components.length" class="sb-empty">暂无业务组件</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</ng-container>
+
+<ng-template #stageBlock let-stage="stage">
+  <div class="sb-grp-head sb-stage-head" (click)="toggleNode(stageKey(stage))">
+    <button
+      type="button"
+      class="sb-caret"
+      [class.is-collapsed]="isCollapsedNode(stageKey(stage))"
+      [class.is-expanded]="!isCollapsedNode(stageKey(stage))"
+      (click)="$event.stopPropagation(); toggleNode(stageKey(stage))"
+    >
+      <span class="sb-caret-icon">▶</span>
+    </button>
+    <span class="sb-grp-badge">阶段</span>
+    <span class="sb-name" [title]="stage.name">{{ stage.name }}</span>
+    <span class="sb-count">{{ stage.processCount }}</span>
+  </div>
+  <ng-container *ngIf="!isCollapsedNode(stageKey(stage))">
+    <button
+      *ngFor="let process of stage.processes"
+      type="button"
+      class="sb-proc-row"
+      data-testid="sidebar-process-row"
+      (click)="openProcess(process)"
+    >
+      <span class="sb-proc-name">{{ process.name }}</span>
+      <span class="sb-count">{{ process.nodeCount }}</span>
+    </button>
+    <div *ngIf="!stage.processes.length" class="sb-empty sb-stage-empty">暂无流程</div>
+  </ng-container>
+</ng-template>
+
+<ng-template #collapsedShell>
+  <div class="sb-collapsed-placeholder" data-testid="angular-sidebar-collapsed"></div>
+</ng-template>
+
+<button
+  id="angular-sb-toggle-btn"
+  class="angular-sb-toggle"
+  type="button"
+  [class.is-collapsed]="collapsed()"
+  (click)="toggleSidebar()"
+>
+  {{ collapsed() ? '展开' : '折叠' }}
+</button>
+<div
+  class="angular-sidebar-resize"
+  data-testid="angular-sidebar-resize-handle"
+  (mousedown)="startResize($event)"
+></div>

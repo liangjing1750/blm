@@ -1,38 +1,40 @@
+import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../../core/runtime/angular-runtime';
+import { ValueDomainDocument } from '../../../core/document/value-domain-model';
 import { ValueDomainActions, createValueDomainActions } from './value-domain-actions';
 import { ValueDomainDraftPort } from './value-domain-draft-port';
-import { ValueDomainDocument } from '../../../core/document/value-domain-model';
 
-interface LegacyWindow {
-  S?: {
-    doc?: ValueDomainDocument;
-    ui?: {
-      stageId?: string;
-      stageLinkFocusId?: string;
-    };
+interface RuntimeLike {
+  doc?: ValueDomainDocument;
+  ui?: {
+    stageId?: string;
+    stageLinkFocusId?: string;
   };
   markModified?: () => void;
   renderSidebar?: () => void;
   showAppConfirm?: (message: string, options?: { title?: string; confirmLabel?: string }) => Promise<boolean>;
 }
 
-// 模块意图：把旧运行时 window.S、markModified、showAppConfirm 隔离在适配层，避免 Angular 组件直接依赖旧全局对象。
 export interface ValueDomainLegacyAdapter {
   document(): ValueDomainDocument;
   actions(): ValueDomainActions;
 }
 
-// 关键流程：适配器只创建 document 与 actions 的桥接，不承载业务规则；业务规则必须留在 value-domain-actions。
-export function createValueDomainLegacyAdapter(runtime: unknown): ValueDomainLegacyAdapter {
-  const legacyWindow = runtime as LegacyWindow;
-  const document = legacyWindow.S?.doc ?? {};
+// 模块意图：保留原适配器入口名，内部改读 Angular runtime，避免价值流组件再依赖旧全局脚本。
+// 关键流程：组件继续拿 document/actions；actions 的副作用统一通过 draftPort 标记本地草稿和刷新壳层。
+// 边界细节：文件名后续可清理为 runtime-adapter，本轮先保持 import 稳定，降低迁移风险。
+export function createValueDomainLegacyAdapter(runtime: unknown = getAngularRuntimeState()): ValueDomainLegacyAdapter {
+  const runtimeLike = runtime as RuntimeLike;
+  const angularRuntime = getAngularRuntimeState();
+  const document = runtimeLike.doc ?? angularRuntime.doc ?? {};
+  const ui = runtimeLike.ui ?? angularRuntime.ui;
   const actions = createValueDomainActions({
     document,
-    draftPort: createDraftPort(legacyWindow),
+    draftPort: createDraftPort(runtimeLike),
     setActiveStageId: (stageId) => {
-      if (legacyWindow.S?.ui) legacyWindow.S.ui.stageId = stageId;
+      ui.stageId = stageId;
     },
     clearStageLinkFocus: (stageId) => {
-      if (legacyWindow.S?.ui?.stageLinkFocusId === stageId) legacyWindow.S.ui.stageLinkFocusId = '';
+      if (ui.stageLinkFocusId === stageId) ui.stageLinkFocusId = '';
     },
   });
   return {
@@ -41,14 +43,16 @@ export function createValueDomainLegacyAdapter(runtime: unknown): ValueDomainLeg
   };
 }
 
-// 边界细节：本地草稿和确认框仍由旧运行时提供，迁移完成前不要在 action 层直接调用 window。
-function createDraftPort(legacyWindow: LegacyWindow): ValueDomainDraftPort {
+function createDraftPort(runtime: RuntimeLike): ValueDomainDraftPort {
   return {
-    markModified: () => legacyWindow.markModified?.(),
-    renderSidebar: () => legacyWindow.renderSidebar?.(),
+    markModified: () => {
+      if (runtime.markModified) runtime.markModified();
+      else markAngularRuntimeModified();
+    },
+    renderSidebar: () => runtime.renderSidebar?.(),
     confirm: (message, options) => {
-      if (legacyWindow.showAppConfirm) return legacyWindow.showAppConfirm(message, options);
-      return Promise.resolve(window.confirm(message));
+      if (runtime.showAppConfirm) return runtime.showAppConfirm(message, options);
+      return confirmRuntimeAction(message);
     },
   };
 }

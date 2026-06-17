@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
 interface LegacyTerm {
   uid?: string;
@@ -261,11 +262,11 @@ export class KnowledgeWorkbenchComponent {
   }
 
   private document(): LegacyDocument {
-    return (window as LegacyWindow).S?.doc || {};
+    return getAngularRuntimeState().doc || {};
   }
 
   private markChanged(): void {
     this.version.update((value) => value + 1);
-    (window as LegacyWindow).markModified?.();
+    markAngularRuntimeModified();
   }
 }

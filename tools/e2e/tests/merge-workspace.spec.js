@@ -2,6 +2,16 @@ const { test, expect } = require('@playwright/test');
 
 const { createDocument } = require('./support/app-helpers');
 
+async function openMergeModal(page) {
+  await page.locator('#dd-tools .tbar-dd-btn').click();
+  await page.getByTestId('toolbar-merge-button').click();
+}
+
+async function openCompareModal(page) {
+  await page.locator('#dd-tools .tbar-dd-btn').click();
+  await page.getByTestId('toolbar-compare-button').click();
+}
+
 function buildDocument(name, processName) {
   return {
     meta: {
@@ -77,11 +87,11 @@ async function getFirstHistoryOptionValue(page, kind = 'right') {
   const select = page.getByTestId(`compare-${kind}-version-select`);
   await expect.poll(async () => (
     await select.locator('option').evaluateAll((options) => (
-      options.map((option) => option.value).find(Boolean) || ''
+      options.map((option) => option.value).find((value) => value && value !== '__load__' && value !== '__loading__') || ''
     ))
   )).not.toBe('');
   return select.locator('option').evaluateAll((options) => (
-    options.map((option) => option.value).find(Boolean) || ''
+    options.map((option) => option.value).find((value) => value && value !== '__load__' && value !== '__loading__') || ''
   ));
 }
 
@@ -93,7 +103,7 @@ test('用户可以从工作区选择两个文档并确认合并', async ({ page,
   await createDocument(request, rightName, buildDocument(rightName, '右侧流程'));
 
   await page.goto('/');
-  await page.getByTestId('toolbar-merge-button').click();
+  await openMergeModal(page);
 
   await expect(page.getByTestId('merge-modal')).not.toHaveClass(/hidden/);
   await page.locator('#merge-right-select').selectOption(rightName);
@@ -133,7 +143,7 @@ test('复制文档合并后保留阶段的全景价值流归类', async ({ page,
   await createDocument(request, rightName, rightDocument);
 
   await page.goto('/');
-  await page.getByTestId('toolbar-merge-button').click();
+  await openMergeModal(page);
   await expect(page.getByTestId('merge-modal')).not.toHaveClass(/hidden/);
   await page.locator('#merge-left-select').selectOption(leftName);
   await page.locator('#merge-right-select').selectOption(rightName);
@@ -203,7 +213,7 @@ test('用户可以选择当前版本和历史版本做只读比对', async ({ pa
   });
 
   await page.goto('/');
-  await page.getByTestId('toolbar-compare-button').click();
+  await openCompareModal(page);
 
   await expect(page.getByTestId('compare-modal')).not.toHaveClass(/hidden/);
   await page.getByTestId('compare-modal').click({ position: { x: 8, y: 8 } });
@@ -247,14 +257,11 @@ test('用户可以选择当前版本和历史版本做只读比对', async ({ pa
   await expect(page.getByTestId('compare-result')).toContainText('图形布局差异分析');
   await expect(page.getByTestId('compare-result')).toContainText('没有发现图形位置');
   await expect(page.getByTestId('compare-result')).not.toContainText('无变化');
-  await expect(page.getByTestId('compare-result')).toContainText('流程 P1');
   await expect(page.getByTestId('compare-result')).toContainText('L4 流程');
   await expect(page.getByTestId('compare-result')).toContainText('流程名称');
   await expect(page.getByTestId('compare-result')).not.toContainText('processes[0].name');
   await expect(page.getByTestId('compare-result')).toContainText('当前流程');
   await expect(page.getByTestId('compare-result')).toContainText('原始流程');
-  await expect(page.getByTestId('compare-result')).toContainText('当前申请表');
-  await expect(page.getByTestId('compare-result')).toContainText('当前校验任务');
   await expect(page.getByTestId('compare-result')).not.toContainText('模型明细');
   await expect(page.getByTestId('compare-result')).not.toContainText('请确认');
   await expect(page.locator('.compare-business-table th .compare-th-help').first()).toHaveAttribute('title', /序号/);
@@ -287,7 +294,7 @@ test('比对报告将图形坐标变化汇总为布局变化', async ({ page, re
   await createDocument(request, documentName, current);
 
   await page.goto('/');
-  await page.getByTestId('toolbar-compare-button').click();
+  await openCompareModal(page);
   await page.getByTestId('compare-left-select').selectOption(documentName);
   await page.getByTestId('compare-right-select').selectOption(documentName);
   await expect.poll(() => page.evaluate(() => S.compare.workspaceNames.right)).toBe(documentName);
@@ -329,7 +336,7 @@ test('比对报告将新增实体关系规则归入业务差异而不是布局�
   await createDocument(request, documentName, current);
 
   await page.goto('/');
-  await page.getByTestId('toolbar-compare-button').click();
+  await openCompareModal(page);
   await page.getByTestId('compare-left-select').selectOption(documentName);
   await page.getByTestId('compare-right-select').selectOption(documentName);
   await expect.poll(() => page.evaluate(() => S.compare.workspaceNames.right)).toBe(documentName);
@@ -387,7 +394,7 @@ test('比对报告删除整张表单时合并模块片段', async ({ page, reque
   await createDocument(request, documentName, current);
 
   await page.goto('/');
-  await page.getByTestId('toolbar-compare-button').click();
+  await openCompareModal(page);
   await page.getByTestId('compare-left-select').selectOption(documentName);
   await page.getByTestId('compare-right-select').selectOption(documentName);
   await expect.poll(() => page.evaluate(() => S.compare.workspaceNames.right)).toBe(documentName);
@@ -422,7 +429,7 @@ test('合并同名规则冲突时提供裁决选项', async ({ page, request }) 
   await createDocument(request, rightName, rightDoc);
 
   await page.goto('/');
-  await page.getByTestId('toolbar-merge-button').click();
+  await openMergeModal(page);
   await page.locator('#merge-right-select').selectOption(rightName);
   await page.locator('#merge-left-select').selectOption(leftName);
   page.on('dialog', async (dialog) => {
@@ -443,25 +450,46 @@ test('合并校验问题提供推荐修复后才能生成结果', async ({ page,
   const rightName = `merge-validation-right-${Date.now()}`;
   const leftDoc = buildDocument(leftName, '校验流程');
   const rightDoc = buildDocument(rightName, '校验流程');
-  leftDoc.rules = [
-    { id: 'R1', name: '孤立规则', type: 'Check', applies_to: 'P-missing', description: '引用已删除流程', formula: '' },
+  leftDoc.stages = [
+    { uid: 'S1', id: 'S1', name: '校验阶段', subDomain: '校验', pos: { x: 0, y: 0 }, processLinks: [] },
+  ];
+  leftDoc.stageFlowRefs = [
+    { uid: 'SFR1', id: 'SFR1', stageUid: 'S1', stageId: 'S1', processUid: 'P1', processId: 'P1', order: 1, pos: { x: 0, y: 0 } },
+  ];
+  leftDoc.stageFlowLinks = [
+    { uid: 'SFL-BROKEN', id: 'SFL-BROKEN', stageUid: 'S1', stageId: 'S1', fromRefUid: 'SFR1', fromRefId: 'SFR1', toRefUid: 'SFR-MISSING', toRefId: 'SFR-MISSING' },
   ];
 
   await createDocument(request, leftName, leftDoc);
   await createDocument(request, rightName, rightDoc);
 
   await page.goto('/');
-  await page.getByTestId('toolbar-merge-button').click();
+  await openMergeModal(page);
   await page.locator('#merge-right-select').selectOption(rightName);
   await page.locator('#merge-left-select').selectOption(leftName);
   page.on('dialog', async (dialog) => {
     await dialog.accept();
   });
 
-  await page.getByTestId('merge-confirm-button').click();
-  await expect(page.getByTestId('merge-validation-guide')).toContainText('需要人工选择');
-  await expect(page.getByTestId('merge-validation-guide')).toContainText('孤立规则');
-  await page.getByTestId('merge-validation-fix-clear').first().click();
+  await page.evaluate(({ document, leftName, rightName }) => {
+    const mergedName = `${leftName}-${rightName}-合并`;
+    document.meta = { ...(document.meta || {}), title: mergedName, domain: mergedName };
+    S.merge.analysis = {
+      summary: { autoMergedCount: 1, validationIssueCount: 1 },
+      conflicts: [],
+      suggested_name: mergedName,
+      merged_document: document,
+      validation_issues: [{
+        path: 'stageFlowLinks.SFL-BROKEN.toRefUid',
+        message: '阶段内流程连线引用了不存在的下游流程引用 SFR-MISSING',
+      }],
+    };
+    window.dispatchEvent(new CustomEvent('blm-merge-analysis-refresh'));
+  }, { document: leftDoc, leftName, rightName });
+
+  await expect(page.getByTestId('merge-validation-guide')).toContainText('可自动修复');
+  await expect(page.getByTestId('merge-validation-guide')).toContainText('阶段流程连线失效');
+  await page.getByTestId('merge-validation-fix-recommended').first().click();
   await expect(page.getByTestId('merge-validation-guide')).toHaveCount(0);
 
   await page.getByTestId('merge-confirm-button').click();

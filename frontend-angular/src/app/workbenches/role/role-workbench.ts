@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
 interface LegacyRole {
   id?: string;
@@ -497,6 +498,11 @@ export class RoleWorkbenchComponent {
   }
 
   private legacy(): LegacyWindow {
-    return window as LegacyWindow;
+    const runtime = getAngularRuntimeState();
+    return {
+      S: { doc: runtime.doc, ui: runtime.ui },
+      markModified: () => markAngularRuntimeModified(),
+      showAppConfirm: (message: string) => confirmRuntimeAction(message),
+    } as LegacyWindow;
   }
 }

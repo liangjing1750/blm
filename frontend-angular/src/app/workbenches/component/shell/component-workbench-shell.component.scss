@@ -1,0 +1,57 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.component-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.component-shell-tabs {
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+  border: 1px solid #d7e3f3;
+  border-radius: 7px;
+  background: #f8fafc;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.component-shell-tab {
+  min-width: 96px;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid #d7e3f3;
+  background: transparent;
+  color: #4b5f7c;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.component-shell-tab:last-child {
+  border-right: 0;
+}
+
+.component-shell-tab.active {
+  background: #2f7cf6;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(47, 124, 246, .18);
+}
+
+.component-shell-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.demo-panel {
+  margin: 0;
+}

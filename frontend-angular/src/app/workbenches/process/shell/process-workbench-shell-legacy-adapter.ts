@@ -1,4 +1,5 @@
 import { LegacyProcess, LegacyProcessNode } from '../editor/process-editor-legacy-adapter';
+import { getAngularRuntimeState, emitRuntimeRefresh } from '../../../core/runtime/angular-runtime';
 
 interface LegacyState {
   doc?: { processes?: LegacyProcess[] };
@@ -43,9 +44,13 @@ export interface ProcessWorkbenchShellLegacyAdapter {
 }
 
 export function createProcessWorkbenchShellLegacyAdapter(
-  legacyWindow: LegacyWindow = window as LegacyWindow,
+  legacyWindow: LegacyWindow = getAngularRuntimeState() as LegacyWindow,
 ): ProcessWorkbenchShellLegacyAdapter {
-  const state = () => legacyWindow.S || {};
+  const state = () => {
+    const direct = legacyWindow as LegacyWindow & { doc?: LegacyState['doc']; ui?: LegacyState['ui'] };
+    if (direct.doc || direct.ui) return { doc: direct.doc, ui: direct.ui };
+    return legacyWindow.S || {};
+  };
   const ui = () => {
     state().ui ||= {};
     return state().ui as NonNullable<LegacyState['ui']>;
@@ -110,7 +115,8 @@ export function createProcessWorkbenchShellLegacyAdapter(
       ensureProcessSelection();
       ui().procView = 'list';
     }
-    legacyWindow.renderSidebar?.();
+    if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+    else emitRuntimeRefresh();
   }
 
   return {
@@ -154,7 +160,8 @@ export function createProcessWorkbenchShellLegacyAdapter(
     setStageEditing(editing) {
       ui().procView = 'stage';
       ui().stageEditorCollapsed = !editing;
-      legacyWindow.renderSidebar?.();
+      if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+      else emitRuntimeRefresh();
     },
     openFlowLegacy() {
       legacyWindow.openProcessFlowLegacyView?.();

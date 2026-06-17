@@ -1,4 +1,5 @@
 import { ValueDomainColumn, ValueDomainLane, ensureValueDomainModel } from '../../../core/document/value-domain-model';
+import { emitRuntimeRefresh, getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench } from '../../../core/runtime/angular-runtime';
 
 export interface LegacyStage {
   uid?: string;
@@ -104,8 +105,12 @@ export interface ProcessStageLegacyAdapter {
   removeLink(stageId: string, linkId: string): void;
 }
 
-export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = window as LegacyWindow): ProcessStageLegacyAdapter {
-  const state = () => legacyWindow.S || {};
+export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = getAngularRuntimeState() as LegacyWindow): ProcessStageLegacyAdapter {
+  const state = () => {
+    const direct = legacyWindow as LegacyWindow & { doc?: ProcessStageDocument; ui?: LegacyState['ui'] };
+    if (direct.doc || direct.ui) return { doc: direct.doc, ui: direct.ui };
+    return legacyWindow.S || {};
+  };
   const document = () => state().doc || {};
   const ui = () => {
     state().ui ||= {};
@@ -113,8 +118,12 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = win
   };
 
   function markModified(sidebar = false): void {
-    legacyWindow.markModified?.();
-    if (sidebar) legacyWindow.renderSidebar?.();
+    if (legacyWindow.markModified) legacyWindow.markModified();
+    else markAngularRuntimeModified();
+    if (sidebar) {
+      if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+      else emitRuntimeRefresh();
+    }
   }
 
   function stageId(stage: LegacyStage | null | undefined): string {
@@ -204,16 +213,19 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = win
       ui().procView = 'stage';
       ui().stageViewMode = 'panorama';
       ui().stageEditorCollapsed = true;
-      legacyWindow.renderProcessTab?.();
+      if (legacyWindow.renderProcessTab) legacyWindow.renderProcessTab();
+      else emitRuntimeRefresh();
     },
     openDetail(targetStageId: string) {
       ui().procView = 'stage';
       ui().stageViewMode = 'detail';
       ui().stageId = targetStageId;
-      legacyWindow.renderProcessTab?.();
+      if (legacyWindow.renderProcessTab) legacyWindow.renderProcessTab();
+      else emitRuntimeRefresh();
     },
     openProcess(targetProcessId: string) {
-      legacyWindow.navigate?.('process', { procId: targetProcessId, taskId: null });
+      if (legacyWindow.navigate) legacyWindow.navigate('process', { procId: targetProcessId, taskId: null });
+      else navigateAngularWorkbench('process', { procId: targetProcessId, taskId: null });
     },
     setStageName(targetStageId: string, value: string) {
       const stage = findStage(targetStageId);

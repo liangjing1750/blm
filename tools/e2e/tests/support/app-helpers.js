@@ -13,13 +13,31 @@ async function openDocument(page, name, options = {}) {
   if (await emptyOpenButton.count()) {
     await emptyOpenButton.first().click();
   } else {
-    await page.locator('#dd-file .tbar-dd-btn').click();
-    await page.getByTestId('toolbar-open-button').click();
+    const fileMenuButton = page.locator('#dd-file .tbar-dd-btn');
+    const openMenuItem = page.getByTestId('toolbar-open-button');
+    await fileMenuButton.click();
+    if (!(await openMenuItem.isVisible().catch(() => false))) {
+      await fileMenuButton.click();
+    }
+    if (await openMenuItem.isVisible().catch(() => false)) {
+      await openMenuItem.click();
+    } else {
+      await page.evaluate(() => window.App?.cmdOpen?.());
+    }
+  }
+  const searchBox = page.locator('#open-file-search');
+  if (await searchBox.count()) {
+    await searchBox.fill(name);
   }
   await page.locator('.file-list-item').filter({ hasText: name }).first().click();
   await expect(page.getByTestId('current-file-name')).toHaveText(name);
   if (expandSidebar && await page.locator('#sidebar.sb-collapsed').count()) {
-    await page.locator('#sb-toggle-btn').click();
+    const angularToggle = page.locator('#angular-sb-toggle-btn');
+    if (await angularToggle.count()) {
+      await angularToggle.click();
+    } else {
+      await page.locator('#sb-toggle-btn').click();
+    }
   }
 }
 

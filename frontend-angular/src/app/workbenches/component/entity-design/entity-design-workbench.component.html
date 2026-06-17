@@ -1,0 +1,173 @@
+<section class="entity-design" data-testid="entity-design-angular">
+  <div class="entity-design-toolbar">
+    <div class="data-view-switch" role="tablist" aria-label="实体设计视图切换">
+      <button class="seg-btn" [class.active]="view() === 'relation'" type="button" data-testid="entity-design-switch-relation" (click)="setView('relation')">关系图</button>
+      <button class="seg-btn" [class.active]="view() === 'state'" type="button" data-testid="entity-design-switch-state" (click)="setView('state')">状态图</button>
+    </div>
+    <span class="live-diagram-hint entity-shortcut-hint">
+      拖拽移动节点 · 点击实体切换编辑对象 · Ctrl+A全选实体 · Ctrl+点击多选 · Shift+左键拖拽框选
+    </span>
+    <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-entity" (click)="addEntity()">＋ 新建实体</button>
+    <button class="btn btn-ghost-sm" type="button" data-testid="entity-design-reset-layout" (click)="resetLayout()">重置布局</button>
+    @if (editorOpen()) {
+      <button class="btn btn-ghost-sm" type="button" data-testid="entity-design-editor-hide" (click)="editorOpen.set(false)">关闭编辑</button>
+    } @else {
+      <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-editor-open" (click)="editorOpen.set(true)">打开编辑</button>
+    }
+  </div>
+
+  <div class="entity-design-body" [class.has-drawer]="editorOpen() && selectedEntity()">
+    <div class="entity-design-canvas-shell" data-testid="entity-design-canvas-shell">
+      @if (view() === 'relation') {
+        <div class="entity-relation-canvas" data-testid="entity-design-relation-view">
+          <div class="entity-board" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
+            <svg class="entity-rel-svg" [attr.width]="boardWidth()" [attr.height]="boardHeight()" aria-hidden="true">
+              <defs>
+                <marker id="entity-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                </marker>
+              </defs>
+              @for (line of relationLines(); track line.from.id + '-' + line.to.id + '-' + $index) {
+                <path class="entity-rel-line" [attr.d]="linePath(line)" marker-end="url(#entity-arrow)"></path>
+              }
+            </svg>
+
+            @for (node of nodes(); track node.id) {
+              <button class="entity-node" [class.is-selected]="isSelected(node.entity)" [class.is-focus]="entityId(selectedEntity()) === node.id" type="button" data-testid="entity-design-node" [ngStyle]="nodeStyle(node)" (mousedown)="startEntityDrag(node.entity, $event)" (click)="$event.stopPropagation(); selectEntity(node.entity, $event)">
+                <span class="entity-node-component">{{ node.constructName }}</span>
+                <strong>{{ node.entity.name || '未命名实体' }}</strong>
+                <em>{{ (node.entity.fields || []).length }} 字段</em>
+              </button>
+            }
+            @if (selectionBox()) {
+              <div class="entity-selection-box" [ngStyle]="selectionBoxStyle()"></div>
+            }
+          </div>
+        </div>
+      } @else {
+        <div class="entity-state-canvas" data-testid="entity-design-state-view">
+          @if (selectedEntity(); as entity) {
+            <div class="entity-state-title">
+              <strong>{{ entity.name || '未命名实体' }}</strong>
+              <span>状态字段值 {{ stateValues().length }}</span>
+            </div>
+            <div class="entity-state-board">
+              @for (state of stateValues(); track state; let index = $index) {
+                <div class="entity-state-node" [style.left.px]="64 + index * 190" [style.top.px]="90 + (index % 2) * 96">{{ state }}</div>
+              }
+              @for (transition of entity.state_transitions || []; track transition.uid || transition.id || $index) {
+                <div class="entity-state-transition">
+                  <span>{{ transition.from || '开始' }}</span>
+                  <strong>→</strong>
+                  <span>{{ transition.to || '结束' }}</span>
+                  <em>{{ transition.action || transition.label || '流转' }}</em>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="entity-empty">暂无实体，点击“新建实体”开始设计。</div>
+          }
+        </div>
+      }
+    </div>
+
+    @if (editorOpen() && selectedEntity(); as entity) {
+      <aside class="entity-design-drawer" data-testid="entity-design-drawer">
+        <div class="entity-design-drawer-head">
+          <h3>{{ entity.name || '未命名实体' }}</h3>
+          <button class="drawer-close" type="button" data-testid="entity-design-drawer-close" (click)="editorOpen.set(false)">×</button>
+        </div>
+        <div class="entity-design-drawer-body">
+          <section class="entity-edit-section">
+            <h4>实体定义</h4>
+            <label class="entity-field">
+              <span>实体名称</span>
+              <input type="text" data-testid="entity-design-name" [value]="entity.name || ''" (input)="setEntityName(entity, $any($event.target).value)">
+            </label>
+            <label class="entity-field">
+              <span>归属构件</span>
+              <select data-testid="entity-design-construct" [value]="entity.businessConstructUid || entity.businessConstructId || entity.constructUid || entity.constructId || ''" (change)="setEntityConstruct(entity, $any($event.target).value)">
+                <option value="">未分组构件</option>
+                @for (construct of constructs(); track constructId(construct)) {
+                  <option [value]="constructId(construct)">{{ construct.name || constructId(construct) }}</option>
+                }
+              </select>
+            </label>
+            <label class="entity-field entity-field-wide">
+              <span>说明</span>
+              <textarea rows="2" data-testid="entity-design-note" [value]="entity.note || ''" (input)="setEntityNote(entity, $any($event.target).value)"></textarea>
+            </label>
+          </section>
+
+          <section class="entity-edit-section">
+            <div class="entity-section-head">
+              <h4>字段</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-field" (click)="addField(entity)">＋ 字段</button>
+            </div>
+            @for (field of entity.fields || []; track fieldId(field, $index); let index = $index) {
+              <div class="entity-field-row" data-testid="entity-design-field-row">
+                <input type="text" aria-label="字段名称" [value]="field.name || ''" (input)="setField(field, 'name', $any($event.target).value)">
+                <select aria-label="字段类型" [value]="field.type || 'string'" (change)="setField(field, 'type', $any($event.target).value)">
+                  <option value="string">string</option>
+                  <option value="number">number</option>
+                  <option value="boolean">boolean</option>
+                  <option value="date">date</option>
+                  <option value="object">object</option>
+                </select>
+                <input type="text" aria-label="状态值" placeholder="状态值，用逗号分隔" [value]="field.state_values || ''" (input)="setField(field, 'state_values', $any($event.target).value)">
+                <button class="stage-quick-btn danger" type="button" title="删除字段" (click)="removeField(entity, index)">×</button>
+              </div>
+              <input class="entity-field-note" type="text" aria-label="字段说明" placeholder="字段说明" [value]="field.note || ''" (input)="setField(field, 'note', $any($event.target).value)">
+            } @empty {
+              <p class="entity-muted">暂无字段。</p>
+            }
+          </section>
+
+          <section class="entity-edit-section">
+            <div class="entity-section-head">
+              <h4>实体关系</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-relation" (click)="addRelation(entity)" [disabled]="entities().length < 2">＋ 关系</button>
+            </div>
+            @for (relation of relationsForEntity(entity); track relation.uid || relation.id || $index; let index = $index) {
+              <div class="entity-relation-row" data-testid="entity-design-relation-row">
+                <span>{{ entity.name || '当前实体' }}</span>
+                <strong>→</strong>
+                <select [value]="relation.to || relation.target || ''" (change)="setRelation(relation, 'to', $any($event.target).value)">
+                  @for (target of entities(); track entityId(target)) {
+                    @if (entityId(target) !== entityId(entity)) {
+                      <option [value]="entityId(target)">{{ target.name || entityId(target) }}</option>
+                    }
+                  }
+                </select>
+                <input type="text" aria-label="关系说明" [value]="relation.label || relation.type || ''" (input)="setRelation(relation, 'label', $any($event.target).value)">
+                <button class="stage-quick-btn danger" type="button" title="删除关系" (click)="removeRelation(entity, index)">×</button>
+              </div>
+            } @empty {
+              <p class="entity-muted">暂无关系。</p>
+            }
+          </section>
+
+          <section class="entity-edit-section">
+            <div class="entity-section-head">
+              <h4>状态流转</h4>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-transition" (click)="addTransition(entity)">＋ 流转</button>
+            </div>
+            @for (transition of entity.state_transitions || []; track transition.uid || transition.id || $index; let index = $index) {
+              <div class="entity-transition-row" data-testid="entity-design-transition-row">
+                <input type="text" aria-label="起始状态" [value]="transition.from || ''" (input)="setTransition(transition, 'from', $any($event.target).value)">
+                <strong>→</strong>
+                <input type="text" aria-label="目标状态" [value]="transition.to || ''" (input)="setTransition(transition, 'to', $any($event.target).value)">
+                <input type="text" aria-label="动作" [value]="transition.action || transition.label || ''" (input)="setTransition(transition, 'action', $any($event.target).value)">
+                <button class="stage-quick-btn danger" type="button" title="删除流转" (click)="removeTransition(entity, index)">×</button>
+              </div>
+            } @empty {
+              <p class="entity-muted">暂无状态流转。</p>
+            }
+          </section>
+
+          <button class="btn btn-danger btn-sm entity-delete-btn" type="button" data-testid="entity-design-delete" (click)="removeEntity(entity)">删除实体</button>
+        </div>
+      </aside>
+    }
+  </div>
+</section>

@@ -1,3 +1,5 @@
+import { emitRuntimeRefresh, getAngularRuntimeState, markAngularRuntimeModified } from '../../../core/runtime/angular-runtime';
+
 export interface LegacyProcessTask {
   id?: string;
   uid?: string;
@@ -63,8 +65,12 @@ export interface ProcessFlowLegacyAdapter {
   renderDiagram(containerId: string, process: LegacyProcess | null | undefined, onSelectTask: (taskId: string) => void): boolean;
 }
 
-export function createProcessFlowLegacyAdapter(legacyWindow: LegacyWindow = window as LegacyWindow): ProcessFlowLegacyAdapter {
-  const state = () => legacyWindow.S || {};
+export function createProcessFlowLegacyAdapter(legacyWindow: LegacyWindow = getAngularRuntimeState() as LegacyWindow): ProcessFlowLegacyAdapter {
+  const state = () => {
+    const direct = legacyWindow as LegacyWindow & { doc?: LegacyState['doc']; ui?: LegacyState['ui'] };
+    if (direct.doc || direct.ui) return { doc: direct.doc, ui: direct.ui };
+    return legacyWindow.S || {};
+  };
   const document = () => state().doc || {};
   const ui = () => {
     state().ui ||= {};
@@ -106,11 +112,13 @@ export function createProcessFlowLegacyAdapter(legacyWindow: LegacyWindow = wind
     selectProcess(targetProcessId: string) {
       ui().procId = targetProcessId;
       ui().taskId = null;
-      legacyWindow.renderSidebar?.();
+      if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+      else emitRuntimeRefresh();
     },
     selectTask(targetTaskId: string) {
       ui().taskId = targetTaskId;
-      legacyWindow.renderSidebar?.();
+      if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+      else emitRuntimeRefresh();
     },
     openTaskEditor(targetTaskId: string) {
       const targetProcessId = processId(currentProcess());
@@ -121,19 +129,23 @@ export function createProcessFlowLegacyAdapter(legacyWindow: LegacyWindow = wind
         return;
       }
       ui().procView = 'list';
-      legacyWindow.renderProcessTab?.();
+      if (legacyWindow.renderProcessTab) legacyWindow.renderProcessTab();
+      else emitRuntimeRefresh();
     },
     setDiagramMode(mode: 'linear' | 'swimlane') {
       ui().procDiagramMode = mode;
-      legacyWindow.markModified?.();
+      if (legacyWindow.markModified) legacyWindow.markModified();
+      else markAngularRuntimeModified();
     },
     setShowEntities(value: boolean) {
       ui().procDiagramShowEntities = value;
-      legacyWindow.markModified?.();
+      if (legacyWindow.markModified) legacyWindow.markModified();
+      else markAngularRuntimeModified();
     },
     setShowTasks(value: boolean) {
       ui().procDiagramShowTasks = value;
-      legacyWindow.markModified?.();
+      if (legacyWindow.markModified) legacyWindow.markModified();
+      else markAngularRuntimeModified();
     },
     zoom(containerId: string, delta: number) {
       legacyWindow.zoomBy?.(containerId, delta);

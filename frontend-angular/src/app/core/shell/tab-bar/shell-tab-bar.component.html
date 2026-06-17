@@ -1,0 +1,23 @@
+<div class="tab-btn-group" data-testid="angular-shell-tab-bar">
+  <button
+    *ngFor="let tab of tabs"
+    class="tab-btn"
+    [class.active]="activeTabId() === tab.id"
+    [attr.data-testid]="'tab-' + tab.id"
+    [disabled]="isPreviewRendering()"
+    type="button"
+    (click)="switchTab(tab.id)"
+  >
+    {{ tab.label }}
+  </button>
+</div>
+<button
+  class="tab-btn tab-back-btn"
+  data-testid="nav-back-button"
+  type="button"
+  [title]="backTitle()"
+  [disabled]="!canGoBack()"
+  (click)="goBack()"
+>
+  ← 返回
+</button>

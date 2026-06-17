@@ -47,7 +47,7 @@ export class ValueDomainWorkbenchComponent {
   protected readonly renamingStageId = signal('');
   protected readonly dragTarget = signal<StageDragTarget | null>(null);
 
-  private readonly legacyAdapter = createValueDomainLegacyAdapter(window);
+  private readonly legacyAdapter = createValueDomainLegacyAdapter();
   private readonly actions = this.legacyAdapter.actions();
   private readonly stageSlotWidth = 184;
   private readonly stageSlotHeight = 38;
