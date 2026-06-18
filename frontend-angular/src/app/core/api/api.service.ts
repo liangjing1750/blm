@@ -53,6 +53,21 @@ export class ApiService {
     return this.postJson('/api/new', { name });
   }
 
+  async copyDocument(sourceName: string, targetName: string): Promise<any> {
+    return this.postJson('/api/copy', {
+      source_name: sourceName,
+      target_name: targetName,
+    });
+  }
+
+  async deleteDocument(name: string): Promise<any> {
+    return this.postJson(`/api/delete/${encodeURIComponent(name)}`, {});
+  }
+
+  async createVersion(name: string, document: any, message = ''): Promise<any> {
+    return this.postJson('/api/version/create', { name, document, message });
+  }
+
   async load(name: string): Promise<any> {
     return this.getJson(`/api/load/${encodeURIComponent(name)}`);
   }

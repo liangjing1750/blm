@@ -152,6 +152,74 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="document-properties-dialog"]')).toBeFalsy();
   });
 
+  it('should restore copy, archive and delete document actions without placeholders', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/copy')) {
+        expect(JSON.parse(String(init?.body))).toEqual({ source_name: 'agent.json', target_name: 'agent-copy.json' });
+        return new Response(JSON.stringify({ ok: true, name: 'agent-copy.json' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-copy.json')) {
+        return new Response(JSON.stringify({ document: { meta: { domain: 'Agent Copy' } } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/version/create')) {
+        expect(JSON.parse(String(init?.body))).toMatchObject({ name: 'agent-copy.json', message: '手动归档' });
+        return new Response(JSON.stringify({ ok: true, version_id: 'v1' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/delete/agent-copy.json')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-save-as-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="copy-document-dialog"]')).toBeTruthy();
+    const copyInput = compiled.querySelector('[data-testid="copy-document-name-input"]') as HTMLInputElement;
+    copyInput.value = 'agent-copy.json';
+    copyInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="copy-document-submit-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-archive-button"]')?.click();
+    await fixture.whenStable();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-delete-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/copy', expect.objectContaining({ method: 'POST' }));
+    expect(fetchSpy).toHaveBeenCalledWith('/api/version/create', expect.objectContaining({ method: 'POST' }));
+    expect(fetchSpy).toHaveBeenCalledWith('/api/delete/agent-copy.json', expect.objectContaining({ method: 'POST' }));
+    expect(runtime.currentFile).toBe('');
+  });
+
   it('should render workspace and trash document cards with ten-item pagination in the open dialog', async () => {
     const documents = Array.from({ length: 11 }, (_, index) => ({
       name: `agent-${index + 1}.json`,

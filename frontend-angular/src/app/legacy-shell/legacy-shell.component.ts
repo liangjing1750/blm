@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
-import { getAngularRuntimeState, switchAngularMainTab } from '../core/runtime/angular-runtime';
+import { getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
 import { OpenDocumentQuery, OpenSpaceSummary } from '../core/shell/open-document/open-document-query';
 import { SidebarDirectoryComponent } from '../core/shell/sidebar/sidebar-directory.component';
@@ -19,7 +19,7 @@ import { PanoramaWorkbench } from '../workbenches/panorama/panorama-workbench';
 import { ProcessWorkbenchShellComponent } from '../workbenches/process/shell/process-workbench-shell.component';
 import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 
-type ToolbarModal = '' | 'create' | 'open' | 'properties' | 'history' | 'placeholder';
+type ToolbarModal = '' | 'create' | 'copy' | 'open' | 'properties' | 'history' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
 
 interface WaitDialogState {
@@ -72,6 +72,7 @@ export class LegacyShellComponent implements OnInit {
   protected readonly toast = signal('');
   protected openQuery = '';
   protected createDocumentName = '';
+  protected copyDocumentName = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
 
   protected readonly activeMainTab = computed(() => this.runtime.ui['mainTab'] || 'panoramaWorkbench');
@@ -137,6 +138,64 @@ export class LegacyShellComponent implements OnInit {
       this.modal.set('');
       await this.refreshWorkspaceFiles();
       this.showToast('文档已创建');
+    });
+  }
+
+  protected openCopyDocument(): void {
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档。');
+      return;
+    }
+    this.copyDocumentName = this.defaultCopyDocumentName(this.runtime.currentFile);
+    this.modal.set('copy');
+    this.activeDropdown.set('');
+  }
+
+  protected async submitCopyDocument(): Promise<void> {
+    const targetName = this.copyDocumentName.trim();
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档。');
+      return;
+    }
+    if (!targetName) {
+      this.showToast('请填写复制后的文档名称。');
+      return;
+    }
+    await this.runBusy(async () => {
+      const result = await this.api.copyDocument(this.runtime.currentFile, targetName);
+      const name = result?.name || targetName;
+      const loaded = await this.api.load(name).catch(() => null);
+      if (loaded) this.openLoadedDocument(name, loaded);
+      this.modal.set('');
+      await this.refreshWorkspaceFiles();
+      this.showToast('文档已复制');
+    });
+  }
+
+  protected async archiveCurrentVersion(): Promise<void> {
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档。');
+      return;
+    }
+    await this.runBusy(async () => {
+      await this.api.createVersion(this.runtime.currentFile, this.runtime.doc, '手动归档');
+      this.showToast('归档版本已创建');
+    });
+  }
+
+  protected async deleteCurrentDocument(): Promise<void> {
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档。');
+      return;
+    }
+    if (!window.confirm(`确定删除“${this.currentDocumentLabel()}”吗？删除后会进入回收站。`)) return;
+    const deletingName = this.runtime.currentFile;
+    await this.runBusy(async () => {
+      await this.api.deleteDocument(deletingName);
+      replaceRuntimeDocument({}, '');
+      this.modal.set('');
+      await this.refreshWorkspaceFiles();
+      this.showToast('文档已删除');
     });
   }
 
@@ -404,5 +463,13 @@ export class LegacyShellComponent implements OnInit {
     window.setTimeout(() => {
       if (this.toast() === message) this.toast.set('');
     }, 2400);
+  }
+
+  private defaultCopyDocumentName(name: string): string {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) return '';
+    return trimmed.toLowerCase().endsWith('.json')
+      ? `${trimmed.slice(0, -5)}-copy.json`
+      : `${trimmed}-copy`;
   }
 }

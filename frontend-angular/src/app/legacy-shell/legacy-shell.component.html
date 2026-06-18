@@ -15,7 +15,7 @@
         <button class="tbar-dd-item" type="button" data-testid="toolbar-new-button" (click)="createDocument()">新建</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-open-button" (click)="openDocumentModal()">打开</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-properties-button" (click)="openDocumentProperties()">属性</button>
-        <button class="tbar-dd-item tbar-dd-danger" type="button" data-testid="toolbar-delete-button" (click)="showPlaceholder('删除文档')">删除</button>
+        <button class="tbar-dd-item tbar-dd-danger" type="button" data-testid="toolbar-delete-button" (click)="deleteCurrentDocument()">删除</button>
       </div>
     </div>
 
@@ -24,7 +24,7 @@
     <div class="tbar-dd">
       <button class="btn btn-ghost tbar-dd-btn" type="button" (click)="toggleDropdown('history', $event)">历史 ▾</button>
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'history'">
-        <button class="tbar-dd-item tbar-dd-primary" type="button" (click)="showPlaceholder('归档版本')">归档版本</button>
+        <button class="tbar-dd-item tbar-dd-primary" type="button" data-testid="toolbar-archive-button" (click)="archiveCurrentVersion()">归档版本</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-history-button" (click)="openHistory()">历史记录</button>
       </div>
     </div>
@@ -32,7 +32,7 @@
     <div class="tbar-dd">
       <button class="btn btn-ghost tbar-dd-btn" type="button" (click)="toggleDropdown('tools', $event)">工具 ▾</button>
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'tools'">
-        <button class="tbar-dd-item" type="button" data-testid="toolbar-save-as-button" (click)="showPlaceholder('复制文档')">复制</button>
+        <button class="tbar-dd-item" type="button" data-testid="toolbar-save-as-button" (click)="openCopyDocument()">复制</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-compare-button" (click)="showPlaceholder('比对')">比对</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-merge-button" (click)="showPlaceholder('合并')">合并</button>
         <div class="tbar-dd-sep"></div>
@@ -115,6 +115,30 @@
             (click)="submitCreateDocument()"
           >
             创建
+          </button>
+        </div>
+      </section>
+
+      <section *ngSwitchCase="'copy'" data-testid="copy-document-dialog">
+        <h2>复制文档</h2>
+        <input
+          class="modal-search create-name-input"
+          type="text"
+          data-testid="copy-document-name-input"
+          [(ngModel)]="copyDocumentName"
+          placeholder="输入复制后的文档名称"
+          (keydown.enter)="submitCopyDocument()"
+        >
+        <div class="modal-actions">
+          <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
+          <button
+            class="btn btn-primary"
+            type="button"
+            data-testid="copy-document-submit-button"
+            [disabled]="busy() || !copyDocumentName.trim()"
+            (click)="submitCopyDocument()"
+          >
+            复制
           </button>
         </div>
       </section>
