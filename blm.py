@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
 BLM - Business Language Modeling Tool
-用法:
-  python blm.py                  启动服务器（默认）
-  python -m blm serve            启动服务器
-  python -m blm ai ask <name>    业务问答
-  python -m blm ai export <name> AI 截图导出 DOCX
+
+Usage:
+  python blm.py
+  python blm.py serve
 """
 
 import argparse
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,11 +45,13 @@ def _resolve_path(root: Path, value: str | None, fallback: Path) -> Path:
 
 
 def build_runtime_config() -> RuntimeConfig:
+    # 模块意图：启动入口只负责解析运行时环境，把服务创建交给 blm_core.server。
     port_text = (os.getenv("BLM_PORT") or str(PORT)).strip()
     try:
         port = int(port_text)
     except ValueError as exc:
         raise ValueError("BLM_PORT 必须是整数") from exc
+
     admin_port_text = (os.getenv("BLM_ADMIN_PORT") or str(ADMIN_PORT)).strip()
     admin_port = None
     if admin_port_text:
@@ -61,6 +61,7 @@ def build_runtime_config() -> RuntimeConfig:
             raise ValueError("BLM_ADMIN_PORT 必须是整数") from exc
         admin_port = parsed_admin_port if parsed_admin_port > 0 else None
 
+    # 关键流程：目录允许通过环境变量覆盖，便于不同机器复用同一份代码。
     app_dir = _resolve_path(ROOT, os.getenv("BLM_APP_DIR"), ROOT / "app")
     workspace_dir = _resolve_path(ROOT, os.getenv("BLM_WORKSPACE_DIR"), ROOT / "workspace")
     open_browser = not _read_bool_env("BLM_NO_BROWSER", False)
@@ -73,44 +74,29 @@ def build_runtime_config() -> RuntimeConfig:
     )
 
 
-def _get_workspace_dir() -> Path:
-    return _resolve_path(ROOT, os.getenv("BLM_WORKSPACE_DIR"), ROOT / "workspace")
+def _run_server() -> None:
+    config = build_runtime_config()
+    run_server(
+        port=config.port,
+        app_dir=config.app_dir,
+        workspace_dir=config.workspace_dir,
+        open_browser=config.open_browser,
+        admin_port=config.admin_port,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="BLM - Business Language Modeling Tool")
     subparsers = parser.add_subparsers(dest="command")
-
-    subparsers.add_parser("serve", help="启动 Web 服务器")
-
-    ai_parser = subparsers.add_parser("ai", help="启动 AI 助手")
-    ai_parser.add_argument("workspace", nargs="?", help="工作区名称（可选，启动后可在对话中切换）")
+    subparsers.add_parser("serve", help="启动 Web 服务")
 
     args = parser.parse_args(argv)
+    # 边界细节：无子命令时保持历史行为，直接启动本地 Web 服务。
+    if args.command in {None, "serve"}:
+        _run_server()
+        return
 
-    if args.command == "ai":
-        from blm_ai.config import load_config
-        from blm_ai.cli import run_agent
-        config = load_config(_get_workspace_dir())
-        run_agent(args.workspace, config)
-    elif args.command == "serve":
-        config = build_runtime_config()
-        run_server(
-            port=config.port,
-            app_dir=config.app_dir,
-            workspace_dir=config.workspace_dir,
-            open_browser=config.open_browser,
-            admin_port=config.admin_port,
-        )
-    else:
-        config = build_runtime_config()
-        run_server(
-            port=config.port,
-            app_dir=config.app_dir,
-            workspace_dir=config.workspace_dir,
-            open_browser=config.open_browser,
-            admin_port=config.admin_port,
-        )
+    parser.error(f"unsupported command: {args.command}")
 
 
 if __name__ == "__main__":

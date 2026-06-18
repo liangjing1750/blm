@@ -141,7 +141,6 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_attachment(path)
                 if path.startswith("/api/export-docx/"):
                     return self._handle_export_docx(path)
-                # AI 路由（通过 register_ai_routes 注入）
                 if getattr(self.__class__, '_ai_routes_get', None):
                     for prefix, handler in self.__class__._ai_routes_get.items():
                         if path == prefix: return handler(self)
@@ -218,7 +217,6 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_merge_apply(body)
                 if path == "/api/export-docx/start":
                     return self._handle_export_docx_start(body)
-                # AI 路由（通过 register_ai_routes 注入）
                 if getattr(self.__class__, '_ai_routes_post', None):
                     for prefix, handler in self.__class__._ai_routes_post.items():
                         if path == prefix: return handler(self, body)
@@ -906,8 +904,6 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             self.wfile.write(body)
 
     # 注入 AI 路由 — AI 与 BLM 解耦的关键点
-    from blm_ai.server_routes import register_ai_routes
-    register_ai_routes(BlmRequestHandler, storage)
 
     return BlmRequestHandler
 
