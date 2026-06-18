@@ -39,7 +39,14 @@ export function findStageByIdentity(document: BlmDocument, stageId: string): Sta
 export function normalizeDocument(raw: Partial<BlmDocument> | null | undefined): BlmDocument {
   const document = { ...(raw || {}) } as BlmDocument;
   document.meta = {
-    domain: String(document.meta?.domain || '未命名模型').trim(),
+    ...(document.meta || {}),
+    domain: String(document.meta?.domain || document.meta?.title || '未命名模型').trim(),
+    title: document.meta?.title,
+    author: document.meta?.author,
+    date: document.meta?.date,
+    space: document.meta?.space,
+    teamSpace: document.meta?.teamSpace,
+    tags: document.meta?.tags,
     version: document.meta?.version,
     owner: document.meta?.owner,
   };

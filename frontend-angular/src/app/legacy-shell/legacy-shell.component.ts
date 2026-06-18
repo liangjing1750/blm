@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
+import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
 import { getAngularRuntimeState, switchAngularMainTab } from '../core/runtime/angular-runtime';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
@@ -18,7 +19,7 @@ import { PanoramaWorkbench } from '../workbenches/panorama/panorama-workbench';
 import { ProcessWorkbenchShellComponent } from '../workbenches/process/shell/process-workbench-shell.component';
 import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 
-type ToolbarModal = '' | 'create' | 'open' | 'history' | 'placeholder';
+type ToolbarModal = '' | 'create' | 'open' | 'properties' | 'history' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
 
 interface WaitDialogState {
@@ -71,6 +72,7 @@ export class LegacyShellComponent implements OnInit {
   protected readonly toast = signal('');
   protected openQuery = '';
   protected createDocumentName = '';
+  protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
 
   protected readonly activeMainTab = computed(() => this.runtime.ui['mainTab'] || 'panoramaWorkbench');
 
@@ -187,6 +189,28 @@ export class LegacyShellComponent implements OnInit {
       this.modal.set('history');
       this.activeDropdown.set('');
     });
+  }
+
+  protected openDocumentProperties(): void {
+    if (!this.runtime.doc) {
+      this.showToast('请先打开或新建一个文档。');
+      return;
+    }
+    this.documentProperties = readDocumentProperties(this.runtime.doc, this.runtime.currentFile);
+    this.modal.set('properties');
+    this.activeDropdown.set('');
+  }
+
+  protected saveDocumentProperties(): void {
+    const message = validateDocumentProperties(this.documentProperties);
+    if (message) {
+      this.showToast(message);
+      return;
+    }
+    applyDocumentProperties(this.runtime.doc, this.documentProperties);
+    this.documentStore.markModified();
+    this.modal.set('');
+    this.showToast('属性已保存');
   }
 
   protected showPlaceholder(title: string): void {

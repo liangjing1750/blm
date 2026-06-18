@@ -22,6 +22,12 @@ export interface BlmDocument {
 
 export interface DocumentMeta {
   domain: string;
+  title?: string;
+  author?: string;
+  date?: string;
+  space?: string;
+  teamSpace?: string;
+  tags?: string | string[];
   version?: string;
   owner?: string;
 }

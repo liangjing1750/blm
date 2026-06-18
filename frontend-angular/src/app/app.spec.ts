@@ -51,6 +51,61 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="create-document-submit-button"]')?.textContent).toContain('创建');
   });
 
+  it('should edit the five document properties from the file menu', async () => {
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: {
+        domain: 'Agent',
+        author: 'Codex',
+        date: '2026-06-18',
+        space: '默认空间',
+        tags: '最小建模',
+      },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-properties-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="document-properties-dialog"]')).toBeTruthy();
+    expect((compiled.querySelector('[data-testid="document-properties-name"]') as HTMLInputElement).value).toBe('Agent');
+    expect((compiled.querySelector('[data-testid="document-properties-author"]') as HTMLInputElement).value).toBe('Codex');
+    expect((compiled.querySelector('[data-testid="document-properties-date"]') as HTMLInputElement).value).toBe('2026-06-18');
+    expect((compiled.querySelector('[data-testid="document-properties-space"]') as HTMLInputElement).value).toBe('默认空间');
+    expect((compiled.querySelector('[data-testid="document-properties-tags"]') as HTMLInputElement).value).toBe('最小建模');
+
+    const nameInput = compiled.querySelector('[data-testid="document-properties-name"]') as HTMLInputElement;
+    nameInput.value = 'Agent v2';
+    nameInput.dispatchEvent(new Event('input'));
+    const tagsInput = compiled.querySelector('[data-testid="document-properties-tags"]') as HTMLInputElement;
+    tagsInput.value = '最小建模，流程';
+    tagsInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="document-properties-save-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(runtime.doc.meta.domain).toBe('Agent v2');
+    expect(runtime.doc.meta.title).toBe('Agent v2');
+    expect(runtime.doc.meta.tags).toBe('最小建模，流程');
+    expect(runtime.modified).toBe(true);
+    expect(compiled.querySelector('[data-testid="document-properties-dialog"]')).toBeFalsy();
+  });
+
   it('should render workspace and trash document cards with ten-item pagination in the open dialog', async () => {
     const documents = Array.from({ length: 11 }, (_, index) => ({
       name: `agent-${index + 1}.json`,

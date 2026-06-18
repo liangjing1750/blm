@@ -163,6 +163,23 @@
   margin: 0 0 20px;
 }
 
+.document-properties-dialog {
+  display: grid;
+  gap: 12px;
+}
+
+.property-field {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.property-field .modal-search {
+  margin: 0;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

@@ -14,7 +14,7 @@
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'file'">
         <button class="tbar-dd-item" type="button" data-testid="toolbar-new-button" (click)="createDocument()">新建</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-open-button" (click)="openDocumentModal()">打开</button>
-        <button class="tbar-dd-item" type="button" data-testid="toolbar-properties-button" (click)="showPlaceholder('文档属性')">属性</button>
+        <button class="tbar-dd-item" type="button" data-testid="toolbar-properties-button" (click)="openDocumentProperties()">属性</button>
         <button class="tbar-dd-item tbar-dd-danger" type="button" data-testid="toolbar-delete-button" (click)="showPlaceholder('删除文档')">删除</button>
       </div>
     </div>
@@ -233,6 +233,34 @@
 
       </section>
 
+
+      <section *ngSwitchCase="'properties'" class="document-properties-dialog" data-testid="document-properties-dialog">
+        <h2>属性</h2>
+        <label class="property-field">
+          <span>文档名称</span>
+          <input class="modal-search" type="text" data-testid="document-properties-name" [(ngModel)]="documentProperties.name" placeholder="文档名称">
+        </label>
+        <label class="property-field">
+          <span>作者</span>
+          <input class="modal-search" type="text" data-testid="document-properties-author" [(ngModel)]="documentProperties.author" placeholder="作者">
+        </label>
+        <label class="property-field">
+          <span>日期</span>
+          <input class="modal-search" type="text" data-testid="document-properties-date" [(ngModel)]="documentProperties.date" placeholder="日期">
+        </label>
+        <label class="property-field">
+          <span>团队空间</span>
+          <input class="modal-search" type="text" data-testid="document-properties-space" [(ngModel)]="documentProperties.space" placeholder="团队空间">
+        </label>
+        <label class="property-field">
+          <span>标签</span>
+          <input class="modal-search" type="text" data-testid="document-properties-tags" [(ngModel)]="documentProperties.tags" placeholder="标签，逗号分隔" (keydown.enter)="saveDocumentProperties()">
+        </label>
+        <div class="modal-actions">
+          <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
+          <button class="btn btn-primary" type="button" data-testid="document-properties-save-button" [disabled]="busy() || !documentProperties.name.trim()" (click)="saveDocumentProperties()">保存</button>
+        </div>
+      </section>
 
       <section *ngSwitchCase="'history'">
         <h2>历史记录</h2>
