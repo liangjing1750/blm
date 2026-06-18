@@ -90,13 +90,16 @@ class FrontendStructureTests(unittest.TestCase):
         shell_ts = ANGULAR_APP_DIR / "legacy-shell" / "legacy-shell.component.ts"
         shell_html = ANGULAR_APP_DIR / "legacy-shell" / "legacy-shell.component.html"
         shell_scss = ANGULAR_APP_DIR / "legacy-shell" / "legacy-shell.component.scss"
+        shell_query = ANGULAR_APP_DIR / "core" / "shell" / "layout" / "shell-layout-query.ts"
 
         self.assertTrue(shell_ts.exists())
         self.assertTrue(shell_html.exists())
         self.assertTrue(shell_scss.exists())
+        self.assertTrue(shell_query.exists())
 
         ts_text = shell_ts.read_text("utf-8")
         html_text = shell_html.read_text("utf-8")
+        query_text = shell_query.read_text("utf-8")
 
         self.assertIn("ApiService", ts_text)
         self.assertIn("DocumentStore", ts_text)
@@ -105,6 +108,12 @@ class FrontendStructureTests(unittest.TestCase):
         self.assertIn("app-sidebar-directory", html_text)
         self.assertIn("app-process-workbench-shell", html_text)
         self.assertIn("app-component-workbench-shell", html_text)
+        self.assertIn("ShellLayoutQuery", ts_text)
+        self.assertIn("*ngIf=\"layoutQuery.showWorkbenchTabs()\"", html_text)
+        self.assertIn("*ngIf=\"layoutQuery.showBackAction()\"", html_text)
+        self.assertIn("showWorkbenchTabs(): boolean", query_text)
+        self.assertIn("showBackAction(): boolean", query_text)
+        self.assertNotIn("protected readonly hasDocument", ts_text)
 
         for forbidden in FORBIDDEN_SOURCE_PATTERNS:
             self.assertNotIn(forbidden, ts_text)

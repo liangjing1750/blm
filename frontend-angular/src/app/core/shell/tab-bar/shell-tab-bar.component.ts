@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, HostListener, computed, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, Input, computed, signal } from '@angular/core';
 import { ShellTabBarAdapter, createShellTabBarLegacyAdapter } from './shell-tab-bar-legacy-adapter';
 
 @Component({
@@ -13,6 +13,7 @@ export class ShellTabBarComponent {
   // 模块意图：主导航是工作壳的公共入口，Angular 组件负责渲染与事件；
   // 旧 runtime 仅保留 tab 状态切换能力，避免继续拼接 onclick 字符串。
   private readonly adapter: ShellTabBarAdapter = createShellTabBarLegacyAdapter();
+  @Input() showBackAction = true;
   protected readonly version = signal(0);
   protected readonly tabs = this.adapter.tabs();
   protected readonly activeTabId = computed(() => {

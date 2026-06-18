@@ -50,15 +50,17 @@
   </div>
 </div>
 
-<app-shell-tab-bar></app-shell-tab-bar>
+<ng-container *ngIf="layoutQuery.showWorkbenchTabs()">
+  <app-shell-tab-bar *ngIf="layoutQuery.showBackAction()" [showBackAction]="true"></app-shell-tab-bar>
+</ng-container>
 
-<main id="main" class="angular-main" [class.no-document]="!hasDocument()">
-  <aside id="sidebar" class="sidebar" *ngIf="hasDocument()">
+<main id="main" class="angular-main" [class.no-document]="!layoutQuery.hasDocument()">
+  <aside id="sidebar" class="sidebar" *ngIf="layoutQuery.showSidebar()">
     <app-sidebar-directory></app-sidebar-directory>
   </aside>
 
   <section id="tab-content" class="angular-workbench" data-testid="angular-workbench">
-    <section *ngIf="!hasDocument()" class="empty-state no-document-home" data-testid="no-document-home">
+    <section *ngIf="!layoutQuery.hasDocument()" class="empty-state no-document-home" data-testid="no-document-home">
       <h2>BLM（Business Language Modeling）业务语言建模</h2>
       <p>结构化记录业务理解，生成可读文档。</p>
       <div class="no-document-actions">
@@ -67,7 +69,7 @@
       </div>
     </section>
 
-    <ng-container *ngIf="hasDocument()">
+    <ng-container *ngIf="layoutQuery.hasDocument()">
       <app-panorama-workbench *ngIf="activeMainTab() === 'panoramaWorkbench'"></app-panorama-workbench>
       <app-process-workbench-shell *ngIf="activeMainTab() === 'processWorkbench'"></app-process-workbench-shell>
       <app-component-workbench-shell *ngIf="activeMainTab() === 'constructWorkbench'"></app-component-workbench-shell>
@@ -88,6 +90,30 @@
     <button class="modal-close" type="button" (click)="closeModal()">×</button>
 
     <ng-container [ngSwitch]="modal()">
+      <section *ngSwitchCase="'create'" data-testid="create-document-dialog">
+        <h2>新建文档</h2>
+        <input
+          class="modal-search create-name-input"
+          type="text"
+          data-testid="create-document-name-input"
+          [(ngModel)]="createDocumentName"
+          placeholder="输入文档名称，例如：入库流程"
+          (keydown.enter)="submitCreateDocument()"
+        >
+        <div class="modal-actions">
+          <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
+          <button
+            class="btn btn-primary"
+            type="button"
+            data-testid="create-document-submit-button"
+            [disabled]="busy() || !createDocumentName.trim()"
+            (click)="submitCreateDocument()"
+          >
+            创建
+          </button>
+        </div>
+      </section>
+
       <section *ngSwitchCase="'open'">
         <h2>打开文档</h2>
         <input class="modal-search" type="search" [(ngModel)]="openQuery" placeholder="搜索文档名称">

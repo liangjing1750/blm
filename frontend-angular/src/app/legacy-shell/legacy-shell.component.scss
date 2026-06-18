@@ -7,8 +7,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 56px;
-  padding: 0 20px;
+  min-height: 44px;
+  padding: 0 18px;
   background: #182437;
   color: #eaf2ff;
 }
@@ -28,13 +28,13 @@
 }
 
 .logo {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   color: #78b7ff;
 }
 
 .product-version {
-  font-size: 12px;
+  font-size: 11px;
   color: #b8c5d8;
 }
 
@@ -45,7 +45,7 @@
 
 .angular-main {
   display: flex;
-  min-height: calc(100vh - 104px);
+  min-height: calc(100vh - 96px);
   background: #eef2f7;
 }
 
@@ -68,8 +68,13 @@
 }
 
 .no-document-home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  padding-top: 72px;
+  min-height: calc(100vh - 132px);
+  padding: 0 24px 148px;
   text-align: center;
 }
 
@@ -100,7 +105,7 @@
 
 .modal-card {
   position: relative;
-  width: min(760px, calc(100vw - 48px));
+  width: min(450px, calc(100vw - 48px));
   max-height: min(720px, calc(100vh - 48px));
   padding: 24px;
   overflow: auto;
@@ -108,6 +113,12 @@
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 24px 80px rgb(15 23 42 / 24%);
+}
+
+.modal-card h2 {
+  margin: 6px 0 20px;
+  font-size: 22px;
+  line-height: 1.3;
 }
 
 .modal-close {
@@ -130,6 +141,18 @@
   padding: 0 12px;
   border: 1px solid #cbd8e7;
   border-radius: 8px;
+}
+
+.create-name-input {
+  height: 40px;
+  margin: 0 0 20px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .document-list {
