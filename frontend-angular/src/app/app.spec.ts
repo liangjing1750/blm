@@ -1,7 +1,8 @@
 ﻿import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 import { App } from './app';
+import { routes } from './app.routes';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
 import { getAngularRuntimeState } from './core/runtime/angular-runtime';
 import { LegacyShellComponent } from './legacy-shell/legacy-shell.component';
@@ -15,7 +16,7 @@ describe('App', () => {
 
     await TestBed.configureTestingModule({
       imports: [App, LegacyShellComponent],
-      providers: [provideRouter([])],
+      providers: [provideRouter(routes)],
     }).compileComponents();
   });
 
@@ -92,6 +93,36 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-components"]')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="business-model-angular"]')?.textContent).toContain('仓单组件');
+  });
+
+  it('should synchronize the main workbench from the browser route on refresh', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'constructWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/panorama');
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(runtime.ui['mainTab']).toBe('panoramaWorkbench');
+    expect(compiled.querySelector('[data-testid="tab-panoramaWorkbench"]')?.classList.contains('active')).toBe(true);
+    expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeTruthy();
   });
 
   it('should keep migration status aligned with restored Angular workbench entries', () => {

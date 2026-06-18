@@ -1,12 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnInit, computed, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { NavigationEnd, Router } from '@angular/router';
+import { Subscription, filter } from 'rxjs';
 import { ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
 import { getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
 import { OpenDocumentQuery, OpenSpaceSummary } from '../core/shell/open-document/open-document-query';
+import { workbenchIdFromUrl } from '../core/shell/routing/main-workbench-route';
 import { SidebarDirectoryComponent } from '../core/shell/sidebar/sidebar-directory.component';
 import { ShellTabBarComponent } from '../core/shell/tab-bar/shell-tab-bar.component';
 import { WaitDialogComponent } from '../core/shell/wait-dialog/wait-dialog.component';
@@ -48,7 +51,7 @@ export const TRANSITION_SHELL = 'angular-shell';
     RoleWorkbenchComponent,
   ],
 })
-export class LegacyShellComponent implements OnInit {
+export class LegacyShellComponent implements OnInit, OnDestroy {
   // 模块意图：用 Angular 壳层承接顶栏、文件入口、同步入口和主工作台挂载。
   // 关键流程：菜单动作通过 ApiService/SyncService/DocumentStore 完成，工作台切换只写入 Angular runtime。
   // 边界细节：比对、合并、预览、手册、反馈、AI 暂时只保留占位入口，避免重新引入旧脚本。
@@ -74,6 +77,7 @@ export class LegacyShellComponent implements OnInit {
   protected createDocumentName = '';
   protected copyDocumentName = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
+  private routeSubscription: Subscription | null = null;
 
   protected readonly activeMainTab = computed(() => this.runtime.ui['mainTab'] || 'panoramaWorkbench');
 
@@ -81,10 +85,19 @@ export class LegacyShellComponent implements OnInit {
     private readonly api: ApiService,
     private readonly documentStore: DocumentStore,
     private readonly syncService: SyncService,
+    private readonly router: Router,
   ) {}
 
   ngOnInit(): void {
+    this.syncMainTabFromRoute(this.router.url);
+    this.routeSubscription = this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe((event) => this.syncMainTabFromRoute(event.urlAfterRedirects));
     void this.refreshWorkspaceFiles();
+  }
+
+  ngOnDestroy(): void {
+    this.routeSubscription?.unsubscribe();
   }
 
   @HostListener('document:click', ['$event'])
@@ -444,7 +457,15 @@ export class LegacyShellComponent implements OnInit {
   private openLoadedDocument(name: string, payload: any): void {
     const document = payload?.document || payload;
     this.documentStore.load(document, name);
-    this.runtime.ui['mainTab'] = this.runtime.ui['mainTab'] || 'panoramaWorkbench';
+    this.syncMainTabFromRoute(this.router.url);
+  }
+
+  // 关键流程：浏览器 URL 是用户可见入口，进入 /panorama、刷新或前进后退时必须反向校正 runtime 主 tab。
+  private syncMainTabFromRoute(url: string): void {
+    const nextMainTab = workbenchIdFromUrl(url);
+    if (this.runtime.ui['mainTab'] === nextMainTab) return;
+    this.runtime.ui['mainTab'] = nextMainTab;
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
   private async runBusy(action: () => Promise<void>): Promise<void> {
