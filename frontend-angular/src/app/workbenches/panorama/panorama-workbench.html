@@ -19,65 +19,95 @@
   </nav>
 
   @if (activeTab() === 'overview') {
-  <div class="grid" data-testid="panorama-overview-panel">
-    <article class="panel">
-      <h2>战略</h2>
-      <ul class="list">
-        <li>产品定位：业务架构建模工具</li>
-        <li>核心用户：业务负责人、产品经理、技术经理</li>
-        <li>衔接方向：流程应用平台与接口实现</li>
-      </ul>
-    </article>
+    <div class="panorama-business-map" data-testid="panorama-overview-rich">
+      <div class="panorama-map-row">
+        <div class="panorama-map-header">
+          <div class="panorama-strategy-flow">
+            <span class="panorama-strategy-pill">业务目标</span>
+            <span class="panorama-strategy-arrow">→</span>
+            <span class="panorama-strategy-pill primary">{{ document().meta.domain || '未命名文档' }}</span>
+            <span class="panorama-strategy-arrow">→</span>
+            <span class="panorama-strategy-pill">可读文档</span>
+          </div>
+        </div>
+      </div>
 
-    <article class="panel">
-      <h2>价值与业务域矩阵</h2>
-      <ul class="list">
-        @for (stage of document().stages; track stage.uid) {
-          <li>
-            <strong>{{ stage.name }}</strong>
-            <span class="muted"> / {{ stage.subDomain || '未归属业务域' }} / {{ stageProcessCount(stage.uid) }} 个流程</span>
-          </li>
-        }
-      </ul>
-    </article>
+      <div class="panorama-matrix-frame">
+        <div class="panorama-matrix" data-testid="panorama-matrix" [style.grid-template-columns]="gridTemplateColumns()">
+          <div class="panorama-matrix-corner">
+            <div class="panorama-corner-axis">
+              <span class="panorama-corner-domain">业务域</span>
+              <span class="panorama-corner-stream">价值流</span>
+              <span class="panorama-corner-slash"></span>
+            </div>
+          </div>
+          @for (column of panoramaModel().columns; track column.id) {
+            <div class="panorama-matrix-head">
+              <span>{{ column.name || column.badge || '价值流' }}</span>
+            </div>
+          }
 
-    <article class="panel">
-      <h2>业务组件</h2>
-      <ul class="list">
-        @for (row of componentRows(); track row.component.uid) {
-          <li>
-            <strong>{{ row.component.name }}</strong>
-            <span class="muted"> / {{ row.component.kind === 'core' ? '核心' : '通用' }}</span>
-            <div class="muted">支撑阶段：{{ row.stages.length ? row.stages.map(stage => stage.name).join('、') : '待承接' }}</div>
-          </li>
-        }
-      </ul>
-    </article>
-  </div>
+          @for (lane of panoramaModel().lanes; track lane.id) {
+            <div class="panorama-matrix-domain">
+              <span>{{ lane.name || lane.badge || '业务域' }}</span>
+            </div>
+            @for (column of panoramaModel().columns; track column.id) {
+              <div class="panorama-matrix-cell">
+                @if (cell(lane.id, column.id); as matrixCell) {
+                  @if (matrixCell.status || matrixCell.text) {
+                    <div class="panorama-empty-cell">{{ matrixCell.status || matrixCell.text }}</div>
+                  }
+                }
+                @if (cellStages(lane.id, column.id).length) {
+                  <div class="panorama-stage-lane">
+                    @for (stage of cellStages(lane.id, column.id); track stage.uid) {
+                      <div class="panorama-stage-cell">
+                        <span class="panorama-stage-name">{{ stage.name }}</span>
+                        <span class="panorama-stage-count">{{ stageProcessCount(stage.uid) }} 个流程</span>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <span class="panorama-empty-cell">待归入阶段</span>
+                }
+              </div>
+            }
+          }
+        </div>
+      </div>
+
+      <div class="panorama-capability-groups" data-testid="panorama-capability-groups">
+        <section class="panorama-capability-group">
+          <div class="panorama-capability-group-label">核心</div>
+          <div class="panorama-capability-strip">
+            @for (row of coreComponentRows(); track row.component.uid) {
+              <div class="panorama-capability-node core">
+                <strong>{{ row.component.name }}</strong>
+                <span class="panorama-stage-count">{{ componentKindLabel(row.component) }} · {{ componentStageText(row.stages) }}</span>
+              </div>
+            } @empty {
+              <span class="panorama-capability-empty">暂无核心组件</span>
+            }
+          </div>
+        </section>
+        <section class="panorama-capability-group generic">
+          <div class="panorama-capability-group-label">通用</div>
+          <div class="panorama-capability-strip">
+            @for (row of genericComponentRows(); track row.component.uid) {
+              <div class="panorama-capability-node generic">
+                <strong>{{ row.component.name }}</strong>
+                <span class="panorama-stage-count">{{ componentKindLabel(row.component) }} · {{ componentStageText(row.stages) }}</span>
+              </div>
+            } @empty {
+              <span class="panorama-capability-empty">暂无通用组件</span>
+            }
+          </div>
+        </section>
+      </div>
+    </div>
   } @else if (activeTab() === 'valueDomain') {
-  <article class="panel" data-testid="panorama-value-domain-panel">
-    <h2>价值与业务域矩阵</h2>
-    <ul class="list">
-      @for (stage of document().stages; track stage.uid) {
-        <li>
-          <strong>{{ stage.name }}</strong>
-          <span class="muted"> / {{ stage.subDomain || '未归属业务域' }} / {{ stageProcessCount(stage.uid) }} 个流程</span>
-        </li>
-      }
-    </ul>
-  </article>
+    <app-value-domain-workbench />
   } @else {
-  <article class="panel" data-testid="panorama-components-panel">
-    <h2>业务组件</h2>
-    <ul class="list">
-      @for (row of componentRows(); track row.component.uid) {
-        <li>
-          <strong>{{ row.component.name }}</strong>
-          <span class="muted"> / {{ row.component.kind === 'core' ? '核心' : '通用' }}</span>
-          <div class="muted">支撑阶段：{{ row.stages.length ? row.stages.map(stage => stage.name).join('、') : '待承接' }}</div>
-        </li>
-      }
-    </ul>
-  </article>
+    <app-business-model-workbench />
   }
 </section>

@@ -66,7 +66,14 @@ describe('App', () => {
       taskDefinitions: [],
       terms: [],
       rules: [],
+      panorama: {
+        columns: [{ id: 'column-1', name: '入库价值流' }],
+        lanes: [{ id: 'lane-1', name: '交易业务域' }],
+        cells: [{ laneUid: 'lane-1', columnUid: 'column-1', status: '建模中' }],
+      },
     };
+    runtime.doc.stages[0].panoramaLaneUid = 'lane-1';
+    runtime.doc.stages[0].panoramaColumnUid = 'column-1';
 
     const fixture = TestBed.createComponent(LegacyShellComponent);
     fixture.detectChanges();
@@ -75,14 +82,16 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="panorama-subtab-overview"]')?.textContent).toContain('全景视图');
     expect(compiled.querySelector('[data-testid="panorama-subtab-valueDomain"]')?.textContent).toContain('价值与业务域');
     expect(compiled.querySelector('[data-testid="panorama-subtab-components"]')?.textContent).toContain('业务组件');
+    expect(compiled.querySelector('[data-testid="panorama-overview-rich"]')?.textContent).toContain('入库价值流');
+    expect(compiled.querySelector('[data-testid="panorama-matrix"]')?.textContent).toContain('准备');
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-valueDomain"]')?.click();
     fixture.detectChanges();
-    expect(compiled.querySelector('[data-testid="panorama-value-domain-panel"]')?.textContent).toContain('准备');
+    expect(compiled.querySelector('[data-testid="value-domain-angular"]')?.textContent).toContain('入库价值流');
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-components"]')?.click();
     fixture.detectChanges();
-    expect(compiled.querySelector('[data-testid="panorama-components-panel"]')?.textContent).toContain('仓单组件');
+    expect(compiled.querySelector('[data-testid="business-model-angular"]')?.textContent).toContain('仓单组件');
   });
 
   it('should keep migration status aligned with restored Angular workbench entries', () => {
