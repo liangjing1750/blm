@@ -2,6 +2,7 @@
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 import { App } from './app';
+import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
 import { getAngularRuntimeState } from './core/runtime/angular-runtime';
 import { LegacyShellComponent } from './legacy-shell/legacy-shell.component';
 
@@ -49,6 +50,51 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="create-document-dialog"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="create-document-name-input"]')?.getAttribute('placeholder')).toContain('入库流程');
     expect(compiled.querySelector('[data-testid="create-document-submit-button"]')?.textContent).toContain('创建');
+  });
+
+  it('should restore panorama secondary tabs inside the Angular workbench', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', subDomain: '交易' }],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [{ uid: 'bc-1', name: '仓单组件', kind: 'core', entityUids: [], taskDefinitionUids: [], stageUids: ['stage-1'] }],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('[data-testid="panorama-subtab-overview"]')?.textContent).toContain('全景视图');
+    expect(compiled.querySelector('[data-testid="panorama-subtab-valueDomain"]')?.textContent).toContain('价值与业务域');
+    expect(compiled.querySelector('[data-testid="panorama-subtab-components"]')?.textContent).toContain('业务组件');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-valueDomain"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="panorama-value-domain-panel"]')?.textContent).toContain('准备');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-components"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="panorama-components-panel"]')?.textContent).toContain('仓单组件');
+  });
+
+  it('should keep migration status aligned with restored Angular workbench entries', () => {
+    const statusById = new Map(WORKBENCH_MIGRATION_STATUS.map((item) => [item.id, item.status]));
+
+    expect(statusById.get('panorama')).toBe('angular');
+    expect(statusById.get('component')).toBe('angular');
+    expect(statusById.get('orchestration')).toBe('angular');
+    expect(statusById.get('entity')).toBe('angular');
+    expect(statusById.get('process')).toBe('angular');
+    expect(statusById.get('knowledge')).toBe('angular');
+    expect(statusById.get('role')).toBe('angular');
   });
 
   it('should edit the five document properties from the file menu', async () => {

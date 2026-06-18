@@ -4,7 +4,22 @@
     <p>战略、价值流与业务域矩阵、业务组件放在同一张业务全景里。</p>
   </header>
 
-  <div class="grid">
+  <nav class="workbench-subtab-shell" data-testid="panorama-subtabs" aria-label="全景工作台视图">
+    @for (tab of tabs; track tab.id) {
+      <button
+        class="domain-subtab-btn"
+        type="button"
+        [class.active]="activeTab() === tab.id"
+        [attr.data-testid]="'panorama-subtab-' + tab.id"
+        (click)="switchTab(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    }
+  </nav>
+
+  @if (activeTab() === 'overview') {
+  <div class="grid" data-testid="panorama-overview-panel">
     <article class="panel">
       <h2>战略</h2>
       <ul class="list">
@@ -39,4 +54,30 @@
       </ul>
     </article>
   </div>
+  } @else if (activeTab() === 'valueDomain') {
+  <article class="panel" data-testid="panorama-value-domain-panel">
+    <h2>价值与业务域矩阵</h2>
+    <ul class="list">
+      @for (stage of document().stages; track stage.uid) {
+        <li>
+          <strong>{{ stage.name }}</strong>
+          <span class="muted"> / {{ stage.subDomain || '未归属业务域' }} / {{ stageProcessCount(stage.uid) }} 个流程</span>
+        </li>
+      }
+    </ul>
+  </article>
+  } @else {
+  <article class="panel" data-testid="panorama-components-panel">
+    <h2>业务组件</h2>
+    <ul class="list">
+      @for (row of componentRows(); track row.component.uid) {
+        <li>
+          <strong>{{ row.component.name }}</strong>
+          <span class="muted"> / {{ row.component.kind === 'core' ? '核心' : '通用' }}</span>
+          <div class="muted">支撑阶段：{{ row.stages.length ? row.stages.map(stage => stage.name).join('、') : '待承接' }}</div>
+        </li>
+      }
+    </ul>
+  </article>
+  }
 </section>
