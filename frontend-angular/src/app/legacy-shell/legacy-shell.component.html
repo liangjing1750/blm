@@ -86,7 +86,12 @@
 </main>
 
 <div *ngIf="modal()" class="modal-backdrop" data-testid="angular-modal" (click)="closeModal()">
-  <section class="modal-card" (click)="$event.stopPropagation()">
+  <section
+    class="modal-card"
+    [class.open-document-card]="modal() === 'open'"
+    [class.open-document-waiting]="waitDialog()"
+    (click)="$event.stopPropagation()"
+  >
     <button class="modal-close" type="button" (click)="closeModal()">×</button>
 
     <ng-container [ngSwitch]="modal()">
@@ -114,16 +119,120 @@
         </div>
       </section>
 
-      <section *ngSwitchCase="'open'">
+      <section *ngSwitchCase="'open'" class="open-document-dialog" data-testid="open-document-dialog">
         <h2>打开文档</h2>
-        <input class="modal-search" type="search" [(ngModel)]="openQuery" placeholder="搜索文档名称">
-        <div class="document-list">
-          <button *ngFor="let file of filteredWorkspaceFiles()" class="document-row" type="button" (click)="openDocument(file.name)">
-            <strong>{{ file.title || file.name }}</strong>
-            <span>{{ file.name }}</span>
-          </button>
+
+        <div class="open-tabbar" role="tablist" aria-label="打开文档范围">
+          <button class="open-tab" [class.active]="openTab() === 'workspace'" type="button" data-testid="open-workspace-tab" (click)="switchOpenTab('workspace')">工作区文档</button>
+          <button class="open-tab" [class.active]="openTab() === 'trash'" type="button" data-testid="open-trash-tab" (click)="switchOpenTab('trash')">回收站</button>
         </div>
+
+        <section class="open-panel" *ngIf="openTab() === 'workspace'">
+          <div class="open-panel-head">
+            <div>
+              <h3>团队文档空间</h3>
+              <p>按团队空间隔离文档；标签用于筛选和备注，正式归档请使用“归档版本”。</p>
+            </div>
+            <input class="modal-search open-search" type="search" [(ngModel)]="openQuery" placeholder="搜索文档名称" (ngModelChange)="selectWorkspacePage(1)">
+          </div>
+
+          <div class="open-space-tabs" *ngIf="workspaceSpaces().length">
+            <button *ngFor="let space of workspaceSpaces()" class="open-space-tab" [class.active]="activeOpenSpace() === space.name" type="button" data-testid="open-space-tab" (click)="selectOpenSpace(space.name)">
+              <span>{{ space.name }}</span>
+              <em>{{ space.count }}</em>
+            </button>
+          </div>
+
+          <div class="open-tag-filters">
+            <button class="open-tag-filter" [class.active]="!activeOpenTag()" type="button" (click)="selectOpenTag('')">全部标签</button>
+            <button *ngFor="let tag of openTags()" class="open-tag-filter" [class.active]="activeOpenTag() === tag" type="button" (click)="selectOpenTag(tag)">{{ tag }}</button>
+          </div>
+
+          <div class="open-card-grid">
+            <article *ngFor="let file of workspacePageItems()" class="workspace-doc-card" data-testid="workspace-doc-card" (click)="openDocument(file.name)">
+              <button class="workspace-doc-card-main" type="button">
+                <span class="workspace-doc-title">{{ file.title || file.name }}</span>
+                <span class="workspace-doc-name">{{ file.name }}</span>
+                <span class="workspace-doc-meta">{{ file.author ? '作者 ' + file.author : '未填写作者' }}{{ file.date ? ' · ' + file.date : '' }}</span>
+                <span class="file-list-tags" *ngIf="file.tags?.length; else noWorkspaceTags">
+                  <em *ngFor="let tag of file.tags?.slice(0, 5)">{{ tag }}</em>
+                </span>
+                <ng-template #noWorkspaceTags>
+                  <span class="workspace-doc-no-tags">无标签</span>
+                </ng-template>
+              </button>
+            </article>
+            <p *ngIf="!workspacePageItems().length" class="open-space-empty">暂无匹配文档。</p>
+          </div>
+
+          <div class="open-pagination" data-testid="workspace-pagination" *ngIf="filteredWorkspaceFiles().length > 10">
+            <span>{{ paginationLabel(workspacePage(), filteredWorkspaceFiles().length) }}</span>
+            <div>
+              <button class="btn btn-outline" type="button" [disabled]="workspacePage() <= 1" (click)="selectWorkspacePage(workspacePage() - 1)">上一页</button>
+              <button class="btn btn-outline" type="button" [disabled]="workspacePage() >= workspaceTotalPages()" (click)="selectWorkspacePage(workspacePage() + 1)">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="open-panel" *ngIf="openTab() === 'trash'">
+          <div class="open-panel-head trash-panel-head">
+            <div>
+              <h3>回收站</h3>
+              <p>点击文档卡片可恢复文档。</p>
+            </div>
+            <div class="trash-actions">
+              <button
+                class="btn btn-outline"
+                type="button"
+                data-testid="trash-clear-selected-button"
+                [disabled]="!selectedTrashCount() || busy()"
+                (click)="clearSelectedTrash()"
+              >
+                清理勾选 <em>{{ selectedTrashCount() }}</em>
+              </button>
+              <button
+                class="btn btn-danger"
+                type="button"
+                data-testid="trash-clear-all-button"
+                [disabled]="!sortedTrashEntries().length || busy()"
+                (click)="clearAllTrash()"
+              >
+                全部彻底清理
+              </button>
+            </div>
+          </div>
+
+          <div class="open-card-grid">
+            <article *ngFor="let entry of trashPageItems()" class="workspace-doc-card trash-doc-card" data-testid="trash-doc-card" (click)="restoreTrashEntry(entry)">
+              <label class="trash-check" (click)="$event.stopPropagation()">
+                <input
+                  type="checkbox"
+                  data-testid="trash-select-checkbox"
+                  [checked]="isTrashSelected(entry)"
+                  (change)="toggleTrashSelection(entry, $any($event.target).checked)"
+                >
+              </label>
+              <button class="workspace-doc-card-main" type="button">
+                <span class="workspace-doc-title">{{ entry.doc_name || entry.label || entry.id }}</span>
+                <span class="workspace-doc-name">{{ entry.id }}</span>
+                <span class="workspace-doc-meta">{{ entry.timestamp || '' }}</span>
+                <span class="workspace-doc-no-tags">点击卡片可恢复</span>
+              </button>
+            </article>
+            <p *ngIf="!trashPageItems().length" class="open-space-empty">回收站当前为空。</p>
+          </div>
+
+          <div class="open-pagination" data-testid="trash-pagination" *ngIf="sortedTrashEntries().length > 10">
+            <span>{{ paginationLabel(trashPage(), sortedTrashEntries().length) }}</span>
+            <div>
+              <button class="btn btn-outline" type="button" [disabled]="trashPage() <= 1" (click)="selectTrashPage(trashPage() - 1)">上一页</button>
+              <button class="btn btn-outline" type="button" [disabled]="trashPage() >= trashTotalPages()" (click)="selectTrashPage(trashPage() + 1)">下一页</button>
+            </div>
+          </div>
+        </section>
+
       </section>
+
 
       <section *ngSwitchCase="'history'">
         <h2>历史记录</h2>
@@ -142,6 +251,12 @@
       </section>
     </ng-container>
   </section>
+
+  <app-wait-dialog
+    *ngIf="waitDialog() as wait"
+    [title]="wait.title"
+    [description]="wait.description"
+  ></app-wait-dialog>
 </div>
 
 <div *ngIf="toast()" class="app-toast angular-toast" data-testid="app-toast">{{ toast() }}</div>

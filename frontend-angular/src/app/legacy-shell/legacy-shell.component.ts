@@ -1,12 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService, WorkspaceSummary } from '../core/api/api.service';
+import { ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
 import { DocumentStore } from '../core/document/document-store';
 import { getAngularRuntimeState, switchAngularMainTab } from '../core/runtime/angular-runtime';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
+import { OpenDocumentQuery, OpenSpaceSummary } from '../core/shell/open-document/open-document-query';
 import { SidebarDirectoryComponent } from '../core/shell/sidebar/sidebar-directory.component';
 import { ShellTabBarComponent } from '../core/shell/tab-bar/shell-tab-bar.component';
+import { WaitDialogComponent } from '../core/shell/wait-dialog/wait-dialog.component';
 import { SyncService } from '../core/sync/sync.service';
 import { ComponentWorkbenchShellComponent } from '../workbenches/component/shell/component-workbench-shell.component';
 import { EntityWorkbench } from '../workbenches/entity/entity-workbench';
@@ -17,6 +19,12 @@ import { ProcessWorkbenchShellComponent } from '../workbenches/process/shell/pro
 import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 
 type ToolbarModal = '' | 'create' | 'open' | 'history' | 'placeholder';
+type OpenDocumentTab = 'workspace' | 'trash';
+
+interface WaitDialogState {
+  title: string;
+  description: string;
+}
 
 export const TRANSITION_SHELL = 'angular-shell';
 
@@ -27,6 +35,7 @@ export const TRANSITION_SHELL = 'angular-shell';
   imports: [
     CommonModule,
     FormsModule,
+    WaitDialogComponent,
     ShellTabBarComponent,
     SidebarDirectoryComponent,
     PanoramaWorkbench,
@@ -44,10 +53,19 @@ export class LegacyShellComponent implements OnInit {
   // 边界细节：比对、合并、预览、手册、反馈、AI 暂时只保留占位入口，避免重新引入旧脚本。
   protected readonly runtime = getAngularRuntimeState();
   protected readonly layoutQuery = new ShellLayoutQuery(this.runtime);
+  protected readonly openDocumentQuery = new OpenDocumentQuery();
   protected readonly activeDropdown = signal<string>('');
   protected readonly modal = signal<ToolbarModal>('');
   protected readonly placeholderTitle = signal('新版迁移中');
   protected readonly workspaceFiles = signal<WorkspaceSummary[]>([]);
+  protected readonly trashEntries = signal<TrashEntry[]>([]);
+  protected readonly openTab = signal<OpenDocumentTab>('workspace');
+  protected readonly activeOpenSpace = signal('');
+  protected readonly activeOpenTag = signal('');
+  protected readonly workspacePage = signal(1);
+  protected readonly trashPage = signal(1);
+  protected readonly selectedTrashIds = signal<Set<string>>(new Set());
+  protected readonly waitDialog = signal<WaitDialogState | null>(null);
   protected readonly historyRows = signal<any[]>([]);
   protected readonly busy = signal(false);
   protected readonly toast = signal('');
@@ -121,16 +139,25 @@ export class LegacyShellComponent implements OnInit {
   }
 
   protected async openDocument(name: string): Promise<void> {
+    const file = this.workspaceFiles().find((item) => item.name === name);
+    const label = file?.title || name;
+    this.waitDialog.set({
+      title: `正在打开“${label}”...`,
+      description: '正在读取文档、附件索引和协作会话信息。',
+    });
     await this.runBusy(async () => {
       const loaded = await this.api.load(name);
       this.openLoadedDocument(name, loaded);
       this.modal.set('');
-      this.showToast('文档已打开');
     });
+    this.waitDialog.set(null);
   }
 
   protected async openDocumentModal(): Promise<void> {
-    await this.refreshWorkspaceFiles();
+    await this.refreshOpenDialogData();
+    this.openTab.set('workspace');
+    this.workspacePage.set(1);
+    this.trashPage.set(1);
     this.modal.set('open');
     this.activeDropdown.set('');
   }
@@ -172,16 +199,163 @@ export class LegacyShellComponent implements OnInit {
     this.modal.set('');
   }
 
+  protected switchOpenTab(tab: OpenDocumentTab): void {
+    this.openTab.set(tab);
+  }
+
+  protected selectedTrashCount(): number {
+    return this.selectedTrashIds().size;
+  }
+
+  protected isTrashSelected(entry: TrashEntry): boolean {
+    return this.selectedTrashIds().has(entry.id);
+  }
+
+  protected toggleTrashSelection(entry: TrashEntry, checked: boolean): void {
+    const next = new Set(this.selectedTrashIds());
+    if (checked) {
+      next.add(entry.id);
+    } else {
+      next.delete(entry.id);
+    }
+    this.selectedTrashIds.set(next);
+  }
+
+  protected async clearSelectedTrash(): Promise<void> {
+    const entryIds = Array.from(this.selectedTrashIds());
+    if (!entryIds.length) return;
+    if (!window.confirm(`确定彻底清理选中的 ${entryIds.length} 个回收站文档吗？`)) return;
+    await this.runBusy(async () => {
+      await this.api.deleteTrash(entryIds);
+      this.selectedTrashIds.set(new Set());
+      await this.refreshOpenDialogData();
+      this.showToast('已清理选中文档');
+    });
+  }
+
+  protected async clearAllTrash(): Promise<void> {
+    if (!this.sortedTrashEntries().length) return;
+    if (!window.confirm('确定彻底清空回收站吗？该操作不可恢复。')) return;
+    await this.runBusy(async () => {
+      await this.api.clearTrash();
+      this.selectedTrashIds.set(new Set());
+      await this.refreshOpenDialogData();
+      this.showToast('回收站已清空');
+    });
+  }
+
+  protected selectOpenSpace(space: string): void {
+    this.activeOpenSpace.set(space);
+    this.activeOpenTag.set('');
+    this.workspacePage.set(1);
+  }
+
+  protected selectOpenTag(tag: string): void {
+    this.activeOpenTag.set(tag);
+    this.workspacePage.set(1);
+  }
+
+  protected selectWorkspacePage(page: number): void {
+    this.workspacePage.set(this.openDocumentQuery.clampPage(page, this.workspaceTotalPages()));
+  }
+
+  protected selectTrashPage(page: number): void {
+    this.trashPage.set(this.openDocumentQuery.clampPage(page, this.trashTotalPages()));
+  }
+
+  protected workspaceSpaces(): OpenSpaceSummary[] {
+    return this.openDocumentQuery.workspaceSpaces(this.workspaceFiles());
+  }
+
+  protected openTags(): string[] {
+    return this.openDocumentQuery.tags(this.workspaceFiles(), this.activeOpenSpace());
+  }
+
   protected filteredWorkspaceFiles(): WorkspaceSummary[] {
-    const query = this.openQuery.trim().toLowerCase();
-    const files = this.workspaceFiles();
-    if (!query) return files;
-    return files.filter((file) => `${file.name} ${file.title || ''}`.toLowerCase().includes(query));
+    return this.openDocumentQuery.filterWorkspaceFiles(this.workspaceFiles(), {
+      activeSpace: this.activeOpenSpace(),
+      activeTag: this.activeOpenTag(),
+      query: this.openQuery,
+    });
+  }
+
+  protected workspacePageItems(): WorkspaceSummary[] {
+    return this.openDocumentQuery.pageItems(this.filteredWorkspaceFiles(), this.workspacePage());
+  }
+
+  protected workspaceTotalPages(): number {
+    return this.openDocumentQuery.totalPages(this.filteredWorkspaceFiles().length);
+  }
+
+  protected sortedTrashEntries(): TrashEntry[] {
+    return this.openDocumentQuery.sortTrash(this.trashEntries());
+  }
+
+  protected trashPageItems(): TrashEntry[] {
+    return this.openDocumentQuery.pageItems(this.sortedTrashEntries(), this.trashPage());
+  }
+
+  protected trashTotalPages(): number {
+    return this.openDocumentQuery.totalPages(this.sortedTrashEntries().length);
+  }
+
+  protected paginationLabel(page: number, totalItems: number): string {
+    return this.openDocumentQuery.paginationLabel(page, totalItems);
+  }
+
+  protected async restoreTrashEntry(entry: TrashEntry): Promise<void> {
+    if (!entry.id) return;
+    await this.runBusy(async () => {
+      const restored = await this.api.restoreTrash(entry.id);
+      const name = restored?.name || entry.doc_name || entry.label || entry.id;
+      this.openLoadedDocument(name, restored);
+      this.modal.set('');
+      await this.refreshOpenDialogData();
+      this.showToast('\u6587\u6863\u5df2\u6062\u590d');
+    });
   }
 
   private async refreshWorkspaceFiles(): Promise<void> {
     const summaries = await this.api.fileSummaries().catch(() => []);
     this.workspaceFiles.set(summaries);
+  }
+
+  private async refreshOpenDialogData(): Promise<void> {
+    const [summaries, trashEntries] = await Promise.all([
+      this.api.fileSummaries().catch(() => []),
+      this.api.trash().catch(() => []),
+    ]);
+    this.workspaceFiles.set(summaries);
+    this.trashEntries.set(trashEntries);
+    this.syncSelectedTrashIds(trashEntries);
+    this.ensureActiveOpenSpace();
+    this.ensureActiveOpenTag();
+    this.workspacePage.set(this.openDocumentQuery.clampPage(this.workspacePage(), this.workspaceTotalPages()));
+    this.trashPage.set(this.openDocumentQuery.clampPage(this.trashPage(), this.trashTotalPages()));
+  }
+
+  private ensureActiveOpenSpace(): void {
+    const spaces = this.workspaceSpaces().map((space) => space.name);
+    if (!spaces.length) {
+      this.activeOpenSpace.set('');
+      return;
+    }
+    if (!spaces.includes(this.activeOpenSpace())) {
+      const defaultSpace = this.openDocumentQuery.normalizeWorkspaceSpace('');
+      this.activeOpenSpace.set(spaces.includes(defaultSpace) ? defaultSpace : spaces[0]);
+    }
+  }
+
+  private ensureActiveOpenTag(): void {
+    if (this.activeOpenTag() && !this.openTags().includes(this.activeOpenTag())) {
+      this.activeOpenTag.set('');
+    }
+  }
+
+  private syncSelectedTrashIds(entries: TrashEntry[]): void {
+    const availableIds = new Set(entries.map((entry) => entry.id));
+    const next = new Set(Array.from(this.selectedTrashIds()).filter((entryId) => availableIds.has(entryId)));
+    this.selectedTrashIds.set(next);
   }
 
   private openLoadedDocument(name: string, payload: any): void {

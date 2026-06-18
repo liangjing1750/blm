@@ -9,6 +9,13 @@ export interface WorkspaceSummary {
   date?: string;
 }
 
+export interface TrashEntry {
+  id: string;
+  label?: string;
+  doc_name?: string;
+  timestamp?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   // 模块意图：集中承接浏览器到后端的 HTTP 调用，替代旧 api.js 的散落全局函数。
@@ -20,6 +27,22 @@ export class ApiService {
 
   async fileSummaries(): Promise<WorkspaceSummary[]> {
     return this.getJson('/api/files/meta', []);
+  }
+
+  async trash(): Promise<TrashEntry[]> {
+    return this.getJson('/api/trash', []);
+  }
+
+  async restoreTrash(entryId: string): Promise<any> {
+    return this.postJson('/api/trash/restore', { entry_id: entryId });
+  }
+
+  async deleteTrash(entryIds: string[]): Promise<any> {
+    return this.postJson('/api/trash/delete', { entry_ids: entryIds });
+  }
+
+  async clearTrash(): Promise<any> {
+    return this.postJson('/api/trash/clear', {});
   }
 
   async files(): Promise<string[]> {

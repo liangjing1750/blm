@@ -1,0 +1,76 @@
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.wait-dialog {
+  width: min(526px, calc(100vw - 64px));
+  padding: 30px 36px 28px;
+  border: 1px solid #d9e4f2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 22px 70px rgb(17 24 39 / 20%);
+  text-align: center;
+}
+
+.wait-spinner {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 18px;
+  border: 5px solid #e4ebf5;
+  border-top-color: #8fa2bb;
+  border-radius: 50%;
+  animation: wait-spin 0.9s linear infinite;
+}
+
+.wait-dialog h2 {
+  margin: 0 0 14px;
+  color: #172033;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.wait-progress {
+  height: 10px;
+  margin: 0 0 14px;
+  overflow: hidden;
+  border: 1px solid #d8e2ee;
+  border-radius: 999px;
+  background: #eef3f8;
+}
+
+.wait-progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d9e4f2, #9eb2ca, #d9e4f2);
+  animation: wait-progress 1.3s ease-in-out infinite;
+}
+
+.wait-dialog p {
+  margin: 0;
+  color: #667892;
+  font-size: 15px;
+}
+
+@keyframes wait-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes wait-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(240%);
+  }
+}
