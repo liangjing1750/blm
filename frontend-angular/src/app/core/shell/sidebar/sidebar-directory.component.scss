@@ -5,7 +5,8 @@
 
 .sb-section {
   height: 100%;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
   padding-bottom: 10px;
   scrollbar-color: #c7d4e4 transparent;
   scrollbar-width: thin;
@@ -62,7 +63,7 @@
 }
 
 .sb-process-browse {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .sb-grp-head,

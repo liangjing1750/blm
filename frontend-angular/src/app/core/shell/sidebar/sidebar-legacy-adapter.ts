@@ -11,6 +11,9 @@ export interface SidebarRuntime {
 
 export interface BlmSidebarDocument {
   valueStreams?: SidebarItem[];
+  panorama?: {
+    columns?: Array<SidebarItem & { scope?: string }>;
+  };
   businessDomains?: SidebarItem[];
   stages?: SidebarStage[];
   stageFlowRefs?: Array<Record<string, any>>;
@@ -33,6 +36,9 @@ export interface SidebarItem {
 export interface SidebarStage extends SidebarItem {
   valueStreamUid?: string;
   valueStreamId?: string;
+  valueStream?: string;
+  panoramaColumnUid?: string;
+  panoramaColumnId?: string;
   businessDomainUid?: string;
   businessDomainId?: string;
   subDomain?: string;
@@ -83,6 +89,8 @@ export interface SidebarEntity extends SidebarItem {
 export interface SidebarTaskDefinition extends SidebarItem {
   businessComponentUid?: string;
   businessComponent?: string;
+  businessConstructUid?: string;
+  businessConstructId?: string;
   constructUid?: string;
   constructUids?: string[];
 }
@@ -105,6 +113,7 @@ export interface SidebarMetric {
 export interface SidebarValueStreamGroup {
   id: string;
   name: string;
+  scope?: string;
   stageCount: number;
   processCount: number;
   stages: SidebarStageGroup[];
@@ -216,6 +225,40 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       || refMatches(item?.['domain'], refs.ids, refs.names);
   };
 
+  const stageValueStreamId = (stage: SidebarStage): string =>
+    String(stage.valueStreamUid || stage.valueStreamId || stage.panoramaColumnUid || stage.panoramaColumnId || stage.valueStream || '未归类价值流').trim();
+
+  const valueStreamItems = (): Array<SidebarItem & { scope?: string }> => {
+    const byId = new Map<string, SidebarItem & { scope?: string }>();
+    const findExisting = (id: string, name: string): (SidebarItem & { scope?: string }) | null => {
+      if (id && byId.has(id)) return byId.get(id) || null;
+      return name ? [...byId.values()].find((item) => item.name === name) || null : null;
+    };
+    const put = (raw: SidebarItem & { scope?: string }, idValue?: string): void => {
+      const id = String(idValue || raw.uid || raw.id || raw.name || '').trim();
+      if (!id) return;
+      const name = String(raw.name || raw.label || id).trim();
+      const existing = findExisting(id, name);
+      if (existing) {
+        if (idOf(existing) !== id) byId.delete(idOf(existing));
+        existing.id = id;
+        existing.name = name || existing.name;
+        existing.scope ||= raw.scope || raw.note || '';
+        byId.set(id, existing);
+        return;
+      }
+      byId.set(id, { ...raw, id, name, scope: raw.scope || raw.note || '' });
+    };
+    (doc().panorama?.columns || []).forEach((column) => put(column));
+    (doc().valueStreams || []).forEach((stream) => put(stream as SidebarItem & { scope?: string }));
+    (doc().stages || []).forEach((stage) => {
+      const id = stageValueStreamId(stage);
+      const name = String(stage.valueStream || id).trim();
+      if (!findExisting(id, name)) put({ id, name, scope: '' }, id);
+    });
+    return [...byId.values()];
+  };
+
   const processNodes = (process: SidebarProcess): SidebarNode[] => {
     if (Array.isArray(process.nodes)) return process.nodes;
     if (Array.isArray(process.tasks)) return process.tasks;
@@ -301,6 +344,8 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     const constructIds = new Set([construct.uid, construct.id, construct.name].filter(Boolean).map(String));
     return (doc().taskDefinitions || []).filter((task) => (
       refMatches(task.constructUid, constructIds, constructIds)
+      || refMatches(task.businessConstructUid, constructIds, constructIds)
+      || refMatches(task.businessConstructId, constructIds, constructIds)
       || (task.constructUids || []).some((id) => refMatches(id, constructIds, constructIds))
     ));
   };
@@ -358,16 +403,17 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
         };
       });
 
-      const streams = doc().valueStreams || [];
+      const streams = valueStreamItems();
       const valueStreams = streams.map((stream) => {
         const streamIds = new Set([stream.uid, stream.id, stream.name].filter(Boolean).map(String));
         const stages = stageGroups.filter((group) => {
           const stage = filteredStages.find((item) => idOf(item) === group.id);
-          return refMatches(stage?.valueStreamUid || stage?.valueStreamId || (stage as Record<string, any> | undefined)?.['valueStream'] || (stage as Record<string, any> | undefined)?.['stream'], streamIds, streamIds);
+          return refMatches(stageValueStreamId(stage as SidebarStage), streamIds, streamIds);
         });
         return {
           id: idOf(stream),
           name: nameOf(stream, '未命名价值流'),
+          scope: stream.scope || stream.note || '',
           stageCount: stages.length,
           processCount: stages.reduce((sum, stage) => sum + stage.processCount, 0),
           stages,
@@ -440,7 +486,7 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     },
     isCollapsed(): boolean {
       if (!Object.prototype.hasOwnProperty.call(ui(), 'sidebarCollapsed')) {
-        ui()['sidebarCollapsed'] = true;
+        ui()['sidebarCollapsed'] = false;
       }
       return !!ui()['sidebarCollapsed'];
     },

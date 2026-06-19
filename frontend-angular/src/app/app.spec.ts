@@ -134,6 +134,7 @@ describe('App', () => {
     runtime.currentFile = 'agent.json';
     runtime.ui['mainTab'] = 'panoramaWorkbench';
     runtime.ui['sbCollapse'] = {};
+    runtime.ui['sidebarCollapsed'] = false;
     runtime.doc = {
       meta: { domain: 'Agent' },
       roles: [],
@@ -166,18 +167,15 @@ describe('App', () => {
     const workbench = compiled.querySelector('[data-testid="angular-workbench"]');
     expect(sidebar?.parentElement).toBe(main);
     expect(workbench?.querySelector('[data-testid="angular-shell-tab-bar"]')).toBeTruthy();
-    expect(compiled.querySelector('[data-testid="angular-sidebar-collapsed"]')).toBeTruthy();
-
-    compiled.querySelector<HTMLButtonElement>('#angular-sb-toggle-btn')?.click();
-    fixture.detectChanges();
-
     expect(compiled.querySelector('[data-testid="angular-sidebar-directory"]')).toBeTruthy();
+    expect(compiled.querySelector('.sb-value-stream-head')?.textContent).toContain('入库价值流');
     expect(compiled.querySelector('[data-testid="sidebar-process-row"]')).toBeFalsy();
     expect(compiled.querySelector('[data-testid="sidebar-construct-item"]')).toBeFalsy();
 
     fixture.destroy();
     runtime.ui['sbCollapse'] = {
       ...runtime.ui['sbCollapse'],
+      'vs-column-1': false,
       'stage-tree-stage-1': false,
       'flow-group-stage-1-group-1': false,
       'cap-bc-1': false,
@@ -191,11 +189,12 @@ describe('App', () => {
     const expanded = expandedFixture.nativeElement as HTMLElement;
 
     expect(expanded.querySelector('.sb-flow-group-head')?.textContent).toContain('流程组');
-
     expect(expanded.querySelector('[data-testid="sidebar-process-row"]')?.textContent).toContain('入库预约');
 
     expect(expanded.querySelector('[data-testid="sidebar-construct-item"]')?.textContent).toContain('业务构件');
-    expect(expanded.querySelector('.sb-asset-section')?.textContent).toContain('实体和任务');
+    const sections = [...expanded.querySelectorAll('.sb-asset-section')].map((item) => item.textContent || '');
+    expect(sections.some((text) => text.includes('实体') && text.includes('仓单'))).toBe(true);
+    expect(sections.some((text) => text.includes('任务') && text.includes('代理运行'))).toBe(true);
     expect(expanded.querySelector('.sb-related-processes')?.textContent).toContain('支撑流程');
   });
 

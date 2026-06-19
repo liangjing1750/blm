@@ -1,8 +1,14 @@
 {
-  "generatedAt": "2026-06-19T03:16:33.936Z",
+  "generatedAt": "2026-06-19T03:36:00.468Z",
   "viewport": {
     "width": 1920,
     "height": 1080
+  },
+  "legacySourceOracle": {
+    "renderPath": "C:\\Users\\Administrator\\Desktop\\project\\blm_old\\app\\render.js",
+    "stylePath": "C:\\Users\\Administrator\\Desktop\\project\\blm_old\\app\\style.css",
+    "renderSidebarSnippet": "function _defaultSbCollapse(doc) {\n  const processes = doc.processes || [];\n  const c = { lang: true };\n  [...new Set(processes.map(p => p.subDomain || '').filter(Boolean))]\n    .forEach((sd) => { c[`sd-${sd}`] = true; });\n  [...new Set(processes.map((p) => `${p.subDomain || ''}::${p.flowGroup || ''}`))]\n    .forEach((key) => { c[`fg-${key}`] = true; });\n  getValueStreamItems(doc).forEach((stream) => { c[`vs-${stream.id}`] = true; });\n  getStageItems(doc).forEach((stageItem) => { c[`stage-tree-${stageItem.id}`] = true; });\n  getCapabilityItems(doc).forEach((capability) => { c[`cap-${capability.id || capability.name}`] = true; });\n  getBusinessConstructItems(doc).forEach((construct) => { c[`construct-${construct.uid || construct.name}`] = true; });\n  [...new Set((doc.entities||[]).map(e => e.group || '').filter(Boolean))]\n    .forEach((grp) => { c[`grp-${grp}`] = true; });\n  processes.forEach(p => { c[`proc-${p.id}`] = true; });\n  return c;\n}\n\n\n",
+    "sidebarStyleSnippet": "/* ─── 滚动条 ─────────────────────────────────────────────── */\n::-webkit-scrollbar { width: 6px; height: 6px; }\n::-webkit-scrollbar-track { background: transparent; }\n::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }\n::-webkit-scrollbar-thumb:hover { background: #94a3b8; }\n\n"
   },
   "legacy": {
     "label": "legacy",
@@ -141,16 +147,87 @@
       "[data-testid=\"angular-sidebar-resize-handle\"]": [],
       "#angular-sb-toggle-btn": [],
       ".sb-value-stream-head": [],
+      ".sb-value-head": [],
       ".sb-stage-head": [],
       ".sb-flow-group-head": [],
       ".sb-capability-head": [],
       ".sb-construct-head": [],
       ".sb-asset-head": [],
+      ".sb-asset-section": [],
+      ".sb-asset-item": [],
+      ".sb-related-processes": [],
       ".view-toggle-group": [],
       ".vtb": [],
       "[data-testid=\"panorama-editor-open\"]": []
     },
-    "error": null
+    "error": null,
+    "sidebarTree": {
+      "tag": "aside",
+      "id": "sidebar",
+      "className": "",
+      "testId": "",
+      "text": "新建或打开文档开始建模",
+      "children": [
+        {
+          "tag": "div",
+          "id": "sidebar-content",
+          "className": "",
+          "testId": "",
+          "text": "新建或打开文档开始建模",
+          "children": [
+            {
+              "tag": "div",
+              "id": "",
+              "className": "sb-empty",
+              "testId": "",
+              "text": "新建或打开文档开始建模",
+              "children": [
+                {
+                  "tag": "br",
+                  "id": "",
+                  "className": "",
+                  "testId": "",
+                  "text": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "div",
+          "id": "sidebar-resize-handle",
+          "className": "",
+          "testId": "sidebar-resize-handle",
+          "text": "",
+          "children": []
+        }
+      ]
+    },
+    "sidebarClassStyles": {
+      "sb-empty": {
+        "text": "新建或打开文档开始建模",
+        "rect": {
+          "x": 0,
+          "y": 56,
+          "width": 239,
+          "height": 83.19
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "12px",
+          "fontWeight": "400",
+          "lineHeight": "21.6px",
+          "padding": "20px 12px",
+          "borderTop": "0px none rgb(100, 116, 139)",
+          "borderBottom": "0px none rgb(100, 116, 139)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(100, 116, 139)"
+        }
+      }
+    }
   },
   "angular": {
     "label": "angular",
@@ -160,12 +237,12 @@
       "#topbar": [],
       "#main": [
         {
-          "text": "BLM（Business Language Modeling）业务语言建模结构化记录业务理解，生成可读文档。新建文档打开文档",
+          "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件 折叠 全景工作台 流程工作台 构件工作台 预览/导出 ← 返回 全景工作台战略、价值流与业务域矩阵、业务组件放在同一张业务全景里。 全景视",
           "rect": {
             "x": 0,
             "y": 48,
             "width": 1920,
-            "height": 1032
+            "height": 1034
           },
           "style": {
             "display": "flex",
@@ -183,25 +260,837 @@
           }
         }
       ],
-      "#sidebar": [],
+      "#sidebar": [
+        {
+          "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件 折叠",
+          "rect": {
+            "x": 0,
+            "y": 48,
+            "width": 360,
+            "height": 1034
+          },
+          "style": {
+            "display": "block",
+            "position": "relative",
+            "overflow": "auto",
+            "overflowY": "auto",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
       "#sidebar-content": [],
       "#sidebar-resize-handle": [],
       "#sb-toggle-btn": [],
       "#tab-bar": [],
-      "[data-testid=\"angular-shell-tab-bar\"]": [],
-      "[data-testid=\"angular-sidebar-directory\"]": [],
-      "[data-testid=\"angular-sidebar-resize-handle\"]": [],
-      "#angular-sb-toggle-btn": [],
+      "[data-testid=\"angular-shell-tab-bar\"]": [
+        {
+          "text": "全景工作台 流程工作台 构件工作台 预览/导出",
+          "rect": {
+            "x": 378,
+            "y": 52.5,
+            "width": 378.63,
+            "height": 40
+          },
+          "style": {
+            "display": "flex",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "[data-testid=\"angular-sidebar-directory\"]": [
+        {
+          "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件",
+          "rect": {
+            "x": 0,
+            "y": 48,
+            "width": 359,
+            "height": 1034
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "hidden scroll",
+            "overflowY": "scroll",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px 0px 10px",
+            "margin": "0px 0px 4px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "[data-testid=\"angular-sidebar-resize-handle\"]": [
+        {
+          "text": "",
+          "rect": {
+            "x": 360,
+            "y": 48,
+            "width": 8,
+            "height": 1032
+          },
+          "style": {
+            "display": "block",
+            "position": "fixed",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "#angular-sb-toggle-btn": [
+        {
+          "text": "折叠",
+          "rect": {
+            "x": 359,
+            "y": 515.66,
+            "width": 28,
+            "height": 48.67
+          },
+          "style": {
+            "display": "block",
+            "position": "fixed",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "13.3333px",
+            "fontWeight": "700",
+            "lineHeight": "normal",
+            "padding": "10px 4px",
+            "margin": "0px",
+            "borderRadius": "0px 8px 8px 0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(85, 112, 142)"
+          }
+        }
+      ],
       ".sb-value-stream-head": [],
+      ".sb-value-head": [],
       ".sb-stage-head": [],
       ".sb-flow-group-head": [],
       ".sb-capability-head": [],
       ".sb-construct-head": [],
       ".sb-asset-head": [],
-      ".view-toggle-group": [],
-      ".vtb": [],
-      "[data-testid=\"panorama-editor-open\"]": []
+      ".sb-asset-section": [],
+      ".sb-asset-item": [],
+      ".sb-related-processes": [],
+      ".view-toggle-group": [
+        {
+          "text": "全景视图 角色管理 术语管理 字典管理 规则管理",
+          "rect": {
+            "x": 395,
+            "y": 217,
+            "width": 386,
+            "height": 27
+          },
+          "style": {
+            "display": "flex",
+            "position": "static",
+            "overflow": "hidden",
+            "overflowY": "hidden",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px",
+            "margin": "0px 4px 0px 0px",
+            "borderRadius": "6px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      ".vtb": [
+        {
+          "text": "全景视图",
+          "rect": {
+            "x": 396,
+            "y": 218,
+            "width": 77,
+            "height": 25
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "4px 14px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(59, 130, 246)",
+            "color": "rgb(255, 255, 255)"
+          }
+        },
+        {
+          "text": "角色管理",
+          "rect": {
+            "x": 473,
+            "y": 218,
+            "width": 77,
+            "height": 25
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "4px 14px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(100, 116, 139)"
+          }
+        },
+        {
+          "text": "术语管理",
+          "rect": {
+            "x": 550,
+            "y": 218,
+            "width": 77,
+            "height": 25
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "4px 14px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(100, 116, 139)"
+          }
+        },
+        {
+          "text": "字典管理",
+          "rect": {
+            "x": 627,
+            "y": 218,
+            "width": 77,
+            "height": 25
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "4px 14px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(100, 116, 139)"
+          }
+        },
+        {
+          "text": "规则管理",
+          "rect": {
+            "x": 704,
+            "y": 218,
+            "width": 76,
+            "height": 25
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "4px 14px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(100, 116, 139)"
+          }
+        }
+      ],
+      "[data-testid=\"panorama-editor-open\"]": [
+        {
+          "text": "打开编辑",
+          "rect": {
+            "x": 1819,
+            "y": 218,
+            "width": 66,
+            "height": 25
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "3px 8px",
+            "margin": "0px",
+            "borderRadius": "6px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(59, 130, 246)"
+          }
+        }
+      ]
     },
-    "error": null
+    "error": null,
+    "sidebarTree": {
+      "tag": "aside",
+      "id": "sidebar",
+      "className": "sidebar",
+      "testId": "",
+      "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件 折叠",
+      "children": [
+        {
+          "tag": "app-sidebar-directory",
+          "id": "",
+          "className": "",
+          "testId": "",
+          "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件 折叠",
+          "children": [
+            {
+              "tag": "div",
+              "id": "",
+              "className": "sb-section",
+              "testId": "angular-sidebar-directory",
+              "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件",
+              "children": [
+                {
+                  "tag": "div",
+                  "id": "",
+                  "className": "sb-domain-filter-panel",
+                  "testId": "",
+                  "text": "业务域全部业务域",
+                  "children": [
+                    {
+                      "tag": "label",
+                      "id": "",
+                      "className": "sb-domain-filter-row",
+                      "testId": "",
+                      "text": "业务域全部业务域",
+                      "children": [
+                        {
+                          "tag": "span",
+                          "id": "",
+                          "className": "",
+                          "testId": "",
+                          "text": "业务域",
+                          "children": []
+                        },
+                        {
+                          "tag": "select",
+                          "id": "",
+                          "className": "sb-domain-filter ng-untouched ng-pristine ng-valid",
+                          "testId": "sidebar-business-domain-filter",
+                          "text": "全部业务域",
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "div",
+                  "id": "",
+                  "className": "sb-header",
+                  "testId": "",
+                  "text": "业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0",
+                  "children": [
+                    {
+                      "tag": "div",
+                      "id": "",
+                      "className": "sb-header-main",
+                      "testId": "",
+                      "text": "业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0",
+                      "children": [
+                        {
+                          "tag": "span",
+                          "id": "",
+                          "className": "sb-header-title",
+                          "testId": "",
+                          "text": "业务统计",
+                          "children": []
+                        },
+                        {
+                          "tag": "div",
+                          "id": "",
+                          "className": "sb-metrics",
+                          "testId": "",
+                          "text": "价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0",
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "div",
+                  "id": "",
+                  "className": "sb-directory-stack",
+                  "testId": "",
+                  "text": "流程目录 当前业务域暂无阶段 组件目录 暂无业务组件",
+                  "children": [
+                    {
+                      "tag": "section",
+                      "id": "",
+                      "className": "sb-directory-block sb-directory-stage",
+                      "testId": "",
+                      "text": "流程目录 当前业务域暂无阶段",
+                      "children": [
+                        {
+                          "tag": "button",
+                          "id": "",
+                          "className": "sb-directory-title active",
+                          "testId": "sidebar-browse-stage",
+                          "text": "流程目录",
+                          "children": []
+                        },
+                        {
+                          "tag": "div",
+                          "id": "",
+                          "className": "sb-process-browse",
+                          "testId": "sidebar-stage-browse",
+                          "text": "当前业务域暂无阶段",
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "section",
+                      "id": "",
+                      "className": "sb-directory-block sb-directory-component",
+                      "testId": "",
+                      "text": "组件目录 暂无业务组件",
+                      "children": [
+                        {
+                          "tag": "button",
+                          "id": "",
+                          "className": "sb-directory-title active",
+                          "testId": "sidebar-browse-domain",
+                          "text": "组件目录",
+                          "children": []
+                        },
+                        {
+                          "tag": "div",
+                          "id": "",
+                          "className": "sb-process-browse",
+                          "testId": "sidebar-domain-browse",
+                          "text": "暂无业务组件",
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "button",
+              "id": "angular-sb-toggle-btn",
+              "className": "angular-sb-toggle",
+              "testId": "",
+              "text": "折叠",
+              "children": []
+            },
+            {
+              "tag": "div",
+              "id": "",
+              "className": "angular-sidebar-resize",
+              "testId": "angular-sidebar-resize-handle",
+              "text": "",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    "sidebarClassStyles": {
+      "sb-directory-block": {
+        "text": "流程目录 当前业务域暂无阶段",
+        "rect": {
+          "x": 0,
+          "y": 169,
+          "width": 359,
+          "height": 63
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(30, 41, 59)",
+          "borderBottom": "0px none rgb(30, 41, 59)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(30, 41, 59)"
+        }
+      },
+      "sb-directory-component": {
+        "text": "组件目录 暂无业务组件",
+        "rect": {
+          "x": 0,
+          "y": 240,
+          "width": 359,
+          "height": 63
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(30, 41, 59)",
+          "borderBottom": "0px none rgb(30, 41, 59)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(30, 41, 59)"
+        }
+      },
+      "sb-directory-stack": {
+        "text": "流程目录 当前业务域暂无阶段 组件目录 暂无业务组件",
+        "rect": {
+          "x": 0,
+          "y": 169,
+          "width": 359,
+          "height": 142
+        },
+        "style": {
+          "display": "grid",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px 0px 8px",
+          "borderTop": "0px none rgb(30, 41, 59)",
+          "borderBottom": "0px none rgb(30, 41, 59)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(30, 41, 59)"
+        }
+      },
+      "sb-directory-stage": {
+        "text": "流程目录 当前业务域暂无阶段",
+        "rect": {
+          "x": 0,
+          "y": 169,
+          "width": 359,
+          "height": 63
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(30, 41, 59)",
+          "borderBottom": "0px none rgb(30, 41, 59)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(30, 41, 59)"
+        }
+      },
+      "sb-directory-title": {
+        "text": "流程目录",
+        "rect": {
+          "x": 10,
+          "y": 173,
+          "width": 339,
+          "height": 30
+        },
+        "style": {
+          "display": "inline-block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "13px",
+          "fontWeight": "700",
+          "lineHeight": "normal",
+          "padding": "0px 8px",
+          "borderTop": "1px solid rgb(219, 234, 254)",
+          "borderBottom": "1px solid rgb(219, 234, 254)",
+          "backgroundColor": "rgb(248, 251, 255)",
+          "color": "rgb(29, 78, 216)"
+        }
+      },
+      "sb-domain-filter": {
+        "text": "全部业务域",
+        "rect": {
+          "x": 51,
+          "y": 56,
+          "width": 296,
+          "height": 26
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "11px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px 8px",
+          "borderTop": "1px solid rgb(215, 228, 244)",
+          "borderBottom": "1px solid rgb(215, 228, 244)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "color": "rgb(30, 41, 59)"
+        }
+      },
+      "sb-domain-filter-panel": {
+        "text": "业务域全部业务域",
+        "rect": {
+          "x": 0,
+          "y": 48,
+          "width": 359,
+          "height": 39
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "8px 12px 4px",
+          "borderTop": "0px none rgb(30, 41, 59)",
+          "borderBottom": "1px solid rgba(148, 163, 184, 0.16)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(30, 41, 59)"
+        }
+      },
+      "sb-domain-filter-row": {
+        "text": "业务域全部业务域",
+        "rect": {
+          "x": 12,
+          "y": 56,
+          "width": 335,
+          "height": 26
+        },
+        "style": {
+          "display": "flex",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "11px",
+          "fontWeight": "600",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(100, 116, 139)",
+          "borderBottom": "0px none rgb(100, 116, 139)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(100, 116, 139)"
+        }
+      },
+      "sb-empty": {
+        "text": "当前业务域暂无阶段",
+        "rect": {
+          "x": 0,
+          "y": 205,
+          "width": 359,
+          "height": 27
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "12px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "5px 12px 5px 26px",
+          "borderTop": "0px none rgb(100, 116, 139)",
+          "borderBottom": "0px none rgb(100, 116, 139)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(100, 116, 139)"
+        }
+      },
+      "sb-header": {
+        "text": "业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0",
+        "rect": {
+          "x": 0,
+          "y": 87,
+          "width": 359,
+          "height": 82
+        },
+        "style": {
+          "display": "flex",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "6px 12px",
+          "borderTop": "0px none rgb(100, 116, 139)",
+          "borderBottom": "0px none rgb(100, 116, 139)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(100, 116, 139)"
+        }
+      },
+      "sb-header-main": {
+        "text": "业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0",
+        "rect": {
+          "x": 12,
+          "y": 93,
+          "width": 335,
+          "height": 70
+        },
+        "style": {
+          "display": "flex",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(100, 116, 139)",
+          "borderBottom": "0px none rgb(100, 116, 139)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(100, 116, 139)"
+        }
+      },
+      "sb-header-title": {
+        "text": "业务统计",
+        "rect": {
+          "x": 12,
+          "y": 93,
+          "width": 335,
+          "height": 17
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "12px",
+          "fontWeight": "600",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(100, 116, 139)",
+          "borderBottom": "0px none rgb(100, 116, 139)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(100, 116, 139)"
+        }
+      },
+      "sb-metric": {
+        "text": "价值流 0",
+        "rect": {
+          "x": 12,
+          "y": 114,
+          "width": 66.91,
+          "height": 22
+        },
+        "style": {
+          "display": "flex",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "12px",
+          "fontWeight": "600",
+          "lineHeight": "14.4px",
+          "padding": "1px 9px",
+          "borderTop": "1px solid rgb(183, 211, 255)",
+          "borderBottom": "1px solid rgb(183, 211, 255)",
+          "backgroundColor": "rgb(245, 249, 255)",
+          "color": "rgb(37, 99, 235)"
+        }
+      },
+      "sb-metrics": {
+        "text": "价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0",
+        "rect": {
+          "x": 12,
+          "y": 114,
+          "width": 335,
+          "height": 49
+        },
+        "style": {
+          "display": "flex",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(100, 116, 139)",
+          "borderBottom": "0px none rgb(100, 116, 139)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(100, 116, 139)"
+        }
+      },
+      "sb-process-browse": {
+        "text": "当前业务域暂无阶段",
+        "rect": {
+          "x": 0,
+          "y": 205,
+          "width": 359,
+          "height": 27
+        },
+        "style": {
+          "display": "block",
+          "overflow": "visible",
+          "overflowY": "visible",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px",
+          "borderTop": "0px none rgb(30, 41, 59)",
+          "borderBottom": "0px none rgb(30, 41, 59)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(30, 41, 59)"
+        }
+      },
+      "sb-section": {
+        "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件",
+        "rect": {
+          "x": 0,
+          "y": 48,
+          "width": 359,
+          "height": 1034
+        },
+        "style": {
+          "display": "block",
+          "overflow": "hidden scroll",
+          "overflowY": "scroll",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "normal",
+          "padding": "0px 0px 10px",
+          "borderTop": "0px none rgb(30, 41, 59)",
+          "borderBottom": "0px none rgb(30, 41, 59)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "color": "rgb(30, 41, 59)"
+        }
+      }
+    }
   }
 }

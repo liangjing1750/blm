@@ -35,7 +35,7 @@
         </button>
         <div class="sb-process-browse" data-testid="sidebar-stage-browse">
           <ng-container *ngFor="let stream of model().valueStreams">
-            <div class="sb-grp-head sb-value-stream-head" (click)="toggleNode(streamKey(stream))">
+            <div class="sb-grp-head sb-value-stream-head sb-value-head" (click)="toggleNode(streamKey(stream))">
               <button
                 type="button"
                 class="sb-caret"
@@ -46,7 +46,7 @@
                 <span class="sb-caret-icon">▶</span>
               </button>
               <span class="sb-grp-badge">价值流</span>
-              <span class="sb-name" [title]="stream.name">{{ stream.name }}</span>
+              <span class="sb-name" [title]="stream.scope || stream.name">{{ stream.name }}</span>
               <span class="sb-count">{{ stream.stageCount }}</span>
             </div>
             <ng-container *ngIf="!isCollapsedNode(streamKey(stream))">
@@ -112,9 +112,10 @@
                   <span class="sb-count">实体 {{ construct.entityCount }}</span>
                   <span class="sb-count">任务 {{ construct.taskCount }}</span>
                 </div>
-                <div *ngIf="!isCollapsedNode(constructKey(component, construct))" class="sb-asset-section">
-                  <div class="sb-asset-head">实体和任务 <span>{{ construct.entityCount + construct.taskCount }}</span></div>
-                  <div class="sb-asset-items">
+                <ng-container *ngIf="!isCollapsedNode(constructKey(component, construct))">
+                  <div class="sb-asset-section">
+                    <div class="sb-asset-head">实体 <span>{{ construct.entityCount }}</span></div>
+                    <div class="sb-asset-items">
                     <button
                       *ngFor="let entity of construct.entities"
                       type="button"
@@ -124,6 +125,12 @@
                       <span class="sb-asset-kind">实体</span>
                       <span>{{ entity.name }}</span>
                     </button>
+                    </div>
+                    <div *ngIf="!construct.entities.length" class="sb-empty sb-asset-empty">暂无实体</div>
+                  </div>
+                  <div class="sb-asset-section">
+                    <div class="sb-asset-head">任务 <span>{{ construct.taskCount }}</span></div>
+                    <div class="sb-asset-items">
                     <button
                       *ngFor="let task of construct.tasks"
                       type="button"
@@ -133,11 +140,10 @@
                       <span class="sb-asset-kind">任务</span>
                       <span>{{ task.name }}</span>
                     </button>
+                    </div>
+                    <div *ngIf="!construct.tasks.length" class="sb-empty sb-asset-empty">暂无任务</div>
                   </div>
-                  <div *ngIf="!construct.entities.length && !construct.tasks.length" class="sb-empty sb-asset-empty">
-                    暂无实体和任务
-                  </div>
-                  <div class="sb-related-processes">
+                  <div class="sb-asset-section sb-related-processes">
                     <div class="sb-asset-head">支撑流程 <span>{{ construct.processCount }}</span></div>
                     <button
                       *ngFor="let process of construct.processes"
@@ -151,7 +157,7 @@
                     </button>
                     <div *ngIf="!construct.processes.length" class="sb-empty sb-asset-empty">暂无支撑流程</div>
                   </div>
-                </div>
+                </ng-container>
               </ng-container>
               <div *ngIf="!component.constructs.length" class="sb-empty sb-asset-empty">暂无业务构件</div>
             </ng-container>
