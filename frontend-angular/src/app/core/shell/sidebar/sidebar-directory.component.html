@@ -152,6 +152,7 @@
                       data-testid="sidebar-construct-process-row"
                       (click)="openProcess(process)"
                     >
+                      <span class="sb-proc-kind">流程</span>
                       <span class="sb-proc-name">{{ process.name }}</span>
                       <span class="sb-count">{{ process.nodeCount }}</span>
                     </button>
@@ -208,6 +209,7 @@
           data-testid="sidebar-process-row"
           (click)="openProcess(process)"
         >
+          <span class="sb-proc-kind">流程</span>
           <span class="sb-proc-name">{{ process.name }}</span>
           <span class="sb-count">{{ process.nodeCount }}</span>
         </button>

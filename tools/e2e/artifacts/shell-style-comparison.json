@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-19T03:36:00.468Z",
+  "generatedAt": "2026-06-19T04:26:28.044Z",
   "viewport": {
     "width": 1920,
     "height": 1080
@@ -237,7 +237,7 @@
       "#topbar": [],
       "#main": [
         {
-          "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件 折叠 全景工作台 流程工作台 构件工作台 预览/导出 ← 返回 全景工作台战略、价值流与业务域矩阵、业务组件放在同一张业务全景里。 全景视",
+          "text": "业务域全部业务域业务统计 价值流 0 阶段 0 流程 0 节点 0 步骤 0 表单 0 任务 0 实体 0 构件 0 组件 0 流程目录 当前业务域暂无阶段 组件目录 暂无业务组件 折叠 全景工作台 流程工作台 构件工作台 预览/导出 ← 返回 全景视图 角色管理 术语管理 字典管理 规则管理 打开编辑业务目标→deb",
           "rect": {
             "x": 0,
             "y": 48,
@@ -328,7 +328,7 @@
             "position": "static",
             "overflow": "hidden scroll",
             "overflowY": "scroll",
-            "fontSize": "14px",
+            "fontSize": "12px",
             "fontWeight": "400",
             "lineHeight": "normal",
             "padding": "0px 0px 10px",
@@ -343,7 +343,7 @@
         {
           "text": "",
           "rect": {
-            "x": 360,
+            "x": 240,
             "y": 48,
             "width": 8,
             "height": 1032
@@ -368,7 +368,7 @@
         {
           "text": "折叠",
           "rect": {
-            "x": 359,
+            "x": 239,
             "y": 515.66,
             "width": 28,
             "height": 48.67
@@ -404,7 +404,7 @@
           "text": "全景视图 角色管理 术语管理 字典管理 规则管理",
           "rect": {
             "x": 395,
-            "y": 217,
+            "y": 126,
             "width": 386,
             "height": 27
           },
@@ -429,7 +429,7 @@
           "text": "全景视图",
           "rect": {
             "x": 396,
-            "y": 218,
+            "y": 127,
             "width": 77,
             "height": 25
           },
@@ -452,7 +452,7 @@
           "text": "角色管理",
           "rect": {
             "x": 473,
-            "y": 218,
+            "y": 127,
             "width": 77,
             "height": 25
           },
@@ -475,7 +475,7 @@
           "text": "术语管理",
           "rect": {
             "x": 550,
-            "y": 218,
+            "y": 127,
             "width": 77,
             "height": 25
           },
@@ -498,7 +498,7 @@
           "text": "字典管理",
           "rect": {
             "x": 627,
-            "y": 218,
+            "y": 127,
             "width": 77,
             "height": 25
           },
@@ -521,7 +521,7 @@
           "text": "规则管理",
           "rect": {
             "x": 704,
-            "y": 218,
+            "y": 127,
             "width": 76,
             "height": 25
           },
@@ -546,7 +546,7 @@
           "text": "打开编辑",
           "rect": {
             "x": 1819,
-            "y": 218,
+            "y": 127,
             "width": 66,
             "height": 25
           },
@@ -743,15 +743,15 @@
         "text": "流程目录 当前业务域暂无阶段",
         "rect": {
           "x": 0,
-          "y": 169,
-          "width": 359,
+          "y": 165,
+          "width": 349,
           "height": 63
         },
         "style": {
           "display": "block",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px",
@@ -765,15 +765,15 @@
         "text": "组件目录 暂无业务组件",
         "rect": {
           "x": 0,
-          "y": 240,
-          "width": 359,
+          "y": 236,
+          "width": 349,
           "height": 63
         },
         "style": {
           "display": "block",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px",
@@ -787,15 +787,15 @@
         "text": "流程目录 当前业务域暂无阶段 组件目录 暂无业务组件",
         "rect": {
           "x": 0,
-          "y": 169,
-          "width": 359,
+          "y": 165,
+          "width": 349,
           "height": 142
         },
         "style": {
           "display": "grid",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px 0px 8px",
@@ -809,15 +809,15 @@
         "text": "流程目录 当前业务域暂无阶段",
         "rect": {
           "x": 0,
-          "y": 169,
-          "width": 359,
+          "y": 165,
+          "width": 349,
           "height": 63
         },
         "style": {
           "display": "block",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px",
@@ -831,15 +831,15 @@
         "text": "流程目录",
         "rect": {
           "x": 10,
-          "y": 173,
-          "width": 339,
+          "y": 169,
+          "width": 329,
           "height": 30
         },
         "style": {
           "display": "inline-block",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "13px",
+          "fontSize": "12px",
           "fontWeight": "700",
           "lineHeight": "normal",
           "padding": "0px 8px",
@@ -854,7 +854,7 @@
         "rect": {
           "x": 51,
           "y": 56,
-          "width": 296,
+          "width": 286,
           "height": 26
         },
         "style": {
@@ -876,14 +876,14 @@
         "rect": {
           "x": 0,
           "y": 48,
-          "width": 359,
+          "width": 349,
           "height": 39
         },
         "style": {
           "display": "block",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "8px 12px 4px",
@@ -898,7 +898,7 @@
         "rect": {
           "x": 12,
           "y": 56,
-          "width": 335,
+          "width": 325,
           "height": 26
         },
         "style": {
@@ -919,8 +919,8 @@
         "text": "当前业务域暂无阶段",
         "rect": {
           "x": 0,
-          "y": 205,
-          "width": 359,
+          "y": 201,
+          "width": 349,
           "height": 27
         },
         "style": {
@@ -942,14 +942,14 @@
         "rect": {
           "x": 0,
           "y": 87,
-          "width": 359,
-          "height": 82
+          "width": 349,
+          "height": 78
         },
         "style": {
           "display": "flex",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "6px 12px",
@@ -964,14 +964,14 @@
         "rect": {
           "x": 12,
           "y": 93,
-          "width": 335,
-          "height": 70
+          "width": 325,
+          "height": 66
         },
         "style": {
           "display": "flex",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px",
@@ -986,7 +986,7 @@
         "rect": {
           "x": 12,
           "y": 93,
-          "width": 335,
+          "width": 325,
           "height": 17
         },
         "style": {
@@ -1008,17 +1008,17 @@
         "rect": {
           "x": 12,
           "y": 114,
-          "width": 66.91,
-          "height": 22
+          "width": 61.33,
+          "height": 20
         },
         "style": {
           "display": "flex",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "12px",
+          "fontSize": "11px",
           "fontWeight": "600",
-          "lineHeight": "14.4px",
-          "padding": "1px 9px",
+          "lineHeight": "13.2px",
+          "padding": "1px 8px",
           "borderTop": "1px solid rgb(183, 211, 255)",
           "borderBottom": "1px solid rgb(183, 211, 255)",
           "backgroundColor": "rgb(245, 249, 255)",
@@ -1030,14 +1030,14 @@
         "rect": {
           "x": 12,
           "y": 114,
-          "width": 335,
-          "height": 49
+          "width": 325,
+          "height": 45
         },
         "style": {
           "display": "flex",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px",
@@ -1051,15 +1051,15 @@
         "text": "当前业务域暂无阶段",
         "rect": {
           "x": 0,
-          "y": 205,
-          "width": 359,
+          "y": 201,
+          "width": 349,
           "height": 27
         },
         "style": {
           "display": "block",
           "overflow": "visible",
           "overflowY": "visible",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px",
@@ -1081,7 +1081,7 @@
           "display": "block",
           "overflow": "hidden scroll",
           "overflowY": "scroll",
-          "fontSize": "14px",
+          "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",
           "padding": "0px 0px 10px",

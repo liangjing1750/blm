@@ -1,5 +1,5 @@
 import { CommonModule, DOCUMENT } from '@angular/common';
-import { Component, HostListener, Inject, OnInit, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, HostListener, Inject, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   SidebarAdapter,
@@ -19,7 +19,7 @@ import {
   templateUrl: './sidebar-directory.component.html',
   styleUrl: './sidebar-directory.component.scss',
 })
-export class SidebarDirectoryComponent implements OnInit {
+export class SidebarDirectoryComponent implements OnInit, AfterViewInit {
   // 模块意图：目录区是壳层的导航聚合根，负责把流程目录和组件目录统一呈现。
   // 它只读取旧文档模型并调用公开导航入口，不再拼接旧 HTML 字符串。
   private readonly adapter: SidebarAdapter = createSidebarLegacyAdapter();
@@ -37,6 +37,10 @@ export class SidebarDirectoryComponent implements OnInit {
   ngOnInit(): void {
     this.refreshFromRuntime();
     this.applySidebarWidth();
+  }
+
+  ngAfterViewInit(): void {
+    this.scheduleSidebarEdgeSync();
   }
 
   protected refreshFromRuntime(): void {
@@ -132,6 +136,29 @@ export class SidebarDirectoryComponent implements OnInit {
       '--angular-sidebar-width',
       this.collapsed() ? '0px' : `${this.sidebarWidth()}px`,
     );
+    this.syncSidebarEdge();
+    this.scheduleSidebarEdgeSync();
     if (toggle) toggle.textContent = this.collapsed() ? '展开' : '折叠';
+  }
+
+  private scheduleSidebarEdgeSync(): void {
+    const frame = this.documentRef.defaultView?.requestAnimationFrame;
+    if (frame) {
+      frame(() => this.syncSidebarEdge());
+      return;
+    }
+    this.syncSidebarEdge();
+  }
+
+  private syncSidebarEdge(): void {
+    const sidebar = this.documentRef.getElementById('sidebar');
+    if (!sidebar) return;
+    const directory = this.documentRef.querySelector('[data-testid="angular-sidebar-directory"]');
+    const sidebarRight = sidebar.getBoundingClientRect().right;
+    const directoryRight = directory?.getBoundingClientRect().right ?? sidebarRight;
+    this.documentRef.documentElement.style.setProperty(
+      '--angular-sidebar-right',
+      `${Math.round(Math.max(sidebarRight, directoryRight))}px`,
+    );
   }
 }

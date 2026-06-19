@@ -5,9 +5,13 @@
 
 .sb-section {
   height: 100%;
+  max-height: 100%;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: scroll;
   padding-bottom: 10px;
+  font-size: 12px;
+  scrollbar-gutter: stable;
   scrollbar-color: #c7d4e4 transparent;
   scrollbar-width: thin;
 }
@@ -36,13 +40,13 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 22px;
-  padding: 1px 9px;
+  min-height: 20px;
+  padding: 1px 8px;
   border: 1px solid #b7d3ff;
   border-radius: 999px;
   background: #f5f9ff;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -84,8 +88,8 @@
 
 .sb-proc-row {
   justify-content: space-between;
-  padding: 6px 12px 6px 72px;
-  font-size: 12px;
+  padding: 5px 12px 5px 72px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -144,16 +148,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 26px;
+  min-height: 24px;
   padding: 4px 10px 4px 38px;
   color: #475569;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .sb-asset-head small {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -170,14 +174,14 @@
   justify-content: flex-start;
   gap: 4px;
   width: auto;
-  min-height: 26px;
+  min-height: 24px;
   margin: 0;
   padding: 3px 9px;
   border: 1px solid #bfdbfe;
   border-radius: 7px;
   background: #f8fbff;
   color: #0f2744;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -193,48 +197,48 @@
 
 .sb-asset-link small {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .sb-related-process-row { padding-left: 62px; }
 
 .sb-count {
-  min-width: 20px;
-  padding: 1px 6px;
+  min-width: 18px;
+  padding: 1px 5px;
   border-radius: 999px;
   background: #e6efff;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-align: center;
 }
 
 .sb-directory-title {
   min-height: 30px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .sb-value-stream-head,
 .sb-capability-head {
   padding: 5px 12px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .sb-stage-head {
   padding: 5px 12px 5px 32px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .sb-grp-badge {
   flex: 0 0 auto;
-  min-height: 18px;
-  padding: 1px 7px;
+  min-height: 17px;
+  padding: 1px 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  line-height: 16px;
+  line-height: 15px;
 }
 
 .sb-caret {
@@ -263,15 +267,29 @@
 
 .sb-name,
 .sb-proc-name {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.sb-proc-kind {
+  flex: 0 0 auto;
+  min-height: 17px;
+  padding: 1px 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 15px;
+}
+
 .angular-sb-toggle {
   position: fixed;
-  left: var(--angular-sidebar-width, 360px);
+  left: var(--angular-sidebar-right, var(--angular-sidebar-width, 360px));
   top: 50%;
   z-index: 30;
   transform: translate(-1px, -50%);
@@ -296,7 +314,7 @@
   position: fixed;
   top: 48px;
   bottom: 0;
-  left: var(--angular-sidebar-width, 360px);
+  left: var(--angular-sidebar-right, var(--angular-sidebar-width, 360px));
   width: 8px;
   z-index: 29;
   cursor: ew-resize;
