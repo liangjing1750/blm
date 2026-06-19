@@ -29,7 +29,7 @@ async function openDocument(page, name, options = {}) {
   if (await searchBox.count()) {
     await searchBox.fill(name);
   }
-  await page.locator('.file-list-item').filter({ hasText: name }).first().click();
+  await clickOpenDocumentCard(page, name);
   await expect(page.getByTestId('current-file-name')).toHaveText(name);
   if (expandSidebar && await page.locator('#sidebar.sb-collapsed').count()) {
     const angularToggle = page.locator('#angular-sb-toggle-btn');
@@ -39,6 +39,21 @@ async function openDocument(page, name, options = {}) {
       await page.locator('#sb-toggle-btn').click();
     }
   }
+}
+
+async function clickOpenDocumentCard(page, name) {
+  const card = page.locator('.file-list-item, [data-testid="workspace-doc-card"]').filter({ hasText: name }).first();
+  for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
+    if (await card.count()) {
+      await card.click();
+      return;
+    }
+    const next = page.locator('[data-testid="workspace-pagination"] button, #workspace-pagination button').filter({ hasText: /下一页|Next/ }).first();
+    if (!(await next.count()) || await next.isDisabled().catch(() => true)) break;
+    await next.click();
+    await page.waitForTimeout(300);
+  }
+  throw new Error(`未找到文档卡片：${name}`);
 }
 
 async function expandValueStreams(page) {

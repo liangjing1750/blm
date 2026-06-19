@@ -17,8 +17,15 @@ interface EntityNodeLayout {
   id: string;
   x: number;
   y: number;
+  width: number;
+  height: number;
   color: string;
+  fill: string;
+  stroke: string;
   background: string;
+  componentKey: string;
+  componentName: string;
+  constructKey: string;
   constructName: string;
 }
 
@@ -26,6 +33,55 @@ interface EntityRelationLine {
   from: EntityNodeLayout;
   to: EntityNodeLayout;
   label: string;
+  path: string;
+  labelX: number;
+  labelY: number;
+  color: string;
+  opacity: number;
+  width: number;
+  dashed: boolean;
+  focus: boolean;
+  muted: boolean;
+}
+
+interface EntityFrame {
+  key: string;
+  label: string;
+  componentKey?: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  color?: string;
+  fill?: string;
+}
+
+interface StateNodeLayout {
+  name: string;
+  kind: 'initial' | 'intermediate' | 'terminal';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  marker?: { kind: 'initial' | 'terminal'; x: number; y: number; size: number };
+}
+
+interface StateTransitionLine {
+  transition: EntityStateTransition;
+  from: StateNodeLayout;
+  to: StateNodeLayout;
+  path: string;
+  label: string;
+  labelX: number;
+  labelY: number;
+  selected: boolean;
+}
+
+interface StateBoardLayout {
+  nodes: StateNodeLayout[];
+  transitions: StateTransitionLine[];
+  width: number;
+  height: number;
 }
 
 interface EntityDragState {
@@ -53,21 +109,35 @@ export class EntityDesignWorkbenchComponent {
   // 模块意图：实体设计在构件工作台内独立运行，复刻旧实体关系图/状态图的核心体验，但不调用 entity-legacy 渲染函数。
   private readonly nodeWidth = 120;
   private readonly nodeHeight = 38;
+  private readonly entityGapX = 40;
+  private readonly entityGapY = 70;
+  private readonly entityPad = 20;
+  private readonly groupHeaderHeight = 28;
+  private readonly groupPadX = 22;
+  private readonly groupPadY = 18;
+  private readonly groupGapX = 56;
+  private readonly groupGapY = 56;
+  private readonly componentPadX = 18;
+  private readonly componentPadY = 18;
+  private readonly componentHeaderHeight = 28;
   protected readonly view = signal<EntityDesignView>('relation');
   protected readonly version = signal(0);
   protected readonly selectedEntityId = signal('');
   protected readonly selectedEntityIds = signal<Set<string>>(new Set());
-  protected readonly editorOpen = signal(true);
+  protected readonly selectedTransitionIndex = signal<number | null>(null);
+  protected readonly editorOpen = signal(false);
   protected readonly selectionBox = signal<SelectionBox | null>(null);
   private readonly adapter: EntityDesignAdapter = createEntityDesignLegacyAdapter();
   private readonly palette = [
-    { color: '#3b82f6', background: '#dbeafe' },
-    { color: '#22c55e', background: '#dcfce7' },
-    { color: '#eab308', background: '#fef9c3' },
-    { color: '#ec4899', background: '#fce7f3' },
-    { color: '#8b5cf6', background: '#ede9fe' },
-    { color: '#06b6d4', background: '#cffafe' },
+    { color: '#1d4ed8', fill: '#dbeafe', stroke: '#3b82f6' },
+    { color: '#047857', fill: '#dcfce7', stroke: '#22c55e' },
+    { color: '#a16207', fill: '#fef9c3', stroke: '#eab308' },
+    { color: '#be185d', fill: '#fce7f3', stroke: '#ec4899' },
+    { color: '#6d28d9', fill: '#ede9fe', stroke: '#8b5cf6' },
+    { color: '#0e7490', fill: '#cffafe', stroke: '#06b6d4' },
+    { color: '#c2410c', fill: '#ffedd5', stroke: '#f97316' },
   ];
+  private readonly relationStrokeColors = ['#3b82f6', '#22c55e', '#eab308', '#ec4899', '#8b5cf6', '#f97316'];
   private dragState: EntityDragState | null = null;
 
   protected readonly entities = computed(() => {
@@ -83,6 +153,9 @@ export class EntityDesignWorkbenchComponent {
   protected readonly nodes = computed(() => this.layoutEntities());
   protected readonly relationLines = computed(() => this.collectRelationLines());
   protected readonly stateValues = computed(() => this.collectStateValues(this.selectedEntity()));
+  protected readonly groupFrames = computed(() => this.computeGroupFrames(this.nodes()));
+  protected readonly componentFrames = computed(() => this.computeComponentFrames(this.groupFrames()));
+  protected readonly stateBoard = computed(() => this.layoutStateBoard(this.selectedEntity()));
 
   protected setView(view: EntityDesignView): void {
     this.view.set(view);
@@ -163,7 +236,6 @@ export class EntityDesignWorkbenchComponent {
     const id = this.adapter.nextId('ENT', entities);
     const entity: EntityDesignEntity = {
       uid: id,
-      id,
       name: '新实体',
       note: '',
       fields: [],
@@ -315,35 +387,90 @@ export class EntityDesignWorkbenchComponent {
     return {
       left: `${node.x}px`,
       top: `${node.y}px`,
+      width: `${node.width}px`,
+      height: `${node.height}px`,
       '--entity-accent': node.color,
+      '--entity-fill': node.fill,
+      '--entity-stroke': node.stroke,
       '--entity-bg': node.background,
     };
   }
 
-  protected linePath(line: EntityRelationLine): string {
-    const startX = line.from.x + this.nodeWidth;
-    const startY = line.from.y + this.nodeHeight / 2;
-    const endX = line.to.x;
-    const endY = line.to.y + this.nodeHeight / 2;
-    const midX = Math.round((startX + endX) / 2);
-    return `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+  protected frameStyle(frame: EntityFrame): Record<string, string> {
+    return {
+      left: `${frame.left}px`,
+      top: `${frame.top}px`,
+      width: `${frame.width}px`,
+      height: `${frame.height}px`,
+      '--entity-frame-color': frame.color || '#94a3b8',
+      '--entity-frame-fill': frame.fill || 'rgba(148, 163, 184, 0.08)',
+    };
+  }
+
+  protected relationLabelStyle(line: EntityRelationLine): Record<string, string> {
+    return {
+      left: `${line.labelX}px`,
+      top: `${line.labelY}px`,
+      color: line.color,
+      opacity: String(line.opacity),
+    };
+  }
+
+  protected stateNodeStyle(node: StateNodeLayout): Record<string, string> {
+    return {
+      left: `${node.x}px`,
+      top: `${node.y}px`,
+      width: `${node.width}px`,
+      height: `${node.height}px`,
+    };
+  }
+
+  protected stateMarkerStyle(marker: StateNodeLayout['marker']): Record<string, string> {
+    if (!marker) return {};
+    return {
+      left: `${marker.x}px`,
+      top: `${marker.y}px`,
+      width: `${marker.size}px`,
+      height: `${marker.size}px`,
+    };
+  }
+
+  protected stateBoardStyle(): Record<string, string> {
+    const board = this.stateBoard();
+    return { width: `${board.width}px`, height: `${board.height}px` };
+  }
+
+  protected selectTransition(index: number, event: Event): void {
+    event.stopPropagation();
+    this.selectedTransitionIndex.set(this.selectedTransitionIndex() === index ? null : index);
   }
 
   protected boardSize(): Record<string, string> {
-    const nodes = this.nodes();
-    const width = Math.max(900, ...nodes.map((node) => node.x + this.nodeWidth + 120));
-    const height = Math.max(520, ...nodes.map((node) => node.y + this.nodeHeight + 96));
-    return { width: `${width}px`, height: `${height}px` };
+    return { width: `${this.boardWidth()}px`, height: `${this.boardHeight()}px` };
   }
 
   protected boardWidth(): number {
     const nodes = this.nodes();
-    return Math.max(900, ...nodes.map((node) => node.x + this.nodeWidth + 120));
+    const groupFrames = this.groupFrames();
+    const componentFrames = this.componentFrames();
+    return Math.max(
+      900,
+      ...nodes.map((node) => node.x + node.width + 80),
+      ...groupFrames.map((frame) => frame.left + frame.width + this.entityPad),
+      ...componentFrames.map((frame) => frame.left + frame.width + this.entityPad),
+    );
   }
 
   protected boardHeight(): number {
     const nodes = this.nodes();
-    return Math.max(520, ...nodes.map((node) => node.y + this.nodeHeight + 96));
+    const groupFrames = this.groupFrames();
+    const componentFrames = this.componentFrames();
+    return Math.max(
+      520,
+      ...nodes.map((node) => node.y + node.height + 100),
+      ...groupFrames.map((frame) => frame.top + frame.height + this.entityPad),
+      ...componentFrames.map((frame) => frame.top + frame.height + this.entityPad),
+    );
   }
 
   @HostListener('document:mousemove', ['$event'])
@@ -399,25 +526,42 @@ export class EntityDesignWorkbenchComponent {
   }
 
   private layoutEntities(): EntityNodeLayout[] {
-    const groups = new Map<string, EntityDesignEntity[]>();
-    for (const entity of this.entities()) {
-      const label = this.constructLabel(entity);
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label)?.push(entity);
-    }
-
     const nodes: EntityNodeLayout[] = [];
-    Array.from(groups.entries()).forEach(([constructName, entities], groupIndex) => {
+    const groups = this.sortEntityGroups().map((group) => ({ ...group, layout: this.measureGroup(group.entities) }));
+    const gridCols = this.groupGridColumns(groups.length);
+    const cellWidth = Math.max(...groups.map((group) => group.layout.width), this.nodeWidth + this.groupPadX * 2);
+    const cellHeight = Math.max(...groups.map((group) => group.layout.height), this.nodeHeight + this.groupHeaderHeight + this.groupPadY * 2);
+    groups.forEach((group, groupIndex) => {
       const palette = this.palette[groupIndex % this.palette.length];
-      entities.forEach((entity, entityIndex) => {
+      const rawRow = Math.floor(groupIndex / gridCols);
+      const rawCol = groupIndex % gridCols;
+      const itemsInRow = Math.min(gridCols, groups.length - rawRow * gridCols);
+      const layoutCol = rawRow % 2 === 0 ? rawCol : (itemsInRow - 1 - rawCol);
+      const baseX = this.entityPad + layoutCol * (cellWidth + this.groupGapX);
+      const baseY = this.entityPad + rawRow * (cellHeight + this.groupGapY);
+      const colOffsets = group.layout.colWidths.reduce((acc: number[], width, index) => {
+        acc.push(index === 0 ? 0 : acc[index - 1] + group.layout.colWidths[index - 1] + this.entityGapX);
+        return acc;
+      }, []);
+      group.entities.forEach((entity, entityIndex) => {
+        const size = this.entityNodeSize(entity);
+        const col = entityIndex % group.layout.colCount;
+        const row = Math.floor(entityIndex / group.layout.colCount);
         nodes.push({
           entity,
           id: this.entityId(entity),
-          x: entity.pos?.x ?? 60 + entityIndex * 180,
-          y: entity.pos?.y ?? 84 + groupIndex * 142,
+          x: entity.pos?.x ?? baseX + this.groupPadX + (colOffsets[col] || 0),
+          y: entity.pos?.y ?? baseY + this.groupHeaderHeight + this.groupPadY + row * (this.nodeHeight + this.entityGapY),
+          width: size.width,
+          height: size.height,
           color: palette.color,
-          background: palette.background,
-          constructName,
+          fill: palette.fill,
+          stroke: palette.stroke,
+          background: palette.fill,
+          componentKey: group.componentKey,
+          componentName: group.componentName,
+          constructKey: group.key,
+          constructName: group.label,
         });
       });
     });
@@ -432,29 +576,284 @@ export class EntityDesignWorkbenchComponent {
     const top = Math.min(box.startY, box.currentY);
     const bottom = Math.max(box.startY, box.currentY);
     const selected = this.nodes()
-      .filter((node) => node.x < right && node.x + this.nodeWidth > left && node.y < bottom && node.y + this.nodeHeight > top)
+      .filter((node) => node.x < right && node.x + node.width > left && node.y < bottom && node.y + node.height > top)
       .map((node) => node.id);
     this.selectedEntityIds.set(new Set(selected));
     this.selectedEntityId.set(selected[0] || '');
     if (selected.length) this.editorOpen.set(true);
   }
 
+  private entityNodeSize(entity: EntityDesignEntity): { width: number; height: number } {
+    const name = String(entity?.name || '未命名实体');
+    const width = Array.from(name).reduce((sum, char) => {
+      if (/[\u2e80-\u9fff\uff00-\uffef]/.test(char)) return sum + 14;
+      if (/[A-Z]/.test(char)) return sum + 8;
+      if (/\s/.test(char)) return sum + 4;
+      return sum + 7;
+    }, 0);
+    return { width: Math.max(this.nodeWidth, Math.ceil(width + 32)), height: this.nodeHeight };
+  }
+
+  private entityMeta(entity: EntityDesignEntity): { constructKey: string; constructLabel: string; componentKey: string; componentLabel: string } {
+    const construct = this.constructForEntity(entity);
+    const componentKey = String(construct?.businessComponentUid || construct?.businessComponentId || '').trim();
+    const component = this.adapter.components().find((item) => String(item.uid || item.id || '') === componentKey);
+    return {
+      constructKey: this.constructId(construct || {}) || '__ungrouped_construct__',
+      constructLabel: construct?.name || '未归属构件',
+      componentKey: componentKey || '__ungrouped_component__',
+      componentLabel: component?.name || '未归属组件',
+    };
+  }
+
+  private sortEntityGroups(): Array<{ key: string; label: string; componentKey: string; componentName: string; entities: EntityDesignEntity[] }> {
+    const entities = this.entities();
+    const relations = this.allRelations();
+    const degree = new Map<string, number>();
+    const groupScore = new Map<string, number>();
+    const groupLinks = new Map<string, Map<string, number>>();
+    for (const entity of entities) {
+      const id = this.entityId(entity);
+      const meta = this.entityMeta(entity);
+      degree.set(id, 0);
+      groupScore.set(meta.constructKey, groupScore.get(meta.constructKey) || 0);
+      if (!groupLinks.has(meta.constructKey)) groupLinks.set(meta.constructKey, new Map());
+    }
+    for (const relation of relations) {
+      const from = this.relationFrom(relation);
+      const to = this.relationTo(relation);
+      degree.set(from, (degree.get(from) || 0) + 1);
+      degree.set(to, (degree.get(to) || 0) + 1);
+      const fromEntity = entities.find((entity) => this.entityId(entity) === from);
+      const toEntity = entities.find((entity) => this.entityId(entity) === to);
+      const fromGroup = this.entityMeta(fromEntity || {}).constructKey;
+      const toGroup = this.entityMeta(toEntity || {}).constructKey;
+      groupScore.set(fromGroup, (groupScore.get(fromGroup) || 0) + 1);
+      groupScore.set(toGroup, (groupScore.get(toGroup) || 0) + 1);
+      if (fromGroup !== toGroup) {
+        if (!groupLinks.has(fromGroup)) groupLinks.set(fromGroup, new Map());
+        if (!groupLinks.has(toGroup)) groupLinks.set(toGroup, new Map());
+        groupLinks.get(fromGroup)?.set(toGroup, (groupLinks.get(fromGroup)?.get(toGroup) || 0) + 1);
+        groupLinks.get(toGroup)?.set(fromGroup, (groupLinks.get(toGroup)?.get(fromGroup) || 0) + 1);
+      }
+    }
+    const keys = Array.from(new Set(entities.map((entity) => this.entityMeta(entity).constructKey)));
+    const sortedKeys: string[] = [];
+    const used = new Set<string>();
+    let current = keys.sort((a, b) => (groupScore.get(b) || 0) - (groupScore.get(a) || 0))[0];
+    while (current) {
+      sortedKeys.push(current);
+      used.add(current);
+      let nextKey = '';
+      let nextScore = -1;
+      for (const key of keys) {
+        if (used.has(key)) continue;
+        const score = (groupLinks.get(current)?.get(key) || 0) * 100 + (groupScore.get(key) || 0);
+        if (score > nextScore) {
+          nextScore = score;
+          nextKey = key;
+        }
+      }
+      current = nextKey;
+    }
+    return sortedKeys.map((key) => {
+      const groupEntities = entities
+        .filter((entity) => this.entityMeta(entity).constructKey === key)
+        .sort((a, b) => (degree.get(this.entityId(b)) || 0) - (degree.get(this.entityId(a)) || 0) || this.entityId(a).localeCompare(this.entityId(b)));
+      const meta = this.entityMeta(groupEntities[0] || {});
+      return { key, label: meta.constructLabel, componentKey: meta.componentKey, componentName: meta.componentLabel, entities: groupEntities };
+    });
+  }
+
+  private measureGroup(entities: EntityDesignEntity[]): { colCount: number; colWidths: number[]; width: number; height: number } {
+    const colCount = entities.length >= 12 ? 3 : (entities.length >= 7 ? 2 : 1);
+    const rowCount = Math.max(1, Math.ceil(entities.length / colCount));
+    const colWidths = Array.from({ length: colCount }, () => this.nodeWidth);
+    entities.forEach((entity, index) => {
+      const col = index % colCount;
+      colWidths[col] = Math.max(colWidths[col], this.entityNodeSize(entity).width);
+    });
+    const contentWidth = colWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, colCount - 1) * this.entityGapX;
+    const contentHeight = rowCount * this.nodeHeight + Math.max(0, rowCount - 1) * this.entityGapY;
+    return {
+      colCount,
+      colWidths,
+      width: contentWidth + this.groupPadX * 2,
+      height: contentHeight + this.groupHeaderHeight + this.groupPadY * 2,
+    };
+  }
+
+  private groupGridColumns(groupCount: number): number {
+    if (groupCount <= 1) return 1;
+    if (groupCount <= 4) return 2;
+    if (groupCount <= 9) return 3;
+    return 4;
+  }
+
+  private computeGroupFrames(nodes: EntityNodeLayout[]): EntityFrame[] {
+    const frames = new Map<string, EntityFrame>();
+    for (const node of nodes) {
+      const left = node.x - this.groupPadX;
+      const top = node.y - this.groupHeaderHeight - this.groupPadY;
+      const right = node.x + node.width + this.groupPadX;
+      const bottom = node.y + node.height + this.groupPadY;
+      const current = frames.get(node.constructKey);
+      if (!current) {
+        frames.set(node.constructKey, {
+          key: node.constructKey,
+          label: node.constructName,
+          componentKey: node.componentKey,
+          left,
+          top,
+          width: right - left,
+          height: bottom - top,
+          color: node.stroke,
+          fill: `${node.fill}66`,
+        });
+      } else {
+        const nextLeft = Math.min(current.left, left);
+        const nextTop = Math.min(current.top, top);
+        const nextRight = Math.max(current.left + current.width, right);
+        const nextBottom = Math.max(current.top + current.height, bottom);
+        current.left = nextLeft;
+        current.top = nextTop;
+        current.width = nextRight - nextLeft;
+        current.height = nextBottom - nextTop;
+      }
+    }
+    return Array.from(frames.values());
+  }
+
+  private computeComponentFrames(groupFrames: EntityFrame[]): EntityFrame[] {
+    const frames = new Map<string, EntityFrame>();
+    for (const frame of groupFrames) {
+      const key = frame.componentKey || '__ungrouped_component__';
+      const left = frame.left - this.componentPadX;
+      const top = frame.top - this.componentHeaderHeight - this.componentPadY;
+      const right = frame.left + frame.width + this.componentPadX;
+      const bottom = frame.top + frame.height + this.componentPadY;
+      const current = frames.get(key);
+      if (!current) {
+        frames.set(key, {
+          key,
+          label: this.componentLabel(key),
+          left,
+          top,
+          width: right - left,
+          height: bottom - top,
+        });
+      } else {
+        const nextLeft = Math.min(current.left, left);
+        const nextTop = Math.min(current.top, top);
+        const nextRight = Math.max(current.left + current.width, right);
+        const nextBottom = Math.max(current.top + current.height, bottom);
+        current.left = nextLeft;
+        current.top = nextTop;
+        current.width = nextRight - nextLeft;
+        current.height = nextBottom - nextTop;
+      }
+    }
+    return Array.from(frames.values());
+  }
+
   private collectRelationLines(): EntityRelationLine[] {
     const nodeMap = new Map(this.nodes().map((node) => [node.id, node]));
     const lines: EntityRelationLine[] = [];
-    for (const relation of this.adapter.relations()) {
+    const selectedId = this.entityId(this.selectedEntity());
+    this.allRelations().forEach((relation, index) => {
       const from = nodeMap.get(this.relationFrom(relation));
       const to = nodeMap.get(this.relationTo(relation));
-      if (from && to) lines.push({ from, to, label: relation.label || relation.type || '关联' });
-    }
+      if (!from || !to) return;
+      const color = this.relationStrokeColors[index % this.relationStrokeColors.length];
+      const crossGroup = from.constructKey !== to.constructKey;
+      const focus = Boolean(selectedId && (from.id === selectedId || to.id === selectedId));
+      const route = this.routeRelation(from, to, index);
+      lines.push({
+        from,
+        to,
+        label: `${relation.type || ''}${relation.type && relation.label ? ' ' : ''}${relation.label || ''}` || '关联',
+        path: route.path,
+        labelX: route.labelX,
+        labelY: route.labelY,
+        color,
+        opacity: selectedId ? (focus ? 0.96 : 0.16) : (crossGroup ? 0.3 : 0.82),
+        width: selectedId ? (focus ? 2.4 : 1.1) : (crossGroup ? 1.1 : 1.7),
+        dashed: crossGroup || relation.type === 'N:N',
+        focus,
+        muted: Boolean(selectedId && !focus),
+      });
+    });
+    return lines;
+  }
+
+  private allRelations(): EntityDesignRelation[] {
+    const relations = [...this.adapter.relations()];
     for (const entity of this.entities()) {
       for (const relation of entity.relations || []) {
-        const from = nodeMap.get(this.relationFrom(relation) || this.entityId(entity));
-        const to = nodeMap.get(this.relationTo(relation));
-        if (from && to) lines.push({ from, to, label: relation.label || relation.type || '关联' });
+        relations.push({ ...relation, from: this.relationFrom(relation) || this.entityId(entity) });
       }
     }
-    return lines;
+    return relations;
+  }
+
+  private routeRelation(from: EntityNodeLayout, to: EntityNodeLayout, index: number): { path: string; labelX: number; labelY: number } {
+    const a = this.nodeRect(from);
+    const b = this.nodeRect(to);
+    if (from.id === to.id) {
+      const loopW = 28 + index * 4;
+      const loopH = Math.max(12, a.h / 3);
+      const exitY = a.cy - loopH;
+      const enterY = a.cy + loopH;
+      return {
+        path: `M ${a.r} ${exitY} L ${a.r + loopW} ${exitY} L ${a.r + loopW} ${enterY} L ${a.r} ${enterY}`,
+        labelX: a.r + loopW + 4,
+        labelY: a.cy + 4,
+      };
+    }
+    const dx = b.cx - a.cx;
+    const dy = b.cy - a.cy;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    if (absDy < this.nodeHeight + 4) {
+      const yCenter = (a.cy + b.cy) / 2 + (index % 2 === 0 ? 0 : 8);
+      const path = dx >= 0
+        ? `M ${a.r} ${a.cy} L ${a.r + 4} ${a.cy} L ${a.r + 4} ${yCenter} L ${b.l - 4} ${yCenter} L ${b.l - 4} ${b.cy} L ${b.l} ${b.cy}`
+        : `M ${a.l} ${a.cy} L ${a.l - 4} ${a.cy} L ${a.l - 4} ${yCenter} L ${b.r + 4} ${yCenter} L ${b.r + 4} ${b.cy} L ${b.r} ${b.cy}`;
+      return { path, labelX: (a.cx + b.cx) / 2, labelY: yCenter - 8 };
+    }
+    if (absDy >= absDx) {
+      const goDown = dy > 0;
+      const sy = goDown ? a.b : a.t;
+      const ey = goDown ? b.t : b.b;
+      const yMid = (sy + ey) / 2 + (index % 2 === 0 ? 0 : 10);
+      return {
+        path: `M ${a.cx} ${sy} L ${a.cx} ${yMid} L ${b.cx} ${yMid} L ${b.cx} ${ey}`,
+        labelX: (a.cx + b.cx) / 2,
+        labelY: yMid - 6,
+      };
+    }
+    const goRight = dx > 0;
+    const sx = goRight ? a.r : a.l;
+    const ex = goRight ? b.l : b.r;
+    const xMid = (sx + ex) / 2 + (index % 2 === 0 ? 0 : 10);
+    return {
+      path: `M ${sx} ${a.cy} L ${xMid} ${a.cy} L ${xMid} ${b.cy} L ${ex} ${b.cy}`,
+      labelX: xMid + 8,
+      labelY: (a.cy + b.cy) / 2 - 4,
+    };
+  }
+
+  private nodeRect(node: EntityNodeLayout): { l: number; t: number; r: number; b: number; cx: number; cy: number; w: number; h: number } {
+    return {
+      l: node.x,
+      t: node.y,
+      r: node.x + node.width,
+      b: node.y + node.height,
+      cx: node.x + node.width / 2,
+      cy: node.y + node.height / 2,
+      w: node.width,
+      h: node.height,
+    };
   }
 
   private relationFrom(relation: EntityDesignRelation): string {
@@ -468,6 +867,113 @@ export class EntityDesignWorkbenchComponent {
   private constructForEntity(entity: EntityDesignEntity): EntityDesignConstruct | undefined {
     const constructId = String(entity.businessConstructUid || entity.businessConstructId || entity.constructUid || entity.constructId || '').trim();
     return this.constructs().find((construct) => this.constructId(construct) === constructId);
+  }
+
+  private componentLabel(componentKey: string): string {
+    return this.adapter.components().find((component) => String(component.uid || component.id || '') === componentKey)?.name || '未归属组件';
+  }
+
+  private layoutStateBoard(entity: EntityDesignEntity | null): StateBoardLayout {
+    if (!entity) return { nodes: [], transitions: [], width: 720, height: 360 };
+    const values = this.collectStateValues(entity);
+    const transitionValues = new Set<string>();
+    for (const transition of entity.state_transitions || []) {
+      if (transition.from) transitionValues.add(transition.from);
+      if (transition.to) transitionValues.add(transition.to);
+    }
+    const nodes = values.map((name, index) => {
+      const incoming = (entity.state_transitions || []).filter((transition) => transition.to === name).length;
+      const outgoing = (entity.state_transitions || []).filter((transition) => transition.from === name).length;
+      const kind: StateNodeLayout['kind'] = incoming === 0 && outgoing > 0
+        ? 'initial'
+        : (outgoing === 0 && incoming > 0 ? 'terminal' : 'intermediate');
+      return { name, kind, originalIndex: index };
+    });
+    if (!nodes.length && transitionValues.size) {
+      Array.from(transitionValues).forEach((name, index) => nodes.push({ name, kind: 'intermediate', originalIndex: index }));
+    }
+    const initial = nodes.filter((node) => node.kind === 'initial');
+    const terminal = nodes.filter((node) => node.kind === 'terminal');
+    const middle = nodes.filter((node) => node.kind === 'intermediate');
+    const orderedRows = [
+      ...(initial.length ? [initial] : []),
+      ...middle.map((node) => [node]),
+      ...(terminal.length ? [terminal] : []),
+    ];
+    const layouts: StateNodeLayout[] = [];
+    const padX = 64;
+    const padY = 48;
+    const gapX = 68;
+    const gapY = 68;
+    const nodeH = 36;
+    orderedRows.forEach((row, rowIndex) => {
+      const rowWidths = row.map((node) => this.stateNodeDisplayWidth(node.name));
+      const rowWidth = rowWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, row.length - 1) * gapX;
+      const startX = padX + Math.max(0, (520 - rowWidth) / 2);
+      row.forEach((node, colIndex) => {
+        const x = Math.round(startX + rowWidths.slice(0, colIndex).reduce((sum, width) => sum + width, 0) + colIndex * gapX);
+        const y = padY + rowIndex * (nodeH + gapY);
+        const width = rowWidths[colIndex];
+        const marker = node.kind === 'initial'
+          ? { kind: 'initial' as const, x: x - 30, y: y + 10, size: 16 }
+          : (node.kind === 'terminal' ? { kind: 'terminal' as const, x: x + width + 18, y: y + 8, size: 20 } : undefined);
+        layouts.push({ name: node.name, kind: node.kind, x, y, width, height: nodeH, marker });
+      });
+    });
+    const nodeMap = new Map(layouts.map((node) => [node.name, node]));
+    const transitions = (entity.state_transitions || []).map((transition, index) => {
+      const from = nodeMap.get(String(transition.from || ''));
+      const to = nodeMap.get(String(transition.to || ''));
+      if (!from || !to) return null;
+      const route = this.routeStateTransition(from, to, index);
+      return {
+        transition,
+        from,
+        to,
+        path: route.path,
+        label: transition.action || transition.label || '流转',
+        labelX: route.labelX,
+        labelY: route.labelY,
+        selected: this.selectedTransitionIndex() === index,
+      };
+    }).filter(Boolean) as StateTransitionLine[];
+    const width = Math.max(720, ...layouts.map((node) => node.x + node.width + 96));
+    const height = Math.max(360, ...layouts.map((node) => node.y + node.height + 80));
+    return { nodes: layouts, transitions, width, height };
+  }
+
+  private stateNodeDisplayWidth(label: string): number {
+    const text = String(label || '').trim() || '状态';
+    let units = 0;
+    for (const char of text) {
+      if (/[\u3400-\u9fff\uf900-\ufaff]/u.test(char)) units += 1.15;
+      else if (/[A-Z0-9]/.test(char)) units += 0.72;
+      else if (/[a-z]/.test(char)) units += 0.62;
+      else units += 0.9;
+    }
+    return Math.max(72, Math.min(172, Math.round(22 + units * 15)));
+  }
+
+  private routeStateTransition(from: StateNodeLayout, to: StateNodeLayout, index: number): { path: string; labelX: number; labelY: number } {
+    const fromX = from.x + from.width / 2;
+    const fromY = from.y + from.height;
+    const toX = to.x + to.width / 2;
+    const toY = to.y;
+    if (from.name === to.name) {
+      const loopW = 34 + index * 8;
+      const midY = from.y + from.height / 2;
+      return {
+        path: `M ${from.x + from.width} ${midY} L ${from.x + from.width + loopW} ${midY} L ${from.x + from.width + loopW} ${midY + 42} L ${from.x + from.width} ${midY + 42}`,
+        labelX: from.x + from.width + loopW + 8,
+        labelY: midY + 24,
+      };
+    }
+    const midY = Math.round((fromY + toY) / 2) + (index % 2 ? 10 : 0);
+    return {
+      path: `M ${fromX} ${fromY} L ${fromX} ${midY} L ${toX} ${midY} L ${toX} ${toY}`,
+      labelX: Math.round((fromX + toX) / 2),
+      labelY: midY - 8,
+    };
   }
 
   private collectStateValues(entity: EntityDesignEntity | null): string[] {

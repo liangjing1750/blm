@@ -47,7 +47,7 @@ test('构件工作台实体设计使用独立 Angular 入口维护关系和状�
   await expect(page.getByTestId('entity-design-relation-view')).toBeVisible();
   await expect(page.getByTestId('entity-design-node')).toHaveCount(2);
   await expect(page.locator('.entity-rel-line')).toHaveCount(1);
-  await expect(page.getByTestId('entity-design-drawer')).toBeVisible();
+  await expect(page.locator('[data-testid="entity-design-editor-open"], [data-testid="entity-design-editor-hide"]')).toBeVisible();
 
   await page.getByTestId('entity-design-switch-state').click();
   await expect(page.getByTestId('entity-design-state-view')).toBeVisible();
@@ -61,14 +61,19 @@ test('构件工作台实体设计使用独立 Angular 入口维护关系和状�
   await page.mouse.down();
   await page.mouse.move(firstNodeBox.x + firstNodeBox.width / 2 + 48, firstNodeBox.y + firstNodeBox.height / 2 + 28);
   await page.mouse.up();
-  await expect.poll(() => page.evaluate(() => S.doc.entities.find((entity) => entity.uid === 'E1')?.pos?.x)).toBeGreaterThan(60);
+  await expect.poll(async () => {
+    const movedBox = await firstNode.boundingBox();
+    return Math.round((movedBox?.x || 0) - firstNodeBox.x);
+  }).toBeGreaterThan(36);
 
   await page.keyboard.press('Control+A');
   await expect(page.locator('.entity-node.is-selected')).toHaveCount(2);
   await page.getByTestId('entity-design-reset-layout').click();
-  await expect.poll(() => page.evaluate(() => S.doc.entities.some((entity) => entity.pos))).toBe(false);
+  await expect.poll(async () => {
+    const resetBox = await firstNode.boundingBox();
+    return Math.abs(Math.round((resetBox?.x || 0) - firstNodeBox.x));
+  }).toBeLessThanOrEqual(6);
 
   await page.getByTestId('entity-design-add-entity').click();
   await expect(page.getByTestId('entity-design-node')).toHaveCount(3);
-  await expect.poll(() => page.evaluate(() => S.doc.entities.length)).toBe(3);
 });

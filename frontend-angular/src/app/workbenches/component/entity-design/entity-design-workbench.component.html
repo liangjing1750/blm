@@ -21,6 +21,15 @@
       @if (view() === 'relation') {
         <div class="entity-relation-canvas" data-testid="entity-design-relation-view">
           <div class="entity-board" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
+            @for (frame of componentFrames(); track frame.key) {
+              <div class="entity-component-frame" [ngStyle]="frameStyle(frame)"></div>
+              <div class="entity-component-title" [style.left.px]="frame.left + 18" [style.top.px]="frame.top + 10">{{ frame.label }}</div>
+            }
+            @for (frame of groupFrames(); track frame.key) {
+              <div class="entity-group-frame" [ngStyle]="frameStyle(frame)">
+                <div class="entity-group-title">{{ frame.label }}</div>
+              </div>
+            }
             <svg class="entity-rel-svg" [attr.width]="boardWidth()" [attr.height]="boardHeight()" aria-hidden="true">
               <defs>
                 <marker id="entity-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -28,9 +37,13 @@
                 </marker>
               </defs>
               @for (line of relationLines(); track line.from.id + '-' + line.to.id + '-' + $index) {
-                <path class="entity-rel-line" [attr.d]="linePath(line)" marker-end="url(#entity-arrow)"></path>
+                <path class="entity-rel-line" [class.is-focus]="line.focus" [class.is-muted]="line.muted" [class.is-dashed]="line.dashed" [attr.d]="line.path" [attr.stroke]="line.color" [attr.stroke-width]="line.width" [attr.stroke-opacity]="line.opacity" marker-end="url(#entity-arrow)"></path>
               }
             </svg>
+
+            @for (line of relationLines(); track line.from.id + '-' + line.to.id + '-label-' + $index) {
+              <span class="entity-rel-label" [ngStyle]="relationLabelStyle(line)">{{ line.label }}</span>
+            }
 
             @for (node of nodes(); track node.id) {
               <button class="entity-node" [class.is-selected]="isSelected(node.entity)" [class.is-focus]="entityId(selectedEntity()) === node.id" type="button" data-testid="entity-design-node" [ngStyle]="nodeStyle(node)" (mousedown)="startEntityDrag(node.entity, $event)" (click)="$event.stopPropagation(); selectEntity(node.entity, $event)">
@@ -51,17 +64,32 @@
               <strong>{{ entity.name || '未命名实体' }}</strong>
               <span>状态字段值 {{ stateValues().length }}</span>
             </div>
-            <div class="entity-state-board">
-              @for (state of stateValues(); track state; let index = $index) {
-                <div class="entity-state-node" [style.left.px]="64 + index * 190" [style.top.px]="90 + (index % 2) * 96">{{ state }}</div>
-              }
-              @for (transition of entity.state_transitions || []; track transition.uid || transition.id || $index) {
-                <div class="entity-state-transition">
-                  <span>{{ transition.from || '开始' }}</span>
-                  <strong>→</strong>
-                  <span>{{ transition.to || '结束' }}</span>
-                  <em>{{ transition.action || transition.label || '流转' }}</em>
+            <div class="entity-state-board" [ngStyle]="stateBoardStyle()">
+              <svg class="entity-state-svg" [attr.width]="stateBoard().width" [attr.height]="stateBoard().height" aria-hidden="true">
+                <defs>
+                  <marker id="entity-state-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                  </marker>
+                </defs>
+                @for (transition of stateBoard().transitions; track transition.label + '-' + $index) {
+                  <path class="entity-state-link" [class.selected]="transition.selected" [attr.d]="transition.path" marker-end="url(#entity-state-arrow)" (click)="selectTransition($index, $event)"></path>
+                  <text class="entity-state-link-label" [attr.x]="transition.labelX" [attr.y]="transition.labelY">{{ transition.label }}</text>
+                }
+              </svg>
+              @for (node of stateBoard().nodes; track node.name) {
+                @if (node.marker?.kind === 'initial') {
+                  <span class="entity-state-marker entity-state-start-dot" [ngStyle]="stateMarkerStyle(node.marker)"></span>
+                }
+                <div class="entity-state-node" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'" [ngStyle]="stateNodeStyle(node)">
+                  <span class="entity-state-node-label">{{ node.name }}</span>
                 </div>
+                @if (node.marker?.kind === 'terminal') {
+                  <span class="entity-state-marker entity-state-end-dot-outer" [ngStyle]="stateMarkerStyle(node.marker)"></span>
+                  <span class="entity-state-marker entity-state-end-dot-inner" [ngStyle]="stateMarkerStyle(node.marker)"></span>
+                }
+              }
+              @if (!stateBoard().nodes.length) {
+                <div class="entity-empty">暂无状态值。</div>
               }
             </div>
           } @else {
