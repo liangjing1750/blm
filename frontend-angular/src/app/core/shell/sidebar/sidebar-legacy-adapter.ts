@@ -348,6 +348,9 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       };
     },
     isCollapsed(): boolean {
+      if (!Object.prototype.hasOwnProperty.call(ui(), 'sidebarCollapsed')) {
+        ui()['sidebarCollapsed'] = true;
+      }
       return !!ui()['sidebarCollapsed'];
     },
     toggleCollapsed(): void {
@@ -361,7 +364,9 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       ui()['sidebarWidth'] = Math.max(260, Math.min(620, Math.round(width)));
     },
     isNodeCollapsed(key: string): boolean {
-      return !!ui()['sbCollapse']?.[key];
+      const collapseState = ui()['sbCollapse'] || {};
+      if (Object.prototype.hasOwnProperty.call(collapseState, key)) return !!collapseState[key];
+      return true;
     },
     toggleNode(key: string): void {
       ui()['sbCollapse'] ||= {};

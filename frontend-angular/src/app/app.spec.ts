@@ -125,6 +125,53 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeTruthy();
   });
 
+  it('should keep the sidebar as an exclusive left column with collapsed directory nodes by default', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['sbCollapse'] = {};
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [{ uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 }],
+      processes: [{ uid: 'process-1', name: '入库预约', nodes: [] }],
+      entities: [],
+      businessComponents: [{ uid: 'bc-1', name: '循环', kind: 'core', entityUids: [], taskDefinitionUids: [], stageUids: ['stage-1'] }],
+      businessConstructs: [{ uid: 'construct-1', name: '会话运行构件', businessComponentUid: 'bc-1' }],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ id: 'column-1', name: '入库价值流' }],
+        lanes: [{ id: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/panorama');
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const main = compiled.querySelector('#main');
+    const sidebar = compiled.querySelector('#sidebar');
+    const workbench = compiled.querySelector('[data-testid="angular-workbench"]');
+    expect(sidebar?.parentElement).toBe(main);
+    expect(workbench?.querySelector('[data-testid="angular-shell-tab-bar"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="angular-sidebar-collapsed"]')).toBeTruthy();
+
+    compiled.querySelector<HTMLButtonElement>('#angular-sb-toggle-btn')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="angular-sidebar-directory"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="sidebar-process-row"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="sidebar-construct-item"]')).toBeFalsy();
+  });
+
   it('should keep migration status aligned with restored Angular workbench entries', () => {
     const statusById = new Map(WORKBENCH_MIGRATION_STATUS.map((item) => [item.id, item.status]));
 

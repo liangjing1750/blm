@@ -45,7 +45,7 @@
 
 .angular-main {
   display: flex;
-  min-height: calc(100vh - 96px);
+  min-height: calc(100vh - 48px);
   background: #eef2f7;
 }
 
@@ -62,9 +62,23 @@
 }
 
 .angular-workbench {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+app-shell-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 50px;
+  padding: 0 18px;
+  border-bottom: 1px solid #d7e1ee;
+  background: #fff;
+  flex: 0 0 auto;
 }
 
 .no-document-home {
