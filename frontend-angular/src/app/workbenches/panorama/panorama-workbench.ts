@@ -3,7 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { BlmDocument, BusinessComponent, Stage } from '../../core/document/document.model';
 import { DocumentStore } from '../../core/document/document-store';
 import { getComponentSupportedStages, getStageProcesses } from '../../core/document/document-model';
-import { ValueDomainCell, ValueDomainColumn, ValueDomainLane } from '../../core/document/value-domain-model';
+import { ValueDomainCell, ValueDomainColumn, ValueDomainLane, getValueDomainColumnUid, getValueDomainLaneUid } from '../../core/document/value-domain-model';
 import { KnowledgeWorkbenchComponent } from '../knowledge/knowledge-workbench';
 import { RoleWorkbenchComponent } from '../role/role-workbench';
 
@@ -44,13 +44,13 @@ export class PanoramaWorkbench {
     const document = this.document() as PanoramaDocument;
     return {
       columns: this.withFallback(document.panorama?.columns, {
-        id: 'default-column',
+        uid: 'default-column',
         name: '价值流',
         badge: '价值链',
         scope: '从业务目标到流程落地',
       }),
       lanes: this.withFallback(document.panorama?.lanes, {
-        id: 'default-lane',
+        uid: 'default-lane',
         name: '业务域',
         badge: '业务域',
         note: '按业务责任组织阶段',
@@ -93,6 +93,14 @@ export class PanoramaWorkbench {
     return this.document().stages.filter((stage) => stage.panoramaLaneUid === laneId && stage.panoramaColumnUid === columnId);
   }
 
+  protected columnUid(column: ValueDomainColumn): string {
+    return getValueDomainColumnUid(column);
+  }
+
+  protected laneUid(lane: ValueDomainLane): string {
+    return getValueDomainLaneUid(lane);
+  }
+
   protected componentKindLabel(component: BusinessComponent): string {
     return this.componentKind(component) === 'generic' ? '通用组件' : '核心组件';
   }
@@ -107,11 +115,11 @@ export class PanoramaWorkbench {
   }
 
   private cellLaneId(cell: ValueDomainCell): string {
-    return String(cell.laneUid || cell.laneId || '').trim();
+    return String(cell.laneUid || '').trim();
   }
 
   private cellColumnId(cell: ValueDomainCell): string {
-    return String(cell.columnUid || cell.columnId || '').trim();
+    return String(cell.columnUid || '').trim();
   }
 
   private componentKind(component: BusinessComponent): 'core' | 'generic' {

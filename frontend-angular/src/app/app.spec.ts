@@ -68,8 +68,8 @@ describe('App', () => {
       terms: [],
       rules: [],
       panorama: {
-        columns: [{ id: 'column-1', name: '入库价值流' }],
-        lanes: [{ id: 'lane-1', name: '交易业务域' }],
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
         cells: [{ laneUid: 'lane-1', columnUid: 'column-1', status: '建模中' }],
       },
     };
@@ -148,8 +148,8 @@ describe('App', () => {
       terms: [],
       rules: [],
       panorama: {
-        columns: [{ id: 'column-1', name: '入库价值流' }],
-        lanes: [{ id: 'lane-1', name: '交易业务域' }],
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
         cells: [],
       },
     };

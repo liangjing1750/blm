@@ -289,18 +289,24 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     this.workspacePage.set(1);
     this.trashPage.set(1);
     this.modal.set('open');
-    this.activeDropdown.set('');
   }
 
   protected async syncNow(): Promise<void> {
     if (!this.runtime.currentFile) {
-      this.showToast('请先打开文档');
+      this.showToast('\u8bf7\u5148\u6253\u5f00\u6587\u6863');
       return;
     }
-    await this.runBusy(async () => {
-      await this.syncService.syncNow();
-      this.showToast('同步完成');
+    this.waitDialog.set({
+      title: '\u6b63\u5728\u540c\u6b65\u6587\u6863...',
+      description: '\u6b63\u5728\u63d0\u4ea4\u672c\u5730\u4fee\u6539\u5e76\u62c9\u53d6\u8fdc\u7aef\u6700\u65b0\u7248\u672c\u3002',
     });
+    try {
+      await this.runBusy(async () => {
+        await this.syncService.syncNow();
+      });
+    } finally {
+      this.waitDialog.set(null);
+    }
   }
 
   protected async openHistory(): Promise<void> {

@@ -11,6 +11,8 @@ import {
   ensureValueDomainModel,
   ensureValueDomainStages,
   findOrCreateValueDomainCell,
+  getValueDomainColumnUid,
+  getValueDomainLaneUid,
   getValueDomainStageId,
 } from '../../../core/document/value-domain-model';
 
@@ -75,7 +77,7 @@ export class ValueDomainWorkbenchComponent {
 
   protected gridTemplateColumns(): string {
     const axisMin = this.editing() ? 220 : 154;
-    const tracks = this.columns().map((column) => `${this.columnWidth(column.id)}px`).join(' ');
+    const tracks = this.columns().map((column) => `${this.columnWidth(this.columnUid(column))}px`).join(' ');
     // 关键流程：列宽复刻旧版全景矩阵基础宽度，按该列阶段槽位动态撑宽，但不再被 1fr 二次拉伸。
     return `${axisMin}px ${tracks}`;
   }
@@ -86,6 +88,14 @@ export class ValueDomainWorkbenchComponent {
 
   protected stageId(stage: ValueDomainStage): string {
     return getValueDomainStageId(stage);
+  }
+
+  protected columnUid(column: ValueDomainColumn): string {
+    return getValueDomainColumnUid(column);
+  }
+
+  protected laneUid(lane: ValueDomainLane): string {
+    return getValueDomainLaneUid(lane);
   }
 
   protected processCount(stage: ValueDomainStage): number {
@@ -146,23 +156,27 @@ export class ValueDomainWorkbenchComponent {
     this.setEditing(editing);
   }
 
+  isEditingFromShell(): boolean {
+    return this.editing();
+  }
+
   protected addColumn(afterId = ''): void {
     this.actions.addColumn(afterId);
     this.refresh();
   }
 
   protected moveColumn(column: ValueDomainColumn, dir: number): void {
-    this.actions.moveColumn(column.id, dir);
+    this.actions.moveColumn(this.columnUid(column), dir);
     this.refresh();
   }
 
   protected async removeColumn(column: ValueDomainColumn): Promise<void> {
-    await this.actions.removeColumn(column.id);
+    await this.actions.removeColumn(this.columnUid(column));
     this.refresh();
   }
 
   protected setColumn(column: ValueDomainColumn, key: 'name' | 'badge' | 'scope', value: string): void {
-    this.actions.setColumn(column.id, key, value);
+    this.actions.setColumn(this.columnUid(column), key, value);
     this.refresh();
   }
 
@@ -172,17 +186,17 @@ export class ValueDomainWorkbenchComponent {
   }
 
   protected moveLane(lane: ValueDomainLane, dir: number): void {
-    this.actions.moveLane(lane.id, dir);
+    this.actions.moveLane(this.laneUid(lane), dir);
     this.refresh();
   }
 
   protected async removeLane(lane: ValueDomainLane): Promise<void> {
-    await this.actions.removeLane(lane.id);
+    await this.actions.removeLane(this.laneUid(lane));
     this.refresh();
   }
 
   protected setLane(lane: ValueDomainLane, key: 'name' | 'badge' | 'note', value: string): void {
-    this.actions.setLane(lane.id, key, value);
+    this.actions.setLane(this.laneUid(lane), key, value);
     this.refresh();
   }
 
@@ -192,8 +206,8 @@ export class ValueDomainWorkbenchComponent {
   }
 
   protected setCell(cell: ValueDomainCell, key: 'status' | 'text', value: string): void {
-    const laneId = cell.laneUid || cell.laneId || '';
-    const columnId = cell.columnUid || cell.columnId || '';
+    const laneId = cell.laneUid || '';
+    const columnId = cell.columnUid || '';
     this.actions.setCell(laneId, columnId, key, value);
     this.refresh();
   }
@@ -278,7 +292,7 @@ export class ValueDomainWorkbenchComponent {
   private columnWidth(columnId: string): number {
     const columnMin = this.editing() ? 220 : 210;
     const required = this.lanes().reduce((maxWidth, lane) => {
-      const stages = this.cellStages(lane.id, columnId);
+      const stages = this.cellStages(this.laneUid(lane), columnId);
       return Math.max(maxWidth, this.stageBoardWidth(stages) + 16);
     }, columnMin);
     return Math.ceil(Math.max(columnMin, required));

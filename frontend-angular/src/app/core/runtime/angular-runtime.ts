@@ -43,7 +43,7 @@ const runtimeState: AngularRuntimeState = {
   ui: {
     mainTab: 'panoramaWorkbench',
     tab: 'panorama',
-    processWorkbenchView: 'stage',
+    processWorkbenchView: 'valueDomain',
     componentTab: 'businessComponents',
     sbCollapse: {},
     businessDomainFilter: 'all',
@@ -89,7 +89,12 @@ export function markAngularRuntimeModified(): void {
 }
 
 export function switchAngularMainTab(tabId: string): void {
-  runtimeState.ui['mainTab'] = normalizeMainWorkbenchId(tabId);
+  const nextTab = normalizeMainWorkbenchId(tabId);
+  runtimeState.ui['mainTab'] = nextTab;
+  if (nextTab === 'processWorkbench') {
+    runtimeState.ui['procView'] = 'valueDomain';
+    runtimeState.ui['processWorkbenchView'] = 'valueDomain';
+  }
   emitRuntimeRefresh();
 }
 

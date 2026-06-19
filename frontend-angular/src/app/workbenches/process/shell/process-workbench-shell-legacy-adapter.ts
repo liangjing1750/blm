@@ -128,7 +128,7 @@ export function createProcessWorkbenchShellLegacyAdapter(
     processId,
     taskId,
     view() {
-      const raw = ui().procView || 'stage';
+      const raw = ui().procView || 'valueDomain';
       if (raw === 'list') return 'editor';
       if (raw === 'valueDomain') return 'valueDomain';
       if (raw === 'node') return 'node';

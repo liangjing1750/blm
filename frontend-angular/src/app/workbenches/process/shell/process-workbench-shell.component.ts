@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, signal } from '@angular/core';
+import { Component, OnDestroy, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyFlowEdge,
@@ -39,6 +39,7 @@ export class ProcessWorkbenchShellComponent implements OnDestroy {
   protected readonly adapter: ProcessWorkbenchShellLegacyAdapter = createProcessWorkbenchShellLegacyAdapter();
   protected readonly editorAdapter = createProcessEditorLegacyAdapter();
   protected readonly viewState = signal<ProcessShellView>(this.adapter.view());
+  @ViewChild(ValueDomainWorkbenchComponent) private valueDomainWorkbench?: ValueDomainWorkbenchComponent;
   private lastObservedView = this.adapter.view();
   private readonly syncTimer = window.setInterval(() => this.syncExternalView(), 120);
 
@@ -235,6 +236,11 @@ export class ProcessWorkbenchShellComponent implements OnDestroy {
     return this.adapter.stageEditing();
   }
 
+  protected valueDomainEditing(): boolean {
+    this.version();
+    return this.valueDomainWorkbench?.isEditingFromShell() || false;
+  }
+
   protected openStage(): void {
     this.adapter.openStage();
     this.viewState.set('stage');
@@ -282,6 +288,11 @@ export class ProcessWorkbenchShellComponent implements OnDestroy {
 
   protected setStageEditing(editing: boolean): void {
     this.adapter.setStageEditing(editing);
+    this.refresh();
+  }
+
+  protected setValueDomainEditing(editing: boolean): void {
+    this.valueDomainWorkbench?.setEditingFromShell(editing);
     this.refresh();
   }
 

@@ -9,6 +9,13 @@
       </div>
       <div class="proc-view-actions">
         <span class="inline-help toolbar-help" tabindex="0" data-testid="process-view-help" data-tip="流程工作台提供价值流、阶段、流程和节点视图；切换只改变前端视图状态，不改业务模型。">?</span>
+        @if (view() === 'valueDomain') {
+          @if (valueDomainEditing()) {
+            <button class="btn btn-ghost-sm" type="button" data-testid="value-domain-editor-hide" (click)="setValueDomainEditing(false)">关闭编辑</button>
+          } @else {
+            <button class="btn btn-outline btn-sm" type="button" data-testid="value-domain-editor-open" (click)="setValueDomainEditing(true)">打开编辑</button>
+          }
+        }
         @if (view() === 'stage') {
           @if (stageEditing()) {
             <button class="btn btn-ghost-sm" type="button" data-testid="stage-editor-hide" (click)="setStageEditing(false)">关闭编辑</button>

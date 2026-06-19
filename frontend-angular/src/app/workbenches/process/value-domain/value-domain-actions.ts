@@ -8,6 +8,8 @@ import {
   ensureValueDomainModel,
   ensureValueDomainStages,
   findOrCreateValueDomainCell,
+  getValueDomainColumnUid,
+  getValueDomainLaneUid,
   getValueDomainStageId,
 } from '../../../core/document/value-domain-model';
 
@@ -64,15 +66,15 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
 
     addColumn(afterId = '') {
       const columns = model().columns;
-      const column = { id: nextId('panorama-column'), name: '', badge: '', scope: '' };
-      const index = columns.findIndex((item) => item.id === afterId);
+      const column = { uid: nextId('panorama-column'), name: '', badge: '', scope: '' };
+      const index = columns.findIndex((item) => getValueDomainColumnUid(item) === afterId);
       columns.splice(index >= 0 ? index + 1 : columns.length, 0, column);
       commit();
     },
 
     moveColumn(columnId: string, dir: number) {
       const columns = model().columns;
-      const index = columns.findIndex((item) => item.id === columnId);
+      const index = columns.findIndex((item) => getValueDomainColumnUid(item) === columnId);
       const targetIndex = index + dir;
       if (index < 0 || targetIndex < 0 || targetIndex >= columns.length) return;
       [columns[index], columns[targetIndex]] = [columns[targetIndex], columns[index]];
@@ -82,15 +84,15 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
     async removeColumn(columnId: string) {
       const panorama = model();
       if (panorama.columns.length <= 1) return;
-      const column = panorama.columns.find((item) => item.id === columnId);
+      const column = panorama.columns.find((item) => getValueDomainColumnUid(item) === columnId);
       if (!column) return;
       const affectedStages = stages().filter((stage) => stage.panoramaColumnUid === columnId);
       const message = affectedStages.length
-        ? `确认删除价值流「${column.name || column.id}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他单元格。`
-        : `确认删除价值流「${column.name || column.id}」吗？`;
+        ? `确认删除价值流「${column.name || getValueDomainColumnUid(column)}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他单元格。`
+        : `确认删除价值流「${column.name || getValueDomainColumnUid(column)}」吗？`;
       if (!await confirm(message, '删除价值流')) return;
-      panorama.columns = panorama.columns.filter((item) => item.id !== columnId);
-      panorama.cells = panorama.cells.filter((item) => (item.columnUid || item.columnId) !== columnId);
+      panorama.columns = panorama.columns.filter((item) => getValueDomainColumnUid(item) !== columnId);
+      panorama.cells = panorama.cells.filter((item) => item.columnUid !== columnId);
       stages().forEach((stage) => {
         if (stage.panoramaColumnUid === columnId) stage.panoramaColumnUid = '';
       });
@@ -98,7 +100,7 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
     },
 
     setColumn(columnId: string, key: 'name' | 'badge' | 'scope', value: string) {
-      const column = model().columns.find((item) => item.id === columnId);
+      const column = model().columns.find((item) => getValueDomainColumnUid(item) === columnId);
       if (!column) return;
       column[key] = value;
       commit();
@@ -106,15 +108,15 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
 
     addLane(afterId = '') {
       const lanes = model().lanes;
-      const lane = { id: nextId('panorama-lane'), name: '', badge: '', note: '' };
-      const index = lanes.findIndex((item) => item.id === afterId);
+      const lane = { uid: nextId('panorama-lane'), name: '', badge: '', note: '' };
+      const index = lanes.findIndex((item) => getValueDomainLaneUid(item) === afterId);
       lanes.splice(index >= 0 ? index + 1 : lanes.length, 0, lane);
       commit();
     },
 
     moveLane(laneId: string, dir: number) {
       const lanes = model().lanes;
-      const index = lanes.findIndex((item) => item.id === laneId);
+      const index = lanes.findIndex((item) => getValueDomainLaneUid(item) === laneId);
       const targetIndex = index + dir;
       if (index < 0 || targetIndex < 0 || targetIndex >= lanes.length) return;
       [lanes[index], lanes[targetIndex]] = [lanes[targetIndex], lanes[index]];
@@ -124,15 +126,15 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
     async removeLane(laneId: string) {
       const panorama = model();
       if (panorama.lanes.length <= 1) return;
-      const lane = panorama.lanes.find((item) => item.id === laneId);
+      const lane = panorama.lanes.find((item) => getValueDomainLaneUid(item) === laneId);
       if (!lane) return;
       const affectedStages = stages().filter((stage) => stage.panoramaLaneUid === laneId);
       const message = affectedStages.length
-        ? `确认删除业务域「${lane.name || lane.id}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他业务域。`
-        : `确认删除业务域「${lane.name || lane.id}」吗？`;
+        ? `确认删除业务域「${lane.name || getValueDomainLaneUid(lane)}」吗？其中 ${affectedStages.length} 个阶段会保留，但会变成未归类，需要重新放入其他业务域。`
+        : `确认删除业务域「${lane.name || getValueDomainLaneUid(lane)}」吗？`;
       if (!await confirm(message, '删除业务域')) return;
-      panorama.lanes = panorama.lanes.filter((item) => item.id !== laneId);
-      panorama.cells = panorama.cells.filter((item) => (item.laneUid || item.laneId) !== laneId);
+      panorama.lanes = panorama.lanes.filter((item) => getValueDomainLaneUid(item) !== laneId);
+      panorama.cells = panorama.cells.filter((item) => item.laneUid !== laneId);
       stages().forEach((stage) => {
         if (stage.panoramaLaneUid === laneId) stage.panoramaLaneUid = '';
       });
@@ -140,7 +142,7 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
     },
 
     setLane(laneId: string, key: 'name' | 'badge' | 'note', value: string) {
-      const lane = model().lanes.find((item) => item.id === laneId);
+      const lane = model().lanes.find((item) => getValueDomainLaneUid(item) === laneId);
       if (!lane) return;
       lane[key] = value;
       commit();
@@ -153,8 +155,8 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
         id: nextStageId(allStages),
         name: addOptions.name || `业务阶段${allStages.length + 1}`,
         subDomain: sourceStage?.subDomain || '',
-        panoramaColumnUid: addOptions.columnId || sourceStage?.panoramaColumnUid || model().columns[0]?.id || '',
-        panoramaLaneUid: addOptions.laneId || sourceStage?.panoramaLaneUid || model().lanes[0]?.id || '',
+        panoramaColumnUid: addOptions.columnId || sourceStage?.panoramaColumnUid || getValueDomainColumnUid(model().columns[0]) || '',
+        panoramaLaneUid: addOptions.laneId || sourceStage?.panoramaLaneUid || getValueDomainLaneUid(model().lanes[0]) || '',
         panoramaSlot: addOptions.slot || null,
       };
       const insertIndex = allStages.findIndex((item) => getValueDomainStageId(item) === afterStageId);

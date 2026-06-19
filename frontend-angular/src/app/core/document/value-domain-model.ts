@@ -13,14 +13,14 @@ export interface ValueDomainDocument {
 }
 
 export interface ValueDomainColumn {
-  id: string;
+  uid: string;
   name?: string;
   badge?: string;
   scope?: string;
 }
 
 export interface ValueDomainLane {
-  id: string;
+  uid: string;
   name?: string;
   badge?: string;
   note?: string;
@@ -29,8 +29,6 @@ export interface ValueDomainLane {
 export interface ValueDomainCell {
   laneUid?: string;
   columnUid?: string;
-  laneId?: string;
-  columnId?: string;
   status?: string;
   text?: string;
 }
@@ -64,10 +62,10 @@ export function ensureValueDomainModel(document: ValueDomainDocument, nextId: (p
   document.panorama.lanes ??= [];
   document.panorama.cells ??= [];
   if (!document.panorama.columns.length) {
-    document.panorama.columns.push({ id: nextId('panorama-column'), name: '默认价值流', badge: '', scope: '' });
+    document.panorama.columns.push({ uid: nextId('panorama-column'), name: '默认价值流', badge: '', scope: '' });
   }
   if (!document.panorama.lanes.length) {
-    document.panorama.lanes.push({ id: nextId('panorama-lane'), name: '默认业务域', badge: '', note: '' });
+    document.panorama.lanes.push({ uid: nextId('panorama-lane'), name: '默认业务域', badge: '', note: '' });
   }
   return document.panorama as ValueDomainModel;
 }
@@ -81,12 +79,20 @@ export function getValueDomainStageId(stage: ValueDomainStage): string {
   return String(stage.id || stage.uid || '');
 }
 
-export function findOrCreateValueDomainCell(model: ValueDomainModel, laneId: string, columnId: string): ValueDomainCell {
+export function getValueDomainColumnUid(column: ValueDomainColumn | null | undefined): string {
+  return String(column?.uid || '');
+}
+
+export function getValueDomainLaneUid(lane: ValueDomainLane | null | undefined): string {
+  return String(lane?.uid || '');
+}
+
+export function findOrCreateValueDomainCell(model: ValueDomainModel, laneUid: string, columnUid: string): ValueDomainCell {
   let cell = model.cells.find((item) => (
-    (item.laneUid || item.laneId) === laneId && (item.columnUid || item.columnId) === columnId
+    item.laneUid === laneUid && item.columnUid === columnUid
   ));
   if (!cell) {
-    cell = { laneUid: laneId, columnUid: columnId, status: '', text: '' };
+    cell = { laneUid, columnUid, status: '', text: '' };
     model.cells.push(cell);
   }
   return cell;

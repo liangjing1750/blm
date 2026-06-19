@@ -9,6 +9,12 @@ import {
   ProcessStageLegacyAdapter,
   createProcessStageLegacyAdapter,
 } from './process-stage-legacy-adapter';
+import {
+  getValueDomainColumnUid,
+  getValueDomainLaneUid,
+  ValueDomainColumn,
+  ValueDomainLane,
+} from '../../../core/document/value-domain-model';
 
 interface FlowNode {
   ref: LegacyStageFlowRef;
@@ -98,7 +104,7 @@ export class ProcessStageWorkbenchComponent {
 
   protected businessDomainLabel(stage: LegacyStage): string {
     const stageLaneId = String(stage.panoramaLaneUid || stage.panoramaLaneId || '').trim();
-    const lane = this.lanes().find((item) => item.id === stageLaneId)
+    const lane = this.lanes().find((item) => this.laneUid(item) === stageLaneId)
       || this.lanes().find((_, index) => index === 0);
     return lane?.name || '未归属业务域';
   }
@@ -117,16 +123,24 @@ export class ProcessStageWorkbenchComponent {
     return this.adapter.lanes();
   }
 
+  protected columnUid(column: ValueDomainColumn): string {
+    return getValueDomainColumnUid(column);
+  }
+
+  protected laneUid(lane: ValueDomainLane): string {
+    return getValueDomainLaneUid(lane);
+  }
+
   protected gridTemplateColumns(): string {
     const axisMin = this.editing() ? 220 : 154;
-    const tracks = this.columns().map((column) => `${this.columnWidth(column.id)}px`).join(' ');
+    const tracks = this.columns().map((column) => `${this.columnWidth(this.columnUid(column))}px`).join(' ');
     return `${axisMin}px ${tracks}`;
   }
 
   protected cellStages(laneId: string, columnId: string): LegacyStage[] {
     return this.stages().filter((stage, index) => (
-      (stage.panoramaLaneUid || stage.panoramaLaneId || this.lanes()[0]?.id || '') === laneId
-      && (stage.panoramaColumnUid || stage.panoramaColumnId || this.columns()[index % Math.max(1, this.columns().length)]?.id || '') === columnId
+      (stage.panoramaLaneUid || stage.panoramaLaneId || getValueDomainLaneUid(this.lanes()[0]) || '') === laneId
+      && (stage.panoramaColumnUid || stage.panoramaColumnId || getValueDomainColumnUid(this.columns()[index % Math.max(1, this.columns().length)]) || '') === columnId
     ));
   }
 
@@ -439,7 +453,7 @@ export class ProcessStageWorkbenchComponent {
 
   private columnWidth(columnId: string): number {
     const min = this.editing() ? 220 : 210;
-    return Math.max(min, ...this.lanes().map((lane) => this.stageBoardWidth(this.cellStages(lane.id, columnId)) + 16));
+    return Math.max(min, ...this.lanes().map((lane) => this.stageBoardWidth(this.cellStages(this.laneUid(lane), columnId)) + 16));
   }
 
   private routeFlowLink(from: FlowNode, to: FlowNode, index: number): string {

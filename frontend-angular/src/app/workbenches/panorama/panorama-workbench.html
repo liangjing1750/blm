@@ -43,26 +43,26 @@
               <span class="panorama-corner-slash"></span>
             </div>
           </div>
-          @for (column of panoramaModel().columns; track column.id) {
+          @for (column of panoramaModel().columns; track columnUid(column)) {
             <div class="panorama-matrix-head">
               <span>{{ column.name || column.badge || '价值流' }}</span>
             </div>
           }
 
-          @for (lane of panoramaModel().lanes; track lane.id) {
+          @for (lane of panoramaModel().lanes; track laneUid(lane)) {
             <div class="panorama-matrix-domain">
               <span>{{ lane.name || lane.badge || '业务域' }}</span>
             </div>
-            @for (column of panoramaModel().columns; track column.id) {
+            @for (column of panoramaModel().columns; track columnUid(column)) {
               <div class="panorama-matrix-cell">
-                @if (cell(lane.id, column.id); as matrixCell) {
+                @if (cell(laneUid(lane), columnUid(column)); as matrixCell) {
                   @if (matrixCell.status || matrixCell.text) {
                     <div class="panorama-empty-cell">{{ matrixCell.status || matrixCell.text }}</div>
                   }
                 }
-                @if (cellStages(lane.id, column.id).length) {
+                @if (cellStages(laneUid(lane), columnUid(column)).length) {
                   <div class="panorama-stage-lane">
-                    @for (stage of cellStages(lane.id, column.id); track stage.uid) {
+                    @for (stage of cellStages(laneUid(lane), columnUid(column)); track stage.uid) {
                       <div class="panorama-stage-cell">
                         <span class="panorama-stage-name">{{ stage.name }}</span>
                         <span class="panorama-stage-count">{{ stageProcessCount(stage.uid) }} 个流程</span>

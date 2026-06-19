@@ -137,25 +137,25 @@
                 <div class="value-stream-matrix" [class.is-editing]="editing()" data-testid="value-stream-matrix" [attr.data-editing]="editing() ? 'true' : 'false'">
                   <div class="value-stream-header-row" [style.grid-template-columns]="gridTemplateColumns()">
                     <div class="value-stream-axis">业务域 / 价值流</div>
-                    @for (column of columns(); track column.id) {
+                    @for (column of columns(); track columnUid(column)) {
                       <div class="value-stream-header" data-testid="value-stream-header">
-                        <strong>{{ column.name || column.id }}</strong>
+                        <strong>{{ column.name || columnUid(column) }}</strong>
                         @if (column.scope) { <span>{{ column.scope }}</span> }
                       </div>
                     }
                   </div>
                   <div class="value-stream-body">
-                    @for (lane of lanes(); track lane.id) {
+                    @for (lane of lanes(); track laneUid(lane)) {
                       <div class="value-stream-row" data-testid="value-stream-row" [style.grid-template-columns]="gridTemplateColumns()">
                         <div class="value-stream-lane">
                           @if (lane.badge) { <span class="value-stream-lane-badge">{{ lane.badge }}</span> }
-                          <strong>{{ lane.name || lane.id }}</strong>
+                          <strong>{{ lane.name || laneUid(lane) }}</strong>
                           @if (lane.note) { <span>{{ lane.note }}</span> }
                         </div>
-                        @for (column of columns(); track column.id) {
-                          <div class="value-stream-cell" [class.has-stages]="cellStages(lane.id, column.id).length" [class.is-editing]="editing()" [attr.data-cell-id]="lane.id + '::' + column.id" [attr.data-lane-id]="lane.id" [attr.data-column-id]="column.id">
-                            <div class="value-stream-stage-board" data-testid="value-stream-stage-board" [ngStyle]="stageBoardStyle(cellStages(lane.id, column.id))">
-                              @for (stage of cellStages(lane.id, column.id); track stageId(stage); let stageIndex = $index) {
+                        @for (column of columns(); track columnUid(column)) {
+                          <div class="value-stream-cell" [class.has-stages]="cellStages(laneUid(lane), columnUid(column)).length" [class.is-editing]="editing()" [attr.data-cell-id]="laneUid(lane) + '::' + columnUid(column)" [attr.data-lane-id]="laneUid(lane)" [attr.data-column-id]="columnUid(column)">
+                            <div class="value-stream-stage-board" data-testid="stage-workbench-stage-board" [ngStyle]="stageBoardStyle(cellStages(laneUid(lane), columnUid(column)))">
+                              @for (stage of cellStages(laneUid(lane), columnUid(column)); track stageId(stage); let stageIndex = $index) {
                                 <div class="stage-graph-node stage-kind stage-matrix-stage" role="button" tabindex="0" data-testid="stage-graph-node" [attr.data-node-id]="stageId(stage)" [attr.data-flow-count]="adapter.processCount(stageId(stage))" [ngStyle]="stageStyle(stage, stageIndex)" (click)="openStage(stage)" (dblclick)="startStageRename(stage, $event)">
                                   @if (renamingStageId() === stageId(stage)) {
                                     <input class="stage-name-inline-input stage-graph-node-title" data-testid="stage-name-inline-input" [ngModel]="stage.name || stageId(stage)" (blur)="finishStageRename(stage, $any($event.target).value)" (keydown.enter)="finishStageRename(stage, $any($event.target).value)" />

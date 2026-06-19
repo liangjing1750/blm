@@ -29,8 +29,8 @@ describe('value-domain actions', () => {
     expect(document.stages?.[0]).toMatchObject({
       id: 'S1',
       name: '业务阶段1',
-      panoramaColumnUid: document.panorama?.columns?.[0].id,
-      panoramaLaneUid: document.panorama?.lanes?.[0].id,
+      panoramaColumnUid: document.panorama?.columns?.[0].uid,
+      panoramaLaneUid: document.panorama?.lanes?.[0].uid,
     });
     expect(events).toEqual(['modified', 'modified', 'modified', 'sidebar']);
   });
@@ -38,8 +38,8 @@ describe('value-domain actions', () => {
   it('moves columns, lanes, and stages without changing references', () => {
     const { actions, document } = createHarness({
       panorama: {
-        columns: [{ id: 'c1' }, { id: 'c2' }],
-        lanes: [{ id: 'l1' }, { id: 'l2' }],
+        columns: [{ uid: 'c1' }, { uid: 'c2' }],
+        lanes: [{ uid: 'l1' }, { uid: 'l2' }],
         cells: [],
       },
       stages: [{ id: 'S1' }, { id: 'S2' }],
@@ -49,16 +49,37 @@ describe('value-domain actions', () => {
     actions.moveLane('l2', -1);
     actions.moveStage('S2', -1);
 
-    expect(document.panorama?.columns?.map((item) => item.id)).toEqual(['c2', 'c1']);
-    expect(document.panorama?.lanes?.map((item) => item.id)).toEqual(['l2', 'l1']);
+    expect(document.panorama?.columns?.map((item) => item.uid)).toEqual(['c2', 'c1']);
+    expect(document.panorama?.lanes?.map((item) => item.uid)).toEqual(['l2', 'l1']);
     expect(document.stages?.map((item) => item.id)).toEqual(['S2', 'S1']);
+  });
+
+  it('uses legacy uid fields when value-domain ids are absent', () => {
+    const { actions, document } = createHarness({
+      panorama: {
+        columns: [{ uid: 'column-a', name: 'A' }, { uid: 'column-b', name: 'B' }],
+        lanes: [{ uid: 'lane-a', name: 'A' }, { uid: 'lane-b', name: 'B' }],
+        cells: [],
+      },
+      stages: [{ id: 'S1' }],
+    });
+
+    actions.moveColumn('column-b', -1);
+    actions.moveLane('lane-b', -1);
+    actions.setCell('lane-b', 'column-b', 'text', 'ready');
+    actions.setStagePlacement('S1', 'lane-b', 'column-b', { row: 1, col: 2 });
+
+    expect(document.panorama?.columns?.map((item) => item.uid)).toEqual(['column-b', 'column-a']);
+    expect(document.panorama?.lanes?.map((item) => item.uid)).toEqual(['lane-b', 'lane-a']);
+    expect(document.panorama?.cells?.[0]).toMatchObject({ laneUid: 'lane-b', columnUid: 'column-b' });
+    expect(document.stages?.[0]).toMatchObject({ panoramaLaneUid: 'lane-b', panoramaColumnUid: 'column-b' });
   });
 
   it('removes columns and lanes while clearing cells and stage placement', async () => {
     const { actions, document, events } = createHarness({
       panorama: {
-        columns: [{ id: 'c1', name: '下单' }, { id: 'c2' }],
-        lanes: [{ id: 'l1', name: '销售' }, { id: 'l2' }],
+        columns: [{ uid: 'c1', name: '下单' }, { uid: 'c2' }],
+        lanes: [{ uid: 'l1', name: '销售' }, { uid: 'l2' }],
         cells: [
           { laneUid: 'l1', columnUid: 'c1', text: 'remove-by-column' },
           { laneUid: 'l1', columnUid: 'c2', text: 'remove-by-lane' },
@@ -71,8 +92,8 @@ describe('value-domain actions', () => {
     await actions.removeColumn('c1');
     await actions.removeLane('l1');
 
-    expect(document.panorama?.columns?.map((item) => item.id)).toEqual(['c2']);
-    expect(document.panorama?.lanes?.map((item) => item.id)).toEqual(['l2']);
+    expect(document.panorama?.columns?.map((item) => item.uid)).toEqual(['c2']);
+    expect(document.panorama?.lanes?.map((item) => item.uid)).toEqual(['l2']);
     expect(document.panorama?.cells).toEqual([{ laneUid: 'l2', columnUid: 'c2', text: 'keep' }]);
     expect(document.stages?.[0].panoramaColumnUid).toBe('');
     expect(document.stages?.[0].panoramaLaneUid).toBe('');
@@ -82,8 +103,8 @@ describe('value-domain actions', () => {
   it('updates cells and stage placement through the same action layer', () => {
     const { actions, document, events } = createHarness({
       panorama: {
-        columns: [{ id: 'c1' }],
-        lanes: [{ id: 'l1' }],
+        columns: [{ uid: 'c1' }],
+        lanes: [{ uid: 'l1' }],
         cells: [],
       },
       stages: [{ id: 'S1' }],
@@ -107,8 +128,8 @@ describe('value-domain actions', () => {
   it('creates named stages in a target cell and persists matrix slots', () => {
     const { actions, document, events } = createHarness({
       panorama: {
-        columns: [{ id: 'c1' }, { id: 'c2' }],
-        lanes: [{ id: 'l1' }, { id: 'l2' }],
+        columns: [{ uid: 'c1' }, { uid: 'c2' }],
+        lanes: [{ uid: 'l1' }, { uid: 'l2' }],
         cells: [],
       },
       stages: [],
