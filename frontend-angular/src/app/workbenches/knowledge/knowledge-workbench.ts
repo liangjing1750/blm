@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
@@ -80,7 +80,7 @@ interface FunctionView {
   templateUrl: './knowledge-workbench.html',
   styleUrl: './knowledge-workbench.scss',
 })
-export class KnowledgeWorkbenchComponent {
+export class KnowledgeWorkbenchComponent implements OnChanges {
   // 模块意图：术语和规则 tab 先完成 Angular 独立渲染；字典数据模型暂不新增写入能力。
   protected readonly activeTab = signal<'termManagement' | 'dictionaryManagement' | 'rules'>('termManagement');
   protected readonly selectedFunctionId = signal('');
@@ -88,6 +88,11 @@ export class KnowledgeWorkbenchComponent {
   protected readonly termsCollapsed = signal(false);
   protected readonly rulesCollapsed = signal(false);
   protected readonly version = signal(0);
+  @Input() initialTab: 'termManagement' | 'dictionaryManagement' | 'rules' = 'termManagement';
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['initialTab']) this.setTabFromShell(this.initialTab);
+  }
 
   setTabFromShell(tabId: string): void {
     if (tabId === 'rules') this.activeTab.set('rules');

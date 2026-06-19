@@ -87,27 +87,74 @@
               >
                 <span class="sb-caret-icon">▶</span>
               </button>
-              <span class="sb-grp-badge">{{ component.kind === 'core' ? '核心' : '通用' }}</span>
+              <span class="sb-grp-badge">业务组件</span>
               <span class="sb-name" [title]="component.name">{{ component.name }}</span>
               <span class="sb-count">{{ component.constructCount }}</span>
             </div>
-            <div *ngIf="!isCollapsedNode(componentKey(component))" class="sb-asset-section">
-              <div class="sb-asset-head">
-                构件 <span>{{ component.constructCount }}</span>
-                <small>实体 {{ component.entityCount }} · 任务 {{ component.taskCount }}</small>
-              </div>
-              <button
-                *ngFor="let construct of component.constructs"
-                type="button"
-                class="sb-asset-item sb-asset-link"
-                data-testid="sidebar-construct-item"
-                (click)="openComponentWorkbench()"
-              >
-                <span>{{ construct.name }}</span>
-                <small>{{ construct.entityCount }}E · {{ construct.taskCount }}T</small>
-              </button>
-              <div *ngIf="!component.constructs.length" class="sb-empty sb-asset-empty">暂无构件</div>
-            </div>
+            <ng-container *ngIf="!isCollapsedNode(componentKey(component))">
+              <ng-container *ngFor="let construct of component.constructs">
+                <div
+                  class="sb-grp-head sb-construct-head"
+                  data-testid="sidebar-construct-item"
+                  (click)="toggleNode(constructKey(component, construct))"
+                >
+                  <button
+                    type="button"
+                    class="sb-caret"
+                    [class.is-collapsed]="isCollapsedNode(constructKey(component, construct))"
+                    [class.is-expanded]="!isCollapsedNode(constructKey(component, construct))"
+                    (click)="$event.stopPropagation(); toggleNode(constructKey(component, construct))"
+                  >
+                    <span class="sb-caret-icon">▶</span>
+                  </button>
+                  <span class="sb-grp-badge">业务构件</span>
+                  <span class="sb-name" [title]="construct.name">{{ construct.name }}</span>
+                  <span class="sb-count">实体 {{ construct.entityCount }}</span>
+                  <span class="sb-count">任务 {{ construct.taskCount }}</span>
+                </div>
+                <div *ngIf="!isCollapsedNode(constructKey(component, construct))" class="sb-asset-section">
+                  <div class="sb-asset-head">实体和任务 <span>{{ construct.entityCount + construct.taskCount }}</span></div>
+                  <div class="sb-asset-items">
+                    <button
+                      *ngFor="let entity of construct.entities"
+                      type="button"
+                      class="sb-asset-item sb-asset-link is-entity"
+                      (click)="openComponentWorkbench()"
+                    >
+                      <span class="sb-asset-kind">实体</span>
+                      <span>{{ entity.name }}</span>
+                    </button>
+                    <button
+                      *ngFor="let task of construct.tasks"
+                      type="button"
+                      class="sb-asset-item sb-asset-link is-task"
+                      (click)="openComponentWorkbench()"
+                    >
+                      <span class="sb-asset-kind">任务</span>
+                      <span>{{ task.name }}</span>
+                    </button>
+                  </div>
+                  <div *ngIf="!construct.entities.length && !construct.tasks.length" class="sb-empty sb-asset-empty">
+                    暂无实体和任务
+                  </div>
+                  <div class="sb-related-processes">
+                    <div class="sb-asset-head">支撑流程 <span>{{ construct.processCount }}</span></div>
+                    <button
+                      *ngFor="let process of construct.processes"
+                      type="button"
+                      class="sb-proc-row sb-related-process-row"
+                      data-testid="sidebar-construct-process-row"
+                      (click)="openProcess(process)"
+                    >
+                      <span class="sb-proc-name">{{ process.name }}</span>
+                      <span class="sb-count">{{ process.nodeCount }}</span>
+                    </button>
+                    <div *ngIf="!construct.processes.length" class="sb-empty sb-asset-empty">暂无支撑流程</div>
+                  </div>
+                </div>
+              </ng-container>
+              <div *ngIf="!component.constructs.length" class="sb-empty sb-asset-empty">暂无业务构件</div>
+            </ng-container>
           </ng-container>
           <div *ngIf="!model().components.length" class="sb-empty">暂无业务组件</div>
         </div>
@@ -132,17 +179,36 @@
     <span class="sb-count">{{ stage.processCount }}</span>
   </div>
   <ng-container *ngIf="!isCollapsedNode(stageKey(stage))">
-    <button
-      *ngFor="let process of stage.processes"
-      type="button"
-      class="sb-proc-row"
-      data-testid="sidebar-process-row"
-      (click)="openProcess(process)"
-    >
-      <span class="sb-proc-name">{{ process.name }}</span>
-      <span class="sb-count">{{ process.nodeCount }}</span>
-    </button>
-    <div *ngIf="!stage.processes.length" class="sb-empty sb-stage-empty">暂无流程</div>
+    <ng-container *ngFor="let group of stage.processGroups">
+      <div class="sb-grp-head sb-flow-group-head" (click)="toggleNode(flowGroupKey(stage, group))">
+        <button
+          type="button"
+          class="sb-caret"
+          [class.is-collapsed]="isCollapsedNode(flowGroupKey(stage, group))"
+          [class.is-expanded]="!isCollapsedNode(flowGroupKey(stage, group))"
+          (click)="$event.stopPropagation(); toggleNode(flowGroupKey(stage, group))"
+        >
+          <span class="sb-caret-icon">▶</span>
+        </button>
+        <span class="sb-grp-badge">流程组</span>
+        <span class="sb-name" [title]="group.name">{{ group.name }}</span>
+        <span class="sb-count">{{ group.processCount }}</span>
+      </div>
+      <ng-container *ngIf="!isCollapsedNode(flowGroupKey(stage, group))">
+        <button
+          *ngFor="let process of group.processes"
+          type="button"
+          class="sb-proc-row in-flow-group"
+          data-testid="sidebar-process-row"
+          (click)="openProcess(process)"
+        >
+          <span class="sb-proc-name">{{ process.name }}</span>
+          <span class="sb-count">{{ process.nodeCount }}</span>
+        </button>
+        <div *ngIf="!group.processes.length" class="sb-empty sb-stage-empty">暂无流程</div>
+      </ng-container>
+    </ng-container>
+    <div *ngIf="!stage.processGroups.length" class="sb-empty sb-stage-empty">暂无流程组</div>
   </ng-container>
 </ng-template>
 

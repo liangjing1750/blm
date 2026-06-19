@@ -1,0 +1,207 @@
+{
+  "generatedAt": "2026-06-19T03:16:33.936Z",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "legacy": {
+    "label": "legacy",
+    "url": "http://127.0.0.1:8086",
+    "ok": true,
+    "selectors": {
+      "#topbar": [],
+      "#main": [],
+      "#sidebar": [
+        {
+          "text": "新建或打开文档开始建模",
+          "rect": {
+            "x": 0,
+            "y": 48,
+            "width": 240,
+            "height": 1032
+          },
+          "style": {
+            "display": "block",
+            "position": "relative",
+            "overflow": "auto",
+            "overflowY": "auto",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "#sidebar-content": [
+        {
+          "text": "新建或打开文档开始建模",
+          "rect": {
+            "x": 0,
+            "y": 48,
+            "width": 239,
+            "height": 99.19
+          },
+          "style": {
+            "display": "block",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "8px 0px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "#sidebar-resize-handle": [
+        {
+          "text": "",
+          "rect": {
+            "x": 229,
+            "y": 48,
+            "width": 10,
+            "height": 1032
+          },
+          "style": {
+            "display": "block",
+            "position": "absolute",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "#sb-toggle-btn": [
+        {
+          "text": "折叠",
+          "rect": {
+            "x": 240,
+            "y": 537,
+            "width": 23,
+            "height": 54
+          },
+          "style": {
+            "display": "block",
+            "position": "absolute",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "12px",
+            "padding": "14px 5px",
+            "margin": "0px",
+            "borderRadius": "0px 6px 6px 0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(100, 116, 139)"
+          }
+        }
+      ],
+      "#tab-bar": [
+        {
+          "text": "",
+          "rect": {
+            "x": 240,
+            "y": 48,
+            "width": 1680,
+            "height": 1
+          },
+          "style": {
+            "display": "flex",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px 16px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(255, 255, 255)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "[data-testid=\"angular-shell-tab-bar\"]": [],
+      "[data-testid=\"angular-sidebar-directory\"]": [],
+      "[data-testid=\"angular-sidebar-resize-handle\"]": [],
+      "#angular-sb-toggle-btn": [],
+      ".sb-value-stream-head": [],
+      ".sb-stage-head": [],
+      ".sb-flow-group-head": [],
+      ".sb-capability-head": [],
+      ".sb-construct-head": [],
+      ".sb-asset-head": [],
+      ".view-toggle-group": [],
+      ".vtb": [],
+      "[data-testid=\"panorama-editor-open\"]": []
+    },
+    "error": null
+  },
+  "angular": {
+    "label": "angular",
+    "url": "http://127.0.0.1:8081",
+    "ok": true,
+    "selectors": {
+      "#topbar": [],
+      "#main": [
+        {
+          "text": "BLM（Business Language Modeling）业务语言建模结构化记录业务理解，生成可读文档。新建文档打开文档",
+          "rect": {
+            "x": 0,
+            "y": 48,
+            "width": 1920,
+            "height": 1032
+          },
+          "style": {
+            "display": "flex",
+            "position": "static",
+            "overflow": "visible",
+            "overflowY": "visible",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "padding": "0px",
+            "margin": "0px",
+            "borderRadius": "0px",
+            "backgroundColor": "rgb(238, 242, 247)",
+            "color": "rgb(30, 41, 59)"
+          }
+        }
+      ],
+      "#sidebar": [],
+      "#sidebar-content": [],
+      "#sidebar-resize-handle": [],
+      "#sb-toggle-btn": [],
+      "#tab-bar": [],
+      "[data-testid=\"angular-shell-tab-bar\"]": [],
+      "[data-testid=\"angular-sidebar-directory\"]": [],
+      "[data-testid=\"angular-sidebar-resize-handle\"]": [],
+      "#angular-sb-toggle-btn": [],
+      ".sb-value-stream-head": [],
+      ".sb-stage-head": [],
+      ".sb-flow-group-head": [],
+      ".sb-capability-head": [],
+      ".sb-construct-head": [],
+      ".sb-asset-head": [],
+      ".view-toggle-group": [],
+      ".vtb": [],
+      "[data-testid=\"panorama-editor-open\"]": []
+    },
+    "error": null
+  }
+}

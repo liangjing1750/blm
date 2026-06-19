@@ -114,6 +114,14 @@ export interface SidebarStageGroup {
   id: string;
   name: string;
   processCount: number;
+  processGroups: SidebarProcessGroup[];
+}
+
+export interface SidebarProcessGroup {
+  id: string;
+  name: string;
+  implicit: boolean;
+  processCount: number;
   processes: SidebarProcessSummary[];
 }
 
@@ -140,6 +148,16 @@ export interface SidebarConstructSummary {
   name: string;
   entityCount: number;
   taskCount: number;
+  processCount: number;
+  entities: SidebarAssetSummary[];
+  tasks: SidebarAssetSummary[];
+  processes: SidebarProcessSummary[];
+}
+
+export interface SidebarAssetSummary {
+  id: string;
+  name: string;
+  kind: 'entity' | 'task';
 }
 
 export interface SidebarAdapter {
@@ -204,6 +222,39 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     return [];
   };
 
+  const summarizeProcess = (process: SidebarProcess, stageName = '', capabilityName = ''): SidebarProcessSummary => ({
+    id: idOf(process),
+    name: nameOf(process, '未命名流程'),
+    nodeCount: processNodes(process).length,
+    stageName,
+    capabilityName,
+  });
+
+  const processGroups = (processes: SidebarProcess[], stageName = ''): SidebarProcessGroup[] => {
+    const hasNamedGroup = processes.some((process) => String((process as Record<string, any>)['flowGroup'] || '').trim());
+    if (!hasNamedGroup) {
+      return [{
+        id: 'all',
+        name: '默认流程组',
+        implicit: true,
+        processCount: processes.length,
+        processes: processes.map((process) => summarizeProcess(process, stageName)),
+      }];
+    }
+    const groups = new Map<string, SidebarProcess[]>();
+    processes.forEach((process) => {
+      const groupName = String((process as Record<string, any>)['flowGroup'] || '').trim() || '未分组';
+      groups.set(groupName, [...(groups.get(groupName) || []), process]);
+    });
+    return Array.from(groups.entries()).map(([name, groupProcesses], index) => ({
+      id: `group-${index + 1}`,
+      name,
+      implicit: false,
+      processCount: groupProcesses.length,
+      processes: groupProcesses.map((process) => summarizeProcess(process, stageName)),
+    }));
+  };
+
   const processesForStage = (stage: SidebarStage, domainId: string): SidebarProcess[] => {
     const stageIds = new Set([stage.uid, stage.id, stage.name].filter(Boolean).map(String));
     const explicitRefs = new Set([...(stage.processUids || []), ...(stage.processIds || [])].filter(Boolean).map(String));
@@ -254,6 +305,31 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     ));
   };
 
+  const constructProcesses = (construct: SidebarConstruct, tasks: SidebarTaskDefinition[], capabilityName = ''): SidebarProcessSummary[] => {
+    const constructIds = new Set([construct.uid, construct.id, construct.name].filter(Boolean).map(String));
+    const relatedIds = new Set([
+      ...(((construct as Record<string, any>)['relatedProcessIds'] as string[] | undefined) || []),
+      ...(((construct as Record<string, any>)['processIds'] as string[] | undefined) || []),
+    ].filter(Boolean).map(String));
+    const taskIds = new Set(tasks.map((task) => idOf(task)).filter(Boolean));
+    return (doc().processes || [])
+      .filter((process) => {
+        const processIds = new Set([process.uid, process.id, process.name].filter(Boolean).map(String));
+        if ([...processIds].some((value) => relatedIds.has(value))) return true;
+        if (refMatches((process as Record<string, any>)['businessConstructUid'], constructIds, constructIds)) return true;
+        const processConstructs = ((process as Record<string, any>)['businessConstructUids'] as string[] | undefined) || [];
+        if (processConstructs.some((id) => refMatches(id, constructIds, constructIds))) return true;
+        return processNodes(process).some((node) => {
+          const orchestrationTasks = [
+            ...(((node as Record<string, any>)['orchestrationTasks'] as Record<string, any>[] | undefined) || []),
+            ...(((node as Record<string, any>)['taskRefs'] as Record<string, any>[] | undefined) || []),
+          ];
+          return orchestrationTasks.some((task) => taskIds.has(String(task['taskDefinitionUid'] || task['taskDefinitionId'] || task['id'] || '').trim()));
+        });
+      })
+      .map((process) => summarizeProcess(process, '', capabilityName));
+  };
+
   const componentEntityCount = (component: SidebarComponentItem, constructs: SidebarConstruct[]): number => {
     const explicit = new Set((component.entityUids || []).filter(Boolean).map(String));
     constructs.forEach((construct) => constructEntities(construct).forEach((entity) => explicit.add(idOf(entity))));
@@ -273,16 +349,12 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       const filteredStages = (doc().stages || []).filter((stage) => matchesDomain(stage, selectedDomainId));
       const stageGroups: SidebarStageGroup[] = filteredStages.map((stage) => {
         const processes = processesForStage(stage, selectedDomainId);
+        const stageName = nameOf(stage, '未命名阶段');
         return {
           id: idOf(stage),
-          name: nameOf(stage, '未命名阶段'),
+          name: stageName,
           processCount: processes.length,
-          processes: processes.map((process) => ({
-            id: idOf(process),
-            name: nameOf(process, '未命名流程'),
-            nodeCount: processNodes(process).length,
-            stageName: nameOf(stage, ''),
-          })),
+          processGroups: processGroups(processes, stageName),
         };
       });
 
@@ -304,18 +376,37 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
 
       const streamedStageIds = new Set(valueStreams.flatMap((stream) => stream.stages.map((stage) => stage.id)));
       const orphanStages = stageGroups.filter((stage) => !streamedStageIds.has(stage.id));
-      const allProcesses = [...stageGroups.flatMap((stage) => stage.processes)];
+      const allProcesses = [
+        ...stageGroups.flatMap((stage) => stage.processGroups.flatMap((group) => group.processes)),
+      ];
       const nodes = (doc().processes || []).flatMap((process) => processNodes(process));
       const components = componentItems()
         .filter((component) => matchesDomain(component, selectedDomainId))
         .map<SidebarComponentGroup>((component) => {
           const constructs = (doc().businessConstructs || []).filter((construct) => constructBelongsToComponent(construct, component));
-          const constructSummaries = constructs.map((construct) => ({
-            id: idOf(construct),
-            name: nameOf(construct, '未命名构件'),
-            entityCount: constructEntities(construct).length,
-            taskCount: constructTasks(construct).length,
-          }));
+          const constructSummaries = constructs.map((construct) => {
+            const entities = constructEntities(construct).map((entity) => ({
+              id: idOf(entity),
+              name: nameOf(entity, '未命名实体'),
+              kind: 'entity' as const,
+            }));
+            const tasks = constructTasks(construct).map((task) => ({
+              id: idOf(task),
+              name: nameOf(task, '未命名任务'),
+              kind: 'task' as const,
+            }));
+            const processes = constructProcesses(construct, constructTasks(construct), nameOf(component, ''));
+            return {
+              id: idOf(construct),
+              name: nameOf(construct, '未命名业务构件'),
+              entityCount: entities.length,
+              taskCount: tasks.length,
+              processCount: processes.length,
+              entities,
+              tasks,
+              processes,
+            };
+          });
           return {
             id: idOf(component),
             name: nameOf(component, '未命名组件'),

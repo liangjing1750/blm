@@ -81,18 +81,20 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     expect(compiled.querySelector('[data-testid="panorama-subtab-overview"]')?.textContent).toContain('全景视图');
-    expect(compiled.querySelector('[data-testid="panorama-subtab-valueDomain"]')?.textContent).toContain('价值与业务域');
-    expect(compiled.querySelector('[data-testid="panorama-subtab-components"]')?.textContent).toContain('业务组件');
+    expect(compiled.querySelector('[data-testid="panorama-subtab-roles"]')?.textContent).toContain('角色管理');
+    expect(compiled.querySelector('[data-testid="panorama-subtab-terms"]')?.textContent).toContain('术语管理');
+    expect(compiled.querySelector('[data-testid="panorama-subtab-dictionary"]')?.textContent).toContain('字典管理');
+    expect(compiled.querySelector('[data-testid="panorama-subtab-rules"]')?.textContent).toContain('规则管理');
     expect(compiled.querySelector('[data-testid="panorama-overview-rich"]')?.textContent).toContain('入库价值流');
     expect(compiled.querySelector('[data-testid="panorama-matrix"]')?.textContent).toContain('准备');
 
-    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-valueDomain"]')?.click();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
     fixture.detectChanges();
-    expect(compiled.querySelector('[data-testid="value-domain-angular"]')?.textContent).toContain('入库价值流');
+    expect(compiled.querySelector('[data-testid="role-summary-card"]')).toBeTruthy();
 
-    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-components"]')?.click();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-terms"]')?.click();
     fixture.detectChanges();
-    expect(compiled.querySelector('[data-testid="business-model-angular"]')?.textContent).toContain('仓单组件');
+    expect(compiled.querySelector('[data-testid="knowledge-angular"]')?.textContent).toContain('术语管理');
   });
 
   it('should synchronize the main workbench from the browser route on refresh', async () => {
@@ -123,6 +125,8 @@ describe('App', () => {
     expect(runtime.ui['mainTab']).toBe('panoramaWorkbench');
     expect(compiled.querySelector('[data-testid="tab-panoramaWorkbench"]')?.classList.contains('active')).toBe(true);
     expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="tab-orchestrationWorkbench"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="tab-entity"]')).toBeFalsy();
   });
 
   it('should keep the sidebar as an exclusive left column with collapsed directory nodes by default', async () => {
@@ -135,11 +139,11 @@ describe('App', () => {
       roles: [],
       stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
       stageFlowRefs: [{ uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 }],
-      processes: [{ uid: 'process-1', name: '入库预约', nodes: [] }],
-      entities: [],
+      processes: [{ uid: 'process-1', name: '入库预约', flowGroup: '入库组', businessConstructUid: 'construct-1', nodes: [] }],
+      entities: [{ uid: 'entity-1', name: '仓单', businessConstructUid: 'construct-1', fields: [] }],
       businessComponents: [{ uid: 'bc-1', name: '循环', kind: 'core', entityUids: [], taskDefinitionUids: [], stageUids: ['stage-1'] }],
       businessConstructs: [{ uid: 'construct-1', name: '会话运行构件', businessComponentUid: 'bc-1' }],
-      taskDefinitions: [],
+      taskDefinitions: [{ uid: 'task-1', name: '代理运行', businessConstructUid: 'construct-1' }],
       terms: [],
       rules: [],
       panorama: {
@@ -170,6 +174,29 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="angular-sidebar-directory"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="sidebar-process-row"]')).toBeFalsy();
     expect(compiled.querySelector('[data-testid="sidebar-construct-item"]')).toBeFalsy();
+
+    fixture.destroy();
+    runtime.ui['sbCollapse'] = {
+      ...runtime.ui['sbCollapse'],
+      'stage-tree-stage-1': false,
+      'flow-group-stage-1-group-1': false,
+      'cap-bc-1': false,
+      'construct-bc-1-construct-1': false,
+    };
+    runtime.ui['sidebarCollapsed'] = false;
+    const expandedFixture = TestBed.createComponent(LegacyShellComponent);
+    expandedFixture.detectChanges();
+    await expandedFixture.whenStable();
+    expandedFixture.detectChanges();
+    const expanded = expandedFixture.nativeElement as HTMLElement;
+
+    expect(expanded.querySelector('.sb-flow-group-head')?.textContent).toContain('流程组');
+
+    expect(expanded.querySelector('[data-testid="sidebar-process-row"]')?.textContent).toContain('入库预约');
+
+    expect(expanded.querySelector('[data-testid="sidebar-construct-item"]')?.textContent).toContain('业务构件');
+    expect(expanded.querySelector('.sb-asset-section')?.textContent).toContain('实体和任务');
+    expect(expanded.querySelector('.sb-related-processes')?.textContent).toContain('支撑流程');
   });
 
   it('should keep migration status aligned with restored Angular workbench entries', () => {

@@ -4,10 +4,10 @@ import { BlmDocument, BusinessComponent, Stage } from '../../core/document/docum
 import { DocumentStore } from '../../core/document/document-store';
 import { getComponentSupportedStages, getStageProcesses } from '../../core/document/document-model';
 import { ValueDomainCell, ValueDomainColumn, ValueDomainLane } from '../../core/document/value-domain-model';
-import { BusinessModelWorkbenchComponent } from '../component/business-model/business-model-workbench.component';
-import { ValueDomainWorkbenchComponent } from '../process/value-domain/value-domain-workbench.component';
+import { KnowledgeWorkbenchComponent } from '../knowledge/knowledge-workbench';
+import { RoleWorkbenchComponent } from '../role/role-workbench';
 
-type PanoramaSubtab = 'overview' | 'valueDomain' | 'components';
+type PanoramaSubtab = 'overview' | 'roles' | 'terms' | 'dictionary' | 'rules';
 
 interface PanoramaSubtabItem {
   id: PanoramaSubtab;
@@ -24,7 +24,7 @@ interface PanoramaDocument extends BlmDocument {
 
 @Component({
   selector: 'app-panorama-workbench',
-  imports: [CommonModule, ValueDomainWorkbenchComponent, BusinessModelWorkbenchComponent],
+  imports: [CommonModule, KnowledgeWorkbenchComponent, RoleWorkbenchComponent],
   templateUrl: './panorama-workbench.html',
   styleUrl: '../../shared/layout/workbench-section.css',
 })
@@ -32,8 +32,10 @@ export class PanoramaWorkbench {
   // 模块意图：全景工作台是跨模型入口，只编排“视图投影”和已迁移子工作台，不在这里承接具体编辑命令。
   protected readonly tabs: PanoramaSubtabItem[] = [
     { id: 'overview', label: '全景视图' },
-    { id: 'valueDomain', label: '价值与业务域' },
-    { id: 'components', label: '业务组件' },
+    { id: 'roles', label: '角色管理' },
+    { id: 'terms', label: '术语管理' },
+    { id: 'dictionary', label: '字典管理' },
+    { id: 'rules', label: '规则管理' },
   ];
   protected readonly activeTab = signal<PanoramaSubtab>('overview');
   private readonly documentStore = inject(DocumentStore);

@@ -4,19 +4,26 @@
     <p>战略、价值流与业务域矩阵、业务组件放在同一张业务全景里。</p>
   </header>
 
-  <nav class="domain-subtab-bar" data-testid="panorama-subtabs" aria-label="全景工作台视图">
-    @for (tab of tabs; track tab.id) {
-      <button
-        class="domain-subtab-btn"
-        type="button"
-        [class.active]="activeTab() === tab.id"
-        [attr.data-testid]="'panorama-subtab-' + tab.id"
-        (click)="switchTab(tab.id)"
-      >
-        {{ tab.label }}
-      </button>
-    }
-  </nav>
+  <div class="proc-view-toolbar panorama-view-toolbar">
+    <div class="proc-view-toolbar-main">
+      <div class="view-toggle-group" data-testid="panorama-subtabs" aria-label="全景工作台视图">
+        @for (tab of tabs; track tab.id) {
+          <button
+            class="vtb"
+            type="button"
+            [class.active]="activeTab() === tab.id"
+            [attr.data-testid]="'panorama-subtab-' + tab.id"
+            (click)="switchTab(tab.id)"
+          >
+            {{ tab.label }}
+          </button>
+        }
+      </div>
+      <div class="proc-view-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="panorama-editor-open">打开编辑</button>
+      </div>
+    </div>
+  </div>
 
   @if (activeTab() === 'overview') {
     <div class="panorama-business-map" data-testid="panorama-overview-rich">
@@ -105,9 +112,13 @@
         </section>
       </div>
     </div>
-  } @else if (activeTab() === 'valueDomain') {
-    <app-value-domain-workbench />
+  } @else if (activeTab() === 'roles') {
+    <app-role-workbench />
+  } @else if (activeTab() === 'terms') {
+    <app-knowledge-workbench initialTab="termManagement" />
+  } @else if (activeTab() === 'dictionary') {
+    <app-knowledge-workbench initialTab="dictionaryManagement" />
   } @else {
-    <app-business-model-workbench />
+    <app-knowledge-workbench initialTab="rules" />
   }
 </section>

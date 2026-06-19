@@ -6,6 +6,7 @@ export const routes: Routes = [
   { path: 'panorama', component: LegacyShellComponent },
   { path: 'process', component: LegacyShellComponent },
   { path: 'component', component: LegacyShellComponent },
+  { path: 'preview', component: LegacyShellComponent },
   { path: 'orchestration', component: LegacyShellComponent },
   { path: 'entity', component: LegacyShellComponent },
   { path: 'knowledge', component: LegacyShellComponent },

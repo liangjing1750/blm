@@ -103,9 +103,40 @@
   color: #0284c7;
 }
 
+.sb-flow-group-head {
+  padding: 5px 12px 5px 52px;
+  background: #fbfdff;
+}
+
+.sb-proc-row.in-flow-group {
+  padding-left: 86px;
+  background: #fff;
+}
+
 .sb-capability-head .sb-grp-badge {
   background: #d8faeb;
   color: #047857;
+}
+
+.sb-construct-head {
+  padding: 5px 10px 5px 32px;
+  font-weight: 800;
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.sb-construct-head:hover {
+  background: #ffedd5;
+}
+
+.sb-construct-head .sb-grp-badge {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.sb-asset-section {
+  padding: 4px 0 6px;
+  background: #fff;
 }
 
 .sb-asset-head {
@@ -125,14 +156,21 @@
   font-weight: 500;
 }
 
+.sb-asset-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 1px 10px 4px 42px;
+}
+
 .sb-asset-link {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 4px;
   width: auto;
-  max-width: calc(100% - 48px);
   min-height: 26px;
-  margin: 2px 0 2px 42px;
+  margin: 0;
   padding: 3px 9px;
   border: 1px solid #bfdbfe;
   border-radius: 7px;
@@ -142,10 +180,22 @@
   font-weight: 700;
 }
 
+.sb-asset-link.is-task {
+  border-color: #c7d2fe;
+  background: #f8f7ff;
+}
+
+.sb-asset-kind {
+  color: #2563eb;
+  font-weight: 800;
+}
+
 .sb-asset-link small {
   color: #64748b;
   font-size: 12px;
 }
+
+.sb-related-process-row { padding-left: 62px; }
 
 .sb-count {
   min-width: 20px;
@@ -220,10 +270,10 @@
 
 .angular-sb-toggle {
   position: fixed;
-  left: 0;
+  left: var(--angular-sidebar-width, 360px);
   top: 50%;
   z-index: 30;
-  transform: translateY(-50%);
+  transform: translate(-1px, -50%);
   writing-mode: vertical-rl;
   min-width: 28px;
   padding: 10px 4px;
@@ -243,10 +293,11 @@
 
 .angular-sidebar-resize {
   position: fixed;
-  top: 64px;
+  top: 48px;
   bottom: 0;
-  left: var(--sidebar-width, 360px);
-  width: 6px;
+  left: var(--angular-sidebar-width, 360px);
+  width: 8px;
+  z-index: 29;
   cursor: ew-resize;
 }
 

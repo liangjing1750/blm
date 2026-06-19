@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import {
   SidebarAdapter,
   SidebarComponentGroup,
+  SidebarConstructSummary,
+  SidebarProcessGroup,
   SidebarProcessSummary,
   SidebarStageGroup,
   SidebarValueStreamGroup,
@@ -100,8 +102,16 @@ export class SidebarDirectoryComponent implements OnInit {
     return `stage-tree-${stage.id}`;
   }
 
+  protected flowGroupKey(stage: SidebarStageGroup, group: SidebarProcessGroup): string {
+    return `flow-group-${stage.id}-${group.id}`;
+  }
+
   protected componentKey(component: SidebarComponentGroup): string {
     return `cap-${component.id}`;
+  }
+
+  protected constructKey(component: SidebarComponentGroup, construct: SidebarConstructSummary): string {
+    return `construct-${component.id}-${construct.id}`;
   }
 
   // 边界细节：旧壳层的宽度样式在 #sidebar 上，Angular 组件挂在 #sidebar-content 内部；
@@ -118,6 +128,10 @@ export class SidebarDirectoryComponent implements OnInit {
       sidebar.style.width = `${this.sidebarWidth()}px`;
       sidebar.style.minWidth = `${this.sidebarWidth()}px`;
     }
+    this.documentRef.documentElement.style.setProperty(
+      '--angular-sidebar-width',
+      this.collapsed() ? '0px' : `${this.sidebarWidth()}px`,
+    );
     if (toggle) toggle.textContent = this.collapsed() ? '展开' : '折叠';
   }
 }
