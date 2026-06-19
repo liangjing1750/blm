@@ -101,9 +101,12 @@
                   [class.is-active]="selectedFunction()?.id === item.id"
                   (click)="selectFunction(item.id)"
                 >
-                  <strong>{{ item.name }}</strong>
-                  <span>{{ item.description || '暂无功能说明' }}</span>
-                  <em>{{ item.ruleCount }} 条规则 / {{ item.nodeCount }} 个节点</em>
+                  <span class="knowledge-function-main">
+                    <strong>{{ item.name }}</strong>
+                    <em>{{ item.ruleCount }}</em>
+                  </span>
+                  <span class="knowledge-function-desc">{{ item.description || '暂无功能说明' }}</span>
+                  <span class="knowledge-function-meta">{{ item.nodeCount }} 个节点</span>
                 </button>
               }
             </div>
@@ -132,7 +135,7 @@
                       <span class="knowledge-rule-cell"><b>节点</b>{{ rule.nodeName }}</span>
                       <span class="knowledge-rule-cell"><b>功能</b>{{ rule.processName }}</span>
                     </div>
-                    <p>{{ rule.content || '暂无内容' }}</p>
+                    <p>{{ readableRuleContent(rule.content) }}</p>
                   </article>
                 }
               </div>

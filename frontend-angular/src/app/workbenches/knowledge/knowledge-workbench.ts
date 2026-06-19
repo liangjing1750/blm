@@ -164,6 +164,24 @@ export class KnowledgeWorkbenchComponent implements OnChanges {
     });
   }
 
+  protected readableRuleContent(content: string): string {
+    const source = content.trim();
+    if (!source) return '暂无内容';
+    // 边界细节：这里只做只读展示净化，不能把处理后的文本写回原始模型。
+    return source
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(div|p|ul|ol)>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '\n- ')
+      .replace(/<\/li>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
   protected selectFunction(functionId: string): void {
     this.selectedFunctionId.set(functionId);
   }
