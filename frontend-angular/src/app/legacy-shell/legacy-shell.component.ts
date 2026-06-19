@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
+import { CollaborationService } from '../core/collaboration/collaboration.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
 import { getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
@@ -83,6 +84,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
 
   constructor(
     private readonly api: ApiService,
+    protected readonly collaboration: CollaborationService,
     private readonly documentStore: DocumentStore,
     private readonly syncService: SyncService,
     private readonly router: Router,
@@ -93,11 +95,13 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     this.routeSubscription = this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event) => this.syncMainTabFromRoute(event.urlAfterRedirects));
+    if (this.runtime.currentFile) this.collaboration.start(this.runtime.currentFile);
     void this.refreshWorkspaceFiles();
   }
 
   ngOnDestroy(): void {
     this.routeSubscription?.unsubscribe();
+    this.collaboration.stop();
   }
 
   @HostListener('document:click', ['$event'])
@@ -120,7 +124,16 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
 
   protected modifiedLabel(): string {
     if (this.runtime.collab.syncing) return '同步中';
-    return this.runtime.modified ? '本地未提交' : '';
+    return this.runtime.modified || this.runtime.collab.pendingSnapshot ? '待同步' : '';
+  }
+
+  protected collaborationLabel(): string {
+    return this.collaboration.statusText();
+  }
+
+  protected collaborationTitle(): string {
+    const names = this.collaboration.onlineNames();
+    return names.length ? `在线：${names.join('、')}` : '正在连接实时协作会话';
   }
 
   protected toggleDropdown(name: string, event?: Event): void {
@@ -206,6 +219,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     await this.runBusy(async () => {
       await this.api.deleteDocument(deletingName);
       replaceRuntimeDocument({}, '');
+      this.collaboration.stop();
       this.modal.set('');
       await this.refreshWorkspaceFiles();
       this.showToast('文档已删除');
@@ -457,6 +471,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   private openLoadedDocument(name: string, payload: any): void {
     const document = payload?.document || payload;
     this.documentStore.load(document, name);
+    this.collaboration.start(name);
     this.runtime.ui['mainTab'] = 'panoramaWorkbench';
     void this.router.navigateByUrl('/panorama');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));

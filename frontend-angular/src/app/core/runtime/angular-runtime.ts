@@ -25,6 +25,12 @@ export interface AngularRuntimeState {
     acceptedSeq: number;
     syncing: boolean;
     lastError: string;
+    connected: boolean;
+    users: Array<Record<string, unknown>>;
+    pendingSnapshot: boolean;
+    hasRemoteUpdate: boolean;
+    lastSyncedAt: string;
+    lastActivity: { user: string; at: string } | null;
   };
   recovery: Record<string, any>;
 }
@@ -53,6 +59,12 @@ const runtimeState: AngularRuntimeState = {
     acceptedSeq: 0,
     syncing: false,
     lastError: '',
+    connected: false,
+    users: [],
+    pendingSnapshot: false,
+    hasRemoteUpdate: false,
+    lastSyncedAt: '',
+    lastActivity: null,
   },
   recovery: {},
 };
@@ -70,6 +82,9 @@ export function replaceRuntimeDocument(document: any, fileName = ''): void {
 
 export function markAngularRuntimeModified(): void {
   runtimeState.modified = true;
+  if (runtimeState.currentFile && !runtimeState.readOnly) {
+    runtimeState.collab.pendingSnapshot = true;
+  }
   emitRuntimeRefresh();
 }
 

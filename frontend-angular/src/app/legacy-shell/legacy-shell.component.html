@@ -5,6 +5,14 @@
       <span class="product-version">v2.11</span>
     </span>
     <span class="file-name" data-testid="current-file-name" [title]="currentDocumentLabel()">{{ currentDocumentLabel() }}</span>
+    <span
+      *ngIf="collaborationLabel()"
+      class="collab-status"
+      [class.connected]="runtime.collab.connected"
+      [class.offline]="!runtime.collab.connected"
+      [title]="collaborationTitle()"
+      data-testid="collab-status"
+    >{{ collaborationLabel() }}</span>
     <span *ngIf="modifiedLabel()" class="modified-badge has-local" data-testid="modified-badge">{{ modifiedLabel() }}</span>
   </div>
 

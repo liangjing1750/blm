@@ -1,11 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../api/api.service';
+import { CollaborationService } from '../collaboration/collaboration.service';
 import { DocumentStore } from '../document/document-store';
 import { getAngularRuntimeState, replaceRuntimeDocument } from '../runtime/angular-runtime';
 
 @Injectable({ providedIn: 'root' })
 export class SyncService {
   private readonly api = inject(ApiService);
+  private readonly collaboration = inject(CollaborationService);
   private readonly documentStore = inject(DocumentStore);
 
   // 模块意图：把“立即同步”从旧 collab.js 中抽到 Angular 服务，保留服务端协作合并入口。
@@ -16,25 +18,21 @@ export class SyncService {
     if (!runtime.currentFile) {
       throw new Error('请先打开或保存文档');
     }
-    runtime.collab.syncing = true;
-    runtime.collab.lastError = '';
+    this.collaboration.beginSync();
     try {
       const result = await this.api.collabSnapshot(runtime.currentFile, runtime.doc, {
-        baseSeq: runtime.collab.seq || runtime.collab.acceptedSeq || 0,
-        user: {},
+        baseSeq: runtime.collab.acceptedSeq || runtime.collab.seq || 0,
+        user: this.collaboration.currentUser(),
       });
       const document = result?.document || result?.merged_document || result?.mergedDocument || runtime.doc;
       const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || runtime.collab.seq || 0);
-      runtime.collab.seq = nextSeq;
-      runtime.collab.acceptedSeq = nextSeq;
       runtime.modified = false;
       replaceRuntimeDocument(document, runtime.currentFile);
       this.documentStore.load(document, runtime.currentFile);
+      this.collaboration.finishSync(nextSeq);
     } catch (error) {
-      runtime.collab.lastError = error instanceof Error ? error.message : String(error);
+      this.collaboration.failSync(error);
       throw error;
-    } finally {
-      runtime.collab.syncing = false;
     }
   }
 }

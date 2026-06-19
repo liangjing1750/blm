@@ -43,6 +43,23 @@
   font-weight: 600;
 }
 
+.collab-status {
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid #64748b;
+  border-radius: 999px;
+  background: rgb(100 116 139 / 14%);
+  color: #cbd5e1;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.collab-status.connected {
+  border-color: #22c55e;
+  background: rgb(34 197 94 / 14%);
+  color: #bbf7d0;
+}
+
 .angular-main {
   display: flex;
   min-height: calc(100vh - 48px);
