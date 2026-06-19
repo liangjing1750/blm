@@ -131,6 +131,45 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     return this.collaboration.statusText();
   }
 
+  protected documentVersionLabel(): string {
+    if (!this.runtime.currentFile || this.runtime.readOnly || !this.runtime.runtime.supportsCollab) return '';
+    const seq = Number(this.runtime.collab.seq || this.runtime.collab.acceptedSeq || 0);
+    return seq > 0 ? `\u5f53\u524d v${seq}` : '';
+  }
+
+  protected documentVersionTitle(): string {
+    const label = this.documentVersionLabel();
+    return label ? `\u6587\u6863\u7248\u672c\uff1a${label}` : '';
+  }
+
+  protected hasLocalUnsubmitted(): boolean {
+    if (!this.runtime.currentFile || this.runtime.readOnly) return false;
+    return Boolean(this.runtime.modified || this.runtime.collab.pendingSnapshot || this.runtime.collab.syncing);
+  }
+
+  protected hasRemoteUnsynced(): boolean {
+    return Boolean(this.runtime.currentFile && !this.runtime.readOnly && this.runtime.collab.hasRemoteUpdate);
+  }
+
+  protected hasSyncBadge(): boolean {
+    return this.hasLocalUnsubmitted() || this.hasRemoteUnsynced();
+  }
+
+  protected localSyncLabel(): string {
+    return this.runtime.collab.syncing ? '\u672c\u5730\u540c\u6b65\u4e2d' : '\u672c\u5730\u672a\u63d0\u4ea4';
+  }
+
+  protected remoteSyncLabel(): string {
+    return '\u8fdc\u7aef\u5f85\u540c\u6b65';
+  }
+
+  protected syncBadgeTitle(): string {
+    return [
+      this.hasRemoteUnsynced() ? '\u8fdc\u7aef\u5df2\u6709\u5176\u4ed6\u4eba\u63d0\u4ea4\uff0c\u70b9\u51fb\u7acb\u5373\u540c\u6b65\u62c9\u53d6\u5e76\u5408\u5e76\u3002' : '',
+      this.hasLocalUnsubmitted() ? '\u672c\u5730\u4fee\u6539\u5c1a\u672a\u63d0\u4ea4\u5230\u670d\u52a1\u7aef\u3002' : '',
+    ].filter(Boolean).join('\n');
+  }
+
   protected collaborationTitle(): string {
     const names = this.collaboration.onlineNames();
     return names.length ? `在线：${names.join('、')}` : '正在连接实时协作会话';

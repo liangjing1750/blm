@@ -6,6 +6,28 @@
     </span>
     <span class="file-name" data-testid="current-file-name" [title]="currentDocumentLabel()">{{ currentDocumentLabel() }}</span>
     <span
+      *ngIf="documentVersionLabel()"
+      class="document-version-badge current"
+      data-testid="document-version-badge"
+      [title]="documentVersionTitle()"
+    >{{ documentVersionLabel() }}</span>
+    <span
+      *ngIf="hasSyncBadge()"
+      class="modified-badge"
+      [class.syncing]="runtime.collab.syncing"
+      [class.has-local]="hasLocalUnsubmitted()"
+      [class.has-remote]="hasRemoteUnsynced()"
+      data-testid="modified-badge"
+      [title]="syncBadgeTitle()"
+    >
+      <span *ngIf="hasRemoteUnsynced()" class="modified-badge-row remote">
+        <span class="modified-badge-dot"></span>{{ remoteSyncLabel() }}
+      </span>
+      <span *ngIf="hasLocalUnsubmitted()" class="modified-badge-row local">
+        <span class="modified-badge-dot"></span>{{ localSyncLabel() }}
+      </span>
+    </span>
+    <span
       *ngIf="collaborationLabel()"
       class="collab-status"
       [class.connected]="runtime.collab.connected"
@@ -13,7 +35,6 @@
       [title]="collaborationTitle()"
       data-testid="collab-status"
     >{{ collaborationLabel() }}</span>
-    <span *ngIf="modifiedLabel()" class="modified-badge has-local" data-testid="modified-badge">{{ modifiedLabel() }}</span>
   </div>
 
   <div class="toolbar-right">

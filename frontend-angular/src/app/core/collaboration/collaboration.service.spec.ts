@@ -91,6 +91,6 @@ describe('CollaborationService', () => {
 
     expect(runtime.doc).toEqual({ meta: { name: 'local' } });
     expect(runtime.collab.hasRemoteUpdate).toBe(true);
-    expect(service.statusText()).toContain('有更新待同步');
+    expect(service.statusText()).toBe('协作 agent在线');
   });
 });

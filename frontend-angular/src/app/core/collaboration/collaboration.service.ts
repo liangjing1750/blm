@@ -107,17 +107,7 @@ export class CollaborationService {
     if (runtime.readOnly) return '\u53ea\u8bfb\u7248\u672c';
     const users = this.onlineNames();
     const onlineText = users.length <= 2 && users.length ? users.join('\u3001') : `${users.length || 1} \u4eba`;
-    const suffix = runtime.collab.syncing
-      ? ' \u00b7 \u540c\u6b65\u4e2d'
-      : runtime.collab.pendingSnapshot || runtime.modified
-        ? ' \u00b7 \u5f85\u540c\u6b65'
-        : runtime.collab.hasRemoteUpdate
-          ? ' \u00b7 \u6709\u66f4\u65b0\u5f85\u540c\u6b65'
-          : runtime.collab.lastSyncedAt
-            ? ' \u00b7 \u5df2\u540c\u6b65'
-            : '';
-    const activity = runtime.collab.lastActivity?.user ? ` \u00b7 ${runtime.collab.lastActivity.user}\u521a\u66f4\u65b0` : '';
-    return runtime.collab.connected ? `\u534f\u4f5c ${onlineText}\u5728\u7ebf${suffix}${activity}` : '\u534f\u4f5c\u8fde\u63a5\u4e2d';
+    return runtime.collab.connected ? `\u534f\u4f5c ${onlineText}\u5728\u7ebf` : '\u534f\u4f5c\u8fde\u63a5\u4e2d';
   }
   onlineNames(): string[] {
     const runtime = getAngularRuntimeState();
