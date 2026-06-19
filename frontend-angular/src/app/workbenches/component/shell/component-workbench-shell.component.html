@@ -1,15 +1,19 @@
 <div class="component-shell" data-testid="component-workbench-angular-shell">
-  <div class="component-shell-tabs" data-testid="component-workbench-tabs">
-    <button
-      *ngFor="let tab of tabs"
-      type="button"
-      class="component-shell-tab"
-      [class.active]="activeTab() === tab.id"
-      [attr.data-testid]="'component-subtab-' + tab.id"
-      (click)="switchTab(tab.id)"
-    >
-      {{ tab.label }}
-    </button>
+  <div class="proc-view-toolbar component-view-toolbar">
+    <div class="proc-view-toolbar-main">
+      <div class="view-toggle-group" data-testid="component-workbench-tabs" aria-label="构件工作台视图">
+        <button
+          *ngFor="let tab of tabs"
+          type="button"
+          class="vtb"
+          [class.active]="activeTab() === tab.id"
+          [attr.data-testid]="'component-subtab-' + tab.id"
+          (click)="switchTab(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+    </div>
   </div>
 
   <section class="component-shell-body">
