@@ -233,12 +233,15 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
       title: `正在打开“${label}”...`,
       description: '正在读取文档、附件索引和协作会话信息。',
     });
-    await this.runBusy(async () => {
-      const loaded = await this.api.load(name);
-      this.openLoadedDocument(name, loaded);
-      this.modal.set('');
-    });
-    this.waitDialog.set(null);
+    try {
+      await this.runBusy(async () => {
+        const loaded = await this.api.load(name);
+        this.openLoadedDocument(name, loaded);
+        this.modal.set('');
+      });
+    } finally {
+      this.waitDialog.set(null);
+    }
   }
 
   protected async openDocumentModal(): Promise<void> {

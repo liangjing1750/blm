@@ -31,21 +31,27 @@ export class CollaborationService {
     const runtime = getAngularRuntimeState();
     if (!docName || runtime.readOnly || !runtime.runtime.supportsCollab) return;
     if (this.docName === docName && this.socket && this.socket.readyState <= WebSocket.OPEN) return;
-    this.stop();
-    this.docName = docName;
-    this.profile = this.loadProfile();
-    runtime.collab.connected = false;
-    runtime.collab.users = [];
-    runtime.collab.lastError = '';
-    emitRuntimeRefresh();
+    try {
+      this.stop();
+      this.docName = docName;
+      this.profile = this.loadProfile();
+      runtime.collab.connected = false;
+      runtime.collab.users = [];
+      runtime.collab.lastError = '';
+      emitRuntimeRefresh();
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${window.location.host}/api/collab/ws`);
-    this.socket = socket;
-    socket.addEventListener('open', () => this.join(socket, docName));
-    socket.addEventListener('message', (event) => this.handleMessage(event.data));
-    socket.addEventListener('close', () => this.markDisconnected(socket));
-    socket.addEventListener('error', () => this.markDisconnected(socket));
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${protocol}//${window.location.host}/api/collab/ws`);
+      this.socket = socket;
+      socket.addEventListener('open', () => this.join(socket, docName));
+      socket.addEventListener('message', (event) => this.handleMessage(event.data));
+      socket.addEventListener('close', () => this.markDisconnected(socket));
+      socket.addEventListener('error', () => this.markDisconnected(socket));
+    } catch (error) {
+      runtime.collab.connected = false;
+      runtime.collab.lastError = error instanceof Error ? error.message : String(error);
+      emitRuntimeRefresh();
+    }
   }
 
   stop(): void {
@@ -98,22 +104,21 @@ export class CollaborationService {
   statusText(): string {
     const runtime = getAngularRuntimeState();
     if (!runtime.currentFile || !runtime.runtime.supportsCollab) return '';
-    if (runtime.readOnly) return '只读版本';
+    if (runtime.readOnly) return '\u53ea\u8bfb\u7248\u672c';
     const users = this.onlineNames();
-    const onlineText = users.length <= 2 && users.length ? users.join('、') : `${users.length || 1} 人`;
+    const onlineText = users.length <= 2 && users.length ? users.join('\u3001') : `${users.length || 1} \u4eba`;
     const suffix = runtime.collab.syncing
-      ? ' · 同步中'
+      ? ' \u00b7 \u540c\u6b65\u4e2d'
       : runtime.collab.pendingSnapshot || runtime.modified
-        ? ' · 待同步'
+        ? ' \u00b7 \u5f85\u540c\u6b65'
         : runtime.collab.hasRemoteUpdate
-          ? ' · 有更新待同步'
+          ? ' \u00b7 \u6709\u66f4\u65b0\u5f85\u540c\u6b65'
           : runtime.collab.lastSyncedAt
-            ? ' · 已同步'
+            ? ' \u00b7 \u5df2\u540c\u6b65'
             : '';
-    const activity = runtime.collab.lastActivity?.user ? ` · ${runtime.collab.lastActivity.user}刚更新` : '';
-    return runtime.collab.connected ? `协作 ${onlineText}在线${suffix}${activity}` : '协作连接中';
+    const activity = runtime.collab.lastActivity?.user ? ` \u00b7 ${runtime.collab.lastActivity.user}\u521a\u66f4\u65b0` : '';
+    return runtime.collab.connected ? `\u534f\u4f5c ${onlineText}\u5728\u7ebf${suffix}${activity}` : '\u534f\u4f5c\u8fde\u63a5\u4e2d';
   }
-
   onlineNames(): string[] {
     const runtime = getAngularRuntimeState();
     const profile = this.profile || this.loadProfile();
@@ -181,12 +186,16 @@ export class CollaborationService {
     const idKey = 'blm.collab.userId';
     const sessionKey = 'blm.collab.sessionId';
     const nameKey = 'blm.collab.userName';
-    const id = localStorage.getItem(idKey) || crypto.randomUUID();
-    const sessionId = sessionStorage.getItem(sessionKey) || crypto.randomUUID();
+    const id = localStorage.getItem(idKey) || this.createId();
+    const sessionId = sessionStorage.getItem(sessionKey) || this.createId();
     const name = (localStorage.getItem(nameKey) || 'agent').trim();
     localStorage.setItem(idKey, id);
     sessionStorage.setItem(sessionKey, sessionId);
     localStorage.setItem(nameKey, name);
     return { id, sessionId, name };
+  }
+
+  private createId(): string {
+    return globalThis.crypto?.randomUUID?.() || `collab-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 }
