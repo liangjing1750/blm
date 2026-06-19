@@ -119,20 +119,19 @@
             </div>
 
             @if (filteredRules().length) {
-              <div class="knowledge-rule-list workbench-scroll-frame workbench-scroll-body" data-testid="knowledge-rules-table">
-                <div class="knowledge-rule-head" aria-hidden="true">
-                  <span>规则</span>
-                  <span>节点</span>
-                  <span>功能</span>
-                  <span>内容摘要</span>
-                </div>
-                @for (rule of filteredRules(); track rule.id) {
+              <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
+                @for (rule of filteredRules(); track rule.id; let index = $index) {
                   <article class="knowledge-rule-card" data-testid="knowledge-rule-row">
+                    <header class="knowledge-rule-card-head">
+                      <span class="knowledge-rule-index">#{{ index + 1 }}</span>
                     <div class="knowledge-rule-name">
                       <strong>{{ rule.name }}</strong>
                     </div>
-                    <span class="knowledge-rule-cell">{{ rule.nodeName }}</span>
-                    <span class="knowledge-rule-cell">{{ rule.processName }}</span>
+                    </header>
+                    <div class="knowledge-rule-meta">
+                      <span class="knowledge-rule-cell"><b>节点</b>{{ rule.nodeName }}</span>
+                      <span class="knowledge-rule-cell"><b>功能</b>{{ rule.processName }}</span>
+                    </div>
                     <p>{{ rule.content || '暂无内容' }}</p>
                   </article>
                 }

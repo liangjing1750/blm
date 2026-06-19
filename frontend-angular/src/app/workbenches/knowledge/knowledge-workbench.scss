@@ -213,55 +213,70 @@
 }
 
 .knowledge-rule-list {
-  flex: 1;
-  min-height: 0;
-}
-
-.knowledge-rule-head,
-.knowledge-rule-card {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(130px, 170px) minmax(160px, 220px) minmax(320px, 1fr);
-  min-width: 1120px;
-}
-
-.knowledge-rule-head {
-  background: #f6f9fd;
-  border-bottom: 1px solid #dbe7f5;
-  font-size: 12px;
-  font-weight: 700;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.knowledge-rule-head span,
-.knowledge-rule-card > * {
-  border-right: 1px solid #edf3fb;
-  padding: 7px 9px;
+  flex: 1;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 4px 2px 0;
 }
 
 .knowledge-rule-card {
   background: #fff;
-  border-bottom: 1px solid #e4edf8;
+  border: 1px solid #d9e7f7;
+  border-left: 3px solid #2f7df6;
+  border-radius: 10px;
+  display: grid;
+  gap: 9px;
+  padding: 11px 13px 12px;
 }
 
-.knowledge-rule-card:last-child {
-  border-bottom: 0;
+.knowledge-rule-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+}
+
+.knowledge-rule-name {
+  min-width: 0;
 }
 
 .knowledge-rule-name strong {
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.42;
 }
 
-.knowledge-rule-card p,
-.knowledge-rule-cell {
+.knowledge-rule-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.knowledge-rule-meta span {
+  align-items: center;
+  background: #f4f8ff;
+  border-radius: 999px;
+  color: #3f5778;
+  display: inline-flex;
   font-size: 12px;
-  line-height: 1.5;
-  margin: 0;
+  gap: 5px;
+  line-height: 20px;
+  padding: 0 8px;
 }
 
-.knowledge-rule-cell,
-.knowledge-rule-card p {
+.knowledge-rule-card > p {
+  background: #f8fbff;
+  border-radius: 8px;
+  color: #405875;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+  padding: 9px 10px;
+  white-space: pre-wrap;
+}
+
+.knowledge-rule-cell {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
