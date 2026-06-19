@@ -457,7 +457,9 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   private openLoadedDocument(name: string, payload: any): void {
     const document = payload?.document || payload;
     this.documentStore.load(document, name);
-    this.syncMainTabFromRoute(this.router.url);
+    this.runtime.ui['mainTab'] = 'panoramaWorkbench';
+    void this.router.navigateByUrl('/panorama');
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
   // 关键流程：浏览器 URL 是用户可见入口，进入 /panorama、刷新或前进后退时必须反向校正 runtime 主 tab。

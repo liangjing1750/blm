@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-19T04:26:28.044Z",
+  "generatedAt": "2026-06-19T09:11:59.408Z",
   "viewport": {
     "width": 1920,
     "height": 1080
@@ -242,7 +242,7 @@
             "x": 0,
             "y": 48,
             "width": 1920,
-            "height": 1034
+            "height": 1032
           },
           "style": {
             "display": "flex",
@@ -267,20 +267,20 @@
             "x": 0,
             "y": 48,
             "width": 360,
-            "height": 1034
+            "height": 1032
           },
           "style": {
             "display": "block",
             "position": "relative",
-            "overflow": "auto",
-            "overflowY": "auto",
+            "overflow": "visible",
+            "overflowY": "visible",
             "fontSize": "14px",
             "fontWeight": "400",
             "lineHeight": "normal",
             "padding": "0px",
             "margin": "0px",
             "borderRadius": "0px",
-            "backgroundColor": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(248, 251, 255)",
             "color": "rgb(30, 41, 59)"
           }
         }
@@ -321,13 +321,13 @@
             "x": 0,
             "y": 48,
             "width": 359,
-            "height": 1034
+            "height": 1032
           },
           "style": {
             "display": "block",
             "position": "static",
-            "overflow": "hidden scroll",
-            "overflowY": "scroll",
+            "overflow": "hidden auto",
+            "overflowY": "auto",
             "fontSize": "12px",
             "fontWeight": "400",
             "lineHeight": "normal",
@@ -343,9 +343,9 @@
         {
           "text": "",
           "rect": {
-            "x": 240,
+            "x": 350,
             "y": 48,
-            "width": 8,
+            "width": 10,
             "height": 1032
           },
           "style": {
@@ -368,24 +368,24 @@
         {
           "text": "折叠",
           "rect": {
-            "x": 239,
-            "y": 515.66,
-            "width": 28,
-            "height": 48.67
+            "x": 360,
+            "y": 537,
+            "width": 23,
+            "height": 54
           },
           "style": {
             "display": "block",
             "position": "fixed",
             "overflow": "visible",
             "overflowY": "visible",
-            "fontSize": "13.3333px",
-            "fontWeight": "700",
-            "lineHeight": "normal",
-            "padding": "10px 4px",
+            "fontSize": "12px",
+            "fontWeight": "400",
+            "lineHeight": "12px",
+            "padding": "14px 5px",
             "margin": "0px",
-            "borderRadius": "0px 8px 8px 0px",
+            "borderRadius": "0px 6px 6px 0px",
             "backgroundColor": "rgb(255, 255, 255)",
-            "color": "rgb(85, 112, 142)"
+            "color": "rgb(100, 116, 139)"
           }
         }
       ],
@@ -403,8 +403,8 @@
         {
           "text": "全景视图 角色管理 术语管理 字典管理 规则管理",
           "rect": {
-            "x": 395,
-            "y": 126,
+            "x": 374,
+            "y": 105,
             "width": 386,
             "height": 27
           },
@@ -428,8 +428,8 @@
         {
           "text": "全景视图",
           "rect": {
-            "x": 396,
-            "y": 127,
+            "x": 375,
+            "y": 106,
             "width": 77,
             "height": 25
           },
@@ -451,8 +451,8 @@
         {
           "text": "角色管理",
           "rect": {
-            "x": 473,
-            "y": 127,
+            "x": 452,
+            "y": 106,
             "width": 77,
             "height": 25
           },
@@ -474,8 +474,8 @@
         {
           "text": "术语管理",
           "rect": {
-            "x": 550,
-            "y": 127,
+            "x": 529,
+            "y": 106,
             "width": 77,
             "height": 25
           },
@@ -497,8 +497,8 @@
         {
           "text": "字典管理",
           "rect": {
-            "x": 627,
-            "y": 127,
+            "x": 606,
+            "y": 106,
             "width": 77,
             "height": 25
           },
@@ -520,8 +520,8 @@
         {
           "text": "规则管理",
           "rect": {
-            "x": 704,
-            "y": 127,
+            "x": 683,
+            "y": 106,
             "width": 76,
             "height": 25
           },
@@ -545,8 +545,8 @@
         {
           "text": "打开编辑",
           "rect": {
-            "x": 1819,
-            "y": 127,
+            "x": 1840,
+            "y": 106,
             "width": 66,
             "height": 25
           },
@@ -1075,12 +1075,12 @@
           "x": 0,
           "y": 48,
           "width": 359,
-          "height": 1034
+          "height": 1032
         },
         "style": {
           "display": "block",
-          "overflow": "hidden scroll",
-          "overflowY": "scroll",
+          "overflow": "hidden auto",
+          "overflowY": "auto",
           "fontSize": "12px",
           "fontWeight": "400",
           "lineHeight": "normal",

@@ -1,6 +1,8 @@
 :host {
   display: block;
   height: 100%;
+  position: relative;
+  overflow: visible;
 }
 
 .sb-section {
@@ -8,26 +10,31 @@
   max-height: 100%;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
+  width: 100%;
   padding-bottom: 10px;
   font-size: 12px;
   scrollbar-gutter: stable;
-  scrollbar-color: #c7d4e4 transparent;
+  scrollbar-color: #cbd5e1 transparent;
   scrollbar-width: thin;
 }
 
 .sb-section::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.sb-section::-webkit-scrollbar-thumb {
-  background: #c7d4e4;
-  border-radius: 999px;
+  width: 6px;
+  height: 6px;
 }
 
 .sb-section::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.sb-section::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.sb-section::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .sb-metrics {
@@ -84,6 +91,7 @@
   color: #0f2744;
   cursor: pointer;
   text-align: left;
+  min-width: 0;
 }
 
 .sb-proc-row {
@@ -174,6 +182,8 @@
   justify-content: flex-start;
   gap: 4px;
   width: auto;
+  max-width: 100%;
+  min-width: 0;
   min-height: 24px;
   margin: 0;
   padding: 3px 9px;
@@ -191,6 +201,7 @@
 }
 
 .sb-asset-kind {
+  flex: 0 0 auto;
   color: #2563eb;
   font-weight: 800;
 }
@@ -289,20 +300,22 @@
 
 .angular-sb-toggle {
   position: fixed;
-  left: var(--angular-sidebar-right, var(--angular-sidebar-width, 360px));
-  top: 50%;
-  z-index: 30;
-  transform: translate(-1px, -50%);
+  left: var(--angular-sidebar-width, 360px);
+  top: calc(48px + (100vh - 48px) / 2);
+  z-index: 3000;
+  transform: translateY(-50%);
   writing-mode: vertical-rl;
-  min-width: 28px;
-  padding: 10px 4px;
-  border: 1px solid #d5e2f1;
+  min-width: 23px;
+  padding: 14px 5px;
+  border: 1px solid var(--border, #e2e8f0);
   border-left: 0;
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 6px 6px 0;
   background: #fff;
-  box-shadow: 0 4px 14px rgba(15, 35, 55, 0.12);
-  color: #55708e;
-  font-weight: 700;
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.08);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -314,10 +327,11 @@
   position: fixed;
   top: 48px;
   bottom: 0;
-  left: var(--angular-sidebar-right, var(--angular-sidebar-width, 360px));
-  width: 8px;
-  z-index: 29;
-  cursor: ew-resize;
+  left: calc(var(--angular-sidebar-width, 360px) - 10px);
+  width: 10px;
+  z-index: 2999;
+  cursor: col-resize;
+  touch-action: none;
 }
 
 .sb-collapsed-placeholder {

@@ -53,12 +53,14 @@
   justify-content: center;
 }
 
-.sidebar {
+#sidebar.sidebar {
+  position: relative;
+  z-index: 20;
   width: 360px;
   min-width: 360px;
   border-right: 1px solid #d7e1ee;
   background: #f8fbff;
-  overflow: auto;
+  overflow: visible;
 }
 
 .angular-workbench {
