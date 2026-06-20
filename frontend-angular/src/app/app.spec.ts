@@ -1,6 +1,7 @@
 ﻿import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { vi } from 'vitest';
+import { Location } from '@angular/common';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 import { routes } from './app.routes';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
@@ -127,6 +128,43 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="tab-orchestrationWorkbench"]')).toBeFalsy();
     expect(compiled.querySelector('[data-testid="tab-entity"]')).toBeFalsy();
+  });
+
+  it('should switch main workbench without router navigation so collaboration stays mounted', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    const location = TestBed.inject(Location);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl');
+    const locationSpy = vi.spyOn(location, 'go');
+    await router.navigateByUrl('/panorama');
+    navigateSpy.mockClear();
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-processWorkbench"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(locationSpy).toHaveBeenCalledWith('/process');
+    expect(navigateSpy).not.toHaveBeenCalled();
   });
 
   it('should keep the sidebar as an exclusive left column with collapsed directory nodes by default', async () => {

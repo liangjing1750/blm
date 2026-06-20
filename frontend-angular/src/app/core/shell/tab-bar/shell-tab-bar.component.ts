@@ -1,6 +1,5 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { ChangeDetectorRef, Component, HostListener, Input, computed, signal } from '@angular/core';
-import { Router } from '@angular/router';
 import { routePathFromWorkbenchId } from '../routing/main-workbench-route';
 import { ShellTabBarAdapter, createShellTabBarLegacyAdapter } from './shell-tab-bar-legacy-adapter';
 
@@ -37,13 +36,13 @@ export class ShellTabBarComponent {
 
   constructor(
     private readonly changeDetector: ChangeDetectorRef,
-    private readonly router: Router,
+    private readonly location: Location,
   ) {}
 
   protected switchTab(tabId: string): void {
     if (this.isPreviewRendering()) return;
     this.adapter.switchTab(tabId);
-    void this.router.navigateByUrl(routePathFromWorkbenchId(tabId));
+    this.location.go(routePathFromWorkbenchId(tabId));
     this.version.update((value) => value + 1);
   }
 
