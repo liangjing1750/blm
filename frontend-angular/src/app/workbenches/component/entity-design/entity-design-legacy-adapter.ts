@@ -16,10 +16,17 @@ export interface EntityDesignEntity {
   fields?: EntityDesignField[];
   relations?: EntityDesignRelation[];
   state_transitions?: EntityStateTransition[];
+  state_nodes?: EntityStateNode[];
   businessConstructUid?: string;
   businessConstructId?: string;
   constructUid?: string;
   constructId?: string;
+  pos?: { x?: number; y?: number };
+}
+
+export interface EntityStateNode {
+  name?: string;
+  kind?: 'initial' | 'intermediate' | 'terminal';
   pos?: { x?: number; y?: number };
 }
 

@@ -91,6 +91,16 @@ interface EntityDragState {
   originalPositions: Record<string, { x: number; y: number }>;
 }
 
+interface StateNodeDragState {
+  entityId: string;
+  stateName: string;
+  startClientX: number;
+  startClientY: number;
+  startLeft: number;
+  startTop: number;
+  moved: boolean;
+}
+
 interface SelectionBox {
   startX: number;
   startY: number;
@@ -139,6 +149,7 @@ export class EntityDesignWorkbenchComponent {
   ];
   private readonly relationStrokeColors = ['#3b82f6', '#22c55e', '#eab308', '#ec4899', '#8b5cf6', '#f97316'];
   private dragState: EntityDragState | null = null;
+  private stateNodeDragState: StateNodeDragState | null = null;
 
   protected readonly entities = computed(() => {
     this.version();
@@ -155,7 +166,10 @@ export class EntityDesignWorkbenchComponent {
   protected readonly stateValues = computed(() => this.collectStateValues(this.selectedEntity()));
   protected readonly groupFrames = computed(() => this.computeGroupFrames(this.nodes()));
   protected readonly componentFrames = computed(() => this.computeComponentFrames(this.groupFrames()));
-  protected readonly stateBoard = computed(() => this.layoutStateBoard(this.selectedEntity()));
+  protected readonly stateBoard = computed(() => {
+    this.version();
+    return this.layoutStateBoard(this.selectedEntity());
+  });
 
   protected setView(view: EntityDesignView): void {
     this.view.set(view);
@@ -445,6 +459,23 @@ export class EntityDesignWorkbenchComponent {
     this.selectedTransitionIndex.set(this.selectedTransitionIndex() === index ? null : index);
   }
 
+  protected startStateNodeDrag(node: StateNodeLayout, event: MouseEvent): void {
+    if (event.button !== 0) return;
+    const entity = this.selectedEntity();
+    if (!entity) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.stateNodeDragState = {
+      entityId: this.entityId(entity),
+      stateName: node.name,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startLeft: node.x,
+      startTop: node.y,
+      moved: false,
+    };
+  }
+
   protected boardSize(): Record<string, string> {
     return { width: `${this.boardWidth()}px`, height: `${this.boardHeight()}px` };
   }
@@ -475,6 +506,21 @@ export class EntityDesignWorkbenchComponent {
 
   @HostListener('document:mousemove', ['$event'])
   protected onDocumentMouseMove(event: MouseEvent): void {
+    if (this.stateNodeDragState) {
+      const drag = this.stateNodeDragState;
+      const dx = event.clientX - drag.startClientX;
+      const dy = event.clientY - drag.startClientY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) drag.moved = true;
+      if (!drag.moved) return;
+      const entity = this.entities().find((item) => this.entityId(item) === drag.entityId);
+      if (!entity) return;
+      this.setStateNodePosition(entity, drag.stateName, {
+        x: Math.max(4, Math.round(drag.startLeft + dx)),
+        y: Math.max(4, Math.round(drag.startTop + dy)),
+      }, false);
+      this.version.update((value) => value + 1);
+      return;
+    }
     if (this.selectionBox()) {
       const board = document.querySelector('.entity-board') as HTMLElement | null;
       if (!board) return;
@@ -500,6 +546,12 @@ export class EntityDesignWorkbenchComponent {
 
   @HostListener('document:mouseup')
   protected onDocumentMouseUp(): void {
+    if (this.stateNodeDragState) {
+      const drag = this.stateNodeDragState;
+      this.stateNodeDragState = null;
+      if (drag.moved) this.adapter.markChanged();
+      return;
+    }
     if (this.selectionBox()) {
       this.applySelectionBox();
       this.selectionBox.set(null);
@@ -881,16 +933,19 @@ export class EntityDesignWorkbenchComponent {
       if (transition.from) transitionValues.add(transition.from);
       if (transition.to) transitionValues.add(transition.to);
     }
+    const savedNodes = this.syncEntityStateNodes(entity, values);
     const nodes = values.map((name, index) => {
       const incoming = (entity.state_transitions || []).filter((transition) => transition.to === name).length;
       const outgoing = (entity.state_transitions || []).filter((transition) => transition.from === name).length;
+      const saved = savedNodes.find((item) => String(item.name || '') === name);
       const kind: StateNodeLayout['kind'] = incoming === 0 && outgoing > 0
         ? 'initial'
         : (outgoing === 0 && incoming > 0 ? 'terminal' : 'intermediate');
-      return { name, kind, originalIndex: index };
+      if (saved && saved.kind !== kind) saved.kind = kind;
+      return { name, kind, originalIndex: index, savedPos: saved?.pos };
     });
     if (!nodes.length && transitionValues.size) {
-      Array.from(transitionValues).forEach((name, index) => nodes.push({ name, kind: 'intermediate', originalIndex: index }));
+      Array.from(transitionValues).forEach((name, index) => nodes.push({ name, kind: 'intermediate', originalIndex: index, savedPos: undefined }));
     }
     const initial = nodes.filter((node) => node.kind === 'initial');
     const terminal = nodes.filter((node) => node.kind === 'terminal');
@@ -911,8 +966,10 @@ export class EntityDesignWorkbenchComponent {
       const rowWidth = rowWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, row.length - 1) * gapX;
       const startX = padX + Math.max(0, (520 - rowWidth) / 2);
       row.forEach((node, colIndex) => {
-        const x = Math.round(startX + rowWidths.slice(0, colIndex).reduce((sum, width) => sum + width, 0) + colIndex * gapX);
-        const y = padY + rowIndex * (nodeH + gapY);
+        const autoX = Math.round(startX + rowWidths.slice(0, colIndex).reduce((sum, width) => sum + width, 0) + colIndex * gapX);
+        const autoY = padY + rowIndex * (nodeH + gapY);
+        const x = Number.isFinite(Number(node.savedPos?.x)) ? Math.max(4, Math.round(Number(node.savedPos?.x))) : autoX;
+        const y = Number.isFinite(Number(node.savedPos?.y)) ? Math.max(4, Math.round(Number(node.savedPos?.y))) : autoY;
         const width = rowWidths[colIndex];
         const marker = node.kind === 'initial'
           ? { kind: 'initial' as const, x: x - 30, y: y + 10, size: 16 }
@@ -952,6 +1009,27 @@ export class EntityDesignWorkbenchComponent {
       else units += 0.9;
     }
     return Math.max(72, Math.min(172, Math.round(22 + units * 15)));
+  }
+
+  private syncEntityStateNodes(entity: EntityDesignEntity, values: string[]): NonNullable<EntityDesignEntity['state_nodes']> {
+    entity.state_nodes ||= [];
+    const names = new Set(values);
+    entity.state_nodes = entity.state_nodes.filter((node) => names.has(String(node.name || '')));
+    for (const name of values) {
+      if (!entity.state_nodes.some((node) => String(node.name || '') === name)) {
+        entity.state_nodes.push({ name, kind: 'intermediate' });
+      }
+    }
+    return entity.state_nodes;
+  }
+
+  private setStateNodePosition(entity: EntityDesignEntity, stateName: string, pos: { x: number; y: number }, markChanged = true): void {
+    const values = this.collectStateValues(entity);
+    const nodes = this.syncEntityStateNodes(entity, values);
+    const node = nodes.find((item) => String(item.name || '') === stateName);
+    if (!node) return;
+    node.pos = { x: pos.x, y: pos.y };
+    if (markChanged) this.changed();
   }
 
   private routeStateTransition(from: StateNodeLayout, to: StateNodeLayout, index: number): { path: string; labelX: number; labelY: number } {

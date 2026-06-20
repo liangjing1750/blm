@@ -80,7 +80,7 @@
                 @if (node.marker?.kind === 'initial') {
                   <span class="entity-state-marker entity-state-start-dot" [ngStyle]="stateMarkerStyle(node.marker)"></span>
                 }
-                <div class="entity-state-node" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'" [ngStyle]="stateNodeStyle(node)">
+                <div class="entity-state-node" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'" [ngStyle]="stateNodeStyle(node)" (mousedown)="startStateNodeDrag(node, $event)">
                   <span class="entity-state-node-label">{{ node.name }}</span>
                 </div>
                 @if (node.marker?.kind === 'terminal') {

@@ -53,6 +53,18 @@ test('构件工作台实体设计使用独立 Angular 入口维护关系和状�
   await expect(page.getByTestId('entity-design-state-view')).toBeVisible();
   await expect(page.locator('.entity-state-node')).toContainText(['待提交', '已提交']);
 
+  const firstStateNode = page.locator('.entity-state-node').first();
+  const firstStateBox = await firstStateNode.boundingBox();
+  expect(firstStateBox).not.toBeNull();
+  await page.mouse.move(firstStateBox.x + firstStateBox.width / 2, firstStateBox.y + firstStateBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(firstStateBox.x + firstStateBox.width / 2 + 42, firstStateBox.y + firstStateBox.height / 2 + 24);
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const movedBox = await firstStateNode.boundingBox();
+    return Math.round((movedBox?.x || 0) - firstStateBox.x);
+  }).toBeGreaterThan(28);
+
   await page.getByTestId('entity-design-switch-relation').click();
   const firstNode = page.getByTestId('entity-design-node').first();
   const firstNodeBox = await firstNode.boundingBox();

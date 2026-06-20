@@ -1,5 +1,6 @@
 import { CollaborationService } from './collaboration.service';
 import { getAngularRuntimeState } from '../runtime/angular-runtime';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 class FakeWebSocket {
   static OPEN = 1;
@@ -93,4 +94,23 @@ describe('CollaborationService', () => {
     expect(runtime.collab.hasRemoteUpdate).toBe(true);
     expect(service.statusText()).toBe('协作 agent在线');
   });
+
+  it('keeps current online status when start is called again for the same document', () => {
+    const service = new CollaborationService();
+    const runtime = getAngularRuntimeState();
+
+    service.start('Agent');
+    const socket = FakeWebSocket.instances[0];
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit('message', {
+      data: JSON.stringify({ type: 'joined', seq: 3, users: [{ name: 'agent' }] }),
+    });
+
+    service.start('Agent');
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(runtime.collab.connected).toBe(true);
+    expect(service.statusText()).toBe('\u534f\u4f5c agent\u5728\u7ebf');
+  });
+
 });

@@ -251,6 +251,7 @@
 
 .entity-state-svg {
   position: absolute;
+  z-index: 1;
   inset: 0;
   overflow: visible;
   pointer-events: none;
@@ -287,6 +288,7 @@
 
 .entity-state-node {
   position: absolute;
+  z-index: 3;
   display: grid;
   place-items: center;
   box-sizing: border-box;
@@ -298,6 +300,8 @@
   font-size: 13px;
   font-weight: 800;
   text-align: center;
+  cursor: move;
+  user-select: none;
 }
 
 .entity-state-node.kind-initial {

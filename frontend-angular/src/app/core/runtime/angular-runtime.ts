@@ -90,6 +90,7 @@ export function markAngularRuntimeModified(): void {
 
 export function switchAngularMainTab(tabId: string): void {
   const nextTab = normalizeMainWorkbenchId(tabId);
+  if (runtimeState.ui['mainTab'] === nextTab) return;
   runtimeState.ui['mainTab'] = nextTab;
   if (nextTab === 'processWorkbench') {
     runtimeState.ui['procView'] = 'valueDomain';

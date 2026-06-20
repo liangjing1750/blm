@@ -29,6 +29,10 @@ async function openDocument(page, name, options = {}) {
   if (await searchBox.count()) {
     await searchBox.fill(name);
   }
+  const angularSearchBox = page.locator('[data-testid="open-document-dialog"] input[type="search"], .open-search').first();
+  if (!(await searchBox.count()) && await angularSearchBox.count()) {
+    await angularSearchBox.fill(name);
+  }
   await clickOpenDocumentCard(page, name);
   await expect(page.getByTestId('current-file-name')).toHaveText(name);
   if (expandSidebar && await page.locator('#sidebar.sb-collapsed').count()) {
@@ -44,12 +48,19 @@ async function openDocument(page, name, options = {}) {
 async function clickOpenDocumentCard(page, name) {
   const card = page.locator('.file-list-item, [data-testid="workspace-doc-card"]').filter({ hasText: name }).first();
   for (let pageIndex = 0; pageIndex < 20; pageIndex += 1) {
-    if (await card.count()) {
+    if (await card.isVisible().catch(() => false)) {
       await card.click();
       return;
     }
     const next = page.locator('[data-testid="workspace-pagination"] button, #workspace-pagination button').filter({ hasText: /下一页|Next/ }).first();
-    if (!(await next.count()) || await next.isDisabled().catch(() => true)) break;
+    if (!(await next.count()) || await next.isDisabled().catch(() => true)) {
+      await page.waitForTimeout(300);
+      if (await card.isVisible().catch(() => false)) {
+        await card.click();
+        return;
+      }
+      break;
+    }
     await next.click();
     await page.waitForTimeout(300);
   }

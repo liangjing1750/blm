@@ -30,7 +30,13 @@ export class CollaborationService {
   start(docName: string): void {
     const runtime = getAngularRuntimeState();
     if (!docName || runtime.readOnly || !runtime.runtime.supportsCollab) return;
-    if (this.docName === docName && this.socket && this.socket.readyState <= WebSocket.OPEN) return;
+    if (this.docName === docName && this.socket && this.socket.readyState <= WebSocket.OPEN) {
+      if (this.socket.readyState === WebSocket.OPEN && !runtime.collab.connected) {
+        runtime.collab.connected = true;
+        emitRuntimeRefresh();
+      }
+      return;
+    }
     try {
       this.stop();
       this.docName = docName;
