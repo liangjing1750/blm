@@ -1,30 +1,69 @@
 <section class="manual-wrap" data-testid="manual-workbench">
-  <aside class="manual-nav">
-    <section class="manual-panel">
-      <div class="manual-panel-title">文档</div>
-      <div class="manual-doc-list">
-        <button
-          *ngFor="let doc of docs()"
-          class="manual-doc-button"
-          type="button"
-          [class.active]="activeDocId() === doc.id"
-          (click)="selectDoc(doc.id)"
-        >
-          <span class="manual-doc-button-title">{{ doc.title }}</span>
-        </button>
-      </div>
-    </section>
-  </aside>
+  <div class="manual-body">
+    <aside class="manual-nav">
+      <section class="manual-panel">
+        <div class="manual-panel-title">文档</div>
+        <div class="manual-doc-list" data-testid="manual-doc-list">
+          <button
+            *ngFor="let doc of docs()"
+            class="manual-doc-button"
+            type="button"
+            data-testid="manual-doc-button"
+            [class.active]="activeDocId() === doc.id"
+            (click)="selectDoc(doc.id)"
+          >
+            <span class="manual-doc-button-title">{{ doc.title }}</span>
+          </button>
+          <div *ngIf="!docs().length" class="manual-empty-hint">正在加载文档列表...</div>
+        </div>
+      </section>
 
-  <main class="manual-reader">
-    <header class="manual-reader-head">
-      <h2>{{ selectedDoc()?.title || '使用手册' }}</h2>
-    </header>
-    <article class="manual-article">
-      <p *ngIf="selectedDoc()?.summary" class="manual-doc-intro">{{ selectedDoc()?.summary }}</p>
-      <div *ngIf="loading()" class="manual-loading">正在加载使用手册...</div>
-      <div *ngIf="error()" class="manual-empty-hint">{{ error() }}</div>
-      <div *ngIf="!loading() && !error()" [innerHTML]="renderedManualHtml()"></div>
-    </article>
-  </main>
+      <section class="manual-panel">
+        <div class="manual-panel-title">目录</div>
+        <div class="manual-outline-list">
+          <div *ngIf="loading()" class="manual-empty-hint">正在生成目录...</div>
+          <div *ngIf="!loading() && !outlineGroups().length" class="manual-empty-hint">当前文档暂无目录项。</div>
+          <div *ngFor="let group of outlineGroups()" class="manual-outline-group">
+            <div class="manual-outline-group-head">
+              <button
+                type="button"
+                class="manual-outline-toggle"
+                [attr.aria-label]="isGroupCollapsed(group.id) ? '展开目录' : '折叠目录'"
+                (click)="toggleOutlineGroup(group.id)"
+              >
+                {{ isGroupCollapsed(group.id) ? '▸' : '▾' }}
+              </button>
+              <button type="button" class="manual-outline-link depth-1 group-link" (click)="jumpTo(group.id)">
+                {{ group.label }}
+              </button>
+            </div>
+            <div class="manual-outline-children" [class.collapsed]="isGroupCollapsed(group.id)">
+              <button
+                *ngFor="let item of group.children"
+                type="button"
+                class="manual-outline-link"
+                [class.depth-2]="item.depth === 1"
+                [class.depth-3]="item.depth >= 2"
+                (click)="jumpTo(item.id)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="manual-reader">
+      <header class="manual-reader-head">
+        <h2>{{ selectedDoc()?.title || '使用手册' }}</h2>
+      </header>
+      <article id="manual-content" class="manual-article">
+        <p *ngIf="selectedDoc()?.summary" class="manual-doc-intro">{{ selectedDoc()?.summary }}</p>
+        <div *ngIf="loading()" class="manual-loading">正在加载文档内容...</div>
+        <div *ngIf="error()" class="manual-empty-hint">{{ error() }}</div>
+        <div *ngIf="!loading() && !error()" [innerHTML]="renderedManualHtml()"></div>
+      </article>
+    </main>
+  </div>
 </section>
