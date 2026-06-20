@@ -1,4 +1,4 @@
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router } from '@angular/router';
@@ -83,13 +83,17 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly busy = signal(false);
   protected readonly toast = signal('');
+  private readonly shellVersion = signal(0);
   protected openQuery = '';
   protected createDocumentName = '';
   protected copyDocumentName = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
   private routeSubscription: Subscription | null = null;
 
-  protected readonly activeMainTab = computed(() => this.runtime.ui['mainTab'] || 'panoramaWorkbench');
+  protected readonly activeMainTab = computed(() => {
+    this.shellVersion();
+    return this.runtime.ui['mainTab'] || 'panoramaWorkbench';
+  });
   protected readonly isUtilityWorkbench = computed(() => ['manual', 'feedback'].includes(this.activeMainTab()));
 
   constructor(
@@ -98,7 +102,6 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     private readonly documentStore: DocumentStore,
     private readonly syncService: SyncService,
     private readonly router: Router,
-    private readonly location: Location,
   ) {}
 
   ngOnInit(): void {
@@ -143,7 +146,15 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   }
 
   protected documentVersionLabel(): string {
-    if (!this.runtime.currentFile || this.runtime.readOnly || !this.runtime.runtime.supportsCollab) return '';
+    if (!this.runtime.currentFile) return '';
+    if (this.runtime.readOnly) {
+      const versionId = String(this.runtime.doc?.meta?.version_id || '').trim();
+      const versionLabel = String(this.runtime.doc?.meta?.version_label || '').trim();
+      if (versionLabel) return versionLabel;
+      if (versionId) return versionId.startsWith('history:') ? '历史快照' : `版本 ${versionId}`;
+      return '只读版本';
+    }
+    if (!this.runtime.runtime.supportsCollab) return '';
     const seq = Number(this.runtime.collab.seq || this.runtime.collab.acceptedSeq || 0);
     return seq > 0 ? `\u5f53\u524d v${seq}` : '';
   }
@@ -193,6 +204,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
 
   protected switchWorkbench(tabId: string): void {
     switchAngularMainTab(tabId);
+    this.refreshShellView();
   }
 
   protected async createDocument(): Promise<void> {
@@ -253,8 +265,14 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
       this.showToast('请先打开文档。');
       return;
     }
+    if (this.runtime.readOnly) {
+      this.showToast('当前查看的是只读版本，不能再次归档。');
+      return;
+    }
+    const message = window.prompt('给这个归档版本填写说明：', '手动归档');
+    if (message === null) return;
     await this.runBusy(async () => {
-      await this.api.createVersion(this.runtime.currentFile, this.runtime.doc, '手动归档');
+      await this.api.createVersion(this.runtime.currentFile, this.runtime.doc, String(message || '').trim());
       this.showToast('归档版本已创建');
     });
   }
@@ -342,15 +360,17 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
 
   protected openManual(): void {
     this.runtime.ui['mainTab'] = 'manual';
-    this.location.go('/manual');
     this.activeDropdown.set('');
+    this.refreshShellView();
+    void this.router.navigateByUrl('/manual');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
   protected openFeedback(): void {
     this.runtime.ui['mainTab'] = 'feedback';
-    this.location.go('/feedback');
     this.activeDropdown.set('');
+    this.refreshShellView();
+    void this.router.navigateByUrl('/feedback');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
@@ -373,6 +393,11 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     if (!this.runtime.currentFile || !id) return;
     await this.runBusy(async () => {
       const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
+      const document = loaded?.document || loaded;
+      document.meta = document.meta && typeof document.meta === 'object' ? document.meta : {};
+      document.meta.readonly = true;
+      document.meta.version_id = `history:${id}`;
+      document.meta.version_label = document.meta.version_label || '历史快照';
       this.openLoadedDocument(this.runtime.currentFile, loaded, true);
       this.modal.set('');
     });
@@ -383,6 +408,11 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     if (!this.runtime.currentFile || !submitId) return;
     await this.runBusy(async () => {
       const loaded = await this.api.loadCollabSubmit(this.runtime.currentFile, submitId);
+      const document = loaded?.document || loaded;
+      document.meta = document.meta && typeof document.meta === 'object' ? document.meta : {};
+      document.meta.readonly = true;
+      document.meta.version_id = `submit:${submitId}`;
+      document.meta.version_label = document.meta.version_label || '本地提交';
       this.openLoadedDocument(this.runtime.currentFile, loaded, true);
       this.modal.set('');
     });
@@ -399,6 +429,32 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
       const versions = await this.api.versions(this.runtime.currentFile).catch(() => []);
       this.versionRows.set(versions || []);
       this.showToast('历史记录已归档为版本。');
+    });
+  }
+
+  protected async restoreHistorySnapshot(row: any): Promise<void> {
+    const id = String(row?.id || row?.snapshot_id || '').trim();
+    if (!this.runtime.currentFile || !id) return;
+    if (!window.confirm('本地恢复会把这个历史版本设为当前文档，点击“立即同步”后才会影响其他人。继续吗？')) return;
+    await this.runBusy(async () => {
+      const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
+      const document = loaded?.document || loaded;
+      this.restoreLoadedDocument(this.runtime.currentFile, document, Number(row?.seq || 0));
+      this.modal.set('');
+      this.showToast('已本地恢复历史版本，点击“立即同步”后才会影响其他人。');
+    });
+  }
+
+  protected async restoreSubmitSnapshot(row: any): Promise<void> {
+    const submitId = String(row?.submitId || '').trim();
+    if (!this.runtime.currentFile || !submitId) return;
+    if (!window.confirm('本地恢复会把这次提交设为当前文档，点击“立即同步”后才会影响其他人。继续吗？')) return;
+    await this.runBusy(async () => {
+      const loaded = await this.api.loadCollabSubmit(this.runtime.currentFile, submitId);
+      const document = loaded?.document || loaded;
+      this.restoreLoadedDocument(this.runtime.currentFile, document, Number(row?.baseSeq || loaded?.baseSeq || 0));
+      this.modal.set('');
+      this.showToast('已本地恢复提交记录，点击“立即同步”后才会影响其他人。');
     });
   }
 
@@ -604,12 +660,36 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
+  private restoreLoadedDocument(name: string, document: any, baseSeq = 0): void {
+    const restored = structuredClone(document || {});
+    restored.meta = restored.meta && typeof restored.meta === 'object' ? restored.meta : {};
+    restored.meta.readonly = false;
+    delete restored.meta.version_id;
+    delete restored.meta.version_label;
+    this.documentStore.load(restored, name);
+    this.runtime.readOnly = false;
+    this.runtime.modified = true;
+    this.runtime.collab.pendingSnapshot = true;
+    this.runtime.collab.draftBaseSeqOverride = Number(baseSeq || 0);
+    this.runtime.collab.recoveryMode = true;
+    this.runtime.collab.forceSnapshotSync = true;
+    this.collaboration.start(name);
+    this.runtime.ui['mainTab'] = 'panoramaWorkbench';
+    void this.router.navigateByUrl('/panorama');
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
   // 关键流程：浏览器 URL 是用户可见入口，进入 /panorama、刷新或前进后退时必须反向校正 runtime 主 tab。
   private syncMainTabFromRoute(url: string): void {
     const nextMainTab = workbenchIdFromUrl(url);
     if (this.runtime.ui['mainTab'] === nextMainTab) return;
     this.runtime.ui['mainTab'] = nextMainTab;
+    this.refreshShellView();
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
+  private refreshShellView(): void {
+    this.shellVersion.update((value) => value + 1);
   }
 
   private async runBusy(action: () => Promise<void>): Promise<void> {

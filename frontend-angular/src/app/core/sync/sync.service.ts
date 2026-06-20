@@ -21,12 +21,16 @@ export class SyncService {
     this.collaboration.beginSync();
     try {
       const result = await this.api.collabSnapshot(runtime.currentFile, runtime.doc, {
-        baseSeq: runtime.collab.acceptedSeq || runtime.collab.seq || 0,
+        baseSeq: runtime.collab.draftBaseSeqOverride ?? runtime.collab.acceptedSeq ?? runtime.collab.seq ?? 0,
+        recoveryMode: Boolean(runtime.collab.recoveryMode),
         user: this.collaboration.currentUser(),
       });
       const document = result?.document || result?.merged_document || result?.mergedDocument || runtime.doc;
       const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || runtime.collab.seq || 0);
       runtime.modified = false;
+      runtime.collab.draftBaseSeqOverride = undefined;
+      runtime.collab.recoveryMode = false;
+      runtime.collab.forceSnapshotSync = false;
       replaceRuntimeDocument(document, runtime.currentFile);
       this.documentStore.load(document, runtime.currentFile);
       this.collaboration.finishSync(nextSeq);

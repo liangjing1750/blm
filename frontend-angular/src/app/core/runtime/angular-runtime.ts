@@ -33,6 +33,9 @@ export interface AngularRuntimeState {
     hasRemoteUpdate: boolean;
     lastSyncedAt: string;
     lastActivity: { user: string; at: string } | null;
+    draftBaseSeqOverride?: number;
+    recoveryMode?: boolean;
+    forceSnapshotSync?: boolean;
   };
   recovery: Record<string, any>;
 }

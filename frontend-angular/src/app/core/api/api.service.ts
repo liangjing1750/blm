@@ -142,6 +142,10 @@ export class ApiService {
     return this.postJson('/api/history/load', { name, snapshot_id: snapshotId });
   }
 
+  async restoreHistory(name: string, snapshotId: string): Promise<any> {
+    return this.postJson('/api/history/restore', { name, snapshot_id: snapshotId });
+  }
+
   async collabSubmits(name: string): Promise<any> {
     return this.postJson('/api/collab/submits/list', { name });
   }

@@ -40,6 +40,7 @@
         </div>
         <button class="btn btn-outline btn-sm" type="button" (click)="openHistory.emit(row)">只读打开</button>
         <button class="btn btn-primary btn-sm" type="button" (click)="archiveHistory.emit(row)">归档版本</button>
+        <button class="btn btn-danger-solid btn-sm" type="button" (click)="restoreHistory.emit(row)">本地恢复</button>
       </article>
 
       <p *ngIf="!versionRows.length && !historyRows.length" class="placeholder-copy">暂无历史记录。</p>
@@ -53,6 +54,7 @@
           <span>{{ row.createdAt || row.submitId || '' }}</span>
         </div>
         <button class="btn btn-outline btn-sm" type="button" (click)="openSubmit.emit(row)">只读打开</button>
+        <button class="btn btn-danger-solid btn-sm" type="button" (click)="restoreSubmit.emit(row)">本地恢复</button>
       </article>
 
       <p *ngIf="!submitRows.length" class="placeholder-copy">暂无提交记录。</p>

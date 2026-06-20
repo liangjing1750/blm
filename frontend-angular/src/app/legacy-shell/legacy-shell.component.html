@@ -330,7 +330,9 @@
         (openVersion)="openVersionReadOnly($event)"
         (openHistory)="openHistoryReadOnly($event)"
         (archiveHistory)="archiveHistorySnapshot($event)"
+        (restoreHistory)="restoreHistorySnapshot($event)"
         (openSubmit)="openSubmitReadOnly($event)"
+        (restoreSubmit)="restoreSubmitSnapshot($event)"
       ></app-history-dialog>
 
       <section *ngSwitchDefault>

@@ -13,7 +13,13 @@ describe('App', () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = '';
     runtime.modified = false;
+    runtime.readOnly = false;
     runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.collab.seq = 0;
+    runtime.collab.acceptedSeq = 0;
+    runtime.collab.pendingSnapshot = false;
+    runtime.collab.draftBaseSeqOverride = undefined;
+    runtime.collab.recoveryMode = false;
 
     await TestBed.configureTestingModule({
       imports: [App, LegacyShellComponent],
@@ -326,6 +332,7 @@ describe('App', () => {
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'prompt').mockReturnValue('手动归档');
 
     const fixture = TestBed.createComponent(LegacyShellComponent);
     const runtime = getAngularRuntimeState();
@@ -369,6 +376,84 @@ describe('App', () => {
     expect(fetchSpy).toHaveBeenCalledWith('/api/version/create', expect.objectContaining({ method: 'POST' }));
     expect(fetchSpy).toHaveBeenCalledWith('/api/delete/agent-copy.json', expect.objectContaining({ method: 'POST' }));
     expect(runtime.currentFile).toBe('');
+  });
+
+  it('should navigate manual and feedback entries to utility workbenches', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/docs')) {
+        return new Response(JSON.stringify([{ id: 'manual', title: '用户手册' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/api/docs/manual')) {
+        return new Response(JSON.stringify({ id: 'manual', title: '用户手册', content: '# 用户手册' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/api/feedback')) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const location = TestBed.inject(Location);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-manual-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(location.path()).toBe('/manual');
+    expect(compiled.querySelector('[data-testid="manual-workbench"]')).toBeTruthy();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-feedback-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(location.path()).toBe('/feedback');
+    expect(compiled.querySelector('[data-testid="feedback-workbench"]')).toBeTruthy();
+  });
+
+  it('should show read-only version labels and local recovery actions in history', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/history/agent.json')) {
+        return new Response(JSON.stringify([{ id: 'h1', message: '同步快照', seq: 3, timestamp_label: '今天' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/agent.json')) {
+        return new Response(JSON.stringify([{ id: 'v1', label: '验收版' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/collab/submits/list')) {
+        return new Response(JSON.stringify({ submits: [{ submitId: 's1', user: 'agent', baseSeq: 2, seq: 3 }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/version/load')) {
+        expect(JSON.parse(String(init?.body))).toMatchObject({ name: 'agent.json', version_id: 'v1' });
+        return new Response(JSON.stringify({ meta: { readonly: true, version_id: 'v1', version_label: '验收版' } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = { meta: { domain: 'Agent' }, roles: [], stages: [], stageFlowRefs: [], processes: [], entities: [], businessComponents: [], taskDefinitions: [], terms: [], rules: [] };
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-history-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('本地恢复');
+    compiled.querySelectorAll<HTMLButtonElement>('[data-testid="history-dialog"] .btn-outline')[0]?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fetchSpy).toHaveBeenCalledWith('/api/version/load', expect.objectContaining({ method: 'POST' }));
+    expect(compiled.querySelector('[data-testid="document-version-badge"]')?.textContent).toContain('验收版');
   });
 
   it('should render workspace and trash document cards with ten-item pagination in the open dialog', async () => {

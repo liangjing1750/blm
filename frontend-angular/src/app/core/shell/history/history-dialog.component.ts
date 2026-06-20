@@ -23,7 +23,9 @@ export class HistoryDialogComponent {
   @Output() openVersion = new EventEmitter<any>();
   @Output() openHistory = new EventEmitter<any>();
   @Output() archiveHistory = new EventEmitter<any>();
+  @Output() restoreHistory = new EventEmitter<any>();
   @Output() openSubmit = new EventEmitter<any>();
+  @Output() restoreSubmit = new EventEmitter<any>();
 
   selectTab(tab: HistoryDialogTab): void {
     this.activeTabChange.emit(tab);
