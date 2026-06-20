@@ -5,11 +5,11 @@ export class ShellLayoutQuery {
   constructor(private readonly runtime: AngularRuntimeState) {}
 
   showWorkbenchTabs(): boolean {
-    return this.hasDocument();
+    return this.hasDocument() && !this.isUtilityWorkbench();
   }
 
   showSidebar(): boolean {
-    return this.hasDocument();
+    return this.hasDocument() && !this.isUtilityWorkbench();
   }
 
   showBackAction(): boolean {
@@ -18,5 +18,9 @@ export class ShellLayoutQuery {
 
   hasDocument(): boolean {
     return !!this.runtime.currentFile;
+  }
+
+  private isUtilityWorkbench(): boolean {
+    return ['manual', 'feedback'].includes(String(this.runtime.ui['mainTab'] || ''));
   }
 }

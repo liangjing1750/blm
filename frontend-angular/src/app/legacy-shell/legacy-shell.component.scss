@@ -157,6 +157,11 @@ app-shell-tab-bar {
   overflow: hidden;
 }
 
+.history-modal-shell {
+  width: min(860px, calc(100vw - 48px));
+  max-height: min(780px, calc(100vh - 48px));
+}
+
 .open-document-waiting {
   filter: blur(3px);
   pointer-events: none;

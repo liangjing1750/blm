@@ -16,6 +16,38 @@ export interface TrashEntry {
   timestamp?: string;
 }
 
+export interface ManualDocSummary {
+  id: string;
+  title: string;
+  summary?: string;
+}
+
+export interface FeedbackDocument {
+  items?: FeedbackItem[];
+}
+
+export interface FeedbackItem {
+  uid: string;
+  category?: string;
+  status?: string;
+  title?: string;
+  description?: string;
+  author?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  messages?: FeedbackMessage[];
+}
+
+export interface FeedbackMessage {
+  uid?: string;
+  floor?: number;
+  author?: string;
+  content?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  attachments?: Array<Record<string, unknown>>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   // 模块意图：集中承接浏览器到后端的 HTTP 调用，替代旧 api.js 的散落全局函数。
@@ -100,6 +132,38 @@ export class ApiService {
 
   async versions(name: string): Promise<any[]> {
     return this.getJson(`/api/versions/${encodeURIComponent(name)}`, []);
+  }
+
+  async loadVersion(name: string, versionId: string): Promise<any> {
+    return this.postJson('/api/version/load', { name, version_id: versionId });
+  }
+
+  async loadHistory(name: string, snapshotId: string): Promise<any> {
+    return this.postJson('/api/history/load', { name, snapshot_id: snapshotId });
+  }
+
+  async collabSubmits(name: string): Promise<any> {
+    return this.postJson('/api/collab/submits/list', { name });
+  }
+
+  async loadCollabSubmit(name: string, submitId: string): Promise<any> {
+    return this.postJson('/api/collab/submits/load', { name, submitId });
+  }
+
+  async docs(): Promise<ManualDocSummary[]> {
+    return this.getJson('/api/docs', []);
+  }
+
+  async doc(docId: string): Promise<any> {
+    return this.getJson(`/api/docs/${encodeURIComponent(docId)}`);
+  }
+
+  async feedback(): Promise<FeedbackDocument> {
+    return this.getJson('/api/feedback', { items: [] });
+  }
+
+  async saveFeedback(payload: Record<string, unknown>): Promise<FeedbackDocument> {
+    return this.postJson('/api/feedback', payload);
   }
 
   private async getJson<T>(url: string, fallback?: T): Promise<T> {

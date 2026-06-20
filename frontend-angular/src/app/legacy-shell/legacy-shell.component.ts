@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, Location } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router } from '@angular/router';
@@ -8,6 +8,7 @@ import { CollaborationService } from '../core/collaboration/collaboration.servic
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
 import { getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
+import { HistoryDialogComponent, HistoryDialogTab } from '../core/shell/history/history-dialog.component';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
 import { OpenDocumentQuery, OpenSpaceSummary } from '../core/shell/open-document/open-document-query';
 import { workbenchIdFromUrl } from '../core/shell/routing/main-workbench-route';
@@ -22,6 +23,8 @@ import { OrchestrationWorkbench } from '../workbenches/orchestration/orchestrati
 import { PanoramaWorkbench } from '../workbenches/panorama/panorama-workbench';
 import { ProcessWorkbenchShellComponent } from '../workbenches/process/shell/process-workbench-shell.component';
 import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
+import { FeedbackWorkbenchComponent } from '../workbenches/support/feedback/feedback-workbench.component';
+import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-workbench.component';
 
 type ToolbarModal = '' | 'create' | 'copy' | 'open' | 'properties' | 'history' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
@@ -41,6 +44,7 @@ export const TRANSITION_SHELL = 'angular-shell';
     CommonModule,
     FormsModule,
     WaitDialogComponent,
+    HistoryDialogComponent,
     ShellTabBarComponent,
     SidebarDirectoryComponent,
     PanoramaWorkbench,
@@ -50,6 +54,8 @@ export const TRANSITION_SHELL = 'angular-shell';
     EntityWorkbench,
     KnowledgeWorkbenchComponent,
     RoleWorkbenchComponent,
+    ManualWorkbenchComponent,
+    FeedbackWorkbenchComponent,
   ],
 })
 export class LegacyShellComponent implements OnInit, OnDestroy {
@@ -72,6 +78,9 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   protected readonly selectedTrashIds = signal<Set<string>>(new Set());
   protected readonly waitDialog = signal<WaitDialogState | null>(null);
   protected readonly historyRows = signal<any[]>([]);
+  protected readonly versionRows = signal<any[]>([]);
+  protected readonly submitRows = signal<any[]>([]);
+  protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly busy = signal(false);
   protected readonly toast = signal('');
   protected openQuery = '';
@@ -81,6 +90,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   private routeSubscription: Subscription | null = null;
 
   protected readonly activeMainTab = computed(() => this.runtime.ui['mainTab'] || 'panoramaWorkbench');
+  protected readonly isUtilityWorkbench = computed(() => ['manual', 'feedback'].includes(this.activeMainTab()));
 
   constructor(
     private readonly api: ApiService,
@@ -88,6 +98,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     private readonly documentStore: DocumentStore,
     private readonly syncService: SyncService,
     private readonly router: Router,
+    private readonly location: Location,
   ) {}
 
   ngOnInit(): void {
@@ -315,13 +326,79 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
       return;
     }
     await this.runBusy(async () => {
-      const [history, versions] = await Promise.all([
+      const [history, versions, submits] = await Promise.all([
         this.api.history(this.runtime.currentFile).catch(() => []),
         this.api.versions(this.runtime.currentFile).catch(() => []),
+        this.api.collabSubmits(this.runtime.currentFile).catch(() => ({ submits: [] })),
       ]);
-      this.historyRows.set([...(versions || []), ...(history || [])]);
+      this.historyRows.set(history || []);
+      this.versionRows.set(versions || []);
+      this.submitRows.set(Array.isArray(submits?.submits) ? submits.submits : []);
+      this.historyTab.set('remote');
       this.modal.set('history');
       this.activeDropdown.set('');
+    });
+  }
+
+  protected openManual(): void {
+    this.runtime.ui['mainTab'] = 'manual';
+    this.location.go('/manual');
+    this.activeDropdown.set('');
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
+  protected openFeedback(): void {
+    this.runtime.ui['mainTab'] = 'feedback';
+    this.location.go('/feedback');
+    this.activeDropdown.set('');
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
+  protected selectHistoryTab(tab: HistoryDialogTab): void {
+    this.historyTab.set(tab);
+  }
+
+  protected async openVersionReadOnly(row: any): Promise<void> {
+    const id = String(row?.id || row?.version_id || '').trim();
+    if (!this.runtime.currentFile || !id) return;
+    await this.runBusy(async () => {
+      const loaded = await this.api.loadVersion(this.runtime.currentFile, id);
+      this.openLoadedDocument(this.runtime.currentFile, loaded, true);
+      this.modal.set('');
+    });
+  }
+
+  protected async openHistoryReadOnly(row: any): Promise<void> {
+    const id = String(row?.id || row?.snapshot_id || '').trim();
+    if (!this.runtime.currentFile || !id) return;
+    await this.runBusy(async () => {
+      const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
+      this.openLoadedDocument(this.runtime.currentFile, loaded, true);
+      this.modal.set('');
+    });
+  }
+
+  protected async openSubmitReadOnly(row: any): Promise<void> {
+    const submitId = String(row?.submitId || '').trim();
+    if (!this.runtime.currentFile || !submitId) return;
+    await this.runBusy(async () => {
+      const loaded = await this.api.loadCollabSubmit(this.runtime.currentFile, submitId);
+      this.openLoadedDocument(this.runtime.currentFile, loaded, true);
+      this.modal.set('');
+    });
+  }
+
+  protected async archiveHistorySnapshot(row: any): Promise<void> {
+    const id = String(row?.id || row?.snapshot_id || '').trim();
+    if (!this.runtime.currentFile || !id) return;
+    const message = window.prompt('给这个归档版本填写说明：', `历史记录 ${id}`);
+    if (message === null) return;
+    await this.runBusy(async () => {
+      const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
+      await this.api.createVersion(this.runtime.currentFile, loaded?.document || loaded, String(message || '').trim());
+      const versions = await this.api.versions(this.runtime.currentFile).catch(() => []);
+      this.versionRows.set(versions || []);
+      this.showToast('历史记录已归档为版本。');
     });
   }
 
@@ -516,10 +593,12 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     this.selectedTrashIds.set(next);
   }
 
-  private openLoadedDocument(name: string, payload: any): void {
+  private openLoadedDocument(name: string, payload: any, readOnly = false): void {
     const document = payload?.document || payload;
     this.documentStore.load(document, name);
-    this.collaboration.start(name);
+    this.runtime.readOnly = readOnly || !!document?.meta?.readonly;
+    if (this.runtime.readOnly) this.collaboration.stop();
+    else this.collaboration.start(name);
     this.runtime.ui['mainTab'] = 'panoramaWorkbench';
     void this.router.navigateByUrl('/panorama');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));

@@ -72,8 +72,8 @@
     <div class="tbar-dd">
       <button class="btn btn-ghost tbar-dd-btn" type="button" (click)="toggleDropdown('help', $event)">帮助 ▾</button>
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'help'">
-        <button class="tbar-dd-item" type="button" data-testid="toolbar-manual-button" (click)="showPlaceholder('使用手册')">使用手册</button>
-        <button class="tbar-dd-item" type="button" data-testid="toolbar-feedback-button" (click)="showPlaceholder('反馈建议')">反馈建议</button>
+        <button class="tbar-dd-item" type="button" data-testid="toolbar-manual-button" (click)="openManual()">使用手册</button>
+        <button class="tbar-dd-item" type="button" data-testid="toolbar-feedback-button" (click)="openFeedback()">反馈建议</button>
       </div>
     </div>
   </div>
@@ -89,7 +89,12 @@
       <app-shell-tab-bar *ngIf="layoutQuery.showBackAction()" [showBackAction]="true"></app-shell-tab-bar>
     </ng-container>
 
-    <section *ngIf="!layoutQuery.hasDocument()" class="empty-state no-document-home" data-testid="no-document-home">
+    <ng-container *ngIf="isUtilityWorkbench()">
+      <app-manual-workbench *ngIf="activeMainTab() === 'manual'"></app-manual-workbench>
+      <app-feedback-workbench *ngIf="activeMainTab() === 'feedback'"></app-feedback-workbench>
+    </ng-container>
+
+    <section *ngIf="!layoutQuery.hasDocument() && !isUtilityWorkbench()" class="empty-state no-document-home" data-testid="no-document-home">
       <h2>BLM（Business Language Modeling）业务语言建模</h2>
       <p>结构化记录业务理解，生成可读文档。</p>
       <div class="no-document-actions">
@@ -118,6 +123,7 @@
   <section
     class="modal-card"
     [class.open-document-card]="modal() === 'open'"
+    [class.history-modal-shell]="modal() === 'history'"
     [class.open-document-waiting]="waitDialog()"
     (click)="$event.stopPropagation()"
   >
@@ -313,16 +319,19 @@
         </div>
       </section>
 
-      <section *ngSwitchCase="'history'">
-        <h2>历史记录</h2>
-        <div class="document-list">
-          <div *ngFor="let row of historyRows()" class="document-row static-row">
-            <strong>{{ row.label || row.name || row.id || row.version_id || '历史项' }}</strong>
-            <span>{{ row.created_at || row.timestamp || row.message || '' }}</span>
-          </div>
-          <p *ngIf="!historyRows().length" class="placeholder-copy">暂无历史记录。</p>
-        </div>
-      </section>
+      <app-history-dialog
+        *ngSwitchCase="'history'"
+        [documentLabel]="currentDocumentLabel()"
+        [activeTab]="historyTab()"
+        [versionRows]="versionRows()"
+        [historyRows]="historyRows()"
+        [submitRows]="submitRows()"
+        (activeTabChange)="selectHistoryTab($event)"
+        (openVersion)="openVersionReadOnly($event)"
+        (openHistory)="openHistoryReadOnly($event)"
+        (archiveHistory)="archiveHistorySnapshot($event)"
+        (openSubmit)="openSubmitReadOnly($event)"
+      ></app-history-dialog>
 
       <section *ngSwitchDefault>
         <h2>{{ placeholderTitle() }}</h2>

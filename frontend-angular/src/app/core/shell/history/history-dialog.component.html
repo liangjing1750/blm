@@ -1,0 +1,61 @@
+<section class="history-dialog" data-testid="history-dialog">
+  <h2>历史记录</h2>
+  <p class="history-subtitle">当前文档：{{ documentLabel }}</p>
+
+  <div class="history-tab-bar" role="tablist" aria-label="历史记录范围">
+    <button
+      class="history-tab"
+      type="button"
+      [class.active]="activeTab === 'remote'"
+      (click)="selectTab('remote')"
+    >
+      远端历史
+    </button>
+    <button
+      class="history-tab"
+      type="button"
+      [class.active]="activeTab === 'local'"
+      (click)="selectTab('local')"
+    >
+      本地提交
+    </button>
+  </div>
+
+  <div class="history-list" data-testid="history-list">
+    <ng-container *ngIf="activeTab === 'remote'; else localHistory">
+      <h3 *ngIf="versionRows.length" class="history-section-title">归档版本</h3>
+      <article *ngFor="let row of versionRows" class="recovery-item">
+        <div class="recovery-item-main">
+          <strong>{{ row.label || row.message || row.id || row.version_id }}</strong>
+          <span>稳定只读快照</span>
+        </div>
+        <button class="btn btn-outline btn-sm" type="button" (click)="openVersion.emit(row)">只读打开</button>
+      </article>
+
+      <h3 *ngIf="historyRows.length" class="history-section-title">协作快照</h3>
+      <article *ngFor="let row of historyRows" class="recovery-item">
+        <div class="recovery-item-main">
+          <strong>{{ row.message || row.user || '协作同步' }}</strong>
+          <span>{{ row.timestamp_label || row.timestamp || row.id || '' }}</span>
+        </div>
+        <button class="btn btn-outline btn-sm" type="button" (click)="openHistory.emit(row)">只读打开</button>
+        <button class="btn btn-primary btn-sm" type="button" (click)="archiveHistory.emit(row)">归档版本</button>
+      </article>
+
+      <p *ngIf="!versionRows.length && !historyRows.length" class="placeholder-copy">暂无历史记录。</p>
+    </ng-container>
+
+    <ng-template #localHistory>
+      <p class="recovery-subtitle">每次 Ctrl+S 的提交原文。打开为只读预览。</p>
+      <article *ngFor="let row of submitRows" class="recovery-item">
+        <div class="recovery-item-main">
+          <strong>{{ row.user || '未知用户' }} 提交 · 基于 v{{ row.baseSeq || 0 }} -> v{{ row.seq || 0 }}</strong>
+          <span>{{ row.createdAt || row.submitId || '' }}</span>
+        </div>
+        <button class="btn btn-outline btn-sm" type="button" (click)="openSubmit.emit(row)">只读打开</button>
+      </article>
+
+      <p *ngIf="!submitRows.length" class="placeholder-copy">暂无提交记录。</p>
+    </ng-template>
+  </div>
+</section>

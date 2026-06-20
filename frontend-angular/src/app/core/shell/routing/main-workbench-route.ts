@@ -8,6 +8,8 @@ const WORKBENCH_TO_PATH: Record<string, string> = {
   entity: '/entity',
   knowledge: '/knowledge',
   role: '/role',
+  manual: '/manual',
+  feedback: '/feedback',
   preview: '/preview',
 };
 
@@ -19,6 +21,8 @@ const PATH_TO_WORKBENCH: Record<string, string> = {
   entity: 'entity',
   knowledge: 'knowledge',
   role: 'role',
+  manual: 'manual',
+  feedback: 'feedback',
   preview: 'preview',
 };
 

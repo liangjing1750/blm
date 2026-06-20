@@ -9,7 +9,9 @@ export type MainWorkbenchId =
   | 'entity'
   | 'knowledge'
   | 'role'
-  | 'preview';
+  | 'preview'
+  | 'manual'
+  | 'feedback';
 
 export interface AngularRuntimeState {
   doc: any;
@@ -113,9 +115,11 @@ export function normalizeMainWorkbenchId(tabId?: string): string {
     orchestration: 'orchestrationWorkbench',
     knowledge: 'knowledge',
     role: 'role',
+    manual: 'manual',
+    feedback: 'feedback',
   };
   const normalized = aliases[String(tabId || '')] || String(tabId || 'panoramaWorkbench');
-  return ['panoramaWorkbench', 'processWorkbench', 'constructWorkbench', 'orchestrationWorkbench', 'entity', 'knowledge', 'role', 'preview'].includes(normalized)
+  return ['panoramaWorkbench', 'processWorkbench', 'constructWorkbench', 'orchestrationWorkbench', 'entity', 'knowledge', 'role', 'preview', 'manual', 'feedback'].includes(normalized)
     ? normalized
     : 'panoramaWorkbench';
 }

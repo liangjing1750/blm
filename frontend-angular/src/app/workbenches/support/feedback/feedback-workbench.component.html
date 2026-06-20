@@ -1,0 +1,136 @@
+<section class="feedback-layout" data-testid="feedback-workbench">
+  <section class="feedback-hero feedback-hero--wide">
+    <div>
+      <p class="feedback-kicker">产品共建</p>
+      <h2>反馈建议</h2>
+      <p>记录使用中的问题、缺陷和优化想法。中间卡片用于快速浏览，右侧详情用于讨论跟进。</p>
+    </div>
+    <div class="feedback-hero-actions">
+      <div class="feedback-global-stat">
+        <strong>{{ filteredItems().length }}</strong><span>当前结果</span>
+        <strong>{{ totalPages() }}</strong><span>页数</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="feedback-workbench feedback-workbench--three">
+    <aside class="feedback-left">
+      <div class="feedback-filter-card">
+        <div class="fb-owner-toggle">
+          <button type="button" [class.active]="ownerFilter() === 'mine'" (click)="ownerFilter.set('mine'); setPage(1)">我的反馈</button>
+          <button type="button" [class.active]="ownerFilter() === 'all'" (click)="ownerFilter.set('all'); setPage(1)">所有人</button>
+        </div>
+        <div class="feedback-filters feedback-filters--inline">
+          <select class="fb-filter" [ngModel]="categoryFilter()" (ngModelChange)="categoryFilter.set($event); setPage(1)">
+            <option value="">全部类型</option>
+            <option *ngFor="let category of categories" [value]="category">{{ category }}</option>
+          </select>
+          <select class="fb-filter" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); setPage(1)">
+            <option value="">全部状态</option>
+            <option *ngFor="let status of statuses" [value]="status">{{ status }}</option>
+          </select>
+        </div>
+        <button class="btn btn-primary feedback-quick-add" type="button" data-testid="feedback-new-button" (click)="openCreate()">+ 新建反馈</button>
+      </div>
+
+      <section class="feedback-summary">
+        <div class="feedback-stat-card feedback-stat-card--total"><strong>{{ items().length }}</strong><span>全部反馈</span></div>
+        <div class="feedback-stat-group">
+          <h3>类型统计</h3>
+          <div class="feedback-stat-grid">
+            <div *ngFor="let category of categories"><strong>{{ countByCategory(category) }}</strong><span>{{ category }}</span></div>
+          </div>
+        </div>
+        <div class="feedback-stat-group">
+          <h3>状态统计</h3>
+          <div class="feedback-stat-grid">
+            <div *ngFor="let status of statuses"><strong>{{ countByStatus(status) }}</strong><span>{{ status }}</span></div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="feedback-main">
+      <div class="feedback-card-toolbar">
+        <div><strong>反馈卡片</strong><span>{{ pageItems().length }} / {{ filteredItems().length }}</span></div>
+        <button class="btn btn-primary btn-sm" type="button" (click)="openCreate()">+ 新建反馈</button>
+      </div>
+      <div class="feedback-tile-grid">
+        <button
+          *ngFor="let item of pageItems()"
+          type="button"
+          class="fb-tile"
+          [class.fb-tile--active]="selectedUid() === item.uid"
+          (click)="selectItem(item.uid)"
+        >
+          <div class="fb-card-head">
+            <span class="fb-badge">{{ item.category || '体验改进' }}</span>
+            <span class="fb-badge fb-badge--status">{{ item.status || '待处理' }}</span>
+          </div>
+          <h4 class="fb-card-title">{{ item.title || '(无标题)' }}</h4>
+          <p class="fb-card-desc">{{ cardSummary(item) }}</p>
+          <div class="fb-tile-foot">
+            <span>{{ item.author || '匿名' }}</span>
+            <span>{{ formatTime(item.createdAt) }}</span>
+            <span>{{ item.messages?.length || 0 }} 楼</span>
+          </div>
+        </button>
+        <div *ngIf="!pageItems().length" class="fb-empty">
+          <strong>暂无反馈记录</strong>
+          <p>可以先提交一条需求功能、体验改进、轻微缺陷或严重问题。</p>
+        </div>
+      </div>
+      <div class="feedback-pagination">
+        <button class="btn btn-outline btn-sm" type="button" [disabled]="page() <= 1" (click)="setPage(page() - 1)">上一页</button>
+        <span>第 {{ page() }} / {{ totalPages() }} 页，每页 20 条</span>
+        <button class="btn btn-outline btn-sm" type="button" [disabled]="page() >= totalPages()" (click)="setPage(page() + 1)">下一页</button>
+      </div>
+    </main>
+
+    <aside class="feedback-detail" *ngIf="creating(); else detailView">
+      <div class="fb-detail-head">
+        <div><p class="feedback-kicker">新建反馈</p><h3>提交一条反馈建议</h3></div>
+        <button class="icon-btn" type="button" (click)="creating.set(false)">×</button>
+      </div>
+      <section class="fb-create-panel">
+        <label>类型<select [(ngModel)]="newCategory"><option *ngFor="let category of categories" [value]="category">{{ category }}</option></select></label>
+        <label>标题<input [(ngModel)]="newTitle" placeholder="用一句话说明反馈内容"></label>
+        <label>详细描述<textarea [(ngModel)]="newDescription" rows="7" placeholder="补充现象、期望、影响范围或复现步骤"></textarea></label>
+        <button class="btn btn-primary" type="button" [disabled]="loading()" (click)="createFeedback()">提交反馈</button>
+      </section>
+    </aside>
+
+    <ng-template #detailView>
+      <aside class="feedback-detail" *ngIf="selectedItem() as item; else emptyDetail">
+        <div class="fb-detail-head">
+          <div><p class="feedback-kicker">反馈详情</p><h3>{{ item.title || '(无标题)' }}</h3></div>
+        </div>
+        <section class="fb-detail-section">
+          <label>类型<select [(ngModel)]="item.category" (change)="updateItem(item)"><option *ngFor="let category of categories" [value]="category">{{ category }}</option></select></label>
+          <label>状态<select [(ngModel)]="item.status" (change)="updateItem(item)"><option *ngFor="let status of statuses" [value]="status">{{ status }}</option></select></label>
+        </section>
+        <section class="fb-thread">
+          <h4>对话记录</h4>
+          <p class="fb-thread-help">每条对话用于补充信息、处理意见或验证结果。</p>
+          <div class="fb-thread-list">
+            <article *ngFor="let message of item.messages || []; let index = index" class="fb-thread-item">
+              <div class="fb-thread-meta"><strong>#{{ message.floor || index + 1 }}</strong><span>{{ message.author || '匿名' }}</span><span>{{ formatTime(message.createdAt) }}</span></div>
+              <div class="fb-thread-content">{{ message.content || '' }}</div>
+            </article>
+            <div *ngIf="!(item.messages || []).length" class="fb-empty fb-empty--compact">暂无对话记录。</div>
+          </div>
+          <div class="fb-message-composer">
+            <textarea [(ngModel)]="replyContent" rows="4" placeholder="追加一条对话记录"></textarea>
+            <div class="fb-composer-actions"><button class="btn btn-primary" type="button" [disabled]="loading()" (click)="sendReply(item)">发送</button></div>
+          </div>
+        </section>
+      </aside>
+    </ng-template>
+
+    <ng-template #emptyDetail>
+      <aside class="feedback-detail"><div class="fb-detail-empty"><strong>选择一条反馈</strong><p>点击中间的反馈卡片后，这里会显示类型、状态和对话记录。</p></div></aside>
+    </ng-template>
+  </div>
+
+  <div *ngIf="statusMessage()" class="feedback-status">{{ statusMessage() }}</div>
+</section>

@@ -1,0 +1,30 @@
+<section class="manual-wrap" data-testid="manual-workbench">
+  <aside class="manual-nav">
+    <section class="manual-panel">
+      <div class="manual-panel-title">文档</div>
+      <div class="manual-doc-list">
+        <button
+          *ngFor="let doc of docs()"
+          class="manual-doc-button"
+          type="button"
+          [class.active]="activeDocId() === doc.id"
+          (click)="selectDoc(doc.id)"
+        >
+          <span class="manual-doc-button-title">{{ doc.title }}</span>
+        </button>
+      </div>
+    </section>
+  </aside>
+
+  <main class="manual-reader">
+    <header class="manual-reader-head">
+      <h2>{{ selectedDoc()?.title || '使用手册' }}</h2>
+    </header>
+    <article class="manual-article">
+      <p *ngIf="selectedDoc()?.summary" class="manual-doc-intro">{{ selectedDoc()?.summary }}</p>
+      <div *ngIf="loading()" class="manual-loading">正在加载使用手册...</div>
+      <div *ngIf="error()" class="manual-empty-hint">{{ error() }}</div>
+      <div *ngIf="!loading() && !error()" [innerHTML]="renderedManualHtml()"></div>
+    </article>
+  </main>
+</section>
