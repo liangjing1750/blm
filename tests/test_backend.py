@@ -220,6 +220,68 @@ class MigrateDocumentTests(unittest.TestCase):
         uids = [r["uid"] for r in result]
         self.assertEqual(uids, ["r1", "r2"])
 
+    def test_merge_does_not_duplicate_entity_fields(self):
+        """Collaboration merge must not accumulate duplicate entity fields."""
+        from blm_core.merge import analyze_merge
+
+        fields = [
+            {"uid": "f1", "name": "warehouse code", "type": "string", "note": ""},
+            {"uid": "f2", "name": "storehouse number", "type": "string", "note": ""},
+            {"uid": "f3", "name": "stack number", "type": "string", "note": ""},
+        ]
+
+        def make_doc(next_fields):
+            return canonical_document({
+                "meta": {"title": "Test"},
+                "roles": [], "stages": [], "stageFlowRefs": [], "stageFlowLinks": [],
+                "processes": [], "businessComponents": [], "businessConstructs": [], "taskDefinitions": [],
+                "entities": [{
+                    "uid": "entity-1",
+                    "name": "warehouse floorplan relation",
+                    "fields": next_fields,
+                    "state_transitions": [],
+                }],
+            })
+
+        base = make_doc(fields)
+        for i in range(10):
+            modified = [
+                {"uid": "f1", "name": "warehouse code", "type": "string", "note": f"v{i}"},
+                {"uid": "f2", "name": "storehouse number", "type": "string", "note": f"v{i}"},
+                {"uid": "f3", "name": "stack number", "type": "string", "note": f"v{i}"},
+            ]
+            user = make_doc(modified)
+            result = analyze_merge("combine", left_document=base, right_document=user)
+            base = canonical_document(result["merged_document"])
+
+        final_fields = base["entities"][0]["fields"]
+        self.assertEqual(len(final_fields), 3)
+        self.assertEqual([field["uid"] for field in final_fields], ["f1", "f2", "f3"])
+
+    def test_canonical_document_dedups_duplicate_entity_fields(self):
+        """canonical_document cleans duplicated entity fields from damaged local data."""
+        document = {
+            "meta": {"title": "Dedup Fields"},
+            "roles": [], "stages": [], "stageFlowRefs": [], "stageFlowLinks": [],
+            "processes": [], "businessComponents": [], "businessConstructs": [], "taskDefinitions": [],
+            "entities": [{
+                "uid": "entity-1",
+                "name": "warehouse floorplan relation",
+                "fields": [
+                    {"uid": "f1", "name": "warehouse code", "type": "string"},
+                    {"uid": "f1", "name": "warehouse code", "type": "string"},
+                    {"uid": "f2", "name": "storehouse number", "type": "string"},
+                    {"uid": "f2", "name": "storehouse number", "type": "string"},
+                ],
+                "state_transitions": [],
+            }],
+        }
+
+        result = canonical_document(document)["entities"][0]["fields"]
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual([field["uid"] for field in result], ["f1", "f2"])
+
     def test_canonical_document_normalizes_task_parameters(self):
         document = {
             "meta": {"title": "Task Params"},

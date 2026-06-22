@@ -185,7 +185,7 @@ LEGACY_FIELD_RENAMES: dict[str, str] = {
 }
 
 
-SEMANTIC_UNIQUE_IN_COMBINE = {"rule", "business_rule"}
+SEMANTIC_UNIQUE_IN_COMBINE = {"rule", "business_rule", "field"}
 
 # uid 为随机生成（无确定性名称），只能用语义 key 匹配的类型
 SEMANTIC_KEY_ONLY_TYPES = {"relation"}

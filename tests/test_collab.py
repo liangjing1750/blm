@@ -896,6 +896,38 @@ class CollaborationSaveV2Tests(unittest.TestCase):
             submit_files = list(submits_dir.glob("*.json"))
             self.assertGreaterEqual(len(submit_files), 1, "至少应有1个提交原文")
 
+    def test_submit_record_cleans_duplicate_entity_fields_from_local_backup(self):
+        """Browser local backup submissions should not persist duplicated entity fields."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            document = create_empty_document("CollabSmoke")
+            document["entities"] = [{
+                "uid": "entity-1",
+                "name": "warehouse floorplan relation",
+                "fields": [
+                    {"uid": "field-1", "name": "warehouse code", "type": "string"},
+                    {"uid": "field-1", "name": "warehouse code", "type": "string"},
+                    {"uid": "field-2", "name": "storehouse number", "type": "string"},
+                    {"uid": "field-2", "name": "storehouse number", "type": "string"},
+                ],
+                "state_transitions": [],
+            }]
+            storage.save("CollabSmoke", create_empty_document("CollabSmoke"))
+            manager = CollaborationManager(storage, autosave_interval=0)
+
+            manager.apply_http_snapshot(
+                "CollabSmoke",
+                {"id": "user-A", "name": "User A", "sessionId": "session-A"},
+                {"baseSeq": 0, "document": document},
+            )
+
+            submits_dir = Path(temp_dir) / "workspace" / "CollabSmoke" / "collab" / "submits"
+            submit_files = list(submits_dir.glob("*.json"))
+            self.assertEqual(len(submit_files), 1)
+            record = json.loads(submit_files[0].read_text("utf-8"))
+            fields = record["document"]["entities"][0]["fields"]
+            self.assertEqual([field["uid"] for field in fields], ["field-1", "field-2"])
+
     def test_concurrent_different_fields_all_preserved(self):
         """AC1: A/B同时从同一baseSeq改不同字段 → 全部保留（v2无冲突自动合并）"""
         with tempfile.TemporaryDirectory() as temp_dir:

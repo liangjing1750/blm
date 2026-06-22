@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from blm_core.document import canonical_document
 from blm_core.diagnostics import log_error, log_event
 from blm_core.merge import analyze_merge
 from blm_core.model_strategy import DESCRIPTORS, semantic_key
@@ -372,6 +373,7 @@ class CollaborationManager:
         document = payload.get("document")
         if not isinstance(document, dict):
             raise WebSocketProtocolError("snapshot document must be object")
+        document = canonical_document(document)
         safe_name = self.storage._validate_name(session.doc_name)
         with self._get_doc_lock(safe_name):
             base_seq = self._parse_base_seq(payload.get("baseSeq")) or 0

@@ -478,7 +478,7 @@ def _dedup_nested_lists(value):
         return value
     result = {}
     for key, child in value.items():
-        if key in ("businessRules", "userSteps", "orchestrationTasks", "forms") and isinstance(child, list):
+        if key in ("businessRules", "userSteps", "orchestrationTasks", "forms", "fields") and isinstance(child, list):
             result[key] = _dedup_by_uid(child)
         else:
             result[key] = _dedup_nested_lists(child)
