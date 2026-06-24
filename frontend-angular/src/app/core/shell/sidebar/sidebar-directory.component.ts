@@ -56,6 +56,11 @@ export class SidebarDirectoryComponent implements OnInit {
     this.refreshFromRuntime();
   }
 
+  @HostListener('window:blm-sidebar-directory-refresh')
+  protected handleSidebarRefresh(): void {
+    this.refreshFromRuntime();
+  }
+
   protected isCollapsedNode(key: string): boolean {
     this.version();
     return this.adapter.isNodeCollapsed(key);

@@ -139,6 +139,11 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     }
   }
 
+  @HostListener('window:blm-angular-runtime-refresh')
+  protected handleRuntimeRefresh(): void {
+    this.refreshShellView();
+  }
+
   protected currentDocumentLabel(): string {
     // 模块意图：顶部展示给用户的是业务文档名称，而不是服务端持久化 key。
     // 关键流程：属性保存会更新 meta.title/domain；这里优先读取 meta，刷新界面时能立即看到已生效的文档名。
@@ -698,6 +703,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     if (this.runtime.readOnly) this.collaboration.stop();
     else this.collaboration.start(name);
     this.runtime.ui['mainTab'] = 'panoramaWorkbench';
+    this.refreshShellView();
     void this.router.navigateByUrl('/panorama');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
@@ -717,6 +723,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     this.runtime.collab.forceSnapshotSync = true;
     this.collaboration.start(name);
     this.runtime.ui['mainTab'] = 'panoramaWorkbench';
+    this.refreshShellView();
     void this.router.navigateByUrl('/panorama');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }

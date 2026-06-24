@@ -60,6 +60,73 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="create-document-submit-button"]')?.textContent).toContain('创建');
   });
 
+  it('should refresh the shell after creating a document from an opened document', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/new')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Fresh Document', title: 'Fresh Document' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'old.json';
+    runtime.doc = {
+      meta: { domain: 'Old Document', title: 'Old Document' },
+      roles: [],
+      stages: [{ uid: 'old-stage', name: '旧阶段', panoramaColumnUid: 'old-column', panoramaLaneUid: 'old-lane' }],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'old-column', name: '旧价值流' }],
+        lanes: [{ uid: 'old-lane', name: '旧业务域' }],
+        cells: [],
+      },
+    };
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance as unknown as {
+      createDocument: () => Promise<void>;
+      submitCreateDocument: () => Promise<void>;
+      createDocumentName: string;
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('[data-testid="current-file-name"]')?.textContent).toContain('Old Document');
+
+    await component.createDocument();
+    component.createDocumentName = 'fresh.json';
+    await component.submitCreateDocument();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(runtime.currentFile).toBe('fresh.json');
+    expect(compiled.querySelector('[data-testid="current-file-name"]')?.textContent).toContain('Fresh Document');
+    expect(compiled.textContent).not.toContain('旧阶段');
+    expect(compiled.textContent).not.toContain('旧价值流');
+  });
+
   it('should restore panorama secondary tabs inside the Angular workbench', () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
