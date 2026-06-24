@@ -301,12 +301,20 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
       this.modal.set('');
       return;
     }
-    await this.runBusy(async () => {
-      await this.api.createVersion(this.runtime.currentFile, this.runtime.doc, this.archiveVersionMessage.trim());
-      this.archiveVersionMessage = '';
-      this.modal.set('');
-      this.showToast('归档版本已创建');
+    this.waitDialog.set({
+      title: '正在归档版本...',
+      description: '正在保存当前文档为稳定只读版本。',
     });
+    try {
+      await this.runBusy(async () => {
+        await this.api.createVersion(this.runtime.currentFile, this.runtime.doc, this.archiveVersionMessage.trim());
+        this.archiveVersionMessage = '';
+        this.modal.set('');
+        this.showToast('归档版本已创建');
+      });
+    } finally {
+      this.waitDialog.set(null);
+    }
   }
 
   protected async deleteCurrentDocument(): Promise<void> {
@@ -422,6 +430,13 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
       this.openLoadedDocument(this.runtime.currentFile, loaded, true);
       this.modal.set('');
     });
+  }
+
+  protected async copyVersionLink(row: any): Promise<void> {
+    const id = String(row?.id || row?.version_id || '').trim();
+    if (!this.runtime.currentFile || !id) return;
+    const copied = await this.copyLocatorUrl(this.buildLocatorUrl({ doc: this.runtime.currentFile, at: `version:${id}` }));
+    this.showToast(copied ? '版本链接已复制' : '复制链接失败', copied ? 'success' : 'error');
   }
 
   protected async openHistoryReadOnly(row: any): Promise<void> {
@@ -774,6 +789,39 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     window.setTimeout(() => {
       if (this.toast()?.message === message) this.toast.set(null);
     }, 2400);
+  }
+
+  private buildLocatorUrl(extra: Record<string, string>): string {
+    const params = new URLSearchParams(window.location.search || '');
+    Object.entries(extra).forEach(([key, value]) => {
+      const text = String(value || '').trim();
+      if (text) params.set(key, text);
+    });
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+  }
+
+  private async copyLocatorUrl(url: string): Promise<boolean> {
+    if (!url) return false;
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(url);
+        return true;
+      } catch {
+        // 浏览器权限或非安全上下文会拒绝 Clipboard API；保留旧版同类降级路径。
+      }
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = url;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      return document.execCommand('copy');
+    } finally {
+      document.body.removeChild(textarea);
+    }
   }
 
   private defaultCopyDocumentName(name: string): string {

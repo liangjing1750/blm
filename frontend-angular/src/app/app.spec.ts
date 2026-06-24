@@ -547,6 +547,8 @@ describe('App', () => {
     archiveInput.dispatchEvent(new Event('input'));
     fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="archive-version-submit-button"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="wait-dialog"]')?.textContent).toContain('正在归档版本');
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -598,13 +600,18 @@ describe('App', () => {
 
   it('should show read-only version labels and local recovery actions in history', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes('/api/history/agent.json')) {
         return new Response(JSON.stringify([{ id: 'h1', message: '同步快照', seq: 3, timestamp_label: '今天' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.includes('/api/versions/agent.json')) {
-        return new Response(JSON.stringify([{ id: 'v1', label: '验收版' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify([{ id: 'v1', label: '验收版', createdAt: '2026年06月24日 11时38分19秒' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.includes('/api/collab/submits/list')) {
         return new Response(JSON.stringify({ submits: [{ submitId: 's1', user: 'agent', baseSeq: 2, seq: 3 }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -631,6 +638,17 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('本地恢复');
+    expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('复制链接');
+    expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('2026年06月24日 11时38分19秒');
+    expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).not.toContain('稳定只读快照');
+
+    Array.from(compiled.querySelectorAll<HTMLButtonElement>('[data-testid="history-dialog"] button'))
+      .find((button) => button.textContent?.includes('复制链接'))
+      ?.click();
+    await fixture.whenStable();
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/[?&]doc=agent\.json(&|$)/));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('at=version%3Av1'));
+
     compiled.querySelectorAll<HTMLButtonElement>('[data-testid="history-dialog"] .btn-outline')[0]?.click();
     await fixture.whenStable();
     fixture.detectChanges();

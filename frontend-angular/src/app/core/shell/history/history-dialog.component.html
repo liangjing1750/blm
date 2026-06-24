@@ -27,9 +27,12 @@
       <article *ngFor="let row of versionRows" class="recovery-item">
         <div class="recovery-item-main">
           <strong>{{ row.label || row.message || row.id || row.version_id }}</strong>
-          <span>稳定只读快照</span>
+          <span>{{ versionTime(row) }}</span>
         </div>
-        <button class="btn btn-outline btn-sm" type="button" (click)="openVersion.emit(row)">只读打开</button>
+        <div class="recovery-item-actions">
+          <button class="btn btn-outline btn-sm" type="button" (click)="openVersion.emit(row)">只读打开</button>
+          <button class="btn btn-outline btn-sm" type="button" (click)="copyVersionLink.emit(row)">复制链接</button>
+        </div>
       </article>
 
       <h3 *ngIf="historyRows.length" class="history-section-title">协作快照</h3>
@@ -38,9 +41,11 @@
           <strong>{{ row.message || row.user || '协作同步' }}</strong>
           <span>{{ row.timestamp_label || row.timestamp || row.id || '' }}</span>
         </div>
-        <button class="btn btn-outline btn-sm" type="button" (click)="openHistory.emit(row)">只读打开</button>
-        <button class="btn btn-primary btn-sm" type="button" (click)="archiveHistory.emit(row)">归档版本</button>
-        <button class="btn btn-danger-solid btn-sm" type="button" (click)="restoreHistory.emit(row)">本地恢复</button>
+        <div class="recovery-item-actions">
+          <button class="btn btn-outline btn-sm" type="button" (click)="openHistory.emit(row)">只读打开</button>
+          <button class="btn btn-primary btn-sm" type="button" (click)="archiveHistory.emit(row)">归档版本</button>
+          <button class="btn btn-danger-solid btn-sm" type="button" (click)="restoreHistory.emit(row)">本地恢复</button>
+        </div>
       </article>
 
       <p *ngIf="!versionRows.length && !historyRows.length" class="placeholder-copy">暂无历史记录。</p>
@@ -53,8 +58,10 @@
           <strong>{{ row.user || '未知用户' }} 提交 · 基于 v{{ row.baseSeq || 0 }} -> v{{ row.seq || 0 }}</strong>
           <span>{{ row.createdAt || row.submitId || '' }}</span>
         </div>
-        <button class="btn btn-outline btn-sm" type="button" (click)="openSubmit.emit(row)">只读打开</button>
-        <button class="btn btn-danger-solid btn-sm" type="button" (click)="restoreSubmit.emit(row)">本地恢复</button>
+        <div class="recovery-item-actions">
+          <button class="btn btn-outline btn-sm" type="button" (click)="openSubmit.emit(row)">只读打开</button>
+          <button class="btn btn-danger-solid btn-sm" type="button" (click)="restoreSubmit.emit(row)">本地恢复</button>
+        </div>
       </article>
 
       <p *ngIf="!submitRows.length" class="placeholder-copy">暂无提交记录。</p>

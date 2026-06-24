@@ -74,6 +74,14 @@
   gap: 4px;
 }
 
+.recovery-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .recovery-item-main strong,
 .recovery-item-main span {
   overflow: hidden;
@@ -89,10 +97,6 @@
 .recovery-item-main span {
   color: #64748b;
   font-size: 12px;
-}
-
-.recovery-item .btn:first-of-type {
-  margin-left: auto;
 }
 
 .btn-danger-solid {

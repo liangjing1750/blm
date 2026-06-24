@@ -21,6 +21,7 @@ export class HistoryDialogComponent {
 
   @Output() activeTabChange = new EventEmitter<HistoryDialogTab>();
   @Output() openVersion = new EventEmitter<any>();
+  @Output() copyVersionLink = new EventEmitter<any>();
   @Output() openHistory = new EventEmitter<any>();
   @Output() archiveHistory = new EventEmitter<any>();
   @Output() restoreHistory = new EventEmitter<any>();
@@ -29,5 +30,17 @@ export class HistoryDialogComponent {
 
   selectTab(tab: HistoryDialogTab): void {
     this.activeTabChange.emit(tab);
+  }
+
+  versionTime(row: any): string {
+    return String(
+      row?.timestamp_label ||
+        row?.createdAt ||
+        row?.created_at ||
+        row?.timestamp ||
+        row?.time ||
+        row?.date ||
+        '',
+    ).trim();
   }
 }
