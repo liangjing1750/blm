@@ -1,22 +1,22 @@
 # styles.scss classification
 
-Generated: 2026-06-24T14:56:42.110Z
+Generated: 2026-06-24T15:11:42.962Z
 
-Scope: frontend-angular/src/styles.scss after shared-style extraction and first component-style migration.
+Scope: frontend-angular/src/styles.scss after shared-style extraction and component-style migration.
 
 ## Summary
 
 | category | meaning | count |
 |---|---|---:|
-| still-used | selector token is referenced by Angular templates, TS, or component styles | 1004 |
-| legacy-compat-selector | no direct Angular component hit, but selector belongs to global shell/modal/old compatibility surface | 165 |
-| suspected-dead | no direct hit and no compatibility hint; requires visual/regression check before deletion | 1108 |
+| still-used | selector token is referenced by Angular templates, TS, or component styles | 952 |
+| legacy-compat-selector | no direct Angular component hit, but selector belongs to global shell/modal/old compatibility surface | 188 |
+| suspected-dead | no direct hit and no compatibility hint; requires visual/regression check before deletion | 1082 |
 
 Full list: docs/refactor/styles-classification.csv
 
 ## Still Used
 
-- count: 1004
+- count: 952
 
 | line | selector | evidence |
 |---:|---|---|
@@ -43,7 +43,7 @@ Full list: docs/refactor/styles-classification.csv
 
 ## Legacy Compatibility Selectors
 
-- count: 165
+- count: 188
 
 | line | selector | evidence |
 |---:|---|---|
@@ -70,7 +70,7 @@ Full list: docs/refactor/styles-classification.csv
 
 ## Suspected Dead Selectors
 
-- count: 1108
+- count: 1082
 
 | line | selector | evidence |
 |---:|---|---|
@@ -98,6 +98,6 @@ Full list: docs/refactor/styles-classification.csv
 ## Migration Notes
 
 - Shared layer exists under `frontend-angular/src/styles/shared/` for base variables, scroll frame, form controls, buttons, and modal shells.
-- Manual and feedback component-owned global styles have been removed from `styles.scss`; their component SCSS files are now the local source of truth.
-- `.manual-shell` rules remain global because they target the outer shell, not the manual component subtree.
+- Manual, feedback, and role component-owned global styles have been removed from `styles.scss`; their component SCSS files are now the local source of truth.
+- `.manual-shell` and preview/export `.pv-content` rules remain global because they target shell or rendered document content outside the owning component subtree.
 - Large process-flow and process-node workbench blocks remain in `styles.scss`; direct migration was verified to exceed Angular component style budgets, so they need subview-level splitting before migration.

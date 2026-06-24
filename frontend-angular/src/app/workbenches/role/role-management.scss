@@ -1,0 +1,134 @@
+.role-light-card {
+  margin-bottom: 16px;
+}
+.role-light-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+.role-light-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.role-light-group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+}
+.role-light-group-head:hover {
+  background: #eff6ff;
+}
+.role-light-group-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.role-light-group-caret {
+  color: var(--accent);
+  font-size: 12px;
+}
+.role-light-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+.role-light-chip-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.role-light-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #bfdbfe;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.role-light-chip:hover {
+  background: #eff6ff;
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.role-light-chip.is-disabled {
+  opacity: .7;
+  border-style: dashed;
+}
+.role-light-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.role-light-count {
+  color: var(--text-m);
+  font-size: 11px;
+}
+.role-light-group-meta {
+  color: var(--text-m);
+  font-size: 11px;
+  font-weight: 600;
+}
+.role-light-remove {
+  margin-left: 4px;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.role-light-remove:hover {
+  background: #fecaca;
+}
+.role-light-input {
+  min-width: 200px;
+}
+.role-create-inline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.role-light-group-select,
+.role-light-group-input {
+  min-width: 128px;
+}
+.role-light-group-custom.hidden {
+  display: none;
+}
+.role-light-group-custom {
+  display: inline-flex;
+}
+.role-light-group-select {
+  padding-right: 28px;
+}
+
+@media (max-width: 960px) {
+  .role-light-groups {
+    grid-template-columns: 1fr;
+  }
+}

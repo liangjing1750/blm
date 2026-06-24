@@ -1,0 +1,197 @@
+.proc-role-view {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  background: #f8fafc;
+  overflow: hidden;
+  min-height: 0;
+}
+.proc-role-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 32px; color: var(--text-m);
+}
+.proc-role-map-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.proc-role-map-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.proc-role-map-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.role-focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.role-focus-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.proc-role-map-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.proc-role-map-subtitle,
+.proc-role-map-focus {
+  color: var(--text-m);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.proc-role-map-focus {
+  white-space: nowrap;
+}
+.role-usecase-map-wrap {
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  min-height: 360px;
+}
+.role-usecase-map-wrap.focused {
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+.role-usecase-map-canvas {
+  position: relative;
+}
+.role-usecase-map-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.role-usecase-group {
+  position: absolute;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: rgba(248,250,252,.88);
+}
+.role-side-group {
+  border-color: #93c5fd;
+  background: rgba(239,246,255,.88);
+}
+.role-proc-group {
+  border-color: #cbd5e1;
+}
+.role-usecase-group-title {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  color: var(--text-m);
+  font-size: 11px;
+  font-weight: 600;
+}
+.role-usecase-group-title small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-l);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.role-usecase-role,
+.role-usecase-process {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .15s, opacity .15s;
+}
+.role-usecase-role:not(.readonly):hover,
+.role-usecase-process:not(.readonly):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15,23,42,.08);
+}
+.role-usecase-role.readonly,
+.role-usecase-process.readonly {
+  cursor: default;
+}
+.role-usecase-role.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59,130,246,.14);
+}
+.role-usecase-role-name,
+.role-usecase-process-name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.role-usecase-role-meta,
+.role-usecase-process-count {
+  font-size: 11px;
+  color: var(--text-m);
+  flex-shrink: 0;
+}
+.role-usecase-process {
+  border-radius: 18px;
+}
+.role-usecase-process.linked {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+.role-usecase-line {
+  fill: none;
+  stroke: rgba(59,130,246,.45);
+  stroke-width: 2;
+}
+.role-usecase-line-label {
+  fill: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 1100px) {
+  .proc-role-view {
+    flex-direction: column;
+  }
+  .proc-role-detail {
+    flex: 0 0 auto;
+    max-width: none;
+    max-height: 320px;
+  }
+}

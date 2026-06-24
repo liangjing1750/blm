@@ -121,7 +121,7 @@ interface LegacyWindow extends Window {
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './role-workbench.html',
-  styleUrl: './role-workbench.scss',
+  styleUrls: ['./role-workbench.scss', './role-management.scss', './role-usecase.scss'],
 })
 export class RoleWorkbenchComponent {
   // 模块意图：角色 tab 先完成 Angular 承载，数据仍通过 legacy 文档适配，避免本轮冲击后端模型。
