@@ -1,0 +1,27 @@
+/* ─── 按钮 ───────────────────────────────────────────────── */
+.btn {
+  padding: 6px 12px; border-radius: var(--radius); border: 1px solid transparent;
+  cursor: pointer; font-size: 13px; font-family: inherit; transition: all .15s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+.btn-ghost   { background: #fff; color: var(--text); border-color: var(--border); }
+.btn-ghost:hover { background: var(--hover); color: var(--text); border-color: #cbd5e1; }
+.btn-ghost.active { background: #e0f2fe; border-color: #93c5fd; color: #075985; }
+#toolbar .btn-ghost { background: transparent; color: var(--header-text); border-color: #475569; }
+#toolbar .btn-ghost:hover { background: #334155; color: #fff; border-color: #64748b; }
+#toolbar .btn-ghost.active { background: #334155; border-color: #93c5fd; color: #fff; }
+.btn-outline { background: transparent; color: var(--accent); border-color: var(--accent); }
+.btn-outline:hover { background: var(--active-bg); }
+.btn-sm { padding: 3px 8px; font-size: 12px; }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { background: #fee2e2; }
+.btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-danger-solid:hover { background: #dc2626; border-color: #dc2626; }
+.btn-icon {
+  background: none; border: none; cursor: pointer; color: var(--text-m);
+  padding: 3px 6px; border-radius: 4px; font-size: 13px;
+}
+.btn-icon:hover { background: var(--hover); color: var(--text); }
+

@@ -1,0 +1,41 @@
+/* ─── 模态框 ─────────────────────────────────────────────── */
+#modal-overlay, #open-modal-overlay, #history-modal-overlay, #save-as-modal-overlay, #user-modal-overlay, #collab-diagnostics-modal-overlay, #collab-conflict-modal, #task-parameter-modal-overlay, #compare-modal-overlay, #merge-modal-overlay, #feedback-image-preview-overlay, #app-dialog-overlay, #migrate-process-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: grid; place-items: center;
+  padding: 24px;
+  overflow: auto;
+  z-index: 1000;
+}
+.modal {
+  background: #fff; border-radius: 8px; padding: 24px; width: 360px;
+  display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.15);
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+.modal h3 { font-size: 16px; font-weight: 600; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.modal-title-row h3 {
+  margin: 0;
+}
+#app-dialog-overlay {
+  z-index: 1200;
+}
+.app-dialog {
+  width: min(420px, calc(100vw - 48px));
+}
+.app-dialog-message {
+  color: var(--text);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.app-dialog-input {
+  width: 100%;
+}

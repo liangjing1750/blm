@@ -1,0 +1,58 @@
+﻿/* ─── CSS 变量 ───────────────────────────────────────────── */
+:root {
+  --bg:          #f0f2f5;
+  --sidebar-bg:  #ffffff;
+  --content-bg:  #ffffff;
+  --header-bg:   #1e293b;
+  --header-text: #f1f5f9;
+  --accent:      #3b82f6;
+  --accent-h:    #2563eb;
+  --text:        #1e293b;
+  --text-m:      #64748b;
+  --border:      #e2e8f0;
+  --hover:       #f1f5f9;
+  --active-bg:   #eff6ff;
+  --active-bd:   #3b82f6;
+  --danger:      #ef4444;
+  --radius:      6px;
+  /* 步骤类型颜色 */
+  --query-bg:    #dbeafe; --query-tx:   #1d4ed8;
+  --check-bg:    #fef9c3; --check-tx:   #854d0e;
+  --compute-bg:  #dcfce7; --compute-tx: #166534;
+  --mutate-bg:   #fee2e2; --mutate-tx:  #991b1b;
+  /* 操作类型颜色 */
+  --op-c: #16a34a; --op-u: #d97706; --op-d: #dc2626;
+}
+
+/* ─── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       font-size: 14px; color: var(--text); background: var(--bg);
+       height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* 工作台通用滚动框：用于表格、矩阵、规则清单等双向增长区域。 */
+.workbench-scroll-frame {
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workbench-scroll-body {
+  min-height: 0;
+  overflow: scroll;
+  scrollbar-color: #c7d2df transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.workbench-scroll-body::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.workbench-scroll-body::-webkit-scrollbar-thumb {
+  background: #c7d2df;
+  border-radius: 999px;
+}
+
