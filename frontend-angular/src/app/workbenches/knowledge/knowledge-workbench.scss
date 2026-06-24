@@ -77,6 +77,10 @@
   padding: 6px 8px;
 }
 
+.knowledge-term-row.is-readonly {
+  grid-template-columns: minmax(180px, 240px) 1fr;
+}
+
 .knowledge-term-row:last-child {
   border-bottom: 0;
 }

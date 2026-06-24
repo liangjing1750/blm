@@ -381,6 +381,22 @@
   ></app-wait-dialog>
 </div>
 
+<div *ngIf="confirmDialog() as confirm" class="modal-backdrop" data-testid="runtime-confirm-backdrop" (click)="closeConfirmDialog(false)">
+  <section class="modal-card confirm-card" data-testid="runtime-confirm-dialog" (click)="$event.stopPropagation()">
+    <button class="modal-close" type="button" (click)="closeConfirmDialog(false)">×</button>
+    <h2>{{ confirm.title }}</h2>
+    <p class="confirm-message">{{ confirm.message }}</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" type="button" data-testid="runtime-confirm-cancel" (click)="closeConfirmDialog(false)">
+        {{ confirm.cancelLabel }}
+      </button>
+      <button class="btn btn-primary" type="button" data-testid="runtime-confirm-submit" (click)="closeConfirmDialog(true)">
+        {{ confirm.confirmLabel }}
+      </button>
+    </div>
+  </section>
+</div>
+
 <app-shell-notification
   *ngIf="toast() as shellToast"
   [message]="shellToast.message"

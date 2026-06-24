@@ -22,7 +22,9 @@
             <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-zoom-in" title="放大" (click)="zoom(0.08)">+</button>
           </div>
         }
-        <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-editor-open">打开编辑</button>
+        <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-editor-open" [class.active]="editing()" (click)="toggleEditing()">
+          {{ editing() ? '退出编辑' : '打开编辑' }}
+        </button>
       </div>
     </div>
   </div>
@@ -137,12 +139,12 @@
       </div>
     </div>
   } @else if (activeTab() === 'roles') {
-    <app-role-workbench />
+    <app-role-workbench [editing]="editing()" />
   } @else if (activeTab() === 'terms') {
-    <app-knowledge-workbench initialTab="termManagement" />
+    <app-knowledge-workbench initialTab="termManagement" [editing]="editing()" />
   } @else if (activeTab() === 'dictionary') {
-    <app-knowledge-workbench initialTab="dictionaryManagement" />
+    <app-knowledge-workbench initialTab="dictionaryManagement" [editing]="editing()" />
   } @else {
-    <app-knowledge-workbench initialTab="rules" />
+    <app-knowledge-workbench initialTab="rules" [editing]="editing()" />
   }
 </section>

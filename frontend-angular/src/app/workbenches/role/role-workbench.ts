@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, Input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
@@ -129,6 +129,7 @@ export class RoleWorkbenchComponent {
   protected readonly selectedRoleId = signal(this.currentRoleId());
   protected readonly version = signal(0);
   protected readonly createOpen = signal(false);
+  @Input() editing = true;
   protected newRoleName = '';
   protected selectedGroup = this.defaultRoleGroup();
   protected customGroup = '';
@@ -341,10 +342,12 @@ export class RoleWorkbenchComponent {
   }
 
   protected openCreateRole(): void {
+    if (!this.editing) return;
     this.createOpen.update((value) => !value);
   }
 
   protected addRole(): void {
+    if (!this.editing) return;
     const name = (this.newRoleName || '新角色').trim();
     const group = this.selectedGroup === '__custom__' ? this.customGroup.trim() : this.selectedGroup;
     if (!group) return;
@@ -367,6 +370,7 @@ export class RoleWorkbenchComponent {
 
   protected async removeRole(role: LegacyRole, event: Event): Promise<void> {
     event.stopPropagation();
+    if (!this.editing) return;
     if (this.roleUsage(role).length) return;
     const confirmed = await (this.legacy().showAppConfirm?.(`确认删除角色“${role.name || this.roleIdentity(role)}”？`, {
       title: '删除角色',
@@ -508,7 +512,11 @@ export class RoleWorkbenchComponent {
     return {
       S: { doc: runtime.doc, ui: runtime.ui },
       markModified: () => markAngularRuntimeModified(),
-      showAppConfirm: (message: string) => confirmRuntimeAction(message),
+      showAppConfirm: (message: string, options?: Record<string, unknown>) => confirmRuntimeAction(message, {
+        title: String(options?.['title'] || ''),
+        confirmLabel: String(options?.['confirmLabel'] || ''),
+        cancelLabel: String(options?.['cancelLabel'] || ''),
+      }),
     } as LegacyWindow;
   }
 }

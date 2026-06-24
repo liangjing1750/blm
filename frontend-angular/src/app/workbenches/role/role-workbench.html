@@ -6,14 +6,9 @@
         (click)="toggleMode()">
         {{ mode() === 'view' ? '切换角色管理' : '查看角色参与流程' }}
       </button>
-      @if (mode() === 'management') {
-        <button class="btn btn-primary btn-sm role-mode-action" data-testid="role-create-toggle" type="button" (click)="openCreateRole()">
-          {{ createOpen() ? '收起添加' : '添加角色' }}
-        </button>
-      }
     </div>
     <div class="role-angular-actions">
-      @if (mode() === 'management' && createOpen()) {
+      @if (mode() === 'management' && editing) {
         <div class="role-create-inline" data-testid="role-create-inline">
           <input id="role-create-input" class="role-light-input" type="text" placeholder="角色名称" [(ngModel)]="newRoleName" (keydown.enter)="addRole()">
           <select id="role-create-group-select" class="role-light-group-select" [(ngModel)]="selectedGroup">
@@ -25,7 +20,7 @@
           <span id="role-create-group-custom-wrap" class="role-light-group-custom" [class.hidden]="selectedGroup !== '__custom__'">
             <input id="role-create-group-custom" class="role-light-group-input" type="text" placeholder="输入新分组" [(ngModel)]="customGroup" (keydown.enter)="addRole()">
           </span>
-          <button class="btn btn-outline btn-sm" data-testid="role-add-button" type="button" (click)="addRole()">确认</button>
+          <button class="btn btn-outline btn-sm" data-testid="role-add-button" type="button" (click)="addRole()">添加角色</button>
         </div>
       }
       <span class="domain-panel-badge">
@@ -50,7 +45,7 @@
                     <span class="role-light-name">{{ role.name }}</span>
                     <span class="role-light-count">{{ roleUsageSummary(role) }}</span>
                   </button>
-                  @if (roleUsage(role).length === 0) {
+                  @if (editing && roleUsage(role).length === 0) {
                     <button class="role-light-remove" type="button" title="删除未使用角色" (click)="removeRole(role, $event)">×</button>
                   }
                 </div>

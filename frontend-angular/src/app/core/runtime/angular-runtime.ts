@@ -147,6 +147,32 @@ export function emitRuntimeRefresh(): void {
   window.dispatchEvent(new CustomEvent('blm-workbench-refresh'));
 }
 
-export function confirmRuntimeAction(message: string): Promise<boolean> {
-  return Promise.resolve(window.confirm(message));
+export interface RuntimeConfirmOptions {
+  title?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+export interface RuntimeConfirmEventDetail {
+  message: string;
+  options: RuntimeConfirmOptions;
+  resolve: (confirmed: boolean) => void;
+  markHandled: () => void;
+}
+
+export function confirmRuntimeAction(message: string, options: RuntimeConfirmOptions = {}): Promise<boolean> {
+  let handled = false;
+  return new Promise((resolve) => {
+    window.dispatchEvent(new CustomEvent<RuntimeConfirmEventDetail>('blm-runtime-confirm', {
+      detail: {
+        message,
+        options,
+        resolve,
+        markHandled: () => {
+          handled = true;
+        },
+      },
+    }));
+    if (!handled) resolve(window.confirm(message));
+  });
 }

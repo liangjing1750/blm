@@ -11,19 +11,22 @@
           <button class="knowledge-secondary" type="button" data-testid="knowledge-term-toggle" (click)="toggleTermsCollapsed()">
             {{ termsCollapsed() ? '展开' : '折叠' }}
           </button>
-          <button class="knowledge-primary" type="button" data-testid="knowledge-term-add" (click)="addTerm()">新增术语</button>
+          @if (editing) {
+            <button class="knowledge-primary" type="button" data-testid="knowledge-term-add" (click)="addTerm()">新增术语</button>
+          }
         </div>
       </header>
 
       @if (!termsCollapsed() && terms().length) {
         <div class="knowledge-term-list workbench-scroll-frame workbench-scroll-body" data-testid="knowledge-language-list">
           @for (term of terms(); track term.id; let index = $index) {
-            <div class="knowledge-term-row" data-testid="knowledge-language-item">
+            <div class="knowledge-term-row" [class.is-readonly]="!editing" data-testid="knowledge-language-item">
               <label aria-label="术语名称">
                 <input
                   type="text"
                   [ngModel]="term.name"
                   data-testid="knowledge-term-name"
+                  [readonly]="!editing"
                   (ngModelChange)="updateTerm(index, 'name', $event)"
                 />
               </label>
@@ -32,15 +35,18 @@
                   type="text"
                   [ngModel]="term.description"
                   data-testid="knowledge-term-description"
+                  [readonly]="!editing"
                   (ngModelChange)="updateTerm(index, 'description', $event)"
                 />
               </label>
-              <div class="knowledge-row-actions">
-                <button type="button" title="在下方新增" data-testid="knowledge-term-add-after" (click)="addTermAfter(index)">+</button>
-                <button type="button" title="上移" data-testid="knowledge-term-move-up" [disabled]="index === 0" (click)="moveTerm(index, -1)">↑</button>
-                <button type="button" title="下移" data-testid="knowledge-term-move-down" [disabled]="index === terms().length - 1" (click)="moveTerm(index, 1)">↓</button>
-                <button class="is-danger" type="button" title="删除" data-testid="knowledge-term-remove" (click)="removeTerm(index)">×</button>
-              </div>
+              @if (editing) {
+                <div class="knowledge-row-actions">
+                  <button type="button" title="在下方新增" data-testid="knowledge-term-add-after" (click)="addTermAfter(index)">+</button>
+                  <button type="button" title="上移" data-testid="knowledge-term-move-up" [disabled]="index === 0" (click)="moveTerm(index, -1)">↑</button>
+                  <button type="button" title="下移" data-testid="knowledge-term-move-down" [disabled]="index === terms().length - 1" (click)="moveTerm(index, 1)">↓</button>
+                  <button class="is-danger" type="button" title="删除" data-testid="knowledge-term-remove" (click)="removeTerm(index)">×</button>
+                </div>
+              }
             </div>
           }
         </div>

@@ -89,6 +89,7 @@ export class KnowledgeWorkbenchComponent implements OnChanges {
   protected readonly rulesCollapsed = signal(false);
   protected readonly version = signal(0);
   @Input() initialTab: 'termManagement' | 'dictionaryManagement' | 'rules' = 'termManagement';
+  @Input() editing = true;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['initialTab']) this.setTabFromShell(this.initialTab);
@@ -191,6 +192,7 @@ export class KnowledgeWorkbenchComponent implements OnChanges {
   }
 
   protected addTerm(): void {
+    if (!this.editing) return;
     const target = this.ensureTermSource();
     const nextIndex = target.length + 1;
     if (Array.isArray(this.document().terms)) {
@@ -202,6 +204,7 @@ export class KnowledgeWorkbenchComponent implements OnChanges {
   }
 
   protected addTermAfter(index: number): void {
+    if (!this.editing) return;
     const target = this.ensureTermSource();
     const insertIndex = Math.min(Math.max(index + 1, 0), target.length);
     const nextIndex = target.length + 1;
@@ -214,6 +217,7 @@ export class KnowledgeWorkbenchComponent implements OnChanges {
   }
 
   protected updateTerm(index: number, key: 'name' | 'description', value: string): void {
+    if (!this.editing) return;
     const target = this.ensureTermSource();
     const term = target[index];
     if (!term) return;
@@ -229,6 +233,7 @@ export class KnowledgeWorkbenchComponent implements OnChanges {
   }
 
   protected removeTerm(index: number): void {
+    if (!this.editing) return;
     const target = this.ensureTermSource();
     if (index < 0 || index >= target.length) return;
     target.splice(index, 1);
@@ -236,6 +241,7 @@ export class KnowledgeWorkbenchComponent implements OnChanges {
   }
 
   protected moveTerm(index: number, direction: -1 | 1): void {
+    if (!this.editing) return;
     const target = this.ensureTermSource();
     const nextIndex = index + direction;
     if (index < 0 || nextIndex < 0 || index >= target.length || nextIndex >= target.length) return;

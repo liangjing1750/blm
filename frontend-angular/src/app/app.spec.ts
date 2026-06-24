@@ -195,10 +195,12 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="role-summary-card"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeFalsy();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-terms"]')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="knowledge-angular"]')?.textContent).toContain('术语管理');
+    expect(compiled.querySelector('[data-testid="knowledge-term-add"]')).toBeFalsy();
   });
 
   it('should keep role creation compact and sync role edits with Ctrl+S', async () => {
@@ -229,7 +231,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeFalsy();
-    compiled.querySelector<HTMLButtonElement>('[data-testid="role-create-toggle"]')?.click();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeTruthy();
     const input = compiled.querySelector<HTMLInputElement>('#role-create-input')!;
@@ -242,7 +244,7 @@ describe('App', () => {
     expect(runtime.doc.roles.some((role: any) => role.name === '清算员')).toBe(true);
     expect(runtime.modified).toBe(true);
     expect(runtime.collab.pendingSnapshot).toBe(true);
-    expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeTruthy();
 
     const preventDefault = vi.fn();
     (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault });
@@ -262,6 +264,45 @@ describe('App', () => {
     expect(runtime.modified).toBe(false);
     expect(runtime.collab.seq).toBe(8);
     expect(compiled.querySelector('[data-testid="wait-dialog"]')).toBeFalsy();
+  });
+
+  it('should delete unused roles through the custom confirm dialog', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-unused', id: 'R1', name: '临时角色', group: '系统角色' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['roleWorkbenchMode'] = 'management';
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.click();
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('.role-light-remove')?.click();
+    fixture.detectChanges();
+
+    const dialog = compiled.querySelector('[data-testid="runtime-confirm-dialog"]');
+    expect(dialog?.textContent).toContain('删除角色');
+    expect(dialog?.textContent).toContain('临时角色');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(runtime.doc.roles.some((role: any) => role.name === '临时角色')).toBe(false);
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')).toBeFalsy();
   });
 
   it('should let the server merge a stale clean snapshot when syncing after another window saved', async () => {

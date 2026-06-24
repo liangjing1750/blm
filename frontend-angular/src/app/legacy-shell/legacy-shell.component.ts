@@ -7,7 +7,7 @@ import { ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.servic
 import { CollaborationService } from '../core/collaboration/collaboration.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
-import { getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
+import { RuntimeConfirmEventDetail, getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
 import { HistoryDialogComponent, HistoryDialogTab } from '../core/shell/history/history-dialog.component';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
 import { ShellNotificationComponent, ShellNotificationKind } from '../core/shell/notification/shell-notification.component';
@@ -38,6 +38,14 @@ interface WaitDialogState {
 interface ShellToastState {
   message: string;
   kind: ShellNotificationKind;
+}
+
+interface ConfirmDialogState {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  resolve: (confirmed: boolean) => void;
 }
 
 export const TRANSITION_SHELL = 'angular-shell';
@@ -90,6 +98,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly busy = signal(false);
   protected readonly toast = signal<ShellToastState | null>(null);
+  protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
   private readonly shellVersion = signal(0);
   protected openQuery = '';
   protected createDocumentName = '';
@@ -143,6 +152,19 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   @HostListener('window:blm-angular-runtime-refresh')
   protected handleRuntimeRefresh(): void {
     this.refreshShellView();
+  }
+
+  @HostListener('window:blm-runtime-confirm', ['$event'])
+  protected handleRuntimeConfirm(event: Event): void {
+    const detail = (event as CustomEvent<RuntimeConfirmEventDetail>).detail;
+    detail.markHandled();
+    this.confirmDialog.set({
+      title: detail.options.title || '确认操作',
+      message: detail.message,
+      confirmLabel: detail.options.confirmLabel || '确认',
+      cancelLabel: detail.options.cancelLabel || '取消',
+      resolve: detail.resolve,
+    });
   }
 
   protected currentDocumentLabel(): string {
@@ -564,6 +586,13 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
 
   protected closeModal(): void {
     this.modal.set('');
+  }
+
+  protected closeConfirmDialog(confirmed: boolean): void {
+    const dialog = this.confirmDialog();
+    if (!dialog) return;
+    this.confirmDialog.set(null);
+    dialog.resolve(confirmed);
   }
 
   protected switchOpenTab(tab: OpenDocumentTab): void {

@@ -38,6 +38,7 @@ export class PanoramaWorkbench {
     { id: 'rules', label: '规则管理' },
   ];
   protected readonly activeTab = signal<PanoramaSubtab>('overview');
+  protected readonly editing = signal(false);
   protected readonly manualZoom = signal<number | null>(null);
   protected readonly viewportSize = signal(this.readViewportSize());
   protected readonly selectedStageUid = signal('');
@@ -109,6 +110,11 @@ export class PanoramaWorkbench {
 
   protected switchTab(tabId: PanoramaSubtab): void {
     this.activeTab.set(tabId);
+    this.editing.set(false);
+  }
+
+  protected toggleEditing(): void {
+    this.editing.update((value) => !value);
   }
 
   protected zoom(delta: number): void {
