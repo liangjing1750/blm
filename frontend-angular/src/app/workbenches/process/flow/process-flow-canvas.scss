@@ -1,0 +1,34 @@
+.process-flow-canvas-shell {
+  position: relative;
+  height: calc(100vh - 218px);
+  max-height: calc(100vh - 218px);
+  min-height: 240px;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid #cfe0f3;
+  border-radius: 12px;
+  background: #fff;
+  scrollbar-width: thin;
+}
+
+.process-flow-canvas-shell::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.process-flow-canvas-shell::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c7d3df;
+}
+
+.process-flow-canvas {
+  position: relative;
+  min-width: 100%;
+  border: 1px solid #d8e4f2;
+  border-radius: 10px;
+  overflow: visible;
+  background:
+    linear-gradient(90deg, #f8fbff 0 116px, transparent 116px),
+    #fff;
+  background-size: 100% 100%, 100% 100%;
+}

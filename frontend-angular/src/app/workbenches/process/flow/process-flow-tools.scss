@@ -1,0 +1,64 @@
+.process-flow-side-tools {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  width: 72px;
+  padding: 5px;
+  border: 1px solid #d7e4f3;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .12);
+}
+
+.process-flow-side-tools button {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  width: 62px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.process-flow-side-tools button span {
+  height: auto;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tool-file-icon {
+  position: relative;
+  width: 13px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  font-size: 0;
+}
+
+.tool-file-icon::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: -4px;
+  width: 7px;
+  height: 4px;
+  border: 1.5px solid currentColor;
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  background: #fff;
+}
+
+.process-flow-side-tools .danger {
+  color: #dc2626;
+}

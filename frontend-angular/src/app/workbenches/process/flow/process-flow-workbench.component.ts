@@ -67,7 +67,15 @@ interface FlowDragState {
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './process-flow-workbench.component.html',
-  styleUrl: './process-flow-workbench.component.scss',
+  styleUrls: [
+    './process-flow-workbench.component.scss',
+    './process-flow-layout.scss',
+    './process-flow-canvas.scss',
+    './process-flow-tools.scss',
+    './process-flow-nodes.scss',
+    './process-flow-inline.scss',
+    './process-flow-attachments.scss',
+  ],
 })
 export class ProcessFlowWorkbenchComponent {
   // Module intent: this view owns process structure; node details stay in the node view.

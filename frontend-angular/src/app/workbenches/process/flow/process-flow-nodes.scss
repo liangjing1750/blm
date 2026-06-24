@@ -1,0 +1,212 @@
+.flow-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid #dbeafe;
+  background: linear-gradient(90deg, #f8fafc 0 116px, #fff 116px);
+}
+
+.flow-lane-title {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  width: 116px;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #94a3b8;
+  color: var(--lane-color, #0f172a);
+  font-size: 14px;
+  font-weight: 800;
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+}
+
+.flow-lane-title::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--lane-color, #2563eb);
+  opacity: .8;
+}
+
+.shared-badge {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  z-index: 4;
+  padding: 2px 7px;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.flow-edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.flow-edge {
+  fill: none;
+  stroke: #64748b;
+  stroke-width: 2;
+  marker-end: url(#process-flow-arrow);
+  cursor: pointer;
+}
+
+.flow-edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+.flow-edge.preview{stroke:#2563eb;stroke-dasharray:7 5;marker-end:none;pointer-events:none}
+
+.flow-edge.active {
+  stroke: #2563eb;
+  stroke-width: 3;
+}
+
+.flow-edges marker path {
+  fill: #64748b;
+}
+
+.flow-edge-label {
+  fill: #0f172a;
+  font-size: 12px;
+}
+
+.flow-node,
+.flow-gateway,
+.flow-terminal {
+  position: absolute;
+  z-index: 5;
+  color: #0f3b70;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.flow-connect-box{position:absolute;z-index:18;border:1px dashed #60a5fa;border-radius:6px;pointer-events:none}
+.connect-anchor{position:absolute;display:grid;width:11px;height:11px;transform:translate(-50%,-50%);place-items:center;border:1px solid #93c5fd;border-radius:999px;background:#fff;color:#2563eb;cursor:crosshair;font-size:9px;font-weight:800;line-height:1;pointer-events:auto}
+
+.flow-node {
+  display: grid;
+  gap: 2px;
+  width: 132px;
+  height: 54px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--lane-color, #2563eb) 42%, #bfdbfe);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--lane-color, #2563eb) 10%, #eff6ff);
+  text-align: center;
+}
+
+.flow-node strong,
+.flow-node small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-node small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.flow-terminal {
+  display: inline-flex;
+  width: auto;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.flow-terminal:not(.is-end) {
+  flex-direction: row-reverse;
+}
+
+.flow-terminal::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #3f6fb5;
+}
+
+.flow-terminal.is-end::before {
+  background: #64748b;
+}
+
+.flow-gateway {
+  display: grid;
+  width: 86px;
+  height: 76px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--lane-color, #2563eb) 78%, #0f172a);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.flow-gateway::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 13px;
+  width: 50px;
+  height: 50px;
+  z-index: -1;
+  transform: rotate(45deg);
+  border: 1.4px solid color-mix(in srgb, var(--lane-color, #2563eb) 48%, #93c5fd);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--lane-color, #2563eb) 8%, #fff);
+}
+
+.flow-gateway::after {
+  content: "+";
+  position: absolute;
+  left: 39px;
+  top: 29px;
+  color: color-mix(in srgb, var(--lane-color, #2563eb) 70%, #0f172a);
+  font-size: 18px;
+  font-weight: 900;
+  opacity: .25;
+}
+
+.flow-gateway span {
+  display: -webkit-box;
+  max-width: 74px;
+  max-height: 50px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: normal;
+  line-height: 1.25;
+  word-break: break-all;
+  font-size: 11px;
+}
+
+.flow-node.active,
+.flow-gateway.active,
+.flow-terminal.active,
+.flow-node.connecting,
+.flow-gateway.connecting,
+.flow-terminal.connecting {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .18);
+}
