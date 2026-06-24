@@ -1,5 +1,5 @@
 import { CommonModule, Location } from '@angular/common';
-import { ChangeDetectorRef, Component, HostListener, Input, computed, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, HostListener, Input, Output, computed, signal } from '@angular/core';
 import { routePathFromWorkbenchId } from '../routing/main-workbench-route';
 import { ShellTabBarAdapter, createShellTabBarLegacyAdapter } from './shell-tab-bar-legacy-adapter';
 
@@ -15,6 +15,7 @@ export class ShellTabBarComponent {
   // 旧 runtime 仅保留 tab 状态切换能力，避免继续拼接 onclick 字符串。
   private readonly adapter: ShellTabBarAdapter = createShellTabBarLegacyAdapter();
   @Input() showBackAction = true;
+  @Output() tabSwitched = new EventEmitter<string>();
   protected readonly version = signal(0);
   protected readonly tabs = this.adapter.tabs();
   protected readonly activeTabId = computed(() => {
@@ -44,6 +45,7 @@ export class ShellTabBarComponent {
     this.adapter.switchTab(tabId);
     this.location.go(routePathFromWorkbenchId(tabId));
     this.version.update((value) => value + 1);
+    this.tabSwitched.emit(tabId);
   }
 
   protected goBack(): void {

@@ -43,7 +43,7 @@
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'file'">
         <button class="tbar-dd-item" type="button" data-testid="toolbar-new-button" (click)="createDocument()">新建</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-open-button" (click)="openDocumentModal()">打开</button>
-        <button class="tbar-dd-item" type="button" data-testid="toolbar-properties-button" (click)="openDocumentProperties()">属性</button>
+        <button class="tbar-dd-item" type="button" data-testid="toolbar-properties-button" [disabled]="!runtime.currentFile" (click)="openDocumentProperties()">属性</button>
         <button class="tbar-dd-item tbar-dd-danger" type="button" data-testid="toolbar-delete-button" (click)="deleteCurrentDocument()">删除</button>
       </div>
     </div>
@@ -86,7 +86,11 @@
 
   <section id="tab-content" class="angular-workbench" data-testid="angular-workbench">
     <ng-container *ngIf="layoutQuery.showWorkbenchTabs()">
-      <app-shell-tab-bar *ngIf="layoutQuery.showBackAction()" [showBackAction]="true"></app-shell-tab-bar>
+      <app-shell-tab-bar
+        *ngIf="layoutQuery.showBackAction()"
+        [showBackAction]="true"
+        (tabSwitched)="refreshShellView()"
+      ></app-shell-tab-bar>
     </ng-container>
 
     <ng-container *ngIf="isUtilityWorkbench()">
@@ -349,4 +353,8 @@
   ></app-wait-dialog>
 </div>
 
-<div *ngIf="toast()" class="app-toast angular-toast" data-testid="app-toast">{{ toast() }}</div>
+<app-shell-notification
+  *ngIf="toast() as shellToast"
+  [message]="shellToast.message"
+  [kind]="shellToast.kind"
+></app-shell-notification>

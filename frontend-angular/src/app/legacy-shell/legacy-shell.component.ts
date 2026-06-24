@@ -10,6 +10,7 @@ import { DocumentStore } from '../core/document/document-store';
 import { getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
 import { HistoryDialogComponent, HistoryDialogTab } from '../core/shell/history/history-dialog.component';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
+import { ShellNotificationComponent, ShellNotificationKind } from '../core/shell/notification/shell-notification.component';
 import { OpenDocumentQuery, OpenSpaceSummary } from '../core/shell/open-document/open-document-query';
 import { workbenchIdFromUrl } from '../core/shell/routing/main-workbench-route';
 import { SidebarDirectoryComponent } from '../core/shell/sidebar/sidebar-directory.component';
@@ -34,6 +35,11 @@ interface WaitDialogState {
   description: string;
 }
 
+interface ShellToastState {
+  message: string;
+  kind: ShellNotificationKind;
+}
+
 export const TRANSITION_SHELL = 'angular-shell';
 
 @Component({
@@ -45,6 +51,7 @@ export const TRANSITION_SHELL = 'angular-shell';
     FormsModule,
     WaitDialogComponent,
     HistoryDialogComponent,
+    ShellNotificationComponent,
     ShellTabBarComponent,
     SidebarDirectoryComponent,
     PanoramaWorkbench,
@@ -82,7 +89,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   protected readonly submitRows = signal<any[]>([]);
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly busy = signal(false);
-  protected readonly toast = signal('');
+  protected readonly toast = signal<ShellToastState | null>(null);
   private readonly shellVersion = signal(0);
   protected openQuery = '';
   protected createDocumentName = '';
@@ -133,7 +140,11 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   }
 
   protected currentDocumentLabel(): string {
-    return this.runtime.currentFile || '未打开文档';
+    // 模块意图：顶部展示给用户的是业务文档名称，而不是服务端持久化 key。
+    // 关键流程：属性保存会更新 meta.title/domain；这里优先读取 meta，刷新界面时能立即看到已生效的文档名。
+    // 边界细节：currentFile 仍作为接口读写用的稳定 key，不在展示层隐式触发重命名。
+    const meta = this.runtime.doc?.meta || {};
+    return String(meta.title || meta.domain || this.runtime.currentFile || '未打开文档').trim();
   }
 
   protected modifiedLabel(): string {
@@ -313,6 +324,10 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   }
 
   protected async openDocumentModal(): Promise<void> {
+    this.activeDropdown.set('');
+    this.openQuery = '';
+    this.activeOpenSpace.set('');
+    this.activeOpenTag.set('');
     await this.refreshOpenDialogData();
     this.openTab.set('workspace');
     this.workspacePage.set(1);
@@ -459,7 +474,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   }
 
   protected openDocumentProperties(): void {
-    if (!this.runtime.doc) {
+    if (!this.runtime.currentFile) {
       this.showToast('请先打开或新建一个文档。');
       return;
     }
@@ -468,7 +483,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     this.activeDropdown.set('');
   }
 
-  protected saveDocumentProperties(): void {
+  protected async saveDocumentProperties(): Promise<void> {
     const message = validateDocumentProperties(this.documentProperties);
     if (message) {
       this.showToast(message);
@@ -476,8 +491,33 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     }
     applyDocumentProperties(this.runtime.doc, this.documentProperties);
     this.documentStore.markModified();
-    this.modal.set('');
-    this.showToast('属性已保存');
+    this.waitDialog.set({
+      title: '正在保存属性...',
+      description: '正在提交文档属性并同步到当前工作区。',
+    });
+    this.busy.set(true);
+    this.collaboration.beginSync();
+    try {
+      const result = await this.api.save(
+        this.runtime.currentFile,
+        this.runtime.doc,
+        { saveMessage: '修改文档属性' },
+      );
+      const document = result?.document || this.runtime.doc;
+      replaceRuntimeDocument(document, this.runtime.currentFile);
+      this.documentStore.load(document, this.runtime.currentFile);
+      this.collaboration.finishSync(Number(result?.seq || this.runtime.collab.seq || 0));
+      this.collaboration.announceDocumentSaved(this.runtime.currentFile);
+      await this.refreshWorkspaceFiles();
+      this.modal.set('');
+      this.showToast('属性已保存');
+    } catch (error) {
+      this.collaboration.failSync(error);
+      this.showToast(error instanceof Error ? error.message : String(error), 'error');
+    } finally {
+      this.busy.set(false);
+      this.waitDialog.set(null);
+    }
   }
 
   protected showPlaceholder(title: string): void {
@@ -653,6 +693,8 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     const document = payload?.document || payload;
     this.documentStore.load(document, name);
     this.runtime.readOnly = readOnly || !!document?.meta?.readonly;
+    this.runtime.collab.hasRemoteUpdate = false;
+    this.runtime.collab.pendingSnapshot = false;
     if (this.runtime.readOnly) this.collaboration.stop();
     else this.collaboration.start(name);
     this.runtime.ui['mainTab'] = 'panoramaWorkbench';
@@ -688,7 +730,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
-  private refreshShellView(): void {
+  protected refreshShellView(): void {
     this.shellVersion.update((value) => value + 1);
   }
 
@@ -703,10 +745,11 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
     }
   }
 
-  private showToast(message: string): void {
-    this.toast.set(message);
+  private showToast(message: string, kind: ShellNotificationKind = 'info'): void {
+    const resolvedKind = kind === 'info' && /(已|成功|完成)/.test(message) ? 'success' : kind;
+    this.toast.set({ message, kind: resolvedKind });
     window.setTimeout(() => {
-      if (this.toast() === message) this.toast.set('');
+      if (this.toast()?.message === message) this.toast.set(null);
     }, 2400);
   }
 

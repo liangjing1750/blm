@@ -45,7 +45,6 @@ export function normalizeDocument(raw: Partial<BlmDocument> | null | undefined):
     author: document.meta?.author,
     date: document.meta?.date,
     space: document.meta?.space,
-    teamSpace: document.meta?.teamSpace,
     tags: document.meta?.tags,
     version: document.meta?.version,
     owner: document.meta?.owner,

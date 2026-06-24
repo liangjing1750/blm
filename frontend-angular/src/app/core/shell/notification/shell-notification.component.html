@@ -1,0 +1,12 @@
+<section
+  class="shell-notification"
+  [class.success]="kind === 'success'"
+  [class.warning]="kind === 'warning'"
+  [class.error]="kind === 'error'"
+  [attr.role]="kind === 'error' || kind === 'warning' ? 'alert' : 'status'"
+  aria-live="polite"
+  data-testid="app-toast"
+>
+  <span class="shell-notification-icon" aria-hidden="true"></span>
+  <span class="shell-notification-message">{{ message }}</span>
+</section>

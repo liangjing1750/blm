@@ -1,0 +1,55 @@
+:host {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 1250;
+  pointer-events: none;
+}
+
+.shell-notification {
+  display: flex;
+  max-width: min(360px, calc(100vw - 44px));
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px 9px 12px;
+  border: 1px solid #cfe0f4;
+  border-left: 3px solid #3f84ff;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 12px 30px rgb(15 23 42 / 14%);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.shell-notification-icon {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #3f84ff;
+}
+
+.shell-notification.success {
+  border-left-color: #16a34a;
+}
+
+.shell-notification.success .shell-notification-icon {
+  background: #16a34a;
+}
+
+.shell-notification.warning {
+  border-left-color: #d97706;
+}
+
+.shell-notification.warning .shell-notification-icon {
+  background: #d97706;
+}
+
+.shell-notification.error {
+  border-left-color: #dc2626;
+}
+
+.shell-notification.error .shell-notification-icon {
+  background: #dc2626;
+}

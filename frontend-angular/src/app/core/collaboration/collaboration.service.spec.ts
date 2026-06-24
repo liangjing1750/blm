@@ -95,6 +95,24 @@ describe('CollaborationService', () => {
     expect(service.statusText()).toBe('协作 agent在线');
   });
 
+  it('marks a same-document local save from another browser session as a remote update', () => {
+    const service = new CollaborationService();
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    sessionStorage.setItem('blm.collab.sessionId', 'current-session');
+
+    (service as any).handleLocalDocumentSaved({
+      type: 'document_saved',
+      docName: 'agent.json',
+      sessionId: 'other-session',
+      userName: 'other',
+      at: '2026-06-24T01:00:00.000Z',
+    });
+
+    expect(runtime.collab.hasRemoteUpdate).toBe(true);
+    expect(runtime.collab.lastActivity).toEqual({ user: 'other', at: '2026-06-24T01:00:00.000Z' });
+  });
+
   it('keeps current online status when start is called again for the same document', () => {
     const service = new CollaborationService();
     const runtime = getAngularRuntimeState();

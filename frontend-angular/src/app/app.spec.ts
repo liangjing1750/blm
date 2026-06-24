@@ -171,6 +171,74 @@ describe('App', () => {
     expect(runtime.ui['mainTab']).toBe('processWorkbench');
     expect(locationSpy).toHaveBeenCalledWith('/process');
     expect(navigateSpy).not.toHaveBeenCalled();
+    expect(compiled.querySelector('[data-testid="process-workbench-angular"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeFalsy();
+  });
+
+  it('should persist document properties through the existing save endpoint', async () => {
+    let savePayload: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/save/agent.json')) {
+        savePayload = JSON.parse(String(init?.body || '{}'));
+        return new Response(JSON.stringify({
+          seq: 4,
+          document: savePayload.document,
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent', author: 'Old', date: '2026-06-01', space: 'Default', tags: '旧标签' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-properties-button"]')?.click();
+    fixture.detectChanges();
+    (compiled.querySelector<HTMLInputElement>('[data-testid="document-properties-name"]') as HTMLInputElement).value = 'New Agent';
+    (compiled.querySelector<HTMLInputElement>('[data-testid="document-properties-name"]') as HTMLInputElement).dispatchEvent(new Event('input'));
+    (compiled.querySelector<HTMLInputElement>('[data-testid="document-properties-author"]') as HTMLInputElement).value = 'Codex';
+    (compiled.querySelector<HTMLInputElement>('[data-testid="document-properties-author"]') as HTMLInputElement).dispatchEvent(new Event('input'));
+    compiled.querySelector<HTMLButtonElement>('[data-testid="document-properties-save-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="wait-dialog"]')?.textContent).toContain('正在保存属性');
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(savePayload?.document?.meta).toMatchObject({
+      domain: 'New Agent',
+      title: 'New Agent',
+      author: 'Codex',
+      date: '2026-06-01',
+      space: 'Default',
+      tags: '旧标签',
+    });
+    expect(runtime.modified).toBe(false);
+    expect(runtime.collab.seq).toBe(4);
+    expect(compiled.querySelector('[data-testid="document-properties-dialog"]')).toBeFalsy();
   });
 
   it('should keep the sidebar as an exclusive left column with collapsed directory nodes by default', async () => {
@@ -254,7 +322,39 @@ describe('App', () => {
     expect(statusById.get('role')).toBe('angular');
   });
 
+  it('should disable document properties before a document is opened', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = '';
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const propertiesButton = compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-properties-button"]');
+
+    expect(propertiesButton?.disabled).toBe(true);
+    propertiesButton?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="document-properties-dialog"]')).toBeFalsy();
+  });
+
   it('should edit the five document properties from the file menu', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/save/agent.json')) {
+        const payload = JSON.parse(String(init?.body || '{}'));
+        return new Response(JSON.stringify({
+          seq: 2,
+          document: payload.document,
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
     const fixture = TestBed.createComponent(LegacyShellComponent);
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
@@ -305,7 +405,11 @@ describe('App', () => {
     expect(runtime.doc.meta.domain).toBe('Agent v2');
     expect(runtime.doc.meta.title).toBe('Agent v2');
     expect(runtime.doc.meta.tags).toBe('最小建模，流程');
-    expect(runtime.modified).toBe(true);
+    expect(runtime.doc.meta.space).toBe('默认空间');
+    expect((runtime.doc.meta as Record<string, unknown>)['teamSpace']).toBeUndefined();
+    expect(runtime.modified).toBe(false);
+    expect(runtime.collab.seq).toBe(2);
+    expect(compiled.querySelector('[data-testid="current-file-name"]')?.textContent?.trim()).toBe('Agent v2');
     expect(compiled.querySelector('[data-testid="document-properties-dialog"]')).toBeFalsy();
   });
 

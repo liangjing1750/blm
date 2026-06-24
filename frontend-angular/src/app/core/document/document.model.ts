@@ -26,7 +26,6 @@ export interface DocumentMeta {
   author?: string;
   date?: string;
   space?: string;
-  teamSpace?: string;
   tags?: string | string[];
   version?: string;
   owner?: string;

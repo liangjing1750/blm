@@ -17,12 +17,21 @@ interface CollaborationMessage {
   documentHash?: string;
 }
 
+interface LocalDocumentSavedMessage {
+  type: 'document_saved';
+  docName: string;
+  sessionId: string;
+  userName: string;
+  at: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CollaborationService {
   private socket: WebSocket | null = null;
   private docName = '';
   private pingTimer: number | null = null;
   private profile: CollaborationUserProfile | null = null;
+  private readonly localSaveChannel: BroadcastChannel | null = this.createLocalSaveChannel();
 
   // 模块意图：承接旧版实时协作的“状态可见 + 主动同步”能力，UI 只订阅 runtime.collab。
   // 关键流程：WebSocket 只负责 join/presence/updated；文档提交仍由 SyncService 走 HTTP snapshot。
@@ -130,6 +139,24 @@ export class CollaborationService {
     return this.profile;
   }
 
+  announceDocumentSaved(docName: string): void {
+    if (!docName) return;
+    const profile = this.currentUser();
+    const payload: LocalDocumentSavedMessage = {
+      type: 'document_saved',
+      docName,
+      sessionId: profile.sessionId,
+      userName: profile.name,
+      at: new Date().toISOString(),
+    };
+    this.localSaveChannel?.postMessage(payload);
+    try {
+      localStorage.setItem('blm.localDocumentSaved', JSON.stringify(payload));
+    } catch {
+      // localStorage may be unavailable in constrained test/browser contexts.
+    }
+  }
+
   private join(socket: WebSocket, docName: string): void {
     if (this.socket !== socket || !this.profile) return;
     socket.send(JSON.stringify({ type: 'join', doc: docName, user: this.profile }));
@@ -170,6 +197,44 @@ export class CollaborationService {
     runtime.collab.connected = false;
     runtime.collab.syncing = false;
     emitRuntimeRefresh();
+  }
+
+  private handleLocalDocumentSaved(payload: LocalDocumentSavedMessage): void {
+    const runtime = getAngularRuntimeState();
+    const profile = this.currentUser();
+    if (!payload || payload.type !== 'document_saved') return;
+    if (!runtime.currentFile || runtime.readOnly) return;
+    if (payload.docName !== runtime.currentFile) return;
+    if (payload.sessionId === profile.sessionId) return;
+    runtime.collab.hasRemoteUpdate = true;
+    runtime.collab.lastActivity = { user: payload.userName || '其他用户', at: payload.at || new Date().toISOString() };
+    emitRuntimeRefresh();
+  }
+
+  private createLocalSaveChannel(): BroadcastChannel | null {
+    const handlePayload = (payload: unknown) => {
+      if (this.isLocalDocumentSavedMessage(payload)) this.handleLocalDocumentSaved(payload);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (event) => {
+        if (event.key !== 'blm.localDocumentSaved' || !event.newValue) return;
+        try {
+          handlePayload(JSON.parse(event.newValue));
+        } catch {
+          // Ignore malformed cross-tab notifications.
+        }
+      });
+    }
+    if (typeof BroadcastChannel === 'undefined') return null;
+    const channel = new BroadcastChannel('blm.document-updates');
+    channel.addEventListener('message', (event) => handlePayload(event.data));
+    return channel;
+  }
+
+  private isLocalDocumentSavedMessage(payload: unknown): payload is LocalDocumentSavedMessage {
+    if (!payload || typeof payload !== 'object') return false;
+    const message = payload as Partial<LocalDocumentSavedMessage>;
+    return message.type === 'document_saved' && typeof message.docName === 'string';
   }
 
   private messageUser(payload: CollaborationMessage): string {

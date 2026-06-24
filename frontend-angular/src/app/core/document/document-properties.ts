@@ -31,7 +31,7 @@ export function readDocumentProperties(document: any, currentFile = ''): Documen
     name: stringifyProperty(meta.domain || meta.title || currentFile),
     author: stringifyProperty(meta.author),
     date: stringifyProperty(meta.date),
-    space: stringifyProperty(meta.space || meta.teamSpace),
+    space: stringifyProperty(meta.space),
     tags: stringifyTags(meta.tags),
   };
 }
