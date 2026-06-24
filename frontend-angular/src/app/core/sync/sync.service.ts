@@ -20,6 +20,13 @@ export class SyncService {
     }
     this.collaboration.beginSync();
     try {
+      if (runtime.collab.hasRemoteUpdate && !runtime.modified && !runtime.collab.pendingSnapshot) {
+        const remoteDocument = await this.api.load(runtime.currentFile);
+        replaceRuntimeDocument(remoteDocument, runtime.currentFile);
+        this.documentStore.load(remoteDocument, runtime.currentFile);
+        this.collaboration.finishSync(Number(runtime.collab.seq || runtime.collab.acceptedSeq || 0));
+        return;
+      }
       const frozenDocument = this.cloneDocument(runtime.doc);
       const frozenHash = this.hashDocument(frozenDocument);
       const result = await this.api.collabSnapshot(runtime.currentFile, frozenDocument, {

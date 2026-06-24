@@ -339,6 +339,67 @@ describe('App', () => {
     expect(runtime.collab.hasRemoteUpdate).toBe(false);
   });
 
+  it('should pull the remote document instead of posting a stale clean role snapshot', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/load/agent.json')) {
+        return new Response(JSON.stringify({
+          meta: { domain: 'Remote' },
+          roles: [{ uid: 'remote-role', name: '远端新增角色', group: '系统角色' }],
+          stages: [],
+          stageFlowRefs: [],
+          processes: [],
+          entities: [],
+          businessComponents: [],
+          taskDefinitions: [],
+          terms: [],
+          rules: [],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/collab/snapshot')) {
+        return new Response(JSON.stringify({ error: 'stale snapshot should not be submitted' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Local' },
+      roles: [{ uid: 'local-role', name: '本地旧角色', group: '系统角色' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.modified = false;
+    runtime.collab.pendingSnapshot = false;
+    runtime.collab.hasRemoteUpdate = true;
+    runtime.collab.seq = 12;
+    runtime.collab.acceptedSeq = 11;
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('本地旧角色');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-sync-button"]')?.click();
+    await fixture.whenStable();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/load/agent.json', expect.objectContaining({ cache: 'no-store' }));
+    expect(fetchSpy).not.toHaveBeenCalledWith('/api/collab/snapshot', expect.anything());
+    expect(runtime.doc.roles[0].name).toBe('远端新增角色');
+    expect(runtime.collab.hasRemoteUpdate).toBe(false);
+    expect(compiled.textContent).toContain('远端新增角色');
+  });
+
   it('should synchronize the main workbench from the browser route on refresh', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
