@@ -62,7 +62,9 @@
 
 .angular-main {
   display: flex;
-  min-height: calc(100vh - 48px);
+  height: calc(100vh - 48px);
+  min-height: 0;
+  overflow: hidden;
   background: #eef2f7;
 }
 
@@ -73,11 +75,27 @@
 #sidebar.sidebar {
   position: relative;
   z-index: 20;
+  display: flex;
+  flex-direction: column;
   width: 360px;
   min-width: 360px;
+  min-height: 0;
   border-right: 1px solid #d7e1ee;
   background: #f8fbff;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-width: thin;
+}
+
+#sidebar.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+#sidebar.sidebar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
 }
 
 .angular-workbench {
