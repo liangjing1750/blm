@@ -6,7 +6,7 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
 import { getAngularRuntimeState } from './core/runtime/angular-runtime';
-import { LegacyShellComponent } from './legacy-shell/legacy-shell.component';
+import { ShellComponent } from './shell/shell.component';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -22,7 +22,7 @@ describe('App', () => {
     runtime.collab.recoveryMode = false;
 
     await TestBed.configureTestingModule({
-      imports: [App, LegacyShellComponent],
+      imports: [App, ShellComponent],
       providers: [provideRouter(routes)],
     }).compileComponents();
   });
@@ -37,8 +37,8 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render the legacy BLM toolbar through the Angular shell', () => {
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+  it('should render the BLM toolbar through the Angular shell', () => {
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('#toolbar')).toBeTruthy();
@@ -47,7 +47,7 @@ describe('App', () => {
 
   it('should open a custom create-document dialog without browser prompt', () => {
     const promptSpy = vi.spyOn(window, 'prompt');
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
@@ -103,7 +103,7 @@ describe('App', () => {
         cells: [],
       },
     };
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const component = fixture.componentInstance as unknown as {
       createDocument: () => Promise<void>;
@@ -154,7 +154,7 @@ describe('App', () => {
     runtime.doc.stages[0].panoramaLaneUid = 'lane-1';
     runtime.doc.stages[0].panoramaColumnUid = 'column-1';
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
 
@@ -224,7 +224,7 @@ describe('App', () => {
     runtime.collab.syncing = false;
     runtime.ui['roleWorkbenchMode'] = 'management';
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
@@ -283,7 +283,7 @@ describe('App', () => {
     };
     runtime.ui['roleWorkbenchMode'] = 'management';
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
@@ -324,7 +324,7 @@ describe('App', () => {
     runtime.collab.hasRemoteUpdate = false;
     runtime.collab.seq = 9;
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-sync-button"]')?.click();
@@ -381,7 +381,7 @@ describe('App', () => {
     runtime.collab.seq = 12;
     runtime.collab.acceptedSeq = 11;
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
@@ -419,7 +419,7 @@ describe('App', () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/panorama');
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -455,7 +455,7 @@ describe('App', () => {
     await router.navigateByUrl('/panorama');
     navigateSpy.mockClear();
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -506,7 +506,7 @@ describe('App', () => {
       rules: [],
     };
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
 
@@ -564,7 +564,7 @@ describe('App', () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/panorama');
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -590,7 +590,7 @@ describe('App', () => {
       'construct-bc-1-construct-1': false,
     };
     runtime.ui['sidebarCollapsed'] = false;
-    const expandedFixture = TestBed.createComponent(LegacyShellComponent);
+    const expandedFixture = TestBed.createComponent(ShellComponent);
     expandedFixture.detectChanges();
     await expandedFixture.whenStable();
     expandedFixture.detectChanges();
@@ -621,7 +621,7 @@ describe('App', () => {
   it('should disable document properties before a document is opened', () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = '';
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
@@ -651,7 +651,7 @@ describe('App', () => {
       }
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.doc = {
@@ -734,7 +734,7 @@ describe('App', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const promptSpy = vi.spyOn(window, 'prompt');
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.doc = {
@@ -809,7 +809,7 @@ describe('App', () => {
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     const location = TestBed.inject(Location);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
@@ -859,7 +859,7 @@ describe('App', () => {
     runtime.currentFile = 'agent.json';
     runtime.doc = { meta: { domain: 'Agent' }, roles: [], stages: [], stageFlowRefs: [], processes: [], entities: [], businessComponents: [], taskDefinitions: [], terms: [], rules: [] };
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-history-button"]')?.click();
@@ -908,7 +908,7 @@ describe('App', () => {
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
@@ -950,7 +950,7 @@ describe('App', () => {
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
@@ -985,7 +985,7 @@ describe('App', () => {
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
@@ -1034,7 +1034,7 @@ describe('App', () => {
     });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    const fixture = TestBed.createComponent(LegacyShellComponent);
+    const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;

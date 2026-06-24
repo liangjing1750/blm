@@ -1,6 +1,6 @@
 # styles.scss classification
 
-Generated: 2026-06-24T15:44:58.617Z
+Generated: 2026-06-24T16:05:15.188Z
 
 Scope: frontend-angular/src/styles.scss after shared-style extraction and component-style migration.
 
@@ -9,8 +9,8 @@ Scope: frontend-angular/src/styles.scss after shared-style extraction and compon
 | category | meaning | count |
 |---|---|---:|
 | still-used | selector token is referenced by Angular templates, TS, or component styles | 628 |
-| legacy-compat-selector | no direct Angular component hit, but selector belongs to global shell/modal/old compatibility surface | 188 |
-| suspected-dead | no direct hit and no compatibility hint; requires visual/regression check before deletion | 987 |
+| global-shell-or-rendered-content | no direct Angular component hit, but selector belongs to shell, dialog, modal, or rendered document content | 213 |
+| suspected-dead | no direct hit and no compatibility hint; requires visual/regression check before deletion | 961 |
 
 Full list: docs/refactor/styles-classification.csv
 
@@ -20,30 +20,30 @@ Full list: docs/refactor/styles-classification.csv
 
 | line | selector | evidence |
 |---:|---|---|
-| 1 | `#toolbar` | frontend-angular/src/app/app.spec.ts; frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 11 | `.toolbar-left` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 12 | `.toolbar-right` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 13 | `.brand-mark` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 22 | `.logo` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 24 | `.product-version` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 32 | `.file-name` | frontend-angular/src/app/app.spec.ts; frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 34 | `.modified-badge` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html |
-| 48 | `.modified-badge-row` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html |
+| 1 | `#toolbar` | frontend-angular/src/app/app.spec.ts; frontend-angular/src/app/shared/layout/workbench-section.css; frontend-angular/src/app/shell/shell.component.html |
+| 11 | `.toolbar-left` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 12 | `.toolbar-right` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 13 | `.brand-mark` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 22 | `.logo` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 24 | `.product-version` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 32 | `.file-name` | frontend-angular/src/app/app.spec.ts; frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 34 | `.modified-badge` | frontend-angular/src/app/shell/shell.component.html |
+| 48 | `.modified-badge-row` | frontend-angular/src/app/shell/shell.component.html |
 | 58 | `.modified-badge-row.local` | frontend-angular/src/app/app.spec.ts; frontend-angular/src/app/core/collaboration/collaboration.service.spec.ts; frontend-angular/src/app/core/collaboration/collaboration.service.ts |
 | 63 | `.modified-badge-row.remote` | frontend-angular/src/app/app.spec.ts; frontend-angular/src/app/core/collaboration/collaboration.service.spec.ts; frontend-angular/src/app/core/shell/history/history-dialog.component.html |
-| 68 | `.modified-badge-dot` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html |
+| 68 | `.modified-badge-dot` | frontend-angular/src/app/shell/shell.component.html |
 | 75 | `.modified-badge.syncing` | frontend-angular/src/app/app.spec.ts; frontend-angular/src/app/core/collaboration/collaboration.service.spec.ts; frontend-angular/src/app/core/collaboration/collaboration.service.ts |
-| 78 | `.collab-status` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 92 | `.collab-status:hover` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 95 | `.collab-status[data-users]::after` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 118 | `.collab-status[data-users]:hover::after` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
+| 78 | `.collab-status` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 92 | `.collab-status:hover` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 95 | `.collab-status[data-users]::after` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 118 | `.collab-status[data-users]:hover::after` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
 | 122 | `.collab-status.connected` | frontend-angular/src/app/core/collaboration/collaboration.service.spec.ts; frontend-angular/src/app/core/collaboration/collaboration.service.ts; frontend-angular/src/app/core/runtime/angular-runtime.ts |
-| 127 | `.collab-status.offline` | frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
-| 152 | `.user-account-button.empty` | frontend-angular/src/app/core/shell/sidebar/sidebar-directory.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.html; frontend-angular/src/app/legacy-shell/legacy-shell.component.scss |
+| 127 | `.collab-status.offline` | frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
+| 152 | `.user-account-button.empty` | frontend-angular/src/app/core/shell/sidebar/sidebar-directory.component.html; frontend-angular/src/app/shell/shell.component.html; frontend-angular/src/app/shell/shell.component.scss |
 
-## Legacy Compatibility Selectors
+## Global Shell Or Rendered Content
 
-- count: 188
+- count: 213
 
 | line | selector | evidence |
 |---:|---|---|
@@ -70,7 +70,7 @@ Full list: docs/refactor/styles-classification.csv
 
 ## Suspected Dead Selectors
 
-- count: 987
+- count: 961
 
 | line | selector | evidence |
 |---:|---|---|
@@ -99,5 +99,5 @@ Full list: docs/refactor/styles-classification.csv
 
 - Shared layer exists under `frontend-angular/src/styles/shared/` for base variables, scroll frame, form controls, buttons, and modal shells.
 - Manual, feedback, role, process-flow, and process-node/editor component-owned global styles have been removed from `styles.scss`; their component SCSS files are now the local source of truth.
-- `.manual-shell` and preview/export `.pv-content` rules remain global because they target shell or rendered document content outside the owning component subtree.
-- Remaining global rules are mostly shell, legacy compatibility, preview rendering, and older workbench surfaces that need targeted verification before deletion.
+- Shell and rendered document content rules remain global until they are moved into explicit shell/rendered-content style entrypoints.
+- Remaining global rules are mostly shell, dialogs, rendered preview content, and older workbench surfaces that need targeted verification before deletion.

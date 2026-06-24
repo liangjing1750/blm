@@ -51,9 +51,9 @@ interface ConfirmDialogState {
 export const TRANSITION_SHELL = 'angular-shell';
 
 @Component({
-  selector: 'app-legacy-shell',
-  templateUrl: './legacy-shell.component.html',
-  styleUrl: './legacy-shell.component.scss',
+  selector: 'app-shell',
+  templateUrl: './shell.component.html',
+  styleUrl: './shell.component.scss',
   imports: [
     CommonModule,
     FormsModule,
@@ -73,7 +73,7 @@ export const TRANSITION_SHELL = 'angular-shell';
     FeedbackWorkbenchComponent,
   ],
 })
-export class LegacyShellComponent implements OnInit, OnDestroy {
+export class ShellComponent implements OnInit, OnDestroy {
   // 模块意图：用 Angular 壳层承接顶栏、文件入口、同步入口和主工作台挂载。
   // 关键流程：菜单动作通过 ApiService/SyncService/DocumentStore 完成，工作台切换只写入 Angular runtime。
   // 边界细节：比对、合并、预览、手册、反馈、AI 暂时只保留占位入口，避免重新引入旧脚本。

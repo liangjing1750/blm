@@ -1229,9 +1229,6 @@
   stroke: none;
   pointer-events: all;
 }
-.entity-state-link-label-legacy {
-  display: none;
-}
 .entity-state-node.kind-initial {
   border-color: #38bdf8;
   background: #e0f2fe;
@@ -9912,4 +9909,3 @@ body.is-collab-reconnecting * {
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .ai-status{font-size:10px;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#16a34a;white-space:nowrap}
 .hidden{display:none!important}
-
