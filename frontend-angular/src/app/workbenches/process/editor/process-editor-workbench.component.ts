@@ -57,7 +57,20 @@ interface ProcessNodeDirectory {
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './process-editor-workbench.component.html',
-  styleUrl: './process-editor-workbench.component.scss',
+  styleUrls: [
+    './process-editor-workbench.component.scss',
+    './node-editor-hero.scss',
+    './node-editor-polish.scss',
+    './node-editor-body-1.scss',
+    './node-editor-body-2.scss',
+    './node-editor-body-3.scss',
+    './node-view-v2.scss',
+    './node-view-v3-layout.scss',
+    './node-view-v3-cards.scss',
+    './node-view-v4.scss',
+    './node-view-v5-role.scss',
+    './node-view-v5-form.scss',
+  ],
 })
 export class ProcessEditorWorkbenchComponent {
   // 模块意图：流程编辑器先承接旧版抽屉编辑能力，后续再把流程图算法从 legacy 中完整迁出。

@@ -1,0 +1,113 @@
+.node-field-head,
+.node-field-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 96px 54px minmax(110px, .8fr) minmax(150px, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 760px;
+}
+
+.node-field-head {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.node-required-check {
+  display: grid;
+  place-items: center;
+}
+
+.node-required-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: #2563eb;
+}
+
+.node-rule-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.node-rule-head {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.node-rule-card textarea {
+  min-height: 70px;
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.node-advanced-card details {
+  display: grid;
+  gap: 10px;
+}
+
+.node-advanced-card summary {
+  cursor: pointer;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.node-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.node-advanced-grid > div {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e2ecf7;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.node-advanced-grid h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.node-editor-aside {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.node-aside-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.node-aside-card strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.node-aside-card span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.node-workbench-empty {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: #64748b;
+}
+
+.node-workbench-empty h3 {
+  margin: 0;
+  color: #0f172a;
+}

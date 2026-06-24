@@ -1,6 +1,6 @@
 # styles.scss classification
 
-Generated: 2026-06-24T15:30:15.006Z
+Generated: 2026-06-24T15:44:58.617Z
 
 Scope: frontend-angular/src/styles.scss after shared-style extraction and component-style migration.
 
@@ -8,15 +8,15 @@ Scope: frontend-angular/src/styles.scss after shared-style extraction and compon
 
 | category | meaning | count |
 |---|---|---:|
-| still-used | selector token is referenced by Angular templates, TS, or component styles | 869 |
+| still-used | selector token is referenced by Angular templates, TS, or component styles | 628 |
 | legacy-compat-selector | no direct Angular component hit, but selector belongs to global shell/modal/old compatibility surface | 188 |
-| suspected-dead | no direct hit and no compatibility hint; requires visual/regression check before deletion | 1082 |
+| suspected-dead | no direct hit and no compatibility hint; requires visual/regression check before deletion | 987 |
 
 Full list: docs/refactor/styles-classification.csv
 
 ## Still Used
 
-- count: 869
+- count: 628
 
 | line | selector | evidence |
 |---:|---|---|
@@ -70,7 +70,7 @@ Full list: docs/refactor/styles-classification.csv
 
 ## Suspected Dead Selectors
 
-- count: 1082
+- count: 987
 
 | line | selector | evidence |
 |---:|---|---|
@@ -98,6 +98,6 @@ Full list: docs/refactor/styles-classification.csv
 ## Migration Notes
 
 - Shared layer exists under `frontend-angular/src/styles/shared/` for base variables, scroll frame, form controls, buttons, and modal shells.
-- Manual, feedback, role, and process-flow component-owned global styles have been removed from `styles.scss`; their component SCSS files are now the local source of truth.
+- Manual, feedback, role, process-flow, and process-node/editor component-owned global styles have been removed from `styles.scss`; their component SCSS files are now the local source of truth.
 - `.manual-shell` and preview/export `.pv-content` rules remain global because they target shell or rendered document content outside the owning component subtree.
-- Process-node/editor blocks remain in `styles.scss`; they are large and should be split by node view, form card, role picker, and responsive override before migration.
+- Remaining global rules are mostly shell, legacy compatibility, preview rendering, and older workbench surfaces that need targeted verification before deletion.

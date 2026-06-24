@@ -1,0 +1,75 @@
+/* Process node editor migrated global styles. */
+.process-editor-shell .process-flow-actions em {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.node-editor-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fbff, #fff);
+}
+
+.node-editor-hero.is-empty {
+  grid-template-columns: 1fr;
+  border-style: dashed;
+}
+
+.node-editor-hero span {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.node-editor-hero h3 {
+  margin: 3px 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 17px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-editor-hero p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.node-editor-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(42px, auto));
+  gap: 6px;
+}
+
+.node-editor-metrics b {
+  display: grid;
+  min-width: 42px;
+  justify-items: center;
+  padding: 6px 8px;
+  border: 1px solid #d7e4f3;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f3b70;
+  font-size: 15px;
+}
+
+.node-editor-metrics small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
