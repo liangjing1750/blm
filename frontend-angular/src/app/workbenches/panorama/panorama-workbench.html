@@ -17,12 +17,12 @@
       <div class="proc-view-actions">
         @if (activeTab() === 'overview') {
           <div class="panorama-zoom-control" data-testid="panorama-zoom-control" aria-label="全景视图缩放">
-            <button class="btn btn-outline btn-sm" type="button" data-testid="panorama-zoom-out" title="缩小" (click)="zoom(-0.08)">-</button>
-            <button class="btn btn-outline btn-sm panorama-zoom-value" type="button" data-testid="panorama-zoom-reset" title="适配屏幕" (click)="resetZoom()">{{ zoomPercent() }}%</button>
-            <button class="btn btn-outline btn-sm" type="button" data-testid="panorama-zoom-in" title="放大" (click)="zoom(0.08)">+</button>
+            <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-zoom-out" title="缩小" (click)="zoom(-0.08)">-</button>
+            <button class="btn btn-outline btn-sm panorama-toolbar-button panorama-zoom-value" type="button" data-testid="panorama-zoom-reset" title="适配屏幕" (click)="resetZoom()">{{ zoomPercent() }}%</button>
+            <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-zoom-in" title="放大" (click)="zoom(0.08)">+</button>
           </div>
         }
-        <button class="btn btn-outline btn-sm" type="button" data-testid="panorama-editor-open">打开编辑</button>
+        <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-editor-open">打开编辑</button>
       </div>
     </div>
   </div>
@@ -72,10 +72,16 @@
                     @if (cellStages(laneUid(lane), columnUid(column)).length) {
                       <div class="panorama-stage-lane">
                         @for (stage of cellStages(laneUid(lane), columnUid(column)); track stage.uid) {
-                          <div class="panorama-stage-cell">
+                          <button
+                            class="panorama-stage-cell"
+                            type="button"
+                            data-testid="panorama-stage-cell"
+                            [class.is-highlighted]="isStageHighlighted(stage)"
+                            (click)="selectStage(stage)"
+                          >
                             <span class="panorama-stage-name">{{ stage.name }}</span>
                             <span class="panorama-stage-count">{{ stageProcessCount(stage.uid) }} 个流程</span>
-                          </div>
+                          </button>
                         }
                       </div>
                     } @else {
@@ -92,10 +98,16 @@
               <div class="panorama-capability-group-label">核心</div>
               <div class="panorama-capability-strip">
                 @for (row of coreComponentRows(); track row.component.uid) {
-                  <div class="panorama-capability-node core">
+                  <button
+                    class="panorama-capability-node core"
+                    type="button"
+                    data-testid="panorama-component-node"
+                    [class.is-highlighted]="isComponentHighlighted(row.component)"
+                    (click)="selectComponent(row.component)"
+                  >
                     <strong>{{ row.component.name }}</strong>
-                    <span class="panorama-stage-count">{{ componentKindLabel(row.component) }} · {{ componentStageText(row.stages) }}</span>
-                  </div>
+                    <span class="panorama-stage-count">{{ componentConstructText(row.component) }}</span>
+                  </button>
                 } @empty {
                   <span class="panorama-capability-empty">暂无核心组件</span>
                 }
@@ -105,10 +117,16 @@
               <div class="panorama-capability-group-label">通用</div>
               <div class="panorama-capability-strip">
                 @for (row of genericComponentRows(); track row.component.uid) {
-                  <div class="panorama-capability-node generic">
+                  <button
+                    class="panorama-capability-node generic"
+                    type="button"
+                    data-testid="panorama-component-node"
+                    [class.is-highlighted]="isComponentHighlighted(row.component)"
+                    (click)="selectComponent(row.component)"
+                  >
                     <strong>{{ row.component.name }}</strong>
-                    <span class="panorama-stage-count">{{ componentKindLabel(row.component) }} · {{ componentStageText(row.stages) }}</span>
-                  </div>
+                    <span class="panorama-stage-count">{{ componentConstructText(row.component) }}</span>
+                  </button>
                 } @empty {
                   <span class="panorama-capability-empty">暂无通用组件</span>
                 }

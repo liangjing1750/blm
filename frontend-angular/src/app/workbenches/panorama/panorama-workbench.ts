@@ -40,6 +40,8 @@ export class PanoramaWorkbench {
   protected readonly activeTab = signal<PanoramaSubtab>('overview');
   protected readonly manualZoom = signal<number | null>(null);
   protected readonly viewportSize = signal(this.readViewportSize());
+  protected readonly selectedStageUid = signal('');
+  protected readonly selectedComponentUid = signal('');
   private readonly documentStore = inject(DocumentStore);
   protected readonly document = this.documentStore.document;
   protected readonly panoramaModel = computed(() => {
@@ -132,6 +134,34 @@ export class PanoramaWorkbench {
     return this.document().stages.filter((stage) => stage.panoramaLaneUid === laneId && stage.panoramaColumnUid === columnId);
   }
 
+  protected selectStage(stage: Stage): void {
+    const stageId = this.stageUid(stage);
+    this.selectedStageUid.set(this.selectedStageUid() === stageId ? '' : stageId);
+    this.selectedComponentUid.set('');
+  }
+
+  protected selectComponent(component: BusinessComponent): void {
+    const componentId = this.componentUid(component);
+    this.selectedComponentUid.set(this.selectedComponentUid() === componentId ? '' : componentId);
+    this.selectedStageUid.set('');
+  }
+
+  protected isStageHighlighted(stage: Stage): boolean {
+    const stageId = this.stageUid(stage);
+    const selectedStage = this.selectedStageUid();
+    if (selectedStage) return selectedStage === stageId;
+    const selectedComponent = this.selectedComponent();
+    return selectedComponent ? this.componentStageIds(selectedComponent).has(stageId) : false;
+  }
+
+  protected isComponentHighlighted(component: BusinessComponent): boolean {
+    const componentId = this.componentUid(component);
+    const selectedComponent = this.selectedComponentUid();
+    if (selectedComponent) return selectedComponent === componentId;
+    const selectedStage = this.selectedStageUid();
+    return selectedStage ? this.componentStageIds(component).has(selectedStage) : false;
+  }
+
   protected columnUid(column: ValueDomainColumn): string {
     return getValueDomainColumnUid(column);
   }
@@ -140,12 +170,22 @@ export class PanoramaWorkbench {
     return getValueDomainLaneUid(lane);
   }
 
-  protected componentKindLabel(component: BusinessComponent): string {
-    return this.componentKind(component) === 'generic' ? '通用组件' : '核心组件';
+  protected componentConstructText(component: BusinessComponent): string {
+    const componentIds = new Set([component.uid, component.id].filter(Boolean).map(String));
+    const constructs = ((this.document() as BlmDocument & { businessConstructs?: Array<Record<string, unknown>> }).businessConstructs || [])
+      .filter((construct) => {
+        const owner = construct['businessComponentUid'] || construct['businessComponentId'] || construct['componentUid'] || construct['componentId'];
+        return componentIds.has(String(owner || ''));
+      });
+    return `${constructs.length}个构件`;
   }
 
-  protected componentStageText(stages: Stage[]): string {
-    return stages.length ? stages.map((stage) => stage.name).join('、') : '待承接';
+  protected stageUid(stage: Stage): string {
+    return String(stage.uid || stage.id || '').trim();
+  }
+
+  protected componentUid(component: BusinessComponent): string {
+    return String(component.uid || component.id || '').trim();
   }
 
   // 边界细节：总览必须是查询投影，缺失矩阵结构时只给 UI fallback，不写回文档模型。
@@ -164,6 +204,15 @@ export class PanoramaWorkbench {
   private componentKind(component: BusinessComponent): 'core' | 'generic' {
     const kind = String(component.kind || '').trim();
     return kind === 'generic' || kind === 'common' ? 'generic' : 'core';
+  }
+
+  private selectedComponent(): BusinessComponent | null {
+    const selected = this.selectedComponentUid();
+    return selected ? this.document().businessComponents.find((component) => this.componentUid(component) === selected) || null : null;
+  }
+
+  private componentStageIds(component: BusinessComponent): Set<string> {
+    return new Set(getComponentSupportedStages(this.document(), component).map((stage) => this.stageUid(stage)).filter(Boolean));
   }
 
   private clampZoom(value: number): number {

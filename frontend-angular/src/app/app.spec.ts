@@ -138,6 +138,10 @@ describe('App', () => {
       processes: [],
       entities: [],
       businessComponents: [{ uid: 'bc-1', name: '仓单组件', kind: 'core', entityUids: [], taskDefinitionUids: [], stageUids: ['stage-1'] }],
+      businessConstructs: [
+        { uid: 'construct-1', name: '仓单构件', businessComponentUid: 'bc-1' },
+        { uid: 'construct-2', name: '库存构件', businessComponentUid: 'bc-1' },
+      ],
       taskDefinitions: [],
       terms: [],
       rules: [],
@@ -161,7 +165,21 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="panorama-subtab-rules"]')?.textContent).toContain('规则管理');
     expect(compiled.querySelector('[data-testid="panorama-overview-rich"]')?.textContent).toContain('入库价值流');
     expect(compiled.querySelector('[data-testid="panorama-matrix"]')?.textContent).toContain('准备');
+    expect(compiled.querySelector('[data-testid="panorama-capability-groups"]')?.textContent).toContain('2个构件');
+    expect(compiled.querySelector('[data-testid="panorama-capability-groups"]')?.textContent).not.toContain('核心组件 · 准备');
     expect(compiled.querySelector('[data-testid="panorama-zoom-control"]')).toBeTruthy();
+    expect(getComputedStyle(compiled.querySelector<HTMLElement>('[data-testid="panorama-zoom-in"]')!).height)
+      .toBe(getComputedStyle(compiled.querySelector<HTMLElement>('[data-testid="panorama-editor-open"]')!).height);
+    const stageCard = compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-stage-cell"]');
+    const componentCard = compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-component-node"]');
+    stageCard?.click();
+    fixture.detectChanges();
+    expect(stageCard?.classList.contains('is-highlighted')).toBe(true);
+    expect(componentCard?.classList.contains('is-highlighted')).toBe(true);
+    componentCard?.click();
+    fixture.detectChanges();
+    expect(componentCard?.classList.contains('is-highlighted')).toBe(true);
+    expect(stageCard?.classList.contains('is-highlighted')).toBe(true);
     const zoomCanvas = compiled.querySelector<HTMLElement>('[data-testid="panorama-zoom-canvas"]');
     const initialZoom = Number(zoomCanvas?.style.zoom || 0);
     expect(initialZoom).toBeLessThanOrEqual(1);

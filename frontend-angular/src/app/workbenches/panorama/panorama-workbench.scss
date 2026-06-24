@@ -9,15 +9,19 @@
   gap: 4px;
 }
 
-.panorama-zoom-control .btn {
-  min-width: 30px;
-  height: 30px;
-  padding: 0 9px;
+.panorama-toolbar-button {
+  min-height: 0;
+  height: 26px;
+  padding: 3px 8px;
   line-height: 1;
 }
 
+.panorama-zoom-control .btn {
+  min-width: 28px;
+}
+
 .panorama-zoom-value {
-  min-width: 58px;
+  min-width: 54px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -39,4 +43,21 @@
 .panorama-business-map {
   min-width: 980px;
   box-sizing: border-box;
+}
+
+.panorama-stage-cell,
+.panorama-capability-node {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.panorama-stage-cell.is-highlighted,
+.panorama-capability-node.is-highlighted {
+  border-color: #f97316;
+  background: #fff7ed;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2), 0 8px 18px rgba(249, 115, 22, 0.14);
+}
+
+.panorama-stage-cell.is-highlighted .panorama-stage-name,
+.panorama-capability-node.is-highlighted strong {
+  color: #c2410c;
 }
