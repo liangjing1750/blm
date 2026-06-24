@@ -201,6 +201,103 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="knowledge-angular"]')?.textContent).toContain('术语管理');
   });
 
+  it('should keep role creation compact and sync role edits with Ctrl+S', async () => {
+    let resolveSnapshot!: (value: Response) => void;
+    let snapshotPayload: any = null;
+    const snapshotPromise = new Promise<Response>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/collab/snapshot')) {
+        snapshotPayload = JSON.parse(String(init?.body));
+        return snapshotPromise;
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = { meta: { domain: 'Agent' }, roles: [{ uid: 'role-1', id: 'R1', name: '系统', group: '系统角色' }], stages: [], stageFlowRefs: [], processes: [], entities: [], businessComponents: [], taskDefinitions: [], terms: [], rules: [] };
+    runtime.collab.hasRemoteUpdate = false;
+    runtime.collab.syncing = false;
+    runtime.ui['roleWorkbenchMode'] = 'management';
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeFalsy();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="role-create-toggle"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeTruthy();
+    const input = compiled.querySelector<HTMLInputElement>('#role-create-input')!;
+    input.value = '清算员';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="role-add-button"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.roles.some((role: any) => role.name === '清算员')).toBe(true);
+    expect(runtime.modified).toBe(true);
+    expect(runtime.collab.pendingSnapshot).toBe(true);
+    expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeFalsy();
+
+    const preventDefault = vi.fn();
+    (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault });
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(preventDefault).toHaveBeenCalled();
+    expect((fixture.componentInstance as any).waitDialog()?.title).toBe('正在同步文档...');
+    resolveSnapshot(new Response(JSON.stringify({ document: runtime.doc, seq: 8 }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await fixture.whenStable();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/collab/snapshot', expect.objectContaining({ method: 'POST' }));
+    expect(snapshotPayload?.document?.roles.some((role: any) => role.name === '清算员')).toBe(true);
+    expect(runtime.modified).toBe(false);
+    expect(runtime.collab.seq).toBe(8);
+    expect(compiled.querySelector('[data-testid="wait-dialog"]')).toBeFalsy();
+  });
+
+  it('should let the server merge a stale clean snapshot when syncing after another window saved', async () => {
+    let snapshotPayload: any = null;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/collab/snapshot')) {
+        snapshotPayload = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ document: { meta: { domain: 'Remote' }, roles: [{ uid: 'remote-role', name: '远端角色' }] }, seq: 9 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = { meta: { domain: 'Local' }, roles: [], stages: [], stageFlowRefs: [], processes: [], entities: [], businessComponents: [], taskDefinitions: [], terms: [], rules: [] };
+    runtime.modified = false;
+    runtime.collab.pendingSnapshot = false;
+    runtime.collab.syncing = false;
+    runtime.collab.hasRemoteUpdate = false;
+    runtime.collab.seq = 9;
+
+    const fixture = TestBed.createComponent(LegacyShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-sync-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/collab/snapshot', expect.objectContaining({ method: 'POST' }));
+    expect(snapshotPayload?.baseSeq).toBe(0);
+    expect(snapshotPayload?.document?.meta?.domain).toBe('Local');
+    expect(runtime.doc.meta.domain).toBe('Remote');
+    expect(runtime.doc.roles[0].name).toBe('远端角色');
+    expect(runtime.collab.hasRemoteUpdate).toBe(false);
+  });
+
   it('should synchronize the main workbench from the browser route on refresh', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

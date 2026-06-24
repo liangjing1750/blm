@@ -2,28 +2,38 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 12px;
+  min-height: 42px;
+  margin: 2px 2px 12px;
 }
 
-.role-mode-action {
+.role-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 0 0 auto;
 }
 
 .role-angular-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .role-light-card .role-create-inline {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 2fr) auto;
+  display: inline-grid;
+  grid-template-columns: 180px 150px auto auto;
   align-items: center;
-  gap: 10px;
-  padding: 0 0 2px;
+  gap: 6px;
+  max-width: min(680px, 100%);
+  padding: 6px 8px;
+  border: 1px solid #d8e4f2;
+  border-radius: 8px;
+  background: #f8fbff;
+  box-shadow: 0 6px 18px rgba(15, 47, 99, 0.08);
 }
 
 .role-light-card .role-light-input {

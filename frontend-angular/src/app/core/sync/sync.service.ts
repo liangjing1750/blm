@@ -20,23 +20,52 @@ export class SyncService {
     }
     this.collaboration.beginSync();
     try {
-      const result = await this.api.collabSnapshot(runtime.currentFile, runtime.doc, {
+      const frozenDocument = this.cloneDocument(runtime.doc);
+      const frozenHash = this.hashDocument(frozenDocument);
+      const result = await this.api.collabSnapshot(runtime.currentFile, frozenDocument, {
         baseSeq: runtime.collab.draftBaseSeqOverride ?? runtime.collab.acceptedSeq ?? runtime.collab.seq ?? 0,
         recoveryMode: Boolean(runtime.collab.recoveryMode),
         user: this.collaboration.currentUser(),
       });
       const document = result?.document || result?.merged_document || result?.mergedDocument || runtime.doc;
       const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || runtime.collab.seq || 0);
-      runtime.modified = false;
+      const editedDuringSync = this.hashDocument(runtime.doc) !== frozenHash;
       runtime.collab.draftBaseSeqOverride = undefined;
       runtime.collab.recoveryMode = false;
       runtime.collab.forceSnapshotSync = false;
       replaceRuntimeDocument(document, runtime.currentFile);
       this.documentStore.load(document, runtime.currentFile);
+      runtime.modified = editedDuringSync;
+      runtime.collab.pendingSnapshot = editedDuringSync;
       this.collaboration.finishSync(nextSeq);
+      if (editedDuringSync) {
+        runtime.modified = true;
+        runtime.collab.pendingSnapshot = true;
+      }
+      this.collaboration.announceDocumentSaved(runtime.currentFile);
     } catch (error) {
       this.collaboration.failSync(error);
       throw error;
     }
+  }
+
+  private cloneDocument(document: any): any {
+    if (typeof structuredClone === 'function') return structuredClone(document || {});
+    return JSON.parse(JSON.stringify(document || {}));
+  }
+
+  private hashDocument(document: any): string {
+    let text = '';
+    try {
+      text = JSON.stringify(document || null);
+    } catch {
+      return '';
+    }
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16);
   }
 }

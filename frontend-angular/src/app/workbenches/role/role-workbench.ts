@@ -128,6 +128,7 @@ export class RoleWorkbenchComponent {
   protected readonly mode = signal<'management' | 'view'>(this.initialMode());
   protected readonly selectedRoleId = signal(this.currentRoleId());
   protected readonly version = signal(0);
+  protected readonly createOpen = signal(false);
   protected newRoleName = '';
   protected selectedGroup = this.defaultRoleGroup();
   protected customGroup = '';
@@ -339,6 +340,10 @@ export class RoleWorkbenchComponent {
     else this.showView();
   }
 
+  protected openCreateRole(): void {
+    this.createOpen.update((value) => !value);
+  }
+
   protected addRole(): void {
     const name = (this.newRoleName || '新角色').trim();
     const group = this.selectedGroup === '__custom__' ? this.customGroup.trim() : this.selectedGroup;
@@ -356,6 +361,7 @@ export class RoleWorkbenchComponent {
     this.selectedGroup = group;
     this.selectedRoleId.set(this.roleIdentity(role));
     this.legacy().S!.ui!['roleId'] = this.roleIdentity(role);
+    this.createOpen.set(false);
     this.markChanged();
   }
 
