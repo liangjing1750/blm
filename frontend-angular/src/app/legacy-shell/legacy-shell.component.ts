@@ -27,7 +27,7 @@ import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 import { FeedbackWorkbenchComponent } from '../workbenches/support/feedback/feedback-workbench.component';
 import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-workbench.component';
 
-type ToolbarModal = '' | 'create' | 'copy' | 'open' | 'properties' | 'history' | 'placeholder';
+type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
 
 interface WaitDialogState {
@@ -94,6 +94,7 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
   protected openQuery = '';
   protected createDocumentName = '';
   protected copyDocumentName = '';
+  protected archiveVersionMessage = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
   private routeSubscription: Subscription | null = null;
 
@@ -285,10 +286,25 @@ export class LegacyShellComponent implements OnInit, OnDestroy {
       this.showToast('当前查看的是只读版本，不能再次归档。');
       return;
     }
-    const message = window.prompt('给这个归档版本填写说明：', '手动归档');
-    if (message === null) return;
+    this.archiveVersionMessage = '';
+    this.modal.set('archive');
+    this.activeDropdown.set('');
+  }
+
+  protected async submitArchiveVersion(): Promise<void> {
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档。');
+      return;
+    }
+    if (this.runtime.readOnly) {
+      this.showToast('当前查看的是只读版本，不能再次归档。');
+      this.modal.set('');
+      return;
+    }
     await this.runBusy(async () => {
-      await this.api.createVersion(this.runtime.currentFile, this.runtime.doc, String(message || '').trim());
+      await this.api.createVersion(this.runtime.currentFile, this.runtime.doc, this.archiveVersionMessage.trim());
+      this.archiveVersionMessage = '';
+      this.modal.set('');
       this.showToast('归档版本已创建');
     });
   }

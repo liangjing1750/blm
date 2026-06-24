@@ -180,6 +180,11 @@ app-shell-tab-bar {
   max-height: min(780px, calc(100vh - 48px));
 }
 
+.archive-version-card {
+  width: min(526px, calc(100vw - 48px));
+  padding: 30px;
+}
+
 .open-document-waiting {
   filter: blur(3px);
   pointer-events: none;

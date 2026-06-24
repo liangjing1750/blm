@@ -503,7 +503,7 @@ describe('App', () => {
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.spyOn(window, 'prompt').mockReturnValue('手动归档');
+    const promptSpy = vi.spyOn(window, 'prompt');
 
     const fixture = TestBed.createComponent(LegacyShellComponent);
     const runtime = getAngularRuntimeState();
@@ -538,6 +538,17 @@ describe('App', () => {
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-archive-button"]')?.click();
     await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(compiled.querySelector('[data-testid="archive-version-dialog"]')).toBeTruthy();
+    const archiveInput = compiled.querySelector('[data-testid="archive-version-message-input"]') as HTMLInputElement;
+    archiveInput.value = '手动归档';
+    archiveInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="archive-version-submit-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-delete-button"]')?.click();
     await fixture.whenStable();
