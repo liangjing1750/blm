@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.panorama-zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.panorama-zoom-control .btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 9px;
+  line-height: 1;
+}
+
+.panorama-zoom-value {
+  min-width: 58px;
+  font-variant-numeric: tabular-nums;
+}
+
+.panorama-zoom-viewport {
+  height: calc(100vh - 170px);
+  min-height: 420px;
+  overflow: auto;
+  padding: 14px 20px 18px;
+  background: #eef2f7;
+  box-sizing: border-box;
+}
+
+.panorama-zoom-canvas {
+  width: max-content;
+  min-width: 100%;
+  transform-origin: 0 0;
+}
+
+.panorama-business-map {
+  min-width: 980px;
+  box-sizing: border-box;
+}

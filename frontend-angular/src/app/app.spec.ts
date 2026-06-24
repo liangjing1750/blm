@@ -161,6 +161,18 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="panorama-subtab-rules"]')?.textContent).toContain('规则管理');
     expect(compiled.querySelector('[data-testid="panorama-overview-rich"]')?.textContent).toContain('入库价值流');
     expect(compiled.querySelector('[data-testid="panorama-matrix"]')?.textContent).toContain('准备');
+    expect(compiled.querySelector('[data-testid="panorama-zoom-control"]')).toBeTruthy();
+    const zoomCanvas = compiled.querySelector<HTMLElement>('[data-testid="panorama-zoom-canvas"]');
+    const initialZoom = Number(zoomCanvas?.style.zoom || 0);
+    expect(initialZoom).toBeLessThanOrEqual(1);
+
+    compiled.querySelector<HTMLElement>('[data-testid="panorama-zoom-viewport"]')?.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    fixture.detectChanges();
+    expect(Number(zoomCanvas?.style.zoom || 0)).toBe(initialZoom);
+
+    compiled.querySelector<HTMLElement>('[data-testid="panorama-zoom-viewport"]')?.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -100 }));
+    fixture.detectChanges();
+    expect(Number(zoomCanvas?.style.zoom || 0)).toBeGreaterThan(initialZoom);
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
     fixture.detectChanges();
@@ -611,7 +623,7 @@ describe('App', () => {
         return new Response(JSON.stringify([{ id: 'h1', message: '同步快照', seq: 3, timestamp_label: '今天' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.includes('/api/versions/agent.json')) {
-        return new Response(JSON.stringify([{ id: 'v1', label: '验收版', createdAt: '2026年06月24日 11时38分19秒' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify([{ id: 'v1', label: '验收版（2026年06月24日 11时38分19秒）', createdAt: '2026年06月24日 11时38分19秒' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.includes('/api/collab/submits/list')) {
         return new Response(JSON.stringify({ submits: [{ submitId: 's1', user: 'agent', baseSeq: 2, seq: 3 }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -639,6 +651,7 @@ describe('App', () => {
 
     expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('本地恢复');
     expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('复制链接');
+    expect(compiled.querySelector('[data-testid="history-dialog"] strong')?.textContent).toBe('验收版');
     expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('2026年06月24日 11时38分19秒');
     expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).not.toContain('稳定只读快照');
 

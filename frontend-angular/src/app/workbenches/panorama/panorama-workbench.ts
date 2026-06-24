@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { BlmDocument, BusinessComponent, Stage } from '../../core/document/document.model';
 import { DocumentStore } from '../../core/document/document-store';
 import { getComponentSupportedStages, getStageProcesses } from '../../core/document/document-model';
@@ -26,7 +26,7 @@ interface PanoramaDocument extends BlmDocument {
   selector: 'app-panorama-workbench',
   imports: [CommonModule, KnowledgeWorkbenchComponent, RoleWorkbenchComponent],
   templateUrl: './panorama-workbench.html',
-  styleUrl: '../../shared/layout/workbench-section.css',
+  styleUrls: ['../../shared/layout/workbench-section.css', './panorama-workbench.scss'],
 })
 export class PanoramaWorkbench {
   // 模块意图：全景工作台是跨模型入口，只编排“视图投影”和已迁移子工作台，不在这里承接具体编辑命令。
@@ -38,6 +38,8 @@ export class PanoramaWorkbench {
     { id: 'rules', label: '规则管理' },
   ];
   protected readonly activeTab = signal<PanoramaSubtab>('overview');
+  protected readonly manualZoom = signal<number | null>(null);
+  protected readonly viewportSize = signal(this.readViewportSize());
   private readonly documentStore = inject(DocumentStore);
   protected readonly document = this.documentStore.document;
   protected readonly panoramaModel = computed(() => {
@@ -76,6 +78,28 @@ export class PanoramaWorkbench {
     // 关键流程：总览只读矩阵按已有全景 CSS 组织布局，避免再次退化成普通列表。
     return `140px ${columnTracks}`;
   });
+  protected readonly fitZoom = computed(() => {
+    const model = this.panoramaModel();
+    const viewport = this.viewportSize();
+    const columns = Math.max(1, model.columns.length);
+    const lanes = Math.max(1, model.lanes.length);
+    const componentRows = Math.max(this.coreComponentRows().length, this.genericComponentRows().length);
+    const estimatedWidth = Math.max(920, 140 + columns * 188 + 72);
+    const estimatedMatrixHeight = 82 + lanes * 88;
+    const estimatedCapabilityHeight = 44 + Math.max(1, Math.ceil(componentRows / 4)) * 84;
+    const estimatedHeight = 96 + estimatedMatrixHeight + estimatedCapabilityHeight;
+    const availableWidth = Math.max(640, viewport.width - 560);
+    const availableHeight = Math.max(420, viewport.height - 188);
+    const scale = Math.min(1, availableWidth / estimatedWidth, availableHeight / estimatedHeight);
+    return this.clampZoom(Math.floor(scale * 100) / 100);
+  });
+  protected readonly zoomValue = computed(() => this.manualZoom() ?? this.fitZoom());
+  protected readonly zoomPercent = computed(() => Math.round(this.zoomValue() * 100));
+
+  @HostListener('window:resize')
+  protected onWindowResize(): void {
+    this.viewportSize.set(this.readViewportSize());
+  }
 
   protected stageProcessCount(stageUid: string): number {
     return getStageProcesses(this.document(), stageUid).length;
@@ -83,6 +107,21 @@ export class PanoramaWorkbench {
 
   protected switchTab(tabId: PanoramaSubtab): void {
     this.activeTab.set(tabId);
+  }
+
+  protected zoom(delta: number): void {
+    const next = this.clampZoom(Math.round((this.zoomValue() + delta) * 100) / 100);
+    this.manualZoom.set(next);
+  }
+
+  protected resetZoom(): void {
+    this.manualZoom.set(null);
+  }
+
+  protected onOverviewWheel(event: WheelEvent): void {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    this.zoom(event.deltaY < 0 ? 0.08 : -0.08);
   }
 
   protected cell(laneId: string, columnId: string): ValueDomainCell | null {
@@ -125,5 +164,14 @@ export class PanoramaWorkbench {
   private componentKind(component: BusinessComponent): 'core' | 'generic' {
     const kind = String(component.kind || '').trim();
     return kind === 'generic' || kind === 'common' ? 'generic' : 'core';
+  }
+
+  private clampZoom(value: number): number {
+    return Math.max(0.55, Math.min(1.35, value));
+  }
+
+  private readViewportSize(): { width: number; height: number } {
+    if (typeof window === 'undefined') return { width: 1440, height: 900 };
+    return { width: window.innerWidth || 1440, height: window.innerHeight || 900 };
   }
 }

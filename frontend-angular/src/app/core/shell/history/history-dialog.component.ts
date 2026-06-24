@@ -32,6 +32,11 @@ export class HistoryDialogComponent {
     this.activeTabChange.emit(tab);
   }
 
+  versionTitle(row: any): string {
+    const title = String(row?.label || row?.message || row?.id || row?.version_id || '').trim();
+    return title.replace(/\s*[（(]\d{4}年\d{2}月\d{2}日\s+\d{2}时\d{2}分\d{2}秒[）)]\s*$/, '').trim() || title;
+  }
+
   versionTime(row: any): string {
     return String(
       row?.timestamp_label ||

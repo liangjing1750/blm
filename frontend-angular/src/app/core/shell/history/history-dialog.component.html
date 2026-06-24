@@ -26,7 +26,7 @@
       <h3 *ngIf="versionRows.length" class="history-section-title">归档版本</h3>
       <article *ngFor="let row of versionRows" class="recovery-item">
         <div class="recovery-item-main">
-          <strong>{{ row.label || row.message || row.id || row.version_id }}</strong>
+          <strong>{{ versionTitle(row) }}</strong>
           <span>{{ versionTime(row) }}</span>
         </div>
         <div class="recovery-item-actions">
