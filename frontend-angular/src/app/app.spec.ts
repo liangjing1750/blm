@@ -1124,7 +1124,8 @@ describe('App', () => {
     // 第一轮 Ctrl+S 同步
     const preventDefault = vi.fn();
     (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault });
-    await Promise.resolve();
+    // 等待异步链完整展开：syncNow → runBusy → syncService.syncNow → serverCompatibleHash → collabSnapshot
+    await new Promise((r) => setTimeout(r, 50));
     fixture.detectChanges();
 
     // 服务端返回 documentHash — 客户端需保存它用于下次同步的 baseDocumentHash
@@ -1169,10 +1170,10 @@ describe('App', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    // 第二轮 Ctrl+S — 验证 baseDocumentHash 被正确传递
+    // 第二轮 Ctrl+S
     const preventDefault2 = vi.fn();
     (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault: preventDefault2 });
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 50));
     fixture.detectChanges();
 
     expect(snapshotPayload?.baseDocumentHash).toBe('mock-hash-abc123');

@@ -29,9 +29,13 @@ export class SyncService {
       }
       const frozenDocument = this.cloneDocument(runtime.doc);
       const frozenHash = this.hashDocument(frozenDocument);
+      // 优先使用服务端返回的 documentHash；首次同步时客户端计算服务端兼容哈希，
+      // 确保 session.seq > 0 时 verified_current_base 检查也能通过。
+      const baseDocumentHash = runtime.collab.serverDocumentHash
+        || await this.serverCompatibleHash(frozenDocument);
       const result = await this.api.collabSnapshot(runtime.currentFile, frozenDocument, {
         baseSeq: runtime.collab.draftBaseSeqOverride ?? runtime.collab.acceptedSeq ?? runtime.collab.seq ?? 0,
-        baseDocumentHash: runtime.collab.serverDocumentHash || '',
+        baseDocumentHash,
         recoveryMode: Boolean(runtime.collab.recoveryMode),
         user: this.collaboration.currentUser(),
       });
@@ -67,6 +71,40 @@ export class SyncService {
     return JSON.parse(JSON.stringify(document || {}));
   }
 
+  // 模块意图：与服务端 _doc_hash (SHA-1) 保持一致，使 baseDocumentHash 可被服务端验证。
+  // 关键流程：排除 meta.uid/document_uid/schema_version，sort_keys JSON→bytes→SHA-1[:16]。
+  private async serverCompatibleHash(document: any): Promise<string> {
+    if (!globalThis.crypto?.subtle?.digest) return '';
+    try {
+      const doc: Record<string, any> = {};
+      for (const key of Object.keys(document || {}).sort()) {
+        if (key === 'meta' && document['meta'] && typeof document['meta'] === 'object') {
+          const filteredMeta: Record<string, any> = {};
+          for (const mk of Object.keys(document['meta']).sort()) {
+            if (mk !== 'uid' && mk !== 'document_uid' && mk !== 'schema_version') {
+              filteredMeta[mk] = document['meta'][mk];
+            }
+          }
+          doc['meta'] = filteredMeta;
+        } else {
+          doc[key] = document[key];
+        }
+      }
+      const text = JSON.stringify(doc, Object.keys(doc).sort(), '');
+      // Python: json.dumps(..., separators=(",", ":"))
+      // JSON.stringify without space arg uses no separators space, matching Python separators
+      const compact = JSON.stringify(JSON.parse(text)); // normalize: no spaces in serialization
+      const encoder = new TextEncoder();
+      const data = encoder.encode(compact);
+      const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hexString = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+      return hexString.substring(0, 16);
+    } catch {
+      return '';
+    }
+  }
+
   private hashDocument(document: any): string {
     let text = '';
     try {
@@ -74,11 +112,11 @@ export class SyncService {
     } catch {
       return '';
     }
-    let hash = 2166136261;
-    for (let index = 0; index < text.length; index += 1) {
-      hash ^= text.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
     }
-    return (hash >>> 0).toString(16);
+    return (h >>> 0).toString(16);
   }
 }
