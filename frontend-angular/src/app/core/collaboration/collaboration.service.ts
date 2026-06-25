@@ -180,6 +180,11 @@ export class CollaborationService {
       runtime.collab.seq = Number(payload.seq || runtime.collab.seq || 0);
       runtime.collab.acceptedSeq = runtime.collab.seq;
       runtime.collab.users = payload.users || [];
+      // 保存服务端当前文档哈希，使得首次同步时 baseDocumentHash 非空，
+      // 服务端 verified_current_base 检查通过，删除操作不会被 merge 还原。
+      if (payload.documentHash) {
+        runtime.collab.serverDocumentHash = String(payload.documentHash);
+      }
     } else if (payload.type === 'presence') {
       runtime.collab.users = payload.users || [];
     } else if (payload.type === 'updated' || payload.type === 'snapshot_notice' || payload.type === 'snapshot') {
