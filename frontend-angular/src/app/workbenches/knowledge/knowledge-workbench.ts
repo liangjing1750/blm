@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnChanges, OnInit, OnDestroy, SimpleChanges, signal } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, OnDestroy, SimpleChanges, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
 interface LegacyTerm {
@@ -82,6 +83,8 @@ interface FunctionView {
 })
 export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy {
 
+  private readonly sanitizer = inject(DomSanitizer);
+
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {
     this.version.update((v) => v + 1);
@@ -94,12 +97,12 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
   ngOnDestroy(): void {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
   }
-  // 模块意图：术语和规则 tab 先完成 Angular 独立渲染；字典数据模型暂不新增写入能力。
+  // 模块意图：规则 tab 按功能（流程）分组展示，支持全局搜索和折叠，富文本内容保留 HTML 排版。
   protected readonly activeTab = signal<'termManagement' | 'dictionaryManagement' | 'rules'>('termManagement');
-  protected readonly selectedFunctionId = signal('');
   protected readonly ruleKeyword = signal('');
   protected readonly termsCollapsed = signal(false);
   protected readonly rulesCollapsed = signal(false);
+  protected readonly collapsedGroups = signal<Set<string>>(new Set());
   protected readonly version = signal(0);
   @Input() initialTab: 'termManagement' | 'dictionaryManagement' | 'rules' = 'termManagement';
   @Input() editing = true;
@@ -112,9 +115,6 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     if (tabId === 'rules') this.activeTab.set('rules');
     else if (tabId === 'dictionaryManagement') this.activeTab.set('dictionaryManagement');
     else this.activeTab.set('termManagement');
-    if (tabId === 'rules' && !this.selectedFunctionId()) {
-      this.selectedFunctionId.set(this.functions()[0]?.id || '');
-    }
   }
 
   protected terms(): TermView[] {
@@ -162,42 +162,61 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     });
   }
 
-  protected selectedFunction(): FunctionView | null {
-    const functions = this.functions();
-    return functions.find((item) => item.id === this.selectedFunctionId()) || functions[0] || null;
+  // 按功能分组的规则视图，未匹配搜索的功能组返回空 rules 数组
+  protected ruleGroups(): Array<{ processId: string; processName: string; nodeCount: number; rules: RuleView[] }> {
+    const keyword = this.ruleKeyword().trim().toLowerCase();
+    const allRules = this.rules();
+    const groups = new Map<string, { processId: string; processName: string; nodeCount: number; rules: RuleView[] }>();
+
+    for (const rule of allRules) {
+      if (keyword && ![rule.processName, rule.nodeName, rule.name, rule.content]
+        .some((v) => v.toLowerCase().includes(keyword))) continue;
+
+      if (!groups.has(rule.processId)) {
+        const nodes = new Set<string>();
+        for (const r of allRules.filter((r) => r.processId === rule.processId)) {
+          nodes.add(r.nodeName);
+        }
+        groups.set(rule.processId, {
+          processId: rule.processId,
+          processName: rule.processName,
+          nodeCount: nodes.size,
+          rules: [],
+        });
+      }
+      groups.get(rule.processId)!.rules.push(rule);
+    }
+    return Array.from(groups.values());
   }
 
-  protected filteredRules(): RuleView[] {
-    const selectedId = this.selectedFunction()?.id || '';
-    const keyword = this.ruleKeyword().trim().toLowerCase();
-    return this.rules().filter((rule) => {
-      const inFunction = !selectedId || rule.processId === selectedId;
-      const inKeyword = !keyword || [rule.processName, rule.nodeName, rule.name, rule.content]
-        .some((value) => value.toLowerCase().includes(keyword));
-      return inFunction && inKeyword;
+  protected toggleGroup(processId: string): void {
+    this.collapsedGroups.update((set) => {
+      const next = new Set(set);
+      if (next.has(processId)) next.delete(processId);
+      else next.add(processId);
+      return next;
     });
   }
 
-  protected readableRuleContent(content: string): string {
-    const source = content.trim();
-    if (!source) return '暂无内容';
-    // 边界细节：这里只做只读展示净化，不能把处理后的文本写回原始模型。
-    return source
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/&amp;/gi, '&')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/(div|p|ul|ol)>/gi, '\n')
-      .replace(/<li[^>]*>/gi, '\n- ')
-      .replace(/<\/li>/gi, '')
-      .replace(/<[^>]+>/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+  protected isGroupCollapsed(processId: string): boolean {
+    return this.collapsedGroups().has(processId);
   }
 
-  protected selectFunction(functionId: string): void {
-    this.selectedFunctionId.set(functionId);
+  // 富文本渲染：保留加粗/列表/换行等基本 HTML，过滤危险标签
+  protected trustedHtml(content: string): SafeHtml {
+    if (!content?.trim()) return '';
+    // 反转义 → 过滤危险标签 → 净化
+    const decoded = content
+      .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&').replace(/&nbsp;/gi, ' ');
+    // 移除 script/style/iframe/on* 事件
+    const safe = decoded
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+      .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+      .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
+      .replace(/\s+on\w+\s*=\s*[^\s>]*/gi, '');
+    return this.sanitizer.bypassSecurityTrustHtml(safe);
   }
 
   protected setRuleKeyword(value: string): void {

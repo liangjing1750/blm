@@ -135,235 +135,142 @@
 
 /* ─── 规则管理 ──────────────────────────────────────────── */
 
-.knowledge-rule-browser {
-  border: 1px solid #dbe7f5;
-  border-radius: 10px;
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  height: min(480px, calc(100vh - 220px));
-  min-height: 340px;
-  overflow: hidden;
-}
-
-/* 左侧功能列表 */
-.knowledge-function-list {
-  background: #f8fafd;
-  border-right: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.knowledge-function-head {
+.knowledge-rule-toolbar {
   align-items: center;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 10px 16px;
 }
 
-.knowledge-function-head-title {
-  color: #334155;
-  font-size: 13px;
-  font-weight: 700;
+.knowledge-rule-search-wrap {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 12px;
 }
 
-.knowledge-function-head-count {
-  background: #e2e8f0;
-  border-radius: 999px;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-}
-
-.knowledge-search {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 8px 10px;
-}
-
-.knowledge-search input {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+.knowledge-rule-search-wrap input {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 12px;
-  padding: 6px 10px;
+  font-size: 13px;
+  max-width: 360px;
+  padding: 7px 12px;
   width: 100%;
 }
 
-.knowledge-search input:focus {
+.knowledge-rule-search-wrap input:focus {
+  background: #fff;
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px #bfdbfe;
   outline: none;
 }
 
-.knowledge-function-scroll {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-height: 0;
-  padding: 6px;
+.knowledge-rule-total {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.knowledge-function {
-  align-items: flex-start;
-  background: #fff;
+/* 分组 */
+.knowledge-rule-groups {
+  max-height: min(520px, calc(100vh - 220px));
+  min-height: 200px;
+  padding: 8px 16px 16px;
+}
+
+.knowledge-rule-group {
+  margin-bottom: 2px;
+}
+
+.knowledge-rule-group-head {
+  align-items: center;
+  background: #f8fafc;
   border: 1px solid transparent;
   border-radius: 8px;
+  color: #334155;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  text-align: left;
-  transition: background .12s, border-color .12s;
-}
-
-.knowledge-function:hover {
-  background: #f1f5f9;
-}
-
-.knowledge-function.is-active {
-  background: #eff6ff;
-  border-color: #93c5fd;
-}
-
-.knowledge-function.is-empty {
-  opacity: 0.5;
-}
-
-.knowledge-function.is-empty:hover,
-.knowledge-function.is-empty.is-active {
-  opacity: 0.75;
-}
-
-.knowledge-function-name {
-  color: #1e293b;
+  font: inherit;
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  gap: 8px;
+  padding: 9px 12px;
+  text-align: left;
+  transition: background .12s;
   width: 100%;
 }
 
-.knowledge-function-meta {
-  align-items: center;
-  display: flex;
-  gap: 6px;
-}
-
-.knowledge-function-badge {
-  background: #dbeafe;
-  border-radius: 6px;
-  color: #1d4ed8;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 7px;
-}
-
-.knowledge-function-badge.zero {
+.knowledge-rule-group-head:hover {
   background: #f1f5f9;
-  color: #94a3b8;
+  border-color: #e2e8f0;
 }
 
-.knowledge-function-nodes {
+.knowledge-rule-group-arrow {
   color: #94a3b8;
-  font-size: 11px;
+  flex-shrink: 0;
+  font-size: 12px;
+  transition: transform .15s;
+  width: 14px;
 }
 
-/* 右侧规则列表 */
-.knowledge-rule-results {
-  background: #fff;
-  display: flex;
+.knowledge-rule-group-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.knowledge-rule-group-name {
   flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.knowledge-rule-head {
-  align-items: center;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 12px 16px 10px;
-}
-
-.knowledge-rule-head-main {
-  align-items: baseline;
-  display: flex;
-  gap: 10px;
-  min-width: 0;
-}
-
-.knowledge-rule-head h3 {
-  color: #1e293b;
-  font-size: 15px;
-  font-weight: 700;
-  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.knowledge-rule-head-badge {
-  color: #64748b;
-  font-size: 12px;
+.knowledge-rule-group-meta {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
-.knowledge-rule-head-count {
-  color: #64748b;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
+/* 规则列表 */
 .knowledge-rule-list {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px 16px 16px;
+  gap: 6px;
+  padding: 8px 0 0 22px;
 }
 
 .knowledge-rule-card {
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 8px;
   display: flex;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 12px 14px;
   transition: border-color .12s, box-shadow .12s;
 }
 
 .knowledge-rule-card:hover {
   border-color: #93c5fd;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, .06);
+  box-shadow: 0 1px 6px rgba(59, 130, 246, .05);
 }
 
 .knowledge-rule-index {
   color: #94a3b8;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  min-width: 28px;
-  padding-top: 2px;
+  min-width: 22px;
+  padding-top: 3px;
 }
 
 .knowledge-rule-body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -375,40 +282,29 @@
   margin: 0;
 }
 
-.knowledge-rule-tags {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .knowledge-rule-tag {
+  align-self: flex-start;
+  background: #fef3c7;
   border-radius: 6px;
+  color: #92400e;
   font-size: 11px;
   font-weight: 600;
-  line-height: 1.4;
   padding: 2px 8px;
 }
 
-.knowledge-rule-tag.tag-node {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.knowledge-rule-tag.tag-process {
-  background: #f1f5f9;
-  color: #475569;
-}
-
+/* 富文本内容 */
 .knowledge-rule-content {
   background: #f8fafc;
   border-radius: 8px;
   color: #475569;
   font-size: 13px;
   line-height: 1.7;
-  margin: 0;
   padding: 10px 12px;
-  white-space: pre-wrap;
+
+  & ul, & ol { padding-left: 20px; margin: 4px 0; }
+  & li { margin: 2px 0; }
+  & strong, & b { color: #334155; }
+  & br { display: block; content: ''; margin-top: 4px; }
 }
 
 /* 空态 */
@@ -440,32 +336,10 @@
   color: #94a3b8;
   font-size: 12px;
   line-height: 1.6;
-  max-width: 360px;
+  max-width: 380px;
 }
 
 .knowledge-note {
-  margin-top: 10px;
+  margin: 10px 16px 14px;
   padding: 14px;
-}
-
-.knowledge-note {
-  margin-top: 10px;
-}
-
-/* 功能描述 */
-.knowledge-function-desc,
-.knowledge-function strong,
-.knowledge-function em,
-.knowledge-function-main,
-.knowledge-function-meta span,
-.knowledge-rule-title,
-.knowledge-rule-title p,
-.knowledge-rule-title span,
-.knowledge-rule-title h3,
-.knowledge-rule-cell,
-.knowledge-rule-meta,
-.knowledge-rule-meta span,
-.knowledge-rule-card-head,
-.knowledge-rule-card > p {
-  /* 清除旧规则，保留在需要时逐个还原 */
 }
