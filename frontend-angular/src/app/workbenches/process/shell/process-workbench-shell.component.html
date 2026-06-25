@@ -33,7 +33,7 @@
   @if (view() === 'valueDomain') {
     <app-value-domain-workbench />
   } @else if (view() === 'stage') {
-    <app-process-stage-workbench (processEditorRequested)="openEditor($event)" />
+    <app-process-stage-workbench (processEditorRequested)="openFlowForProcess($event)" />
   } @else if (view() === 'flow') {
     <app-process-flow-workbench (taskEditorRequested)="openNode($event)" />
   } @else if (view() === 'node') {

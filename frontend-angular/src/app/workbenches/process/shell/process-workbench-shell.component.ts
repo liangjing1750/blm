@@ -310,6 +310,13 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     this.refresh();
   }
 
+  protected openFlowForProcess(processId: string): void {
+    if (processId) getAngularRuntimeState().ui['procId'] = processId;
+    this.adapter.openFlow();
+    this.viewState.set('flow');
+    this.refresh();
+  }
+
   protected setStageEditing(editing: boolean): void {
     this.adapter.setStageEditing(editing);
     this.refresh();
