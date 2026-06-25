@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, signal } from '@angular/core';
+import { Component, Input, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
@@ -123,8 +123,11 @@ interface LegacyWindow extends Window {
   templateUrl: './role-workbench.html',
   styleUrls: ['./role-workbench.scss', './role-management.scss', './role-usecase.scss'],
 })
-export class RoleWorkbenchComponent {
+export class RoleWorkbenchComponent implements OnInit, OnDestroy {
   // 模块意图：角色 tab 先完成 Angular 承载，数据仍通过 legacy 文档适配，避免本轮冲击后端模型。
+  // 关键流程：本地编辑通过 markChanged() 递增 version 信号触发重渲染；
+  //           远端同步通过 blm-workbench-refresh 事件同样递增 version，实现双窗口数据一致。
+  // 边界细节：远端同步后需校验 selectedRoleId，若角色已被另一窗口删除则回退到第一个角色。
   protected readonly mode = signal<'management' | 'view'>(this.initialMode());
   protected readonly selectedRoleId = signal(this.currentRoleId());
   protected readonly version = signal(0);
@@ -134,6 +137,23 @@ export class RoleWorkbenchComponent {
   protected selectedGroup = this.defaultRoleGroup();
   protected customGroup = '';
   protected participatingOnly = Boolean(this.legacy().S?.ui?.['roleParticipatingOnly']);
+
+  // 远端同步刷新监听器引用，ngOnDestroy 时移除
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+    const current = this.roles().find((r) => this.roleIdentity(r) === this.selectedRoleId());
+    if (!current) {
+      this.selectedRoleId.set(this.roleIdentity(this.roles()[0] || {}));
+    }
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
 
   protected roles(): LegacyRole[] {
     this.version();
