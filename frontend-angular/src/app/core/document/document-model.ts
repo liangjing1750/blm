@@ -120,7 +120,7 @@ export function normalizeStageFlowRefs(document: BlmDocument): StageFlowRef[] {
   const refs: StageFlowRef[] = [];
   const seen = new Set<string>();
 
-  const pushRef = (stageIdentity: string, processIdentity: string, order: number, uid = '') => {
+  const pushRef = (stageIdentity: string, processIdentity: string, order: number, uid = '', pos?: { x: number; y: number }) => {
     const stage = findStageByIdentity(document, stageIdentity);
     const process = findProcessByIdentity(document, processIdentity);
     if (!stage || !process) return;
@@ -132,12 +132,13 @@ export function normalizeStageFlowRefs(document: BlmDocument): StageFlowRef[] {
       stageUid: stage.uid,
       processUid: process.uid,
       order: Math.max(1, Math.round(Number(order || refs.length + 1))),
+      pos: pos || { x: 0, y: 0 },
     });
   };
 
   document.stageFlowRefs.forEach((ref, index) => {
-    const refLike = ref as StageFlowRef & { stageId?: string; processId?: string };
-    pushRef(refLike.stageUid || refLike.stageId || '', refLike.processUid || refLike.processId || '', refLike.order || index + 1, refLike.uid);
+    const refLike = ref as StageFlowRef & { stageId?: string; processId?: string; pos?: { x: number; y: number } };
+    pushRef(refLike.stageUid || refLike.stageId || '', refLike.processUid || refLike.processId || '', refLike.order || index + 1, refLike.uid, refLike.pos);
   });
 
   document.processes.forEach((process) => {

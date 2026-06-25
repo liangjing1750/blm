@@ -54,6 +54,7 @@ export interface StageFlowRef {
   stageUid: string;
   processUid: string;
   order: number;
+  pos?: { x: number; y: number };
 }
 
 export interface Process {

@@ -22,7 +22,7 @@ describe('document model algorithms', () => {
     });
 
     expect(document.stageFlowRefs).toEqual([
-      { uid: 'ref-a', stageUid: 'stage-a', processUid: 'process-a', order: 2 },
+      { uid: 'ref-a', stageUid: 'stage-a', processUid: 'process-a', order: 2, pos: { x: 0, y: 0 } },
     ]);
     expect(getStageProcesses(document, 'stage-a').map((process) => process.uid)).toEqual(['process-a']);
     expect(normalizeStageFlowRefs(document)).toEqual(document.stageFlowRefs);
@@ -41,6 +41,7 @@ describe('document model algorithms', () => {
         stageUid: 'stage-a',
         processUid: 'process-a',
         order: 1,
+        pos: { x: 0, y: 0 },
       },
     ]);
   });
