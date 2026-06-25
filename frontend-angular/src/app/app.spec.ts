@@ -883,7 +883,7 @@ describe('App', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(fetchSpy).toHaveBeenCalledWith('/api/version/load', expect.objectContaining({ method: 'POST' }));
-    expect(compiled.querySelector('[data-testid="document-version-badge"]')?.textContent).toContain('验收版');
+    expect(compiled.querySelector('[data-testid="current-version-badge"]')?.textContent).toContain('验收版');
   });
 
   it('should render workspace and trash document cards with ten-item pagination in the open dialog', async () => {

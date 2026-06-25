@@ -6,11 +6,17 @@
     </span>
     <span class="file-name" data-testid="current-file-name" [title]="currentDocumentLabel()">{{ currentDocumentLabel() }}</span>
     <span
-      *ngIf="documentVersionLabel()"
-      class="document-version-badge current"
-      data-testid="document-version-badge"
-      [title]="documentVersionTitle()"
-    >{{ documentVersionLabel() }}</span>
+      *ngIf="hasVersionBadge()"
+      class="modified-badge"
+      data-testid="version-badge-group"
+    >
+      <span *ngIf="currentVersionLabel()" class="modified-badge-row current-version" data-testid="current-version-badge">
+        <span class="modified-badge-dot"></span>{{ currentVersionLabel() }}
+      </span>
+      <span *ngIf="latestVersionLabel()" class="modified-badge-row latest-version" data-testid="latest-version-badge">
+        <span class="modified-badge-dot"></span>{{ latestVersionLabel() }}
+      </span>
+    </span>
     <span
       *ngIf="hasSyncBadge()"
       class="modified-badge"

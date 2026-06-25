@@ -184,7 +184,9 @@ export class ShellComponent implements OnInit, OnDestroy {
     return this.collaboration.statusText();
   }
 
-  protected documentVersionLabel(): string {
+  // 模块意图：区分"当前版本"（本地已确认基线）和"最新版本"（远端已知最高版本），
+  // 消除原来笼统显示 seq 的歧义。
+  protected currentVersionLabel(): string {
     if (!this.runtime.currentFile) return '';
     if (this.runtime.readOnly) {
       const versionId = String(this.runtime.doc?.meta?.version_id || '').trim();
@@ -194,14 +196,22 @@ export class ShellComponent implements OnInit, OnDestroy {
       return '只读版本';
     }
     if (!this.runtime.runtime.supportsCollab) return '';
-    const seq = Number(this.runtime.collab.seq || this.runtime.collab.acceptedSeq || 0);
-    return seq > 0 ? `\u5f53\u524d v${seq}` : '';
+    const base = Number(this.runtime.collab.acceptedSeq || 0);
+    return base > 0 ? `当前版本 v${base}` : '';
   }
 
-  protected documentVersionTitle(): string {
-    const label = this.documentVersionLabel();
-    return label ? `\u6587\u6863\u7248\u672c\uff1a${label}` : '';
+  protected latestVersionLabel(): string {
+    if (!this.runtime.currentFile || this.runtime.readOnly) return '';
+    if (!this.runtime.runtime.supportsCollab) return '';
+    const latest = Number(this.runtime.collab.seq || 0);
+    const base = Number(this.runtime.collab.acceptedSeq || 0);
+    return latest > base ? `最新版本 v${latest}` : '';
   }
+
+  protected hasVersionBadge(): boolean {
+    return Boolean(this.currentVersionLabel() || this.latestVersionLabel());
+  }
+
 
   protected hasLocalUnsubmitted(): boolean {
     if (!this.runtime.currentFile || this.runtime.readOnly) return false;
