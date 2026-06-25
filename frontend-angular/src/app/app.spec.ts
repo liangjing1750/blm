@@ -1098,13 +1098,8 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.click();
     fixture.detectChanges();
 
-    // 验证两个角色都存在
     expect(runtime.doc.roles.length).toBe(2);
 
-    // 点击「临时角色」对应的删除按钮（第二个 .role-light-remove）
-    const removeButtons = compiled.querySelectorAll<HTMLButtonElement>('.role-light-remove');
-    expect(removeButtons.length).toBeGreaterThanOrEqual(1);
-    // 找到包含"临时角色"的 chip-wrap 中的删除按钮
     const chips = compiled.querySelectorAll('[data-testid="role-summary-chip"]');
     let targetButton: HTMLButtonElement | null = null;
     chips.forEach((chip) => {
@@ -1116,29 +1111,27 @@ describe('App', () => {
     targetButton!.click();
     fixture.detectChanges();
 
-    // 确认删除对话框
     const dialog = compiled.querySelector('[data-testid="runtime-confirm-dialog"]');
     expect(dialog?.textContent).toContain('删除角色');
     compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    // 删除后只剩一个角色
     expect(runtime.doc.roles.length).toBe(1);
     expect(runtime.doc.roles.some((r: any) => r.name === '临时角色')).toBe(false);
     expect(runtime.modified).toBe(true);
-    expect(runtime.collab.pendingSnapshot).toBe(true);
 
-    // 模拟 Ctrl+S 同步
+    // 第一轮 Ctrl+S 同步
     const preventDefault = vi.fn();
     (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault });
     await Promise.resolve();
     fixture.detectChanges();
 
-    // 服务器返回合并后的文档 — 关键：这里的 document 应该是删除后的版本
+    // 服务端返回 documentHash — 客户端需保存它用于下次同步的 baseDocumentHash
     resolveSnapshot(new Response(JSON.stringify({
       ok: true,
-      document: snapshotPayload.document, // 服务端确认: 使用客户端快照中的文档
+      document: snapshotPayload.document,
+      documentHash: 'mock-hash-abc123',
       seq: 1,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     await fixture.whenStable();
@@ -1147,13 +1140,56 @@ describe('App', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    // 关键断言：同步后角色数量仍为1，临时角色没有被复原
     expect(runtime.doc.roles.length).toBe(1);
     expect(runtime.doc.roles.some((r: any) => r.name === '临时角色')).toBe(false);
-
-    // 快照内容也应该包含删除后的结果
+    expect(runtime.collab.serverDocumentHash).toBe('mock-hash-abc123');
     expect(snapshotPayload?.document?.roles?.length).toBe(1);
-    expect(snapshotPayload?.document?.roles?.some((r: any) => r.name === '临时角色')).toBe(false);
+
+    // 第二轮同步：删除最后一个角色
+    snapshotPayload = null;
+    const snapshotPromise2 = new Promise<Response>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/collab/snapshot')) {
+        snapshotPayload = JSON.parse(String(init?.body));
+        return snapshotPromise2;
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const removeButtons2 = compiled.querySelectorAll<HTMLButtonElement>('.role-light-remove');
+    expect(removeButtons2.length).toBeGreaterThanOrEqual(1);
+    removeButtons2[0].click();
+    fixture.detectChanges();
+    const dialog2 = compiled.querySelector('[data-testid="runtime-confirm-dialog"]');
+    expect(dialog2?.textContent).toContain('删除角色');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // 第二轮 Ctrl+S — 验证 baseDocumentHash 被正确传递
+    const preventDefault2 = vi.fn();
+    (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault: preventDefault2 });
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(snapshotPayload?.baseDocumentHash).toBe('mock-hash-abc123');
+
+    resolveSnapshot(new Response(JSON.stringify({
+      ok: true,
+      document: snapshotPayload.document,
+      documentHash: 'mock-hash-def456',
+      seq: 2,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await fixture.whenStable();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(runtime.collab.serverDocumentHash).toBe('mock-hash-def456');
   });
 });
 
