@@ -1,5 +1,5 @@
-﻿import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { createValueDomainLegacyAdapter } from './value-domain-legacy-adapter';
 import {
   ValueDomainCell,
@@ -41,7 +41,20 @@ interface StageDragTarget {
   templateUrl: './value-domain-workbench.component.html',
   styleUrl: './value-domain-workbench.component.scss',
 })
-export class ValueDomainWorkbenchComponent {
+export class ValueDomainWorkbenchComponent implements OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // 模块意图：组件只负责“矩阵视觉和用户交互”，所有文档修改都通过 ValueDomainActions 完成。
   protected readonly editing = signal(false);
   protected readonly version = signal(0);

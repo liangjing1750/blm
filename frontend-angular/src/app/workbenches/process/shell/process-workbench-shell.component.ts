@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, ViewChild, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyFlowEdge,
@@ -33,7 +33,17 @@ import {
   templateUrl: './process-workbench-shell.component.html',
   styleUrl: './process-workbench-shell.component.scss',
 })
-export class ProcessWorkbenchShellComponent implements OnDestroy {
+export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
   // 模块意图：流程工作台壳层统一管理二级 tab 和工作台切换，避免 legacy renderProcessTab 继续生成页面结构。
   protected readonly version = signal(0);
   protected readonly adapter: ProcessWorkbenchShellLegacyAdapter = createProcessWorkbenchShellLegacyAdapter();
@@ -50,6 +60,7 @@ export class ProcessWorkbenchShellComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     window.clearInterval(this.syncTimer);
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
   }
 
   protected hasProcess(): boolean {

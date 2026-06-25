@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, HostListener, computed, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, computed, signal, OnInit, OnDestroy } from '@angular/core';
 import { BusinessModelWorkbenchComponent } from '../business-model/business-model-workbench.component';
 import { EntityDesignWorkbenchComponent } from '../entity-design/entity-design-workbench.component';
 import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
@@ -35,7 +35,20 @@ interface ComponentTabItem {
   templateUrl: './component-workbench-shell.component.html',
   styleUrl: './component-workbench-shell.component.scss',
 })
-export class ComponentWorkbenchShellComponent {
+export class ComponentWorkbenchShellComponent implements OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // 模块意图：构件工作台外壳负责二级 tab 与承接页布局，具体业务组件和实体设计交给子工作台。
   // 关键流程：legacy 主导航仍调用 ComponentWorkbench.render，这里通过全局状态保持当前 tab 并由 Angular 渲染。
   // 边界细节：本组件不调用旧 component-legacy/entity-legacy 渲染函数，避免新工作台继续被旧 HTML 拼接牵制。

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Output, signal } from '@angular/core';
+import { Component, EventEmitter, Output, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyProcess,
@@ -61,7 +61,20 @@ interface FlowDragState {
   templateUrl: './process-stage-workbench.component.html',
   styleUrl: './process-stage-workbench.component.scss',
 })
-export class ProcessStageWorkbenchComponent {
+export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // 模块意图：阶段视图的 Angular 渲染层。流程工作台壳仍由 legacy 控制，本组件负责阶段全景和阶段详情画布。
   protected readonly version = signal(0);
   protected readonly renamingStageId = signal('');

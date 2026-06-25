@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, HostListener, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, HostListener, Output, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyFlowEdge,
@@ -77,7 +77,20 @@ interface FlowDragState {
     './process-flow-attachments.scss',
   ],
 })
-export class ProcessFlowWorkbenchComponent {
+export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // Module intent: this view owns process structure; node details stay in the node view.
   protected readonly version = signal(0);
   protected readonly selectedElementId = signal<string>('');

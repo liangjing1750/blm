@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, QueryList, ViewChildren, signal } from '@angular/core';
+import { Component, ElementRef, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyEntity,
@@ -72,7 +72,20 @@ interface ProcessNodeDirectory {
     './node-view-v5-form.scss',
   ],
 })
-export class ProcessEditorWorkbenchComponent {
+export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // 模块意图：流程编辑器先承接旧版抽屉编辑能力，后续再把流程图算法从 legacy 中完整迁出。
   protected readonly version = signal(0);
   protected readonly adapter: ProcessEditorLegacyAdapter = createProcessEditorLegacyAdapter();

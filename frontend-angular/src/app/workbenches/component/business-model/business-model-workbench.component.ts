@@ -1,5 +1,5 @@
-﻿import { CommonModule } from '@angular/common';
-import { Component, computed, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Component, computed, signal, OnInit, OnDestroy } from '@angular/core';
 import {
   BusinessModelAdapter,
   BusinessModelComponent,
@@ -26,7 +26,20 @@ interface BusinessModelStats {
   templateUrl: './business-model-workbench.component.html',
   styleUrl: './business-model-workbench.component.scss',
 })
-export class BusinessModelWorkbenchComponent {
+export class BusinessModelWorkbenchComponent implements OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // 模块意图：业务组件与构件是构件工作台的聚合入口，负责组件、构件、实体、任务之间的归属关系维护。
   protected readonly version = signal(0);
   protected readonly mode = signal<BusinessModelMode>('component');

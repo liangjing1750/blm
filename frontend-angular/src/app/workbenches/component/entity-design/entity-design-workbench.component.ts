@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, computed, signal } from '@angular/core';
+import { Component, HostListener, computed, signal, OnInit, OnDestroy } from '@angular/core';
 import {
   EntityDesignAdapter,
   EntityDesignConstruct,
@@ -115,7 +115,20 @@ interface SelectionBox {
   templateUrl: './entity-design-workbench.component.html',
   styleUrl: './entity-design-workbench.component.scss',
 })
-export class EntityDesignWorkbenchComponent {
+export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // 模块意图：实体设计在构件工作台内独立运行，复刻旧实体关系图/状态图的核心体验，但不调用 entity-legacy 渲染函数。
   private readonly nodeWidth = 120;
   private readonly nodeHeight = 38;

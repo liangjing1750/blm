@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnChanges, SimpleChanges, signal } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, OnDestroy, SimpleChanges, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
@@ -80,7 +80,20 @@ interface FunctionView {
   templateUrl: './knowledge-workbench.html',
   styleUrl: './knowledge-workbench.scss',
 })
-export class KnowledgeWorkbenchComponent implements OnChanges {
+export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy {
+
+  // 远端同步后通过 blm-workbench-refresh 事件刷新视图
+  private readonly onRefresh = () => {
+    this.version.update((v) => v + 1);
+  };
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
   // 模块意图：术语和规则 tab 先完成 Angular 独立渲染；字典数据模型暂不新增写入能力。
   protected readonly activeTab = signal<'termManagement' | 'dictionaryManagement' | 'rules'>('termManagement');
   protected readonly selectedFunctionId = signal('');
