@@ -80,8 +80,58 @@
             data-testid="knowledge-rule-search"
             (ngModelChange)="setRuleKeyword($event)"
           />
-          <span class="knowledge-rule-total">共 {{ rules().length }} 条规则</span>
+          <span class="knowledge-rule-total">{{ ruleGroups().length }} 个流程 · {{ rules().length }} 条规则</span>
         </header>
+
+        @if (stageTabs().length > 0) {
+          <nav class="knowledge-stage-tabs" data-testid="knowledge-stage-tabs">
+            <button
+              class="knowledge-stage-tab"
+              type="button"
+              data-testid="knowledge-stage-tab-all"
+              [class.active]="!selectedStageId()"
+              (click)="selectStage('')"
+            >全部</button>
+            @for (tab of visibleStageTabs(); track tab.id) {
+              <button
+                class="knowledge-stage-tab"
+                type="button"
+                [attr.data-testid]="'knowledge-stage-tab-' + tab.id"
+                [class.active]="isStageSelected(tab.id)"
+                (click)="selectStage(tab.id)"
+              >
+                <span class="knowledge-stage-tab-name">{{ tab.name }}</span>
+                <span class="knowledge-stage-tab-count">{{ tab.processCount }}</span>
+              </button>
+            }
+            @if (overflowStageTabs().length) {
+              <div class="knowledge-stage-more-wrap">
+                <button
+                  class="knowledge-stage-tab knowledge-stage-more"
+                  type="button"
+                  data-testid="knowledge-stage-more"
+                  [class.active]="overflowStageTabs().some(t => isStageSelected(t.id))"
+                  (click)="toggleStageDropdown()"
+                >更多 ▾</button>
+                @if (stageDropdownOpen()) {
+                  <div class="knowledge-stage-dropdown" data-testid="knowledge-stage-dropdown">
+                    @for (tab of overflowStageTabs(); track tab.id) {
+                      <button
+                        class="knowledge-stage-dropdown-item"
+                        type="button"
+                        [class.active]="isStageSelected(tab.id)"
+                        (click)="selectStage(tab.id)"
+                      >
+                        <span>{{ tab.name }}</span>
+                        <span class="knowledge-stage-tab-count">{{ tab.processCount }}</span>
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </nav>
+        }
 
         <div class="knowledge-rule-cards workbench-scroll-body">
           @for (group of ruleGroups(); track group.processId) {

@@ -42,6 +42,8 @@ interface LegacyDocument {
   language?: LegacyTerm[];
   rules?: LegacyRule[];
   processes?: LegacyProcess[];
+  stages?: Array<{ uid?: string; id?: string; name?: string }>;
+  stageFlowRefs?: Array<{ stageUid?: string; stageId?: string; processUid?: string; processId?: string }>;
 }
 
 interface LegacyWindow extends Window {
@@ -97,12 +99,14 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
   ngOnDestroy(): void {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
   }
-  // 模块意图：规则 tab 按功能（流程）分组展示，支持全局搜索和折叠，富文本内容保留 HTML 排版。
+  // 模块意图：规则 tab 按阶段分类→流程卡片→规则列表三层组织，支持全局搜索和富文本。
   protected readonly activeTab = signal<'termManagement' | 'dictionaryManagement' | 'rules'>('termManagement');
   protected readonly ruleKeyword = signal('');
   protected readonly termsCollapsed = signal(false);
   protected readonly rulesCollapsed = signal(false);
   protected readonly expandedGroupId = signal('');
+  protected readonly selectedStageId = signal(''); // '' = 全部
+  protected readonly stageDropdownOpen = signal(false);
   protected readonly version = signal(0);
   @Input() initialTab: 'termManagement' | 'dictionaryManagement' | 'rules' = 'termManagement';
   @Input() editing = true;
@@ -162,31 +166,96 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     });
   }
 
-  // 按功能分组的规则视图，未匹配搜索的功能组返回空 rules 数组
+  // 阶段 Tab 列表：按流程数降序排列，"全部"默认在首位
+  protected stageTabs(): Array<{ id: string; name: string; processCount: number }> {
+    const stageMap = new Map<string, { name: string; processes: Set<string> }>();
+    const refs = this.document().stageFlowRefs || [];
+    const stages = this.document().stages || [];
+    const stageIndex = new Map(stages.map((s: any) => [String(s.uid || s.id || ''), String(s.name || '')]));
+
+    for (const ref of refs) {
+      const stageId = String(ref.stageUid || ref.stageId || '');
+      const processId = String(ref.processUid || ref.processId || '');
+      if (!stageId || !processId) continue;
+      if (!stageMap.has(stageId)) stageMap.set(stageId, { name: stageIndex.get(stageId) || stageId, processes: new Set() });
+      stageMap.get(stageId)!.processes.add(processId);
+    }
+
+    // 检测未归入阶段的流程
+    const allProcessIds = new Set((this.document().processes || []).map((p: any) => String(p.uid || p.id || '')));
+    const stagedIds = new Set<string>();
+    for (const [, v] of stageMap) for (const pid of v.processes) stagedIds.add(pid);
+    const unstaged = new Set([...allProcessIds].filter((id) => id && !stagedIds.has(id)));
+
+    const tabs = Array.from(stageMap.entries())
+      .map(([id, v]) => ({ id, name: v.name || id, processCount: v.processes.size }))
+      .sort((a, b) => b.processCount - a.processCount);
+
+    if (unstaged.size > 0) tabs.push({ id: '__unstaged__', name: '未归类', processCount: unstaged.size });
+
+    return tabs;
+  }
+
+  // 按阶段筛选 + 关键词过滤后的规则分组
   protected ruleGroups(): Array<{ processId: string; processName: string; nodeCount: number; rules: RuleView[] }> {
     const keyword = this.ruleKeyword().trim().toLowerCase();
+    const stageId = this.selectedStageId();
     const allRules = this.rules();
-    const groups = new Map<string, { processId: string; processName: string; nodeCount: number; rules: RuleView[] }>();
 
+    // 计算阶段→流程映射（仅当选中具体阶段时过滤）
+    let allowedProcessIds: Set<string> | null = null;
+    if (stageId) {
+      const refs = this.document().stageFlowRefs || [];
+      if (stageId === '__unstaged__') {
+        const stagedIds = new Set(refs.map((r: any) => String(r.processUid || r.processId || '')));
+        allowedProcessIds = new Set((this.document().processes || [])
+          .map((p: any) => String(p.uid || p.id || ''))
+          .filter((id: string) => id && !stagedIds.has(id)));
+      } else {
+        allowedProcessIds = new Set(refs
+          .filter((r: any) => String(r.stageUid || r.stageId || '') === stageId)
+          .map((r: any) => String(r.processUid || r.processId || '')));
+      }
+    }
+
+    const groups = new Map<string, { processId: string; processName: string; nodeCount: number; rules: RuleView[] }>();
     for (const rule of allRules) {
+      if (allowedProcessIds && !allowedProcessIds.has(rule.processId)) continue;
       if (keyword && ![rule.processName, rule.nodeName, rule.name, rule.content]
         .some((v) => v.toLowerCase().includes(keyword))) continue;
 
       if (!groups.has(rule.processId)) {
         const nodes = new Set<string>();
-        for (const r of allRules.filter((r) => r.processId === rule.processId)) {
-          nodes.add(r.nodeName);
-        }
+        for (const r of allRules.filter((r) => r.processId === rule.processId)) nodes.add(r.nodeName);
         groups.set(rule.processId, {
-          processId: rule.processId,
-          processName: rule.processName,
-          nodeCount: nodes.size,
-          rules: [],
+          processId: rule.processId, processName: rule.processName,
+          nodeCount: nodes.size, rules: [],
         });
       }
       groups.get(rule.processId)!.rules.push(rule);
     }
     return Array.from(groups.values());
+  }
+
+  protected selectStage(stageId: string): void {
+    this.selectedStageId.set(stageId);
+    this.stageDropdownOpen.set(false);
+  }
+
+  protected toggleStageDropdown(): void {
+    this.stageDropdownOpen.update((v) => !v);
+  }
+
+  protected visibleStageTabs(): Array<{ id: string; name: string; processCount: number }> {
+    return this.stageTabs().slice(0, 5);
+  }
+
+  protected overflowStageTabs(): Array<{ id: string; name: string; processCount: number }> {
+    return this.stageTabs().slice(5);
+  }
+
+  protected isStageSelected(stageId: string): boolean {
+    return this.selectedStageId() === stageId;
   }
 
   protected toggleExpand(processId: string): void {
