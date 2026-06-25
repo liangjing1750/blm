@@ -29,9 +29,8 @@ export class SyncService {
       }
       const frozenDocument = this.cloneDocument(runtime.doc);
       const frozenHash = this.hashDocument(frozenDocument);
-      // 边界细节：服务端内存文档与磁盘加载文档哈希不同（save_collaboration_working_copy 会修改结构），
-      // 客户端自行计算 SHA-1 永不可能匹配。唯一可信来源是 joined/sync 响应中的 documentHash。
-      // joined 消息到达后 serverDocumentHash 被设置，后续同步直接使用。
+      console.log('[sync] stageFlowRefs with pos:', (frozenDocument?.stageFlowRefs || []).filter((r: any) => r.pos?.x || r.pos?.y).length,
+        'stageFlowLinks:', (frozenDocument?.stageFlowLinks || []).length);
       const baseDocumentHash = runtime.collab.serverDocumentHash || '';
       const result = await this.api.collabSnapshot(runtime.currentFile, frozenDocument, {
         baseSeq: runtime.collab.draftBaseSeqOverride ?? runtime.collab.acceptedSeq ?? runtime.collab.seq ?? 0,

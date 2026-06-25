@@ -11,6 +11,12 @@
   grid-template-columns: 300px minmax(0, 1fr);
   width: 100%;
   min-height: 0;
+  height: 100%;
+}
+
+.manual-body > * {
+  max-height: calc(100vh - 108px);
+  overflow: auto;
 }
 
 .manual-nav {

@@ -252,6 +252,7 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
         x: Math.round(Number(offset.x) || 0),
         y: Math.round(Number(offset.y) || 0),
       };
+      console.log('[stage-adapter] setRefOffset', targetRefId, ref.pos);
       markModified();
     },
     addProcess(targetStageId: string) {
