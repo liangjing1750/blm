@@ -255,9 +255,16 @@ export class ValueDomainWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected startStageRename(stage: ValueDomainStage, event: MouseEvent): void {
+    if (!this.editing()) return;
     event.preventDefault();
     event.stopPropagation();
     this.renamingStageId.set(this.stageId(stage));
+  }
+
+  // 关闭编辑状态下点击阶段 → 跳转到阶段视图
+  protected openStageInShell(stage: ValueDomainStage): void {
+    if (this.editing()) return;
+    window.dispatchEvent(new CustomEvent('blm-open-stage-view', { detail: { stageId: this.stageId(stage) } }));
   }
 
   protected finishStageRename(stage: ValueDomainStage, value: string): void {

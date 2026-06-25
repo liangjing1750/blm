@@ -13,6 +13,7 @@ import { ProcessEditorWorkbenchComponent } from '../editor/process-editor-workbe
 import { ProcessFlowWorkbenchComponent } from '../flow/process-flow-workbench.component';
 import { ProcessStageWorkbenchComponent } from '../stage/process-stage-workbench.component';
 import { ValueDomainWorkbenchComponent } from '../value-domain/value-domain-workbench.component';
+import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import {
   ProcessShellView,
   ProcessWorkbenchShellLegacyAdapter,
@@ -40,8 +41,19 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     this.version.update((v) => v + 1);
   };
 
+  private readonly onOpenStage = (event: Event) => {
+    const detail = (event as CustomEvent<{ stageId: string }>).detail;
+    if (detail?.stageId) {
+      getAngularRuntimeState().ui['stageId'] = detail.stageId;
+      this.adapter.openStage();
+      this.viewState.set('stage');
+      this.version.update((v) => v + 1);
+    }
+  };
+
   ngOnInit(): void {
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
+    window.addEventListener('blm-open-stage-view', this.onOpenStage);
   }
 
   // 模块意图：流程工作台壳层统一管理二级 tab 和工作台切换，避免 legacy renderProcessTab 继续生成页面结构。
@@ -61,6 +73,7 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
   ngOnDestroy(): void {
     window.clearInterval(this.syncTimer);
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+    window.removeEventListener('blm-open-stage-view', this.onOpenStage);
   }
 
   protected hasProcess(): boolean {

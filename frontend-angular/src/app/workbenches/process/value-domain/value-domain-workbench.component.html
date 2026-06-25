@@ -96,7 +96,7 @@
 
                   <div class="value-stream-stage-board" data-testid="value-stream-stage-board" [ngStyle]="stageBoardStyle(cellStages(laneUid(lane), columnUid(column)))">
                     @for (stage of cellStages(laneUid(lane), columnUid(column)); track stageId(stage); let stageIndex = $index) {
-                      <div class="stage-graph-node stage-kind stage-matrix-stage" [class.is-editing]="editing()" [class.is-renaming]="renamingStageId() === stageId(stage)" data-testid="value-domain-stage-card" [attr.data-node-id]="stageId(stage)" [ngStyle]="stageStyle(stage, stageIndex)" (mousedown)="startStageDrag(stage, $event)" (dblclick)="startStageRename(stage, $event)">
+                      <div class="stage-graph-node stage-kind stage-matrix-stage" [class.is-editing]="editing()" [class.is-renaming]="renamingStageId() === stageId(stage)" data-testid="value-domain-stage-card" [attr.data-node-id]="stageId(stage)" [ngStyle]="stageStyle(stage, stageIndex)" (mousedown)="startStageDrag(stage, $event)" (dblclick)="startStageRename(stage, $event)" (click)="openStageInShell(stage)">
                         @if (renamingStageId() === stageId(stage)) {
                           <input class="stage-name-inline-input" type="text" data-testid="stage-name-inline-input" [value]="stage.name || ''" (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()" (keydown.enter)="finishStageRename(stage, $any($event.target).value)" (keydown.escape)="cancelStageRename()" (blur)="finishStageRename(stage, $any($event.target).value)" autofocus>
                         } @else {
