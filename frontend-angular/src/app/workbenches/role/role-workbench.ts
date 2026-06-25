@@ -392,13 +392,20 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     if (!this.editing) return;
     if (this.roleUsage(role).length) return;
-    const confirmed = await (this.legacy().showAppConfirm?.(`确认删除角色“${role.name || this.roleIdentity(role)}”？`, {
+    const confirmed = await (this.legacy().showAppConfirm?.(`确认删除角色”${role.name || this.roleIdentity(role)}”？`, {
       title: '删除角色',
       confirmLabel: '删除',
-    }) ?? Promise.resolve(window.confirm(`确认删除角色“${role.name || this.roleIdentity(role)}”？`)));
+    }) ?? Promise.resolve(window.confirm(`确认删除角色”${role.name || this.roleIdentity(role)}”？`)));
     if (!confirmed) return;
     const target = this.roleIdentity(role);
+    const beforeLength = this.roles().length;
+    const beforeUids = this.roles().map(r => r.uid || r.id).join(',');
+    console.log('[removeRole] 删除前 roles:', beforeLength, 'uids:', beforeUids);
     this.document().roles = this.roles().filter((item) => this.roleIdentity(item) !== target);
+    const afterLength = this.roles().length;
+    const afterUids = this.roles().map(r => r.uid || r.id).join(',');
+    console.log('[removeRole] 删除后 roles:', afterLength, 'uids:', afterUids);
+    console.log('[removeRole] runtime.doc === this.document():', getAngularRuntimeState().doc === this.document());
     this.selectedRoleId.set(this.roleIdentity(this.roles()[0] || {}));
     this.markChanged();
   }

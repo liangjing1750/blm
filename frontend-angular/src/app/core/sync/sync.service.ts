@@ -29,10 +29,14 @@ export class SyncService {
       }
       const frozenDocument = this.cloneDocument(runtime.doc);
       const frozenHash = this.hashDocument(frozenDocument);
+      console.log('[syncNow] frozenDocument.roles.length:', frozenDocument?.roles?.length,
+        'uids:', frozenDocument?.roles?.map((r: any) => r.uid || r.id).join(','));
       // 优先使用服务端返回的 documentHash；首次同步时客户端计算服务端兼容哈希，
       // 确保 session.seq > 0 时 verified_current_base 检查也能通过。
       const baseDocumentHash = runtime.collab.serverDocumentHash
         || await this.serverCompatibleHash(frozenDocument);
+      console.log('[syncNow] baseDocumentHash:', baseDocumentHash, 'serverDocumentHash:', runtime.collab.serverDocumentHash,
+        'seq:', runtime.collab.seq, 'acceptedSeq:', runtime.collab.acceptedSeq);
       const result = await this.api.collabSnapshot(runtime.currentFile, frozenDocument, {
         baseSeq: runtime.collab.draftBaseSeqOverride ?? runtime.collab.acceptedSeq ?? runtime.collab.seq ?? 0,
         baseDocumentHash,
@@ -40,6 +44,9 @@ export class SyncService {
         user: this.collaboration.currentUser(),
       });
       const document = result?.document || result?.merged_document || result?.mergedDocument || runtime.doc;
+      console.log('[syncNow] result.document.roles.length:', document?.roles?.length,
+        'uids:', document?.roles?.map((r: any) => r.uid || r.id).join(','));
+      console.log('[syncNow] result.documentHash:', result?.documentHash, 'result.seq:', result?.seq);
       const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || runtime.collab.seq || 0);
       const editedDuringSync = this.hashDocument(runtime.doc) !== frozenHash;
       // 保存服务端返回的 documentHash，下次同步时作为 baseDocumentHash 传给服务端，
