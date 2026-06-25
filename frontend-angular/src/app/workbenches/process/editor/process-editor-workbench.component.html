@@ -21,6 +21,7 @@
           </select>
         </label>
         <div class="node-top-divider"></div>
+        <span class="node-top-select-label">节点</span>
         <div class="node-top-node-cards" data-testid="process-editor-node-cards">
           @for (item of nodeDirectory(); track item.id) {
             @for (node of item.tasks; track taskId(node); let index = $index) {
@@ -33,12 +34,11 @@
               >
                 <span class="node-top-node-index">{{ index + 1 }}</span>
                 <span class="node-top-node-name">{{ node.name || '未命名节点' }}</span>
-                <span class="node-top-node-meta">{{ taskRoleSummary(node) }}</span>
                 <span class="node-top-node-edit" (click)="startRenameNode(node, $event)" title="修改节点名称">✎</span>
               </button>
             }
           } @empty {
-            <span class="node-top-node-empty">当前流程暂无节点</span>
+            <span class="node-top-node-empty">暂无节点</span>
           }
         </div>
       </header>

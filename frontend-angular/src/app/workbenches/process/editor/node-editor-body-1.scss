@@ -18,6 +18,14 @@
   padding: 10px 16px;
 }
 
+.node-top-select-label {
+  color: #64748b;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .node-top-select {
   align-items: center;
   display: flex;
