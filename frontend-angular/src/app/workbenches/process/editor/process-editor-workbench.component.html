@@ -1,57 +1,48 @@
 @if (currentProcess(); as process) {
   @if (currentTask(); as task) {
-    <div class="node-workbench-page node-workbench-page--directory" data-testid="process-editor-workbench">
-      <aside class="node-directory-panel" data-testid="process-editor-flow-view">
-        <div class="node-directory-filter">
-          <label class="node-filter-field node-filter-field--stage">
-            <span>阶段</span>
-            <select [ngModel]="currentStageId(process)" (ngModelChange)="selectStage($event)">
-              @for (stage of allStages(); track stage.id) {
-                <option [value]="stage.id">{{ stage.name }}</option>
-              } @empty {
-                <option value="">暂无阶段</option>
-              }
-            </select>
-          </label>
-          <label class="node-filter-field node-filter-field--process">
-            <span>流程</span>
-            <select [ngModel]="processId(process)" (ngModelChange)="selectProcess($event)">
-              @for (item of processes(); track processId(item)) {
-                <option [value]="processId(item)">{{ item.name || '未命名流程' }}</option>
-              }
-            </select>
-          </label>
-        </div>
-        <div class="node-directory-list" data-testid="process-editor-graph">
+    <div class="node-workbench-page" data-testid="process-editor-workbench">
+      <header class="node-top-bar">
+        <label class="node-top-select">
+          <span>阶段</span>
+          <select [ngModel]="currentStageId(process)" (ngModelChange)="selectStage($event)">
+            @for (stage of allStages(); track stage.id) {
+              <option [value]="stage.id">{{ stage.name }}</option>
+            } @empty {
+              <option value="">暂无阶段</option>
+            }
+          </select>
+        </label>
+        <label class="node-top-select">
+          <span>流程</span>
+          <select [ngModel]="processId(process)" (ngModelChange)="selectProcess($event)">
+            @for (item of processes(); track processId(item)) {
+              <option [value]="processId(item)">{{ item.name || '未命名流程' }}</option>
+            }
+          </select>
+        </label>
+        <div class="node-top-divider"></div>
+        <div class="node-top-node-cards" data-testid="process-editor-node-cards">
           @for (item of nodeDirectory(); track item.id) {
-            <section class="node-directory-group node-directory-group--nodes">
-              <h4>节点</h4>
-              <div class="node-directory-items">
-                @for (node of item.tasks; track taskId(node); let index = $index) {
-                  <button
-                    type="button"
-                    class="node-directory-item"
-                    data-testid="process-editor-node"
-                    [class.active]="taskId(node) === taskId(task)"
-                    (click)="selectTask(node)"
-                  >
-                    <span>{{ index + 1 }}</span>
-                    <b>{{ node.name || '未命名节点' }}</b>
-                    <small>{{ taskRoleSummary(node) }}</small>
-                    @if (taskId(node) === taskId(task)) {
-                      <em>正在编辑</em>
-                    }
-                  </button>
-                }
-              </div>
-            </section>
+            @for (node of item.tasks; track taskId(node); let index = $index) {
+              <button
+                type="button"
+                class="node-top-node-card"
+                data-testid="process-editor-node"
+                [class.active]="taskId(node) === taskId(task)"
+                (click)="selectTask(node)"
+              >
+                <span class="node-top-node-index">{{ index + 1 }}</span>
+                <span class="node-top-node-name">{{ node.name || '未命名节点' }}</span>
+                <span class="node-top-node-meta">{{ taskRoleSummary(node) }}</span>
+              </button>
+            }
           } @empty {
-            <p class="node-empty">当前流程暂无节点。</p>
+            <span class="node-top-node-empty">当前流程暂无节点</span>
           }
         </div>
-      </aside>
+      </header>
 
-      <section class="node-editor-main node-editor-main--node" data-testid="process-editor-drawer">
+      <section class="node-editor-main" data-testid="process-editor-drawer">
         <header class="node-editor-canopy">
           <div class="node-basic-strip node-basic-strip--three">
             <label class="node-top-field node-top-field--input">

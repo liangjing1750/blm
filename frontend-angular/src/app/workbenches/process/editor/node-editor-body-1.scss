@@ -1,32 +1,128 @@
 .node-workbench-page {
-  display: grid;
-  grid-template-columns: minmax(260px, 22vw) minmax(0, 1fr);
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
   height: calc(100vh - 128px);
-  padding: 12px 14px;
   overflow: hidden;
   background: #eef2f7;
 }
 
-.node-workbench-page--directory {
-  grid-template-columns: minmax(260px, 22vw) minmax(0, 1fr);
+/* ─── 顶栏：阶段 + 流程选择 + 节点卡片 ─────────────────── */
+
+.node-top-bar {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+  padding: 8px 14px;
+}
+
+.node-top-select {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+
+  span {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  select {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    color: #334155;
+    font-size: 12px;
+    max-width: 180px;
+    padding: 5px 24px 5px 8px;
+  }
+}
+
+.node-top-divider {
+  background: #e2e8f0;
+  flex-shrink: 0;
+  height: 24px;
+  width: 1px;
+}
+
+.node-top-node-cards {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+
+  &::-webkit-scrollbar { height: 4px; }
+  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+}
+
+.node-top-node-card {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  font: inherit;
+  gap: 6px;
+  padding: 6px 10px;
+  transition: background .12s, border-color .12s;
+
+  &:hover { background: #f1f5f9; }
+
+  &.active {
+    background: #eff6ff;
+    border-color: #93c5fd;
+  }
+}
+
+.node-top-node-index {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.node-top-node-name {
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-top-node-meta {
+  color: #94a3b8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.node-top-node-empty {
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+/* ─── 主内容区（全宽） ────────────────────────────────── */
+
+.node-editor-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .node-context-panel,
-.node-directory-panel,
-.node-editor-main,
 .node-editor-aside {
   min-height: 0;
-}
-
-.node-context-panel,
-.node-directory-panel,
-.node-editor-main {
-  border: 1px solid #d7e4f3;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
-  overflow: hidden;
 }
 
 .node-context-head {

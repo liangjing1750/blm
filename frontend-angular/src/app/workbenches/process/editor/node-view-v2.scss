@@ -1,26 +1,7 @@
-/* Node view v2: directory plus fixed canopy. */
+/* Node view v2: top bar layout (sidebar removed, stage/process in top bar). */
 .node-workbench-page--directory {
-  grid-template-columns: minmax(250px, 21vw) minmax(0, 1fr);
   color: #243244;
   font-size: 12px;
-}
-
-.node-directory-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.node-directory-filter {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid #e8eef6;
-  background: #fbfdff;
-}
-
-.node-directory-filter label {
-  display: grid;
-  gap: 4px;
 }
 
 .node-directory-filter span {
