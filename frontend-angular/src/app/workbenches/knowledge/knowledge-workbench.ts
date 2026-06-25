@@ -399,10 +399,6 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     this.rulesCollapsed.update((value) => !value);
   }
 
-  protected topLevelRules(): LegacyRule[] {
-    return this.document().rules || [];
-  }
-
   private termSources(): LegacyTerm[] {
     const doc = this.document();
     const terms = Array.isArray(doc.terms) ? doc.terms : [];
