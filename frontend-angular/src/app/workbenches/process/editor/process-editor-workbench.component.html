@@ -169,7 +169,7 @@
                       <button class="step-action" type="button" data-testid="task-form-duplicate" title="复制完整表单" (click)="duplicateForm(task, form)">⧉</button>
                       <button class="step-del" type="button" title="删除表单" (click)="removeForm(task, form)">×</button>
                     </div>
-                    <input class="task-form-purpose" type="text" data-testid="task-form-purpose" [ngModel]="form.purpose || ''" (ngModelChange)="setFormPurpose(form, $event)" placeholder="表单用途，如：筛选、列表、新增、详情、输出说明" />
+                    <textarea class="task-form-purpose" rows="1" data-testid="task-form-purpose" [ngModel]="form.purpose || ''" (input)="autoGrow($any($event.target)); setFormPurpose(form, $any($event.target).value)" placeholder="表单用途，如：筛选、列表、新增、详情、输出说明"></textarea>
                     <div class="task-form-sections">
                       @for (section of sections(form); track section.id || section.uid || $index; let sectionIndex = $index) {
                         <div class="task-form-section-card" data-testid="task-form-section-card">

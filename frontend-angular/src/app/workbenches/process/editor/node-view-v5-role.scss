@@ -219,6 +219,8 @@
 
 .node-step-name {
   max-height: 96px;
+  flex: 1;
+  min-width: 200px;
 }
 
 .node-rule-name-textarea {
@@ -308,8 +310,6 @@
 
 .node-rich-content {
   min-height: 132px;
-  max-height: 320px;
-  overflow: auto;
   padding: 14px 16px;
   border: 1px solid #dbe7f5;
   border-radius: 8px;

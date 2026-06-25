@@ -108,12 +108,12 @@
   align-items: center;
   min-height: 28px;
   padding: 0 12px;
-  border: 1px solid var(--node-section-pill-border, #d7e4f3);
+  border: 1px solid #93c5fd;
   border-radius: 999px;
-  background: #fff;
-  color: var(--node-section-title, #64748b);
+  background: #eff6ff;
+  color: #1d4ed8;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .node-selected-chip-row .is-empty {

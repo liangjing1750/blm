@@ -8,10 +8,14 @@
 
 .node-task-form-card .task-form-purpose {
   width: 100%;
-  min-height: 31px;
+  min-height: 38px;
+  resize: vertical;
+  overflow: hidden;
   border: 1px solid #d7e4f3;
   border-radius: 7px;
-  padding: 0 10px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
 }
 
 .node-task-form-card .task-form-sections {

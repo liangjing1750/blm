@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, HostListener, Output, inject, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, Output, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyFlowEdge,
@@ -112,6 +112,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly columnGap = 168;
   private readonly lanePalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#16a34a'];
 
+  @Input() editing = true;
   @Output() readonly taskEditorRequested = new EventEmitter<string>();
 
   protected processes(): LegacyProcess[] {
