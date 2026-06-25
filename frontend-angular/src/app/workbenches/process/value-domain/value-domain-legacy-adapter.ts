@@ -25,10 +25,16 @@ export interface ValueDomainLegacyAdapter {
 export function createValueDomainLegacyAdapter(runtime: unknown = getAngularRuntimeState()): ValueDomainLegacyAdapter {
   const runtimeLike = runtime as RuntimeLike;
   const angularRuntime = getAngularRuntimeState();
-  const document = runtimeLike.doc ?? angularRuntime.doc ?? {};
   const ui = runtimeLike.ui ?? angularRuntime.ui;
+
+  // 边界细节：每次调用 document() 动态读取最新 runtimeState.doc，
+  // 确保远端同步后 replaceRuntimeDocument 替换的文档能被立即感知。
+  const getDocument = (): ValueDomainDocument => {
+    return (getAngularRuntimeState().doc ?? {}) as ValueDomainDocument;
+  };
+
   const actions = createValueDomainActions({
-    document,
+    document: getDocument() as ValueDomainDocument,
     draftPort: createDraftPort(runtimeLike),
     setActiveStageId: (stageId) => {
       ui.stageId = stageId;
@@ -38,7 +44,7 @@ export function createValueDomainLegacyAdapter(runtime: unknown = getAngularRunt
     },
   });
   return {
-    document: () => document,
+    document: getDocument,
     actions: () => actions,
   };
 }
