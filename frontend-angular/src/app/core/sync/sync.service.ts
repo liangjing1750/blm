@@ -31,12 +31,18 @@ export class SyncService {
       const frozenHash = this.hashDocument(frozenDocument);
       const result = await this.api.collabSnapshot(runtime.currentFile, frozenDocument, {
         baseSeq: runtime.collab.draftBaseSeqOverride ?? runtime.collab.acceptedSeq ?? runtime.collab.seq ?? 0,
+        baseDocumentHash: runtime.collab.serverDocumentHash || '',
         recoveryMode: Boolean(runtime.collab.recoveryMode),
         user: this.collaboration.currentUser(),
       });
       const document = result?.document || result?.merged_document || result?.mergedDocument || runtime.doc;
       const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || runtime.collab.seq || 0);
       const editedDuringSync = this.hashDocument(runtime.doc) !== frozenHash;
+      // 保存服务端返回的 documentHash，下次同步时作为 baseDocumentHash 传给服务端，
+      // 使服务端 verified_current_base 检查通过，避免删除操作被 merge 还原。
+      if (result?.documentHash) {
+        runtime.collab.serverDocumentHash = String(result.documentHash);
+      }
       runtime.collab.draftBaseSeqOverride = undefined;
       runtime.collab.recoveryMode = false;
       runtime.collab.forceSnapshotSync = false;

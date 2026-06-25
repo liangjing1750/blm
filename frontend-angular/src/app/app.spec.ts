@@ -1058,5 +1058,102 @@ describe('App', () => {
     expect(fetchSpy).toHaveBeenCalledWith('/api/trash/delete', expect.objectContaining({ method: 'POST' }));
     expect(fetchSpy).toHaveBeenCalledWith('/api/trash/clear', expect.objectContaining({ method: 'POST' }));
   });
+
+  it('删除角色后Ctrl+S同步不应复原已删除的角色', async () => {
+    let resolveSnapshot!: (value: Response) => void;
+    let snapshotPayload: any = null;
+    const snapshotPromise = new Promise<Response>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/collab/snapshot')) {
+        snapshotPayload = JSON.parse(String(init?.body));
+        return snapshotPromise;
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [
+        { uid: 'role-1', id: 'R1', name: '管理员', group: '系统角色' },
+        { uid: 'role-2', id: 'R2', name: '临时角色', group: '临时分组' },
+      ],
+      stages: [], stageFlowRefs: [], processes: [], entities: [],
+      businessComponents: [], taskDefinitions: [], terms: [], rules: [],
+    };
+    runtime.collab.hasRemoteUpdate = false;
+    runtime.collab.syncing = false;
+    runtime.collab.seq = 0;
+    runtime.collab.acceptedSeq = 0;
+    runtime.ui['roleWorkbenchMode'] = 'management';
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.click();
+    fixture.detectChanges();
+
+    // 验证两个角色都存在
+    expect(runtime.doc.roles.length).toBe(2);
+
+    // 点击「临时角色」对应的删除按钮（第二个 .role-light-remove）
+    const removeButtons = compiled.querySelectorAll<HTMLButtonElement>('.role-light-remove');
+    expect(removeButtons.length).toBeGreaterThanOrEqual(1);
+    // 找到包含"临时角色"的 chip-wrap 中的删除按钮
+    const chips = compiled.querySelectorAll('[data-testid="role-summary-chip"]');
+    let targetButton: HTMLButtonElement | null = null;
+    chips.forEach((chip) => {
+      if (chip.textContent?.includes('临时角色')) {
+        targetButton = (chip.parentElement as HTMLElement)?.querySelector('.role-light-remove');
+      }
+    });
+    expect(targetButton).toBeTruthy();
+    targetButton!.click();
+    fixture.detectChanges();
+
+    // 确认删除对话框
+    const dialog = compiled.querySelector('[data-testid="runtime-confirm-dialog"]');
+    expect(dialog?.textContent).toContain('删除角色');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // 删除后只剩一个角色
+    expect(runtime.doc.roles.length).toBe(1);
+    expect(runtime.doc.roles.some((r: any) => r.name === '临时角色')).toBe(false);
+    expect(runtime.modified).toBe(true);
+    expect(runtime.collab.pendingSnapshot).toBe(true);
+
+    // 模拟 Ctrl+S 同步
+    const preventDefault = vi.fn();
+    (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault });
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    // 服务器返回合并后的文档 — 关键：这里的 document 应该是删除后的版本
+    resolveSnapshot(new Response(JSON.stringify({
+      ok: true,
+      document: snapshotPayload.document, // 服务端确认: 使用客户端快照中的文档
+      seq: 1,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await fixture.whenStable();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    // 关键断言：同步后角色数量仍为1，临时角色没有被复原
+    expect(runtime.doc.roles.length).toBe(1);
+    expect(runtime.doc.roles.some((r: any) => r.name === '临时角色')).toBe(false);
+
+    // 快照内容也应该包含删除后的结果
+    expect(snapshotPayload?.document?.roles?.length).toBe(1);
+    expect(snapshotPayload?.document?.roles?.some((r: any) => r.name === '临时角色')).toBe(false);
+  });
 });
 

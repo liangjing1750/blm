@@ -31,6 +31,7 @@ export interface AngularRuntimeState {
     users: Array<Record<string, unknown>>;
     pendingSnapshot: boolean;
     hasRemoteUpdate: boolean;
+    serverDocumentHash: string;
     lastSyncedAt: string;
     lastActivity: { user: string; at: string } | null;
     draftBaseSeqOverride?: number;
@@ -68,6 +69,7 @@ const runtimeState: AngularRuntimeState = {
     users: [],
     pendingSnapshot: false,
     hasRemoteUpdate: false,
+    serverDocumentHash: '',
     lastSyncedAt: '',
     lastActivity: null,
   },
