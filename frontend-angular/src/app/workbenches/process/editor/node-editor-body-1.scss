@@ -130,6 +130,32 @@
   padding: 4px 0;
 }
 
+/* ─── 只读模式：隐藏编辑控件 ──────────────────────────── */
+
+.node-readonly {
+  .node-top-node-edit { display: none; }
+  .node-row-actions { display: none; }
+  .node-step-type { pointer-events: none; opacity: .6; }
+  .node-step-type-custom { pointer-events: none; opacity: .6; }
+  .node-step-name { pointer-events: none; background: #f8fafc; }
+  .node-rich-add { display: none; }
+  .node-rich-toolbar-row { display: none; }
+  .node-rich-content { pointer-events: none; }
+  .node-fold-btn { display: none; }
+  .node-role-picker-footer { display: none; }
+  .step-del, .step-action { display: none; }
+  .task-form-inline-actions { display: none; }
+  .task-form-section-add { display: none; }
+  .task-form-card-head .step-action,
+  .task-form-card-head .step-del { display: none; }
+  .btn-outline, .btn-primary { display: none; }
+  .node-section-actions { display: none; }
+  .node-material-tabs button { pointer-events: none; }
+  .node-material-upload { display: none; }
+  .prototype-file-actions .prototype-file-remove { display: none; }
+  .node-progress-step { pointer-events: none; opacity: .8; }
+}
+
 /* ─── 主内容区（全宽） ────────────────────────────────── */
 
 .node-editor-main {

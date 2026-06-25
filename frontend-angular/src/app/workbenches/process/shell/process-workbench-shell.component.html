@@ -30,7 +30,7 @@
             <button class="btn btn-outline btn-sm" type="button" data-testid="flow-editor-open" (click)="setFlowEditing(true)">打开编辑</button>
           }
         }
-        @if (view() === 'editor') {
+        @if (view() === 'editor' || view() === 'node') {
           @if (editorEditing()) {
             <button class="btn btn-ghost-sm" type="button" data-testid="editor-editing-hide" (click)="setEditorEditing(false)">关闭编辑</button>
           } @else {

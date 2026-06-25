@@ -1,6 +1,6 @@
 @if (currentProcess(); as process) {
   @if (currentTask(); as task) {
-    <div class="node-workbench-page" data-testid="process-editor-workbench">
+    <div class="node-workbench-page" data-testid="process-editor-workbench" [class.node-readonly]="!editing">
       <header class="node-top-bar">
         <label class="node-top-select">
           <span>阶段</span>

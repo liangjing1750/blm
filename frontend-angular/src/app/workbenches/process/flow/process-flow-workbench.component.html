@@ -1,10 +1,10 @@
-<div class="process-flow-view redesigned" data-testid="process-flow-view">
+<div class="process-flow-view redesigned" data-testid="process-flow-view" [class.flow-readonly]="!editing">
   @if (currentProcess(); as process) {
     <section class="process-flow-frame">
       <header class="process-flow-topbar" data-testid="process-flow-basic-fields">
         <label class="compact-field select-field">
           <span>阶段</span>
-          <select class="stage-select" data-testid="process-flow-stage-select" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
+          <select class="stage-select" data-testid="process-flow-stage-select" [disabled]="!editing" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
             @for (stage of stages(); track stageId(stage)) {
               <option [value]="stageId(stage)">{{ stageName(stage) }}</option>
             }
@@ -12,7 +12,7 @@
         </label>
         <label class="compact-field select-field">
           <span>流程</span>
-          <select class="process-select" data-testid="process-flow-select" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
+          <select class="process-select" data-testid="process-flow-select" [disabled]="!editing" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
             @for (item of processesForCurrentStage(); track processId(item)) {
               <option [value]="processId(item)">{{ item.name || '\u672a\u547d\u540d\u6d41\u7a0b' }}</option>
             }
@@ -20,15 +20,15 @@
         </label>
         <label class="compact-field name-field">
           <span>&#x540d;&#x79f0;</span>
-          <input type="text" data-testid="process-flow-name-input" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
+          <input type="text" data-testid="process-flow-name-input" [readonly]="!editing" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
         </label>
         <label class="compact-field">
           <span>&#x89e6;&#x53d1;</span>
-          <input type="text" data-testid="process-flow-trigger-input" [ngModel]="process.trigger || ''" (ngModelChange)="setProcessField('trigger', $event)" />
+          <input type="text" data-testid="process-flow-trigger-input" [readonly]="!editing" [ngModel]="process.trigger || ''" (ngModelChange)="setProcessField('trigger', $event)" />
         </label>
         <label class="compact-field">
           <span>&#x9884;&#x671f;</span>
-          <input type="text" data-testid="process-flow-outcome-input" [ngModel]="process.outcome || ''" (ngModelChange)="setProcessField('outcome', $event)" />
+          <input type="text" data-testid="process-flow-outcome-input" [readonly]="!editing" [ngModel]="process.outcome || ''" (ngModelChange)="setProcessField('outcome', $event)" />
         </label>
       </header>
 

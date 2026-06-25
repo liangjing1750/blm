@@ -98,3 +98,10 @@
   font-size: 14px;
 }
 .flow-inline-panel select[multiple]{height:72px}
+
+/* 只读模式 */
+.flow-readonly {
+  .process-flow-side-tools { display: none; }
+  .process-flow-topbar input,
+  .process-flow-topbar select { pointer-events: none; opacity: .6; background: #f8fafc; }
+}
