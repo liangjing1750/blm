@@ -102,7 +102,7 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
   protected readonly ruleKeyword = signal('');
   protected readonly termsCollapsed = signal(false);
   protected readonly rulesCollapsed = signal(false);
-  protected readonly collapsedGroups = signal<Set<string>>(new Set());
+  protected readonly expandedGroupId = signal('');
   protected readonly version = signal(0);
   @Input() initialTab: 'termManagement' | 'dictionaryManagement' | 'rules' = 'termManagement';
   @Input() editing = true;
@@ -189,17 +189,12 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     return Array.from(groups.values());
   }
 
-  protected toggleGroup(processId: string): void {
-    this.collapsedGroups.update((set) => {
-      const next = new Set(set);
-      if (next.has(processId)) next.delete(processId);
-      else next.add(processId);
-      return next;
-    });
+  protected toggleExpand(processId: string): void {
+    this.expandedGroupId.set(this.expandedGroupId() === processId ? '' : processId);
   }
 
-  protected isGroupCollapsed(processId: string): boolean {
-    return this.collapsedGroups().has(processId);
+  protected isExpanded(processId: string): boolean {
+    return this.expandedGroupId() === processId;
   }
 
   // 富文本渲染：保留加粗/列表/换行等基本 HTML，过滤危险标签

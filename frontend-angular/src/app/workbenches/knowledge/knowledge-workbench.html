@@ -73,53 +73,62 @@
     <article class="knowledge-panel" data-testid="knowledge-rules-panel">
       @if (!rulesCollapsed() && functions().length) {
         <header class="knowledge-rule-toolbar">
-          <div class="knowledge-rule-search-wrap">
-            <input
-              type="search"
-              placeholder="搜索规则、节点或内容…"
-              [ngModel]="ruleKeyword()"
-              data-testid="knowledge-rule-search"
-              (ngModelChange)="setRuleKeyword($event)"
-            />
-            <span class="knowledge-rule-total">{{ rules().length }} 条规则</span>
-          </div>
+          <input
+            type="search"
+            placeholder="搜索规则或流程名称…"
+            [ngModel]="ruleKeyword()"
+            data-testid="knowledge-rule-search"
+            (ngModelChange)="setRuleKeyword($event)"
+          />
+          <span class="knowledge-rule-total">共 {{ rules().length }} 条规则</span>
         </header>
 
-        <div class="knowledge-rule-groups workbench-scroll-body">
+        <div class="knowledge-rule-cards workbench-scroll-body">
           @for (group of ruleGroups(); track group.processId) {
-            <div class="knowledge-rule-group" data-testid="knowledge-rule-group">
+            <article
+              class="knowledge-rule-card"
+              data-testid="knowledge-rule-card"
+              [class.is-expanded]="isExpanded(group.processId)"
+              [class.has-rules]="group.rules.length > 0"
+            >
               <button
-                class="knowledge-rule-group-head"
+                class="knowledge-rule-card-summary"
                 type="button"
-                data-testid="knowledge-rule-group-head"
-                (click)="toggleGroup(group.processId)"
+                data-testid="knowledge-rule-card-summary"
+                [disabled]="!group.rules.length"
+                (click)="toggleExpand(group.processId)"
               >
-                <span class="knowledge-rule-group-arrow" [class.collapsed]="isGroupCollapsed(group.processId)">▾</span>
-                <span class="knowledge-rule-group-name">{{ group.processName }}</span>
-                <span class="knowledge-rule-group-meta">{{ group.rules.length }} 条规则 · {{ group.nodeCount }} 节点</span>
+                <span class="knowledge-rule-card-name">{{ group.processName }}</span>
+                <span class="knowledge-rule-card-meta">
+                  <span>{{ group.nodeCount }} 节点</span>
+                  <span class="knowledge-rule-card-count" [class.zero]="!group.rules.length">{{ group.rules.length }} 条规则</span>
+                </span>
+                @if (group.rules.length) {
+                  <span class="knowledge-rule-card-arrow" [class.expanded]="isExpanded(group.processId)">▾</span>
+                }
               </button>
 
-              @if (!isGroupCollapsed(group.processId)) {
+              @if (isExpanded(group.processId) && group.rules.length) {
                 <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
                   @for (rule of group.rules; track rule.id; let index = $index) {
-                    <article class="knowledge-rule-card" data-testid="knowledge-rule-row">
+                    <div class="knowledge-rule-item" data-testid="knowledge-rule-row">
                       <span class="knowledge-rule-index">#{{ index + 1 }}</span>
                       <div class="knowledge-rule-body">
                         <h4 class="knowledge-rule-name">{{ rule.name }}</h4>
-                        <span class="knowledge-rule-tag tag-node">{{ rule.nodeName }}</span>
+                        <span class="knowledge-rule-tag">{{ rule.nodeName }}</span>
                         @if (rule.content) {
                           <div class="knowledge-rule-content" [innerHTML]="trustedHtml(rule.content)"></div>
                         }
                       </div>
-                    </article>
+                    </div>
                   }
                 </div>
               }
-            </div>
+            </article>
           } @empty {
             <div class="knowledge-empty">
               <span class="knowledge-empty-icon">🔍</span>
-              <strong>没有匹配的规则</strong>
+              <strong>没有匹配的流程或规则</strong>
               <span>尝试更换搜索关键词。</span>
             </div>
           }
