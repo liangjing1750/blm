@@ -398,14 +398,7 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
     }) ?? Promise.resolve(window.confirm(`确认删除角色”${role.name || this.roleIdentity(role)}”？`)));
     if (!confirmed) return;
     const target = this.roleIdentity(role);
-    const beforeLength = this.roles().length;
-    const beforeUids = this.roles().map(r => r.uid || r.id).join(',');
-    console.log('[removeRole] 删除前 roles:', beforeLength, 'uids:', beforeUids);
     this.document().roles = this.roles().filter((item) => this.roleIdentity(item) !== target);
-    const afterLength = this.roles().length;
-    const afterUids = this.roles().map(r => r.uid || r.id).join(',');
-    console.log('[removeRole] 删除后 roles:', afterLength, 'uids:', afterUids);
-    console.log('[removeRole] runtime.doc === this.document():', getAngularRuntimeState().doc === this.document());
     this.selectedRoleId.set(this.roleIdentity(this.roles()[0] || {}));
     this.markChanged();
   }
