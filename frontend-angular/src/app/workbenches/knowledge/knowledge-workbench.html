@@ -80,7 +80,7 @@
             data-testid="knowledge-rule-search"
             (ngModelChange)="setRuleKeyword($event)"
           />
-          <span class="knowledge-rule-total">{{ ruleGroups().length }} 个流程 · {{ rules().length }} 条规则</span>
+          <span class="knowledge-rule-total">{{ rules().length }} 条规则</span>
         </header>
 
         @if (stageTabs().length > 0) {
@@ -139,13 +139,12 @@
               class="knowledge-rule-card"
               data-testid="knowledge-rule-card"
               [class.is-expanded]="isExpanded(group.processId)"
-              [class.has-rules]="group.rules.length > 0"
+              [class.no-rules]="!group.rules.length"
             >
               <button
                 class="knowledge-rule-card-summary"
                 type="button"
                 data-testid="knowledge-rule-card-summary"
-                [disabled]="!group.rules.length"
                 (click)="toggleExpand(group.processId)"
               >
                 <span class="knowledge-rule-card-name">{{ group.processName }}</span>
@@ -153,12 +152,11 @@
                   <span>{{ group.nodeCount }} 节点</span>
                   <span class="knowledge-rule-card-count" [class.zero]="!group.rules.length">{{ group.rules.length }} 条规则</span>
                 </span>
-                @if (group.rules.length) {
-                  <span class="knowledge-rule-card-arrow" [class.expanded]="isExpanded(group.processId)">▾</span>
-                }
+                <span class="knowledge-rule-card-arrow" [class.expanded]="isExpanded(group.processId)">▾</span>
               </button>
 
-              @if (isExpanded(group.processId) && group.rules.length) {
+              @if (isExpanded(group.processId)) {
+                @if (group.rules.length) {
                 <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
                   @for (rule of group.rules; track rule.id; let index = $index) {
                     <div class="knowledge-rule-item" data-testid="knowledge-rule-row">
@@ -173,6 +171,11 @@
                     </div>
                   }
                 </div>
+                } @else {
+                  <div class="knowledge-rule-list">
+                    <span class="knowledge-rule-empty">该流程尚未维护业务规则，可在流程编辑器中为节点添加规则。</span>
+                  </div>
+                }
               }
             </article>
           } @empty {

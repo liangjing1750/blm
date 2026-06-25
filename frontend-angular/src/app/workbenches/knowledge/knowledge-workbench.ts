@@ -196,45 +196,70 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     return tabs;
   }
 
-  // 按阶段筛选 + 关键词过滤后的规则分组
+  // 按阶段筛选 + 关键词过滤后的规则分组（包含无规则流程）
   protected ruleGroups(): Array<{ processId: string; processName: string; nodeCount: number; rules: RuleView[] }> {
     const keyword = this.ruleKeyword().trim().toLowerCase();
     const stageId = this.selectedStageId();
     const allRules = this.rules();
 
-    // 计算阶段→流程映射（仅当选中具体阶段时过滤）
-    let allowedProcessIds: Set<string> | null = null;
+    // 计算阶段→流程映射
+    let inScopeIds: Set<string> | null = null;
     if (stageId) {
       const refs = this.document().stageFlowRefs || [];
       if (stageId === '__unstaged__') {
         const stagedIds = new Set(refs.map((r: any) => String(r.processUid || r.processId || '')));
-        allowedProcessIds = new Set((this.document().processes || [])
+        inScopeIds = new Set((this.document().processes || [])
           .map((p: any) => String(p.uid || p.id || ''))
           .filter((id: string) => id && !stagedIds.has(id)));
       } else {
-        allowedProcessIds = new Set(refs
+        inScopeIds = new Set(refs
           .filter((r: any) => String(r.stageUid || r.stageId || '') === stageId)
           .map((r: any) => String(r.processUid || r.processId || '')));
       }
     }
 
+    // 第一步：建立所有流程的节点计数（用于无规则流程也显示卡片）
+    const allProcesses = (this.document().processes || []).map((p: any) => ({
+      id: String(p.uid || p.id || ''), name: String(p.name || '未命名流程').trim(),
+    }));
+    const processNodeCounts = new Map<string, number>();
+    for (const p of allProcesses) {
+      const nodes = (this.document().processes || []).find(
+        (proc: any) => String(proc.uid || proc.id || '') === p.id
+      );
+      processNodeCounts.set(p.id, (nodes?.nodes || nodes?.tasks || []).length);
+    }
+
+    // 第二步：按流程分组规则
     const groups = new Map<string, { processId: string; processName: string; nodeCount: number; rules: RuleView[] }>();
     for (const rule of allRules) {
-      if (allowedProcessIds && !allowedProcessIds.has(rule.processId)) continue;
+      if (inScopeIds && !inScopeIds.has(rule.processId)) continue;
       if (keyword && ![rule.processName, rule.nodeName, rule.name, rule.content]
         .some((v) => v.toLowerCase().includes(keyword))) continue;
 
       if (!groups.has(rule.processId)) {
-        const nodes = new Set<string>();
-        for (const r of allRules.filter((r) => r.processId === rule.processId)) nodes.add(r.nodeName);
         groups.set(rule.processId, {
           processId: rule.processId, processName: rule.processName,
-          nodeCount: nodes.size, rules: [],
+          nodeCount: processNodeCounts.get(rule.processId) || 0, rules: [],
         });
       }
       groups.get(rule.processId)!.rules.push(rule);
     }
-    return Array.from(groups.values());
+
+    // 第三步：补全无规则但在范围内的流程
+    for (const p of allProcesses) {
+      if (!p.id) continue;
+      if (inScopeIds && !inScopeIds.has(p.id)) continue;
+      if (keyword) continue; // 有搜索关键词时不显示无规则流程
+      if (groups.has(p.id)) continue;
+      groups.set(p.id, {
+        processId: p.id, processName: p.name,
+        nodeCount: processNodeCounts.get(p.id) || 0, rules: [],
+      });
+    }
+
+    // 第四步：按流程名排序
+    return Array.from(groups.values()).sort((a, b) => a.processName.localeCompare(b.processName, 'zh-Hans-CN'));
   }
 
   protected selectStage(stageId: string): void {
