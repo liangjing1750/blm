@@ -134,12 +134,13 @@
         }
 
         <div class="knowledge-rule-cards workbench-scroll-body">
-          @for (group of ruleGroups(); track group.processId) {
+            @if (ruleGroups(); as groups) {
+              @for (group of groups; track group.processId) {
             <article
               class="knowledge-rule-card"
               data-testid="knowledge-rule-card"
               [class.is-expanded]="isExpanded(group.processId)"
-              [class.no-rules]="!group.rules.length"
+              [class.no-rules]="!totalRuleCount(group)"
             >
               <button
                 class="knowledge-rule-card-summary"
@@ -150,27 +151,37 @@
                 <span class="knowledge-rule-card-name">{{ group.processName }}</span>
                 <span class="knowledge-rule-card-meta">
                   <span>{{ group.nodeCount }} 节点</span>
-                  <span class="knowledge-rule-card-count" [class.zero]="!group.rules.length">{{ group.rules.length }} 条规则</span>
+                  <span class="knowledge-rule-card-count" [class.zero]="!totalRuleCount(group)">{{ totalRuleCount(group) }} 条规则</span>
                 </span>
                 <span class="knowledge-rule-card-arrow" [class.expanded]="isExpanded(group.processId)">▾</span>
               </button>
 
               @if (isExpanded(group.processId)) {
-                @if (group.rules.length) {
-                <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
-                  @for (rule of group.rules; track rule.id; let index = $index) {
-                    <div class="knowledge-rule-item" data-testid="knowledge-rule-row">
-                      <span class="knowledge-rule-index">#{{ index + 1 }}</span>
-                      <div class="knowledge-rule-body">
-                        <h4 class="knowledge-rule-name">{{ rule.name }}</h4>
-                        <span class="knowledge-rule-tag">{{ rule.nodeName }}</span>
-                        @if (rule.content) {
-                          <div class="knowledge-rule-content" [innerHTML]="trustedHtml(rule.content)"></div>
-                        }
+                @if (group.nodeGroups.length) {
+                  @for (nodeGroup of group.nodeGroups; track nodeGroup.nodeName) {
+                    @if (group.nodeGroups.length > 1) {
+                      <div class="knowledge-rule-node-head">
+                        <span class="knowledge-rule-node-name">{{ nodeGroup.nodeName }}</span>
+                        <span class="knowledge-rule-node-count">{{ nodeGroup.rules.length }} 条规则</span>
                       </div>
+                    }
+                    <div class="knowledge-rule-list">
+                    @for (rule of nodeGroup.rules; track rule.id; let index = $index) {
+                      <div class="knowledge-rule-item" data-testid="knowledge-rule-row">
+                        <span class="knowledge-rule-index">#{{ index + 1 }}</span>
+                        <div class="knowledge-rule-body">
+                          <h4 class="knowledge-rule-name">{{ rule.name }}</h4>
+                          @if (group.nodeGroups.length === 1) {
+                            <span class="knowledge-rule-tag">{{ rule.nodeName }}</span>
+                          }
+                          @if (rule.content) {
+                            <div class="knowledge-rule-content" [innerHTML]="trustedHtml(rule.content)"></div>
+                          }
+                        </div>
+                      </div>
+                    }
                     </div>
                   }
-                </div>
                 } @else {
                   <div class="knowledge-rule-list">
                     <span class="knowledge-rule-empty">该流程尚未维护业务规则，可在流程编辑器中为节点添加规则。</span>
@@ -178,13 +189,14 @@
                 }
               }
             </article>
-          } @empty {
-            <div class="knowledge-empty">
-              <span class="knowledge-empty-icon">🔍</span>
-              <strong>没有匹配的流程或规则</strong>
-              <span>尝试更换搜索关键词。</span>
-            </div>
-          }
+              } @empty {
+                <div class="knowledge-empty">
+                  <span class="knowledge-empty-icon">🔍</span>
+                  <strong>没有匹配的流程或规则</strong>
+                  <span>尝试更换搜索关键词。</span>
+                </div>
+              }
+            }
         </div>
       } @else if (!rulesCollapsed()) {
         <div class="knowledge-empty">

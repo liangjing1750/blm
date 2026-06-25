@@ -59,6 +59,11 @@ interface TermView {
   description: string;
 }
 
+interface RuleNodeGroup {
+  nodeName: string;
+  rules: RuleView[];
+}
+
 interface RuleView {
   id: string;
   processId: string;
@@ -196,8 +201,8 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     return tabs;
   }
 
-  // 按阶段筛选 + 关键词过滤后的规则分组（包含无规则流程）
-  protected ruleGroups(): Array<{ processId: string; processName: string; nodeCount: number; rules: RuleView[] }> {
+  // 按阶段筛选 + 关键词过滤后的规则分组（包含无规则流程，规则按节点二级分组）
+  protected ruleGroups(): Array<{ processId: string; processName: string; nodeCount: number; nodeGroups: RuleNodeGroup[] }> {
     const keyword = this.ruleKeyword().trim().toLowerCase();
     const stageId = this.selectedStageId();
     const allRules = this.rules();
@@ -218,20 +223,23 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
       }
     }
 
-    // 第一步：建立所有流程的节点计数（用于无规则流程也显示卡片）
+    // 第一步：建立所有流程的节点计数
     const allProcesses = (this.document().processes || []).map((p: any) => ({
       id: String(p.uid || p.id || ''), name: String(p.name || '未命名流程').trim(),
     }));
     const processNodeCounts = new Map<string, number>();
     for (const p of allProcesses) {
-      const nodes = (this.document().processes || []).find(
-        (proc: any) => String(proc.uid || proc.id || '') === p.id
+      const proc = (this.document().processes || []).find(
+        (p2: any) => String(p2.uid || p2.id || '') === p.id
       );
-      processNodeCounts.set(p.id, (nodes?.nodes || nodes?.tasks || []).length);
+      processNodeCounts.set(p.id, (proc?.nodes || proc?.tasks || []).length);
     }
 
-    // 第二步：按流程分组规则
-    const groups = new Map<string, { processId: string; processName: string; nodeCount: number; rules: RuleView[] }>();
+    // 第二步：按流程→节点分组规则
+    const groups = new Map<string, {
+      processId: string; processName: string; nodeCount: number;
+      nodeMap: Map<string, RuleView[]>;
+    }>();
     for (const rule of allRules) {
       if (inScopeIds && !inScopeIds.has(rule.processId)) continue;
       if (keyword && ![rule.processName, rule.nodeName, rule.name, rule.content]
@@ -240,26 +248,35 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
       if (!groups.has(rule.processId)) {
         groups.set(rule.processId, {
           processId: rule.processId, processName: rule.processName,
-          nodeCount: processNodeCounts.get(rule.processId) || 0, rules: [],
+          nodeCount: processNodeCounts.get(rule.processId) || 0, nodeMap: new Map(),
         });
       }
-      groups.get(rule.processId)!.rules.push(rule);
+      const g = groups.get(rule.processId)!;
+      if (!g.nodeMap.has(rule.nodeName)) g.nodeMap.set(rule.nodeName, []);
+      g.nodeMap.get(rule.nodeName)!.push(rule);
     }
 
     // 第三步：补全无规则但在范围内的流程
     for (const p of allProcesses) {
       if (!p.id) continue;
       if (inScopeIds && !inScopeIds.has(p.id)) continue;
-      if (keyword) continue; // 有搜索关键词时不显示无规则流程
+      if (keyword) continue;
       if (groups.has(p.id)) continue;
       groups.set(p.id, {
         processId: p.id, processName: p.name,
-        nodeCount: processNodeCounts.get(p.id) || 0, rules: [],
+        nodeCount: processNodeCounts.get(p.id) || 0, nodeMap: new Map(),
       });
     }
 
-    // 第四步：按流程名排序
-    return Array.from(groups.values()).sort((a, b) => a.processName.localeCompare(b.processName, 'zh-Hans-CN'));
+    // 第四步：转为数组，nodeMap → nodeGroups，按流程名排序
+    return Array.from(groups.values())
+      .map((g) => ({
+        processId: g.processId, processName: g.processName, nodeCount: g.nodeCount,
+        nodeGroups: Array.from(g.nodeMap.entries())
+          .map(([nodeName, rules]) => ({ nodeName, rules }))
+          .sort((a, b) => a.nodeName.localeCompare(b.nodeName, 'zh-Hans-CN')),
+      }))
+      .sort((a, b) => a.processName.localeCompare(b.processName, 'zh-Hans-CN'));
   }
 
   protected selectStage(stageId: string): void {
@@ -306,6 +323,10 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
       .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
       .replace(/\s+on\w+\s*=\s*[^\s>]*/gi, '');
     return this.sanitizer.bypassSecurityTrustHtml(safe);
+  }
+
+  protected totalRuleCount(group: { nodeGroups: RuleNodeGroup[] }): number {
+    return group.nodeGroups.reduce((sum, ng) => sum + ng.rules.length, 0);
   }
 
   protected setRuleKeyword(value: string): void {

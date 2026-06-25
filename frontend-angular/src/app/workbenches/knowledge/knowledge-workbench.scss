@@ -382,6 +382,27 @@
   }
 }
 
+/* 节点子标题 */
+.knowledge-rule-node-head {
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 16px 4px;
+}
+
+.knowledge-rule-node-name {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.knowledge-rule-node-count {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
 /* 展开后的规则列表 */
 .knowledge-rule-list {
   border-top: 1px solid #e2e8f0;
