@@ -2,7 +2,7 @@ import { BlmDocument } from './document.model';
 
 export const SAMPLE_DOCUMENT: BlmDocument = {
   meta: {
-    domain: '交割智慧监管平台',
+    domain: '业务语言建模',
     version: 'v3',
     owner: '业务负责人',
   },
