@@ -38,9 +38,29 @@
       class="collab-status"
       [class.connected]="runtime.collab.connected"
       [class.offline]="!runtime.collab.connected"
+      [class.has-popup]="collabUsersOpen()"
       [title]="collaborationTitle()"
       data-testid="collab-status"
+      (click)="toggleCollabUsers($event)"
     >{{ collaborationLabel() }}</span>
+    @if (collabUsersOpen()) {
+      <div class="collab-users-popup" data-testid="collab-users-popup" (click)="$event.stopPropagation()">
+        <div class="collab-users-popup-head">
+          <span>协作在线（{{ collaborationOnlineUsers().length }} 人）</span>
+          <button type="button" class="collab-users-popup-close" (click)="closeCollabUsers()">×</button>
+        </div>
+        <div class="collab-users-popup-list">
+          @for (user of collaborationOnlineUsers(); track user.name) {
+            <div class="collab-users-popup-row">
+              <span class="collab-users-popup-name">{{ user.name }}</span>
+              @if (user.connectionCount > 1) {
+                <span class="collab-users-popup-windows">{{ user.connectionCount }} 个窗口</span>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
   </div>
 
   <div class="toolbar-right">

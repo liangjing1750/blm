@@ -120,18 +120,42 @@ export class CollaborationService {
     const runtime = getAngularRuntimeState();
     if (!runtime.currentFile || !runtime.runtime.supportsCollab) return '';
     if (runtime.readOnly) return '\u53ea\u8bfb\u7248\u672c';
-    const users = this.onlineNames();
-    const onlineText = users.length <= 2 && users.length ? users.join('\u3001') : `${users.length || 1} \u4eba`;
-    return runtime.collab.connected ? `\u534f\u4f5c ${onlineText}\u5728\u7ebf` : '\u534f\u4f5c\u8fde\u63a5\u4e2d';
+    if (!runtime.collab.connected) return '\u534f\u4f5c\u8fde\u63a5\u4e2d';
+    const names = this.onlineNames();
+    if (!names.length) return '\u534f\u4f5c\u5728\u7ebf';
+    if (names.length <= 3) return `\u534f\u4f5c ${names.join('\u3001')}\u5728\u7ebf`;
+    return `\u534f\u4f5c ${names[0]}\u3001${names[1]} \u7b49${names.length}\u4eba\u5728\u7ebf`;
   }
+
   onlineNames(): string[] {
     const runtime = getAngularRuntimeState();
     const profile = this.profile || this.loadProfile();
-    const names = (runtime.collab.users || []).map((item) => {
+    const names: string[] = [];
+    for (const item of runtime.collab.users || []) {
       const rawName = String(item['name'] || item['user'] || '').trim();
-      return rawName || profile.name;
-    }).filter(Boolean);
-    return Array.from(new Set(names.length ? names : profile.name ? [profile.name] : []));
+      const name = rawName || profile.name;
+      if (!name) continue;
+      const count = Number(item['connectionCount'] || 1);
+      names.push(count > 1 ? `${name}\uff08${count}\u4e2a\u7a97\u53e3\uff09` : name);
+    }
+    // \u786e\u4fdd\u5f53\u524d\u7528\u6237\u4e5f\u5728\u5217\u8868\u4e2d
+    if (profile.name && !names.includes(profile.name) && !names.some((n) => n.startsWith(`${profile.name}\uff08`))) {
+      names.unshift(profile.name);
+    }
+    return Array.from(new Set(names));
+  }
+
+  allOnlineUsers(): Array<{ name: string; connectionCount: number }> {
+    const runtime = getAngularRuntimeState();
+    const profile = this.profile || this.loadProfile();
+    const users = (runtime.collab.users || []).map((item) => ({
+      name: String(item['name'] || item['user'] || '').trim() || profile.name,
+      connectionCount: Number(item['connectionCount'] || 1),
+    }));
+    if (profile.name && !users.some((u) => u.name === profile.name)) {
+      users.unshift({ name: profile.name, connectionCount: 1 });
+    }
+    return users;
   }
 
   currentUser(): CollaborationUserProfile {

@@ -99,6 +99,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly busy = signal(false);
   protected readonly toast = signal<ShellToastState | null>(null);
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
+  protected readonly collabUsersOpen = signal(false);
   private readonly shellVersion = signal(0);
   protected openQuery = '';
   protected createDocumentName = '';
@@ -137,8 +138,11 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   @HostListener('document:click', ['$event'])
   protected closeDropdownOnOutsideClick(event: MouseEvent): void {
-    if ((event.target as HTMLElement | null)?.closest('.tbar-dd')) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.tbar-dd')) return;
+    if (target?.closest('.collab-users-popup') || target?.closest('.collab-status')) return;
     this.activeDropdown.set('');
+    this.collabUsersOpen.set(false);
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -182,6 +186,25 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected collaborationLabel(): string {
     return this.collaboration.statusText();
+  }
+
+  protected collaborationTitle(): string {
+    return this.collaboration.allOnlineUsers().map((u) =>
+      u.connectionCount > 1 ? `${u.name}（${u.connectionCount}个窗口）` : u.name
+    ).join('、') || '协作在线';
+  }
+
+  protected collaborationOnlineUsers(): Array<{ name: string; connectionCount: number }> {
+    return this.collaboration.allOnlineUsers();
+  }
+
+  protected toggleCollabUsers(event: Event): void {
+    event.stopPropagation();
+    this.collabUsersOpen.update((v) => !v);
+  }
+
+  protected closeCollabUsers(): void {
+    this.collabUsersOpen.set(false);
   }
 
   // 模块意图：区分"当前版本"（本地已确认基线）和"最新版本"（远端已知最高版本），
@@ -241,10 +264,6 @@ export class ShellComponent implements OnInit, OnDestroy {
     ].filter(Boolean).join('\n');
   }
 
-  protected collaborationTitle(): string {
-    const names = this.collaboration.onlineNames();
-    return names.length ? `在线：${names.join('、')}` : '正在连接实时协作会话';
-  }
 
   protected toggleDropdown(name: string, event?: Event): void {
     event?.stopPropagation();
