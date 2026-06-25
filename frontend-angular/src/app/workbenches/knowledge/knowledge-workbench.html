@@ -73,11 +73,11 @@
     <article class="knowledge-panel" data-testid="knowledge-rules-panel">
       <header class="knowledge-panel-head">
         <div>
-          <h2>规则条目</h2>
-          <p>把流程视为功能，把节点规则视为功能规则，先选功能再定位规则。</p>
+          <h2>规则管理</h2>
+          <p>按功能（流程）查看各节点中沉淀的业务规则，当前为只读汇总视图。</p>
         </div>
         <div class="knowledge-actions">
-          <span class="knowledge-count" data-testid="knowledge-rules-count">规则 {{ rules().length }}</span>
+          <span class="knowledge-count" data-testid="knowledge-rules-count">共 {{ rules().length }} 条规则</span>
           <button class="knowledge-secondary" type="button" data-testid="knowledge-rules-toggle" (click)="toggleRulesCollapsed()">
             {{ rulesCollapsed() ? '展开' : '折叠' }}
           </button>
@@ -87,12 +87,14 @@
       @if (!rulesCollapsed() && functions().length) {
         <div class="knowledge-rule-browser" data-testid="knowledge-rule-browser">
           <aside class="knowledge-function-list" aria-label="功能列表">
+            <div class="knowledge-function-head">
+              <span class="knowledge-function-head-title">功能列表</span>
+              <span class="knowledge-function-head-count">{{ functions().length }}</span>
+            </div>
             <div class="knowledge-search">
-              <label for="rule-keyword">规则检索</label>
               <input
-                id="rule-keyword"
                 type="search"
-                placeholder="搜索规则、节点或内容"
+                placeholder="搜索规则…"
                 [ngModel]="ruleKeyword()"
                 data-testid="knowledge-rule-search"
                 (ngModelChange)="setRuleKeyword($event)"
@@ -105,56 +107,68 @@
                   type="button"
                   data-testid="knowledge-function-item"
                   [class.is-active]="selectedFunction()?.id === item.id"
+                  [class.is-empty]="item.ruleCount === 0"
                   (click)="selectFunction(item.id)"
                 >
-                  <span class="knowledge-function-main">
-                    <strong>{{ item.name }}</strong>
-                    <em>{{ item.ruleCount }}</em>
+                  <span class="knowledge-function-name">{{ item.name }}</span>
+                  <span class="knowledge-function-meta">
+                    <span class="knowledge-function-badge" [class.zero]="item.ruleCount === 0">{{ item.ruleCount }} 条规则</span>
+                    <span class="knowledge-function-nodes">{{ item.nodeCount }} 节点</span>
                   </span>
-                  <span class="knowledge-function-desc">{{ item.description || '暂无功能说明' }}</span>
-                  <span class="knowledge-function-meta">{{ item.nodeCount }} 个节点</span>
                 </button>
               }
             </div>
           </aside>
 
           <section class="knowledge-rule-results" data-testid="knowledge-rule-results">
-            <div class="knowledge-rule-title">
-              <div>
-                <h3>{{ selectedFunction()?.name || '全部功能' }}</h3>
-                <p>{{ selectedFunction()?.description || '查看该功能下节点沉淀出来的业务规则。' }}</p>
+            @if (selectedFunction(); as func) {
+              <div class="knowledge-rule-head">
+                <div class="knowledge-rule-head-main">
+                  <h3>{{ func.name }}</h3>
+                  <span class="knowledge-rule-head-badge">{{ func.ruleCount }} 条规则 · {{ func.nodeCount }} 节点</span>
+                </div>
+                <span class="knowledge-rule-head-count">显示 {{ filteredRules().length }} 条</span>
               </div>
-              <span>{{ filteredRules().length }} 条</span>
-            </div>
 
-            @if (filteredRules().length) {
-              <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
-                @for (rule of filteredRules(); track rule.id; let index = $index) {
-                  <article class="knowledge-rule-card" data-testid="knowledge-rule-row">
-                    <header class="knowledge-rule-card-head">
+              @if (filteredRules().length) {
+                <div class="knowledge-rule-list" data-testid="knowledge-rules-table">
+                  @for (rule of filteredRules(); track rule.id; let index = $index) {
+                    <article class="knowledge-rule-card" data-testid="knowledge-rule-row">
                       <span class="knowledge-rule-index">#{{ index + 1 }}</span>
-                    <div class="knowledge-rule-name">
-                      <strong>{{ rule.name }}</strong>
-                    </div>
-                    </header>
-                    <div class="knowledge-rule-meta">
-                      <span class="knowledge-rule-cell"><b>节点</b>{{ rule.nodeName }}</span>
-                      <span class="knowledge-rule-cell"><b>功能</b>{{ rule.processName }}</span>
-                    </div>
-                    <p>{{ readableRuleContent(rule.content) }}</p>
-                  </article>
-                }
-              </div>
+                      <div class="knowledge-rule-body">
+                        <h4 class="knowledge-rule-name">{{ rule.name }}</h4>
+                        <div class="knowledge-rule-tags">
+                          <span class="knowledge-rule-tag tag-node">{{ rule.nodeName }}</span>
+                          <span class="knowledge-rule-tag tag-process">{{ rule.processName }}</span>
+                        </div>
+                        @if (rule.content) {
+                          <p class="knowledge-rule-content">{{ readableRuleContent(rule.content) }}</p>
+                        }
+                      </div>
+                    </article>
+                  }
+                </div>
+              } @else {
+                <div class="knowledge-empty" data-testid="knowledge-rules-empty">
+                  <span class="knowledge-empty-icon">🔍</span>
+                  <strong>没有匹配的规则</strong>
+                  <span>尝试更换功能或调整搜索关键词。</span>
+                </div>
+              }
             } @else {
               <div class="knowledge-empty" data-testid="knowledge-rules-empty">
-                当前筛选下没有规则。可以换一个功能，或调整检索关键词。
+                <span class="knowledge-empty-icon">📋</span>
+                <strong>请选择一个功能</strong>
+                <span>从左侧功能列表中选择一个流程，查看其节点中的业务规则。</span>
               </div>
             }
           </section>
         </div>
       } @else if (!rulesCollapsed()) {
         <div class="knowledge-empty" data-testid="knowledge-rules-empty">
-          暂无流程功能。规则仍在流程节点内维护，这里只做按功能汇总查看。
+          <span class="knowledge-empty-icon">📋</span>
+          <strong>暂无流程功能</strong>
+          <span>规则仍在流程节点内维护，这里只做按功能汇总查看。创建流程并添加节点规则后，这里会自动汇总显示。</span>
         </div>
       }
 
