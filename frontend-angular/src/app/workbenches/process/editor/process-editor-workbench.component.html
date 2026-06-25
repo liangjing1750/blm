@@ -11,7 +11,6 @@
               <option value="">暂无阶段</option>
             }
           </select>
-          <button class="node-top-jump" type="button" title="跳转到阶段视图" (click)="openStage(primaryStage(process)?.id || '')">↗</button>
         </label>
         <label class="node-top-select">
           <span>流程</span>
@@ -20,7 +19,6 @@
               <option [value]="processId(item)">{{ item.name || '未命名流程' }}</option>
             }
           </select>
-          <button class="node-top-jump" type="button" title="跳转到流程视图" (click)="openProcessFlow(processId(process))">↗</button>
         </label>
         <div class="node-top-divider"></div>
         <div class="node-top-node-cards" data-testid="process-editor-node-cards">
@@ -45,33 +43,9 @@
         </div>
       </header>
 
-      <section class="node-editor-main" data-testid="process-editor-drawer">
-        <header class="node-editor-canopy">
-          <div class="node-basic-strip node-basic-strip--three">
-            <label class="node-top-field node-top-field--input">
-              <span>节点名称</span>
-              <input type="text" data-testid="process-task-name-input" [ngModel]="task.name || ''" (ngModelChange)="setTaskField(task, 'name', $event)" />
-            </label>
-            <button class="node-top-field node-top-field--link" type="button" data-testid="process-node-flow-link" (click)="openProcessFlow(processId(process))">
-              <span>所属流程</span>
-              <strong>{{ process.name || '未命名流程' }}</strong>
-            </button>
-            @if (primaryStage(process); as stage) {
-              <button class="node-top-field node-top-field--link" type="button" data-testid="process-stage-refs" (click)="openStage(stage.id)">
-                <span>所属阶段</span>
-                <strong>{{ stage.name }}</strong>
-              </button>
-            } @else {
-              <div class="node-top-field node-top-field--empty" data-testid="process-stage-refs">
-                <span>所属阶段</span>
-                <strong>暂无关联阶段</strong>
-              </div>
-            }
-            <input class="node-hidden-process-input" type="text" data-testid="process-name-input" [ngModel]="process.name || ''" (ngModelChange)="setProcessField('name', $event)" />
-          </div>
-          <div class="node-progress-guide" data-testid="process-node-progress-guide">
-            <div class="node-progress-track"><span [style.width.%]="nodeCompletion(task)"></span></div>
-            <div class="node-progress-steps">
+      <div class="node-progress-guide" data-testid="process-node-progress-guide">
+        <div class="node-progress-track"><span [style.width.%]="nodeCompletion(task)"></span></div>
+        <div class="node-progress-steps">
               @for (item of anchorItems(task); track item.id; let index = $index) {
                 <button
                   type="button"
@@ -88,8 +62,8 @@
               }
             </div>
           </div>
-        </header>
 
+        <section class="node-editor-main" data-testid="process-editor-drawer">
         <div class="node-editor-scroll node-editor-scroll--body">
           <section #nodeSection class="node-editor-card node-basic-card node-editor-card--role" id="node-role-section" data-testid="process-task-lite-panel">
             <div class="node-section-head">
