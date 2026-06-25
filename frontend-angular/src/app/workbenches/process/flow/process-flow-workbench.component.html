@@ -34,6 +34,7 @@
 
       <section class="process-flow-body">
         <section class="process-flow-canvas-shell" data-testid="process-flow-canvas-shell" (wheel)="onCanvasWheel($event)">
+          @if (editing) {
           <div class="process-flow-side-tools">
             <button type="button" data-testid="process-flow-add-node" title="&#x65b0;&#x589e;&#x8282;&#x70b9;" (click)="addTask()"><b>+</b><span>&#x8282;&#x70b9;</span></button>
             <button type="button" data-testid="process-flow-add-gateway" title="&#x65b0;&#x589e;&#x7f51;&#x5173;" (click)="addGateway()"><b>&#x25c7;</b><span>&#x7f51;&#x5173;</span></button>
@@ -45,6 +46,7 @@
               <button class="danger" type="button" data-testid="process-flow-delete-selected" title="&#x5220;&#x9664;&#x9009;&#x4e2d;" (click)="removeSelected(process)"><b>x</b><span>&#x5220;&#x9664;</span></button>
             }
           </div>
+          }
 
           <div class="process-flow-canvas" data-testid="process-flow-canvas" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
             @for (lane of lanes(process); track lane.id) {

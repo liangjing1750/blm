@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyEntity,
@@ -73,6 +73,8 @@ interface ProcessNodeDirectory {
   ],
 })
 export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
+
+  @Input() editing = true;
 
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {

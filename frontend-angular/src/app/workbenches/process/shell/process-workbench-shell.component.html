@@ -31,7 +31,11 @@
           }
         }
         @if (view() === 'editor') {
-          <button class="btn btn-ghost-sm" type="button" data-testid="process-editor-back-flow" (click)="openFlow()">关闭编辑</button>
+          @if (editorEditing()) {
+            <button class="btn btn-ghost-sm" type="button" data-testid="editor-editing-hide" (click)="setEditorEditing(false)">关闭编辑</button>
+          } @else {
+            <button class="btn btn-outline btn-sm" type="button" data-testid="editor-editing-open" (click)="setEditorEditing(true)">打开编辑</button>
+          }
         }
       </div>
     </div>
@@ -44,8 +48,8 @@
   } @else if (view() === 'flow') {
     <app-process-flow-workbench [editing]="flowEditing()" (taskEditorRequested)="openNode($event)" />
   } @else if (view() === 'node') {
-    <app-process-editor-workbench />
+    <app-process-editor-workbench [editing]="editorEditing()" />
   } @else {
-    <app-process-editor-workbench />
+    <app-process-editor-workbench [editing]="editorEditing()" />
   }
 </div>
