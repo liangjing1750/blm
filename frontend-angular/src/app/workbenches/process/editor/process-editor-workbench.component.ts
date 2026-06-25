@@ -537,6 +537,15 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     this.adapter.openStage(stageId);
   }
 
+  protected startRenameNode(node: LegacyProcessNode, event: MouseEvent): void {
+    event.stopPropagation();
+    const name = window.prompt('修改节点名称', node.name || '');
+    if (name !== null && name.trim()) {
+      this.adapter.setTaskField(node, 'name', name.trim());
+      this.version.update((v) => v + 1);
+    }
+  }
+
   protected forms(task: LegacyProcessNode): LegacyTaskForm[] {
     task.forms ||= [];
     // 模块意图：节点视图负责把旧版扁平表单升级为“表单-分组-字段”的维护界面。

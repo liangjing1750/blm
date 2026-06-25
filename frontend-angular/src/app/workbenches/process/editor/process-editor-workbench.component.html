@@ -11,6 +11,7 @@
               <option value="">暂无阶段</option>
             }
           </select>
+          <button class="node-top-jump" type="button" title="跳转到阶段视图" (click)="openStage(primaryStage(process)?.id || '')">↗</button>
         </label>
         <label class="node-top-select">
           <span>流程</span>
@@ -19,6 +20,7 @@
               <option [value]="processId(item)">{{ item.name || '未命名流程' }}</option>
             }
           </select>
+          <button class="node-top-jump" type="button" title="跳转到流程视图" (click)="openProcessFlow(processId(process))">↗</button>
         </label>
         <div class="node-top-divider"></div>
         <div class="node-top-node-cards" data-testid="process-editor-node-cards">
@@ -34,6 +36,7 @@
                 <span class="node-top-node-index">{{ index + 1 }}</span>
                 <span class="node-top-node-name">{{ node.name || '未命名节点' }}</span>
                 <span class="node-top-node-meta">{{ taskRoleSummary(node) }}</span>
+                <span class="node-top-node-edit" (click)="startRenameNode(node, $event)" title="修改节点名称">✎</span>
               </button>
             }
           } @empty {

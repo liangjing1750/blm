@@ -42,11 +42,32 @@
   }
 }
 
+.node-top-jump {
+  background: none;
+  border: 0;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  flex-shrink: 0;
+
+  &:hover { color: #3b82f6; }
+}
+
 .node-top-divider {
   background: #e2e8f0;
   flex-shrink: 0;
   height: 24px;
   width: 1px;
+}
+
+.node-top-node-edit {
+  color: #94a3b8;
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 0 2px;
+
+  &:hover { color: #3b82f6; }
 }
 
 .node-top-node-cards {
