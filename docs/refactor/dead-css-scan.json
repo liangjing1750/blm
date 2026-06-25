@@ -1,0 +1,8448 @@
+{
+  "summary": {
+    "total": 1769,
+    "still_used": 572,
+    "global_shell": 21,
+    "suspected_dead": 1176
+  },
+  "suspected_dead": [
+    {
+      "line": 135,
+      "selector": ".user-account-button",
+      "tokens": [
+        "user-account-button"
+      ]
+    },
+    {
+      "line": 150,
+      "selector": ".user-account-button:hover",
+      "tokens": [
+        "user-account-button"
+      ]
+    },
+    {
+      "line": 160,
+      "selector": ".user-modal-shell",
+      "tokens": [
+        "user-modal-shell"
+      ]
+    },
+    {
+      "line": 163,
+      "selector": ".modal.collab-diagnostics-modal",
+      "tokens": [
+        "collab-diagnostics-modal",
+        "modal"
+      ]
+    },
+    {
+      "line": 170,
+      "selector": ".collab-diagnostics-content",
+      "tokens": [
+        "collab-diagnostics-content"
+      ]
+    },
+    {
+      "line": 176,
+      "selector": ".collab-diagnostic-grid",
+      "tokens": [
+        "collab-diagnostic-grid"
+      ]
+    },
+    {
+      "line": 181,
+      "selector": ".collab-diagnostic-grid > div",
+      "tokens": [
+        "collab-diagnostic-grid"
+      ]
+    },
+    {
+      "line": 188,
+      "selector": ".collab-diagnostic-grid span",
+      "tokens": [
+        "collab-diagnostic-grid"
+      ]
+    },
+    {
+      "line": 195,
+      "selector": ".collab-diagnostic-grid strong",
+      "tokens": [
+        "collab-diagnostic-grid"
+      ]
+    },
+    {
+      "line": 203,
+      "selector": ".collab-diagnostic-grid > div:first-child",
+      "tokens": [
+        "collab-diagnostic-grid"
+      ]
+    },
+    {
+      "line": 206,
+      "selector": ".collab-diagnostic-error",
+      "tokens": [
+        "collab-diagnostic-error"
+      ]
+    },
+    {
+      "line": 213,
+      "selector": ".collab-diagnostic-error span",
+      "tokens": [
+        "collab-diagnostic-error"
+      ]
+    },
+    {
+      "line": 219,
+      "selector": ".collab-diagnostic-error strong",
+      "tokens": [
+        "collab-diagnostic-error"
+      ]
+    },
+    {
+      "line": 225,
+      "selector": ".collab-diagnostic-section h4",
+      "tokens": [
+        "collab-diagnostic-section"
+      ]
+    },
+    {
+      "line": 230,
+      "selector": ".collab-diagnostic-users",
+      "tokens": [
+        "collab-diagnostic-users"
+      ]
+    },
+    {
+      "line": 235,
+      "selector": ".collab-diagnostic-user",
+      "tokens": [
+        "collab-diagnostic-user"
+      ]
+    },
+    {
+      "line": 247,
+      "selector": ".collab-diagnostic-user strong",
+      "tokens": [
+        "collab-diagnostic-user"
+      ]
+    },
+    {
+      "line": 253,
+      "selector": ".collab-diagnostic-user span",
+      "tokens": [
+        "collab-diagnostic-user"
+      ]
+    },
+    {
+      "line": 256,
+      "selector": ".collab-diagnostic-raw",
+      "tokens": [
+        "collab-diagnostic-raw"
+      ]
+    },
+    {
+      "line": 261,
+      "selector": ".collab-diagnostic-raw summary",
+      "tokens": [
+        "collab-diagnostic-raw"
+      ]
+    },
+    {
+      "line": 268,
+      "selector": ".collab-diagnostic-raw pre",
+      "tokens": [
+        "collab-diagnostic-raw"
+      ]
+    },
+    {
+      "line": 286,
+      "selector": ".user-form-field",
+      "tokens": [
+        "user-form-field"
+      ]
+    },
+    {
+      "line": 291,
+      "selector": ".user-form-field span",
+      "tokens": [
+        "user-form-field"
+      ]
+    },
+    {
+      "line": 296,
+      "selector": ".user-form-field input",
+      "tokens": [
+        "user-form-field"
+      ]
+    },
+    {
+      "line": 330,
+      "selector": ".collab-conflict-actions",
+      "tokens": [
+        "collab-conflict-actions"
+      ]
+    },
+    {
+      "line": 342,
+      "selector": ".modal.collab-conflict-dialog",
+      "tokens": [
+        "collab-conflict-dialog",
+        "modal"
+      ]
+    },
+    {
+      "line": 357,
+      "selector": ".modal.collab-conflict-dialog .collab-conflict-actions",
+      "tokens": [
+        "collab-conflict-actions",
+        "collab-conflict-dialog",
+        "modal"
+      ]
+    },
+    {
+      "line": 358,
+      "selector": ".modal.collab-conflict-dialog h3",
+      "tokens": [
+        "collab-conflict-dialog",
+        "modal"
+      ]
+    },
+    {
+      "line": 363,
+      "selector": ".collab-conflict-list",
+      "tokens": [
+        "collab-conflict-list"
+      ]
+    },
+    {
+      "line": 370,
+      "selector": ".collab-conflict-item",
+      "tokens": [
+        "collab-conflict-item"
+      ]
+    },
+    {
+      "line": 377,
+      "selector": ".collab-conflict-field",
+      "tokens": [
+        "collab-conflict-field"
+      ]
+    },
+    {
+      "line": 384,
+      "selector": ".collab-conflict-cols",
+      "tokens": [
+        "collab-conflict-cols"
+      ]
+    },
+    {
+      "line": 389,
+      "selector": ".collab-conflict-col pre",
+      "tokens": [
+        "collab-conflict-col"
+      ]
+    },
+    {
+      "line": 401,
+      "selector": ".collab-conflict-label",
+      "tokens": [
+        "collab-conflict-label"
+      ]
+    },
+    {
+      "line": 406,
+      "selector": ".collab-conflict-choose",
+      "tokens": [
+        "collab-conflict-choose"
+      ]
+    },
+    {
+      "line": 433,
+      "selector": "/* ─── 布局 ───────────────────────────────────────────────── */ #layout",
+      "tokens": [
+        "layout"
+      ]
+    },
+    {
+      "line": 445,
+      "selector": "#sidebar-content",
+      "tokens": [
+        "sidebar-content"
+      ]
+    },
+    {
+      "line": 446,
+      "selector": "#sidebar-resize-handle",
+      "tokens": [
+        "sidebar-resize-handle"
+      ]
+    },
+    {
+      "line": 481,
+      "selector": ".no-doc-shell #tab-bar",
+      "tokens": [
+        "no-doc-shell",
+        "tab-bar"
+      ]
+    },
+    {
+      "line": 564,
+      "selector": ".sb-metric-flow",
+      "tokens": [
+        "sb-metric-flow"
+      ]
+    },
+    {
+      "line": 568,
+      "selector": ".sb-metric-interaction",
+      "tokens": [
+        "sb-metric-interaction"
+      ]
+    },
+    {
+      "line": 572,
+      "selector": ".sb-metric-model",
+      "tokens": [
+        "sb-metric-model"
+      ]
+    },
+    {
+      "line": 576,
+      "selector": ".sb-metric-flow .sb-metric-label",
+      "tokens": [
+        "sb-metric-flow",
+        "sb-metric-label"
+      ]
+    },
+    {
+      "line": 577,
+      "selector": ".sb-metric-interaction .sb-metric-label",
+      "tokens": [
+        "sb-metric-interaction",
+        "sb-metric-label"
+      ]
+    },
+    {
+      "line": 578,
+      "selector": ".sb-metric-model .sb-metric-label",
+      "tokens": [
+        "sb-metric-label",
+        "sb-metric-model"
+      ]
+    },
+    {
+      "line": 579,
+      "selector": ".sb-metric-label",
+      "tokens": [
+        "sb-metric-label"
+      ]
+    },
+    {
+      "line": 580,
+      "selector": ".sb-metric-value",
+      "tokens": [
+        "sb-metric-value"
+      ]
+    },
+    {
+      "line": 582,
+      "selector": ".sb-toggle",
+      "tokens": [
+        "sb-toggle"
+      ]
+    },
+    {
+      "line": 596,
+      "selector": ".sb-item",
+      "tokens": [
+        "sb-item"
+      ]
+    },
+    {
+      "line": 604,
+      "selector": ".sb-item:hover",
+      "tokens": [
+        "sb-item"
+      ]
+    },
+    {
+      "line": 607,
+      "selector": ".sb-id",
+      "tokens": [
+        "sb-id"
+      ]
+    },
+    {
+      "line": 611,
+      "selector": "/* ─── 主内容区 ───────────────────────────────────────────── */ #content",
+      "tokens": [
+        "content"
+      ]
+    },
+    {
+      "line": 614,
+      "selector": "/* ─── 标签页 ─────────────────────────────────────────────── */ #tab-bar",
+      "tokens": [
+        "tab-bar"
+      ]
+    },
+    {
+      "line": 666,
+      "selector": "/* ─── 主内容区：overflow hidden，子组件自管滚动 ─────────── */ .live-diagram-wrap",
+      "tokens": [
+        "live-diagram-wrap"
+      ]
+    },
+    {
+      "line": 674,
+      "selector": ".live-diagram-toolbar",
+      "tokens": [
+        "live-diagram-toolbar"
+      ]
+    },
+    {
+      "line": 684,
+      "selector": ".live-diagram",
+      "tokens": [
+        "live-diagram"
+      ]
+    },
+    {
+      "line": 690,
+      "selector": ".live-diagram svg",
+      "tokens": [
+        "live-diagram"
+      ]
+    },
+    {
+      "line": 691,
+      "selector": ".data-toolbar",
+      "tokens": [
+        "data-toolbar"
+      ]
+    },
+    {
+      "line": 716,
+      "selector": ".data-state-select-inline",
+      "tokens": [
+        "data-state-select-inline"
+      ]
+    },
+    {
+      "line": 725,
+      "selector": ".data-state-select-label",
+      "tokens": [
+        "data-state-select-label"
+      ]
+    },
+    {
+      "line": 729,
+      "selector": ".data-state-select-inline select",
+      "tokens": [
+        "data-state-select-inline"
+      ]
+    },
+    {
+      "line": 732,
+      "selector": ".data-toolbar.state-mode [data-testid=\"data-add-entity\"], .data-toolbar.state-mode .data-state-select-inline",
+      "tokens": [
+        "data-state-select-inline",
+        "data-toolbar",
+        "state-mode"
+      ]
+    },
+    {
+      "line": 736,
+      "selector": ".data-state-toolbar-actions, .data-relation-toolbar-actions",
+      "tokens": [
+        "data-relation-toolbar-actions",
+        "data-state-toolbar-actions"
+      ]
+    },
+    {
+      "line": 743,
+      "selector": ".data-state-zoom-controls",
+      "tokens": [
+        "data-state-zoom-controls"
+      ]
+    },
+    {
+      "line": 748,
+      "selector": ".data-state-zoom-reset",
+      "tokens": [
+        "data-state-zoom-reset"
+      ]
+    },
+    {
+      "line": 751,
+      "selector": ".entity-state-workbench",
+      "tokens": [
+        "entity-state-workbench"
+      ]
+    },
+    {
+      "line": 760,
+      "selector": ".entity-state-browser, .entity-state-card",
+      "tokens": [
+        "entity-state-browser",
+        "entity-state-card"
+      ]
+    },
+    {
+      "line": 766,
+      "selector": ".entity-state-browser",
+      "tokens": [
+        "entity-state-browser"
+      ]
+    },
+    {
+      "line": 770,
+      "selector": ".entity-state-group + .entity-state-group",
+      "tokens": [
+        "entity-state-group"
+      ]
+    },
+    {
+      "line": 773,
+      "selector": ".entity-state-group-title",
+      "tokens": [
+        "entity-state-group-title"
+      ]
+    },
+    {
+      "line": 779,
+      "selector": ".entity-state-group-list",
+      "tokens": [
+        "entity-state-group-list"
+      ]
+    },
+    {
+      "line": 784,
+      "selector": ".entity-state-chip",
+      "tokens": [
+        "entity-state-chip"
+      ]
+    },
+    {
+      "line": 799,
+      "selector": ".entity-state-stage",
+      "tokens": [
+        "entity-state-stage"
+      ]
+    },
+    {
+      "line": 807,
+      "selector": ".entity-state-main-shell",
+      "tokens": [
+        "entity-state-main-shell"
+      ]
+    },
+    {
+      "line": 814,
+      "selector": ".entity-state-main",
+      "tokens": [
+        "entity-state-main"
+      ]
+    },
+    {
+      "line": 818,
+      "selector": ".entity-state-card",
+      "tokens": [
+        "entity-state-card"
+      ]
+    },
+    {
+      "line": 822,
+      "selector": ".entity-state-editor",
+      "tokens": [
+        "entity-state-editor"
+      ]
+    },
+    {
+      "line": 829,
+      "selector": ".state-editor-drawer",
+      "tokens": [
+        "state-editor-drawer"
+      ]
+    },
+    {
+      "line": 842,
+      "selector": ".state-editor-drawer .entity-state-editor",
+      "tokens": [
+        "entity-state-editor",
+        "state-editor-drawer"
+      ]
+    },
+    {
+      "line": 851,
+      "selector": ".entity-state-editor-head",
+      "tokens": [
+        "entity-state-editor-head"
+      ]
+    },
+    {
+      "line": 861,
+      "selector": ".entity-state-editor-head h4",
+      "tokens": [
+        "entity-state-editor-head"
+      ]
+    },
+    {
+      "line": 864,
+      "selector": ".entity-state-editor-hint",
+      "tokens": [
+        "entity-state-editor-hint"
+      ]
+    },
+    {
+      "line": 869,
+      "selector": ".entity-state-config-row",
+      "tokens": [
+        "entity-state-config-row"
+      ]
+    },
+    {
+      "line": 875,
+      "selector": ".entity-state-values-readonly",
+      "tokens": [
+        "entity-state-values-readonly"
+      ]
+    },
+    {
+      "line": 885,
+      "selector": ".entity-state-card-head",
+      "tokens": [
+        "entity-state-card-head"
+      ]
+    },
+    {
+      "line": 892,
+      "selector": ".entity-state-card-summary",
+      "tokens": [
+        "entity-state-card-summary"
+      ]
+    },
+    {
+      "line": 898,
+      "selector": ".entity-state-field-chip",
+      "tokens": [
+        "entity-state-field-chip"
+      ]
+    },
+    {
+      "line": 913,
+      "selector": ".entity-state-card-title",
+      "tokens": [
+        "entity-state-card-title"
+      ]
+    },
+    {
+      "line": 918,
+      "selector": ".entity-state-card-subtitle",
+      "tokens": [
+        "entity-state-card-subtitle"
+      ]
+    },
+    {
+      "line": 923,
+      "selector": ".entity-state-card-meta",
+      "tokens": [
+        "entity-state-card-meta"
+      ]
+    },
+    {
+      "line": 931,
+      "selector": ".entity-state-card-values",
+      "tokens": [
+        "entity-state-card-values"
+      ]
+    },
+    {
+      "line": 937,
+      "selector": ".entity-state-value-chip",
+      "tokens": [
+        "entity-state-value-chip"
+      ]
+    },
+    {
+      "line": 958,
+      "selector": ".entity-state-overview-grid",
+      "tokens": [
+        "entity-state-overview-grid"
+      ]
+    },
+    {
+      "line": 963,
+      "selector": ".entity-state-field-panel",
+      "tokens": [
+        "entity-state-field-panel"
+      ]
+    },
+    {
+      "line": 971,
+      "selector": ".entity-state-field-panel:hover",
+      "tokens": [
+        "entity-state-field-panel"
+      ]
+    },
+    {
+      "line": 980,
+      "selector": ".entity-state-field-panel-head",
+      "tokens": [
+        "entity-state-field-panel-head"
+      ]
+    },
+    {
+      "line": 987,
+      "selector": ".entity-state-field-panel-title",
+      "tokens": [
+        "entity-state-field-panel-title"
+      ]
+    },
+    {
+      "line": 992,
+      "selector": ".entity-state-field-panel-meta",
+      "tokens": [
+        "entity-state-field-panel-meta"
+      ]
+    },
+    {
+      "line": 998,
+      "selector": ".entity-state-field-panel-badges",
+      "tokens": [
+        "entity-state-field-panel-badges"
+      ]
+    },
+    {
+      "line": 1005,
+      "selector": ".entity-state-field-badge",
+      "tokens": [
+        "entity-state-field-badge"
+      ]
+    },
+    {
+      "line": 1016,
+      "selector": ".entity-state-field-badge.role-primary",
+      "tokens": [
+        "entity-state-field-badge",
+        "role-primary"
+      ]
+    },
+    {
+      "line": 1021,
+      "selector": ".entity-state-field-badge.role-secondary",
+      "tokens": [
+        "entity-state-field-badge",
+        "role-secondary"
+      ]
+    },
+    {
+      "line": 1031,
+      "selector": ".entity-state-field-empty",
+      "tokens": [
+        "entity-state-field-empty"
+      ]
+    },
+    {
+      "line": 1034,
+      "selector": ".entity-state-graph",
+      "tokens": [
+        "entity-state-graph"
+      ]
+    },
+    {
+      "line": 1039,
+      "selector": ".entity-state-zoom-shell",
+      "tokens": [
+        "entity-state-zoom-shell"
+      ]
+    },
+    {
+      "line": 1042,
+      "selector": ".entity-state-zoom-target",
+      "tokens": [
+        "entity-state-zoom-target"
+      ]
+    },
+    {
+      "line": 1099,
+      "selector": ".entity-state-link-label-group",
+      "tokens": [
+        "entity-state-link-label-group"
+      ]
+    },
+    {
+      "line": 1103,
+      "selector": ".entity-state-link-label-group.dragging",
+      "tokens": [
+        "dragging",
+        "entity-state-link-label-group"
+      ]
+    },
+    {
+      "line": 1106,
+      "selector": ".entity-state-link-label-hitbox",
+      "tokens": [
+        "entity-state-link-label-hitbox"
+      ]
+    },
+    {
+      "line": 1113,
+      "selector": ".entity-state-link-label-hitbox.dragging",
+      "tokens": [
+        "dragging",
+        "entity-state-link-label-hitbox"
+      ]
+    },
+    {
+      "line": 1121,
+      "selector": ".entity-state-link-route-hitbox",
+      "tokens": [
+        "entity-state-link-route-hitbox"
+      ]
+    },
+    {
+      "line": 1128,
+      "selector": ".entity-state-link-route-hitbox:hover",
+      "tokens": [
+        "entity-state-link-route-hitbox"
+      ]
+    },
+    {
+      "line": 1131,
+      "selector": ".entity-state-link-route-hitbox.dragging",
+      "tokens": [
+        "dragging",
+        "entity-state-link-route-hitbox"
+      ]
+    },
+    {
+      "line": 1135,
+      "selector": ".entity-state-link-endpoint-handle",
+      "tokens": [
+        "entity-state-link-endpoint-handle"
+      ]
+    },
+    {
+      "line": 1147,
+      "selector": ".entity-state-link-endpoint-handle:hover, .entity-state-link-endpoint-handle.dragging",
+      "tokens": [
+        "dragging",
+        "entity-state-link-endpoint-handle"
+      ]
+    },
+    {
+      "line": 1152,
+      "selector": ".entity-state-link-endpoint-handle.dragging",
+      "tokens": [
+        "dragging",
+        "entity-state-link-endpoint-handle"
+      ]
+    },
+    {
+      "line": 1168,
+      "selector": ".entity-state-link-label-box",
+      "tokens": [
+        "entity-state-link-label-box"
+      ]
+    },
+    {
+      "line": 1212,
+      "selector": ".entity-state-kind-editor",
+      "tokens": [
+        "entity-state-kind-editor"
+      ]
+    },
+    {
+      "line": 1219,
+      "selector": ".entity-state-kind-head h5",
+      "tokens": [
+        "entity-state-kind-head"
+      ]
+    },
+    {
+      "line": 1223,
+      "selector": ".entity-state-kind-list",
+      "tokens": [
+        "entity-state-kind-list"
+      ]
+    },
+    {
+      "line": 1229,
+      "selector": ".entity-state-kind-row",
+      "tokens": [
+        "entity-state-kind-row"
+      ]
+    },
+    {
+      "line": 1235,
+      "selector": ".entity-state-kind-name",
+      "tokens": [
+        "entity-state-kind-name"
+      ]
+    },
+    {
+      "line": 1240,
+      "selector": ".entity-transition-list",
+      "tokens": [
+        "entity-transition-list"
+      ]
+    },
+    {
+      "line": 1255,
+      "selector": ".entity-transition-arrow",
+      "tokens": [
+        "entity-transition-arrow"
+      ]
+    },
+    {
+      "line": 1261,
+      "selector": ".entity-transition-actions",
+      "tokens": [
+        "entity-transition-actions"
+      ]
+    },
+    {
+      "line": 1267,
+      "selector": ".entity-state-editor-actions",
+      "tokens": [
+        "entity-state-editor-actions"
+      ]
+    },
+    {
+      "line": 1274,
+      "selector": ".transition-action",
+      "tokens": [
+        "transition-action"
+      ]
+    },
+    {
+      "line": 1289,
+      "selector": ".transition-action:hover",
+      "tokens": [
+        "transition-action"
+      ]
+    },
+    {
+      "line": 1294,
+      "selector": ".transition-action:disabled",
+      "tokens": [
+        "transition-action"
+      ]
+    },
+    {
+      "line": 1300,
+      "selector": ".transition-action-delete:hover",
+      "tokens": [
+        "transition-action-delete"
+      ]
+    },
+    {
+      "line": 1306,
+      "selector": "/* 流程概览列表（domain tab） */ .procs-ov-list",
+      "tokens": [
+        "procs-ov-list"
+      ]
+    },
+    {
+      "line": 1308,
+      "selector": ".proc-ov-item",
+      "tokens": [
+        "proc-ov-item"
+      ]
+    },
+    {
+      "line": 1312,
+      "selector": ".proc-ov-hdr",
+      "tokens": [
+        "proc-ov-hdr"
+      ]
+    },
+    {
+      "line": 1319,
+      "selector": ".proc-ov-hdr:hover",
+      "tokens": [
+        "proc-ov-hdr"
+      ]
+    },
+    {
+      "line": 1320,
+      "selector": ".proc-ov-goto",
+      "tokens": [
+        "proc-ov-goto"
+      ]
+    },
+    {
+      "line": 1321,
+      "selector": ".proc-ov-diag",
+      "tokens": [
+        "proc-ov-diag"
+      ]
+    },
+    {
+      "line": 1326,
+      "selector": ".proc-ov-diag svg",
+      "tokens": [
+        "proc-ov-diag"
+      ]
+    },
+    {
+      "line": 1328,
+      "selector": "/* ── 自定义流程图（HTML，任务横线 + 实体正下方） ── */ .pf-wrap",
+      "tokens": [
+        "pf-wrap"
+      ]
+    },
+    {
+      "line": 1339,
+      "selector": "/* 开始 / 结束 椭圆 */ .pf-se",
+      "tokens": [
+        "pf-se"
+      ]
+    },
+    {
+      "line": 1350,
+      "selector": "/* 连接箭头 */ .pf-arrow",
+      "tokens": [
+        "pf-arrow"
+      ]
+    },
+    {
+      "line": 1359,
+      "selector": "/* 任务列（上：节点框，下：虚线+标签） */ .pf-col",
+      "tokens": [
+        "pf-col"
+      ]
+    },
+    {
+      "line": 1368,
+      "selector": "/* 任务节点框 */ .pf-task",
+      "tokens": [
+        "pf-task"
+      ]
+    },
+    {
+      "line": 1382,
+      "selector": ".pf-task.pf-clickable",
+      "tokens": [
+        "pf-clickable",
+        "pf-task"
+      ]
+    },
+    {
+      "line": 1383,
+      "selector": ".pf-task.pf-clickable:hover",
+      "tokens": [
+        "pf-clickable",
+        "pf-task"
+      ]
+    },
+    {
+      "line": 1384,
+      "selector": ".pf-tn",
+      "tokens": [
+        "pf-tn"
+      ]
+    },
+    {
+      "line": 1385,
+      "selector": ".pf-role-list",
+      "tokens": [
+        "pf-role-list"
+      ]
+    },
+    {
+      "line": 1392,
+      "selector": ".pf-role-chip",
+      "tokens": [
+        "pf-role-chip"
+      ]
+    },
+    {
+      "line": 1406,
+      "selector": ".pf-task-multi-role",
+      "tokens": [
+        "pf-task-multi-role"
+      ]
+    },
+    {
+      "line": 1409,
+      "selector": ".pf-gateway, .ps-gateway",
+      "tokens": [
+        "pf-gateway",
+        "ps-gateway"
+      ]
+    },
+    {
+      "line": 1424,
+      "selector": ".pf-boundary",
+      "tokens": [
+        "pf-boundary"
+      ]
+    },
+    {
+      "line": 1439,
+      "selector": ".pf-start, .pf-end",
+      "tokens": [
+        "pf-end",
+        "pf-start"
+      ]
+    },
+    {
+      "line": 1445,
+      "selector": ".pf-edge-label, .ps-edge-label",
+      "tokens": [
+        "pf-edge-label",
+        "ps-edge-label"
+      ]
+    },
+    {
+      "line": 1459,
+      "selector": ".pf-arrow",
+      "tokens": [
+        "pf-arrow"
+      ]
+    },
+    {
+      "line": 1465,
+      "selector": ".pf-branch-list",
+      "tokens": [
+        "pf-branch-list"
+      ]
+    },
+    {
+      "line": 1474,
+      "selector": "/* 垂直虚线 */ .pf-vline",
+      "tokens": [
+        "pf-vline"
+      ]
+    },
+    {
+      "line": 1480,
+      "selector": "/* 实体标签堆 */ .pf-tags",
+      "tokens": [
+        "pf-tags"
+      ]
+    },
+    {
+      "line": 1487,
+      "selector": ".pf-tag",
+      "tokens": [
+        "pf-tag"
+      ]
+    },
+    {
+      "line": 1496,
+      "selector": ".pf-graph-wrap",
+      "tokens": [
+        "pf-graph-wrap"
+      ]
+    },
+    {
+      "line": 1504,
+      "selector": ".pf-link-layer",
+      "tokens": [
+        "pf-link-layer"
+      ]
+    },
+    {
+      "line": 1511,
+      "selector": ".pf-link",
+      "tokens": [
+        "pf-link"
+      ]
+    },
+    {
+      "line": 1518,
+      "selector": ".pf-loop-link, .pf-return-link",
+      "tokens": [
+        "pf-loop-link",
+        "pf-return-link"
+      ]
+    },
+    {
+      "line": 1522,
+      "selector": ".pf-graph-wrap .pf-col",
+      "tokens": [
+        "pf-col",
+        "pf-graph-wrap"
+      ]
+    },
+    {
+      "line": 1527,
+      "selector": ".pf-graph-wrap .pf-boundary",
+      "tokens": [
+        "pf-boundary",
+        "pf-graph-wrap"
+      ]
+    },
+    {
+      "line": 1531,
+      "selector": ".pf-graph-wrap .pf-edge-label",
+      "tokens": [
+        "pf-edge-label",
+        "pf-graph-wrap"
+      ]
+    },
+    {
+      "line": 1535,
+      "selector": ".pf-wrap.pf-wrap-has-return",
+      "tokens": [
+        "pf-wrap",
+        "pf-wrap-has-return"
+      ]
+    },
+    {
+      "line": 1536,
+      "selector": ".pf-wrap",
+      "tokens": [
+        "pf-wrap"
+      ]
+    },
+    {
+      "line": 1537,
+      "selector": ".pf-se",
+      "tokens": [
+        "pf-se"
+      ]
+    },
+    {
+      "line": 1538,
+      "selector": ".pf-arrow",
+      "tokens": [
+        "pf-arrow"
+      ]
+    },
+    {
+      "line": 1539,
+      "selector": ".pf-return-overlay",
+      "tokens": [
+        "pf-return-overlay"
+      ]
+    },
+    {
+      "line": 1547,
+      "selector": ".pf-return-line",
+      "tokens": [
+        "pf-return-line"
+      ]
+    },
+    {
+      "line": 1555,
+      "selector": "/* 缩放控件 */ .zoom-controls",
+      "tokens": [
+        "zoom-controls"
+      ]
+    },
+    {
+      "line": 1559,
+      "selector": ".zoom-btn",
+      "tokens": [
+        "zoom-btn"
+      ]
+    },
+    {
+      "line": 1567,
+      "selector": ".zoom-reset-btn",
+      "tokens": [
+        "zoom-reset-btn"
+      ]
+    },
+    {
+      "line": 1573,
+      "selector": ".zoom-btn:hover",
+      "tokens": [
+        "zoom-btn"
+      ]
+    },
+    {
+      "line": 1579,
+      "selector": ".edit-panel",
+      "tokens": [
+        "edit-panel"
+      ]
+    },
+    {
+      "line": 1583,
+      "selector": ".edit-panel-title",
+      "tokens": [
+        "edit-panel-title"
+      ]
+    },
+    {
+      "line": 1603,
+      "selector": ".sb-count-group",
+      "tokens": [
+        "sb-count-group"
+      ]
+    },
+    {
+      "line": 1609,
+      "selector": ".sb-count-labeled",
+      "tokens": [
+        "sb-count-labeled"
+      ]
+    },
+    {
+      "line": 1616,
+      "selector": ".sb-count-labeled .sb-count-label",
+      "tokens": [
+        "sb-count-label",
+        "sb-count-labeled"
+      ]
+    },
+    {
+      "line": 1621,
+      "selector": ".sb-count-labeled.entity-count",
+      "tokens": [
+        "entity-count",
+        "sb-count-labeled"
+      ]
+    },
+    {
+      "line": 1625,
+      "selector": ".sb-count-labeled.task-count",
+      "tokens": [
+        "sb-count-labeled",
+        "task-count"
+      ]
+    },
+    {
+      "line": 1645,
+      "selector": ".workbench-subtab-shell",
+      "tokens": [
+        "workbench-subtab-shell"
+      ]
+    },
+    {
+      "line": 1652,
+      "selector": ".workbench-subtab-actions",
+      "tokens": [
+        "workbench-subtab-actions"
+      ]
+    },
+    {
+      "line": 1659,
+      "selector": ".panorama-edit-menu",
+      "tokens": [
+        "panorama-edit-menu"
+      ]
+    },
+    {
+      "line": 1663,
+      "selector": ".panorama-edit-menu > summary",
+      "tokens": [
+        "panorama-edit-menu"
+      ]
+    },
+    {
+      "line": 1668,
+      "selector": ".panorama-edit-menu > summary::-webkit-details-marker",
+      "tokens": [
+        "panorama-edit-menu"
+      ]
+    },
+    {
+      "line": 1672,
+      "selector": ".panorama-edit-menu-list",
+      "tokens": [
+        "panorama-edit-menu-list"
+      ]
+    },
+    {
+      "line": 1687,
+      "selector": ".panorama-edit-menu-list button",
+      "tokens": [
+        "panorama-edit-menu-list"
+      ]
+    },
+    {
+      "line": 1700,
+      "selector": ".panorama-edit-menu-list button:hover",
+      "tokens": [
+        "panorama-edit-menu-list"
+      ]
+    },
+    {
+      "line": 1704,
+      "selector": ".component-demo-scroll, .orchestration-demo-scroll",
+      "tokens": [
+        "component-demo-scroll",
+        "orchestration-demo-scroll"
+      ]
+    },
+    {
+      "line": 1738,
+      "selector": ".demo-card-grid",
+      "tokens": [
+        "demo-card-grid"
+      ]
+    },
+    {
+      "line": 1743,
+      "selector": ".demo-mini-card",
+      "tokens": [
+        "demo-mini-card"
+      ]
+    },
+    {
+      "line": 1751,
+      "selector": ".demo-mini-card strong",
+      "tokens": [
+        "demo-mini-card"
+      ]
+    },
+    {
+      "line": 1755,
+      "selector": ".demo-mini-card span",
+      "tokens": [
+        "demo-mini-card"
+      ]
+    },
+    {
+      "line": 1759,
+      "selector": ".demo-mini-card em",
+      "tokens": [
+        "demo-mini-card"
+      ]
+    },
+    {
+      "line": 1764,
+      "selector": ".demo-handoff",
+      "tokens": [
+        "demo-handoff"
+      ]
+    },
+    {
+      "line": 1769,
+      "selector": ".demo-handoff > div",
+      "tokens": [
+        "demo-handoff"
+      ]
+    },
+    {
+      "line": 1776,
+      "selector": ".demo-handoff h4",
+      "tokens": [
+        "demo-handoff"
+      ]
+    },
+    {
+      "line": 1781,
+      "selector": ".demo-handoff span",
+      "tokens": [
+        "demo-handoff"
+      ]
+    },
+    {
+      "line": 1791,
+      "selector": ".orchestration-panel .demo-flow",
+      "tokens": [
+        "demo-flow",
+        "orchestration-panel"
+      ]
+    },
+    {
+      "line": 1798,
+      "selector": ".demo-flow-node",
+      "tokens": [
+        "demo-flow-node"
+      ]
+    },
+    {
+      "line": 1810,
+      "selector": ".demo-flow-node.strong",
+      "tokens": [
+        "demo-flow-node",
+        "strong"
+      ]
+    },
+    {
+      "line": 1815,
+      "selector": ".demo-flow-arrow",
+      "tokens": [
+        "demo-flow-arrow"
+      ]
+    },
+    {
+      "line": 1833,
+      "selector": ".proc-drawer, .entity-drawer, .stage-drawer",
+      "tokens": [
+        "entity-drawer",
+        "proc-drawer",
+        "stage-drawer"
+      ]
+    },
+    {
+      "line": 1844,
+      "selector": ".entity-drawer",
+      "tokens": [
+        "entity-drawer"
+      ]
+    },
+    {
+      "line": 1848,
+      "selector": ".stage-drawer",
+      "tokens": [
+        "stage-drawer"
+      ]
+    },
+    {
+      "line": 1862,
+      "selector": "/* 实体关系图全高模式 */ .entity-diag-full",
+      "tokens": [
+        "entity-diag-full"
+      ]
+    },
+    {
+      "line": 1868,
+      "selector": ".entity-diag-full.entity-drawer-shift",
+      "tokens": [
+        "entity-diag-full",
+        "entity-drawer-shift"
+      ]
+    },
+    {
+      "line": 1888,
+      "selector": ".dc-sep",
+      "tokens": [
+        "dc-sep"
+      ]
+    },
+    {
+      "line": 1889,
+      "selector": ".drawer-actions",
+      "tokens": [
+        "drawer-actions"
+      ]
+    },
+    {
+      "line": 1897,
+      "selector": ".drawer-diag",
+      "tokens": [
+        "drawer-diag"
+      ]
+    },
+    {
+      "line": 1907,
+      "selector": ".drawer-diag-bar",
+      "tokens": [
+        "drawer-diag-bar"
+      ]
+    },
+    {
+      "line": 1925,
+      "selector": ".drawer-diag .live-diagram",
+      "tokens": [
+        "drawer-diag",
+        "live-diagram"
+      ]
+    },
+    {
+      "line": 1931,
+      "selector": ".drawer-empty",
+      "tokens": [
+        "drawer-empty"
+      ]
+    },
+    {
+      "line": 1954,
+      "selector": ".stage-card-head",
+      "tokens": [
+        "stage-card-head"
+      ]
+    },
+    {
+      "line": 1991,
+      "selector": ".stage-card-side-actions",
+      "tokens": [
+        "stage-card-side-actions"
+      ]
+    },
+    {
+      "line": 1997,
+      "selector": ".stage-card-breadcrumb",
+      "tokens": [
+        "stage-card-breadcrumb"
+      ]
+    },
+    {
+      "line": 2016,
+      "selector": ".stage-card-subtitle",
+      "tokens": [
+        "stage-card-subtitle"
+      ]
+    },
+    {
+      "line": 2022,
+      "selector": ".stage-header-warning, .stage-warning",
+      "tokens": [
+        "stage-header-warning",
+        "stage-warning"
+      ]
+    },
+    {
+      "line": 2034,
+      "selector": ".stage-warning",
+      "tokens": [
+        "stage-warning"
+      ]
+    },
+    {
+      "line": 2101,
+      "selector": ".preview-stage-node",
+      "tokens": [
+        "preview-stage-node"
+      ]
+    },
+    {
+      "line": 2126,
+      "selector": ".stage-graph-node-meta",
+      "tokens": [
+        "stage-graph-node-meta"
+      ]
+    },
+    {
+      "line": 2208,
+      "selector": ".stage-flow-link-list",
+      "tokens": [
+        "stage-flow-link-list"
+      ]
+    },
+    {
+      "line": 2214,
+      "selector": ".stage-flow-link-row",
+      "tokens": [
+        "stage-flow-link-row"
+      ]
+    },
+    {
+      "line": 2221,
+      "selector": ".stage-flow-empty-note",
+      "tokens": [
+        "stage-flow-empty-note"
+      ]
+    },
+    {
+      "line": 2322,
+      "selector": ".stage-flow-group-editor",
+      "tokens": [
+        "stage-flow-group-editor"
+      ]
+    },
+    {
+      "line": 2335,
+      "selector": ".stage-flow-group-editor span",
+      "tokens": [
+        "stage-flow-group-editor"
+      ]
+    },
+    {
+      "line": 2339,
+      "selector": ".stage-flow-group-editor input",
+      "tokens": [
+        "stage-flow-group-editor"
+      ]
+    },
+    {
+      "line": 2350,
+      "selector": ".stage-flow-group-editor input:focus",
+      "tokens": [
+        "stage-flow-group-editor"
+      ]
+    },
+    {
+      "line": 2355,
+      "selector": ".stage-flow-group-editor button",
+      "tokens": [
+        "stage-flow-group-editor"
+      ]
+    },
+    {
+      "line": 2367,
+      "selector": ".stage-flow-group-editor button:hover",
+      "tokens": [
+        "stage-flow-group-editor"
+      ]
+    },
+    {
+      "line": 2443,
+      "selector": ".stage-flow-node-meta",
+      "tokens": [
+        "stage-flow-node-meta"
+      ]
+    },
+    {
+      "line": 2510,
+      "selector": ".stage-chain-graph",
+      "tokens": [
+        "stage-chain-graph"
+      ]
+    },
+    {
+      "line": 2513,
+      "selector": ".stage-chain-board",
+      "tokens": [
+        "stage-chain-board"
+      ]
+    },
+    {
+      "line": 2526,
+      "selector": ".stage-chain-track",
+      "tokens": [
+        "stage-chain-track"
+      ]
+    },
+    {
+      "line": 2534,
+      "selector": ".stage-chain-item",
+      "tokens": [
+        "stage-chain-item"
+      ]
+    },
+    {
+      "line": 2566,
+      "selector": ".stage-chain-node-title",
+      "tokens": [
+        "stage-chain-node-title"
+      ]
+    },
+    {
+      "line": 2574,
+      "selector": ".stage-chain-link",
+      "tokens": [
+        "stage-chain-link"
+      ]
+    },
+    {
+      "line": 2600,
+      "selector": ".value-stream-hscroll",
+      "tokens": [
+        "value-stream-hscroll"
+      ]
+    },
+    {
+      "line": 2837,
+      "selector": ".matrix-body-editors",
+      "tokens": [
+        "matrix-body-editors"
+      ]
+    },
+    {
+      "line": 2952,
+      "selector": ".value-stream-more",
+      "tokens": [
+        "value-stream-more"
+      ]
+    },
+    {
+      "line": 2964,
+      "selector": ".stage-editor-section + .stage-editor-section",
+      "tokens": [
+        "stage-editor-section"
+      ]
+    },
+    {
+      "line": 2967,
+      "selector": ".stage-editor-section-head",
+      "tokens": [
+        "stage-editor-section-head"
+      ]
+    },
+    {
+      "line": 2974,
+      "selector": ".stage-editor-section-head h5",
+      "tokens": [
+        "stage-editor-section-head"
+      ]
+    },
+    {
+      "line": 2978,
+      "selector": ".stage-link-list, .stage-member-list",
+      "tokens": [
+        "stage-link-list",
+        "stage-member-list"
+      ]
+    },
+    {
+      "line": 2984,
+      "selector": ".stage-link-row, .stage-member-chip, .stage-inline-row",
+      "tokens": [
+        "stage-inline-row",
+        "stage-link-row",
+        "stage-member-chip"
+      ]
+    },
+    {
+      "line": 2992,
+      "selector": ".stage-link-row select, .stage-inline-row select",
+      "tokens": [
+        "stage-inline-row",
+        "stage-link-row"
+      ]
+    },
+    {
+      "line": 2996,
+      "selector": ".stage-member-chip",
+      "tokens": [
+        "stage-member-chip"
+      ]
+    },
+    {
+      "line": 3003,
+      "selector": ".stage-link-row",
+      "tokens": [
+        "stage-link-row"
+      ]
+    },
+    {
+      "line": 3009,
+      "selector": ".stage-link-row.is-related",
+      "tokens": [
+        "is-related",
+        "stage-link-row"
+      ]
+    },
+    {
+      "line": 3013,
+      "selector": ".stage-link-focus-note",
+      "tokens": [
+        "stage-link-focus-note"
+      ]
+    },
+    {
+      "line": 3033,
+      "selector": ".stage-member-label",
+      "tokens": [
+        "stage-member-label"
+      ]
+    },
+    {
+      "line": 3039,
+      "selector": ".stage-member-actions, .row-actions",
+      "tokens": [
+        "row-actions",
+        "stage-member-actions"
+      ]
+    },
+    {
+      "line": 3087,
+      "selector": ".stage-inline-row",
+      "tokens": [
+        "stage-inline-row"
+      ]
+    },
+    {
+      "line": 3091,
+      "selector": ".stage-overview-editor-list",
+      "tokens": [
+        "stage-overview-editor-list"
+      ]
+    },
+    {
+      "line": 3096,
+      "selector": ".stage-overview-editor-row",
+      "tokens": [
+        "stage-overview-editor-row"
+      ]
+    },
+    {
+      "line": 3106,
+      "selector": ".stage-overview-editor-row.is-focused",
+      "tokens": [
+        "is-focused",
+        "stage-overview-editor-row"
+      ]
+    },
+    {
+      "line": 3110,
+      "selector": ".stage-overview-editor-row input",
+      "tokens": [
+        "stage-overview-editor-row"
+      ]
+    },
+    {
+      "line": 3113,
+      "selector": ".stage-overview-editor-row select",
+      "tokens": [
+        "stage-overview-editor-row"
+      ]
+    },
+    {
+      "line": 3117,
+      "selector": ".stage-overview-id-badge, .readonly-token",
+      "tokens": [
+        "readonly-token",
+        "stage-overview-id-badge"
+      ]
+    },
+    {
+      "line": 3142,
+      "selector": ".panorama-table-editor",
+      "tokens": [
+        "panorama-table-editor"
+      ]
+    },
+    {
+      "line": 3145,
+      "selector": ".panorama-config-block + .panorama-config-block",
+      "tokens": [
+        "panorama-config-block"
+      ]
+    },
+    {
+      "line": 3148,
+      "selector": ".panorama-config-title",
+      "tokens": [
+        "panorama-config-title"
+      ]
+    },
+    {
+      "line": 3158,
+      "selector": ".panorama-config-list",
+      "tokens": [
+        "panorama-config-list"
+      ]
+    },
+    {
+      "line": 3163,
+      "selector": ".panorama-config-row, .panorama-cell-editor-row",
+      "tokens": [
+        "panorama-cell-editor-row",
+        "panorama-config-row"
+      ]
+    },
+    {
+      "line": 3173,
+      "selector": ".panorama-config-row",
+      "tokens": [
+        "panorama-config-row"
+      ]
+    },
+    {
+      "line": 3176,
+      "selector": ".panorama-lane-editor-row",
+      "tokens": [
+        "panorama-lane-editor-row"
+      ]
+    },
+    {
+      "line": 3179,
+      "selector": ".panorama-config-row input, .panorama-cell-editor-row input",
+      "tokens": [
+        "panorama-cell-editor-row",
+        "panorama-config-row"
+      ]
+    },
+    {
+      "line": 3183,
+      "selector": ".panorama-cell-editor-grid",
+      "tokens": [
+        "panorama-cell-editor-grid"
+      ]
+    },
+    {
+      "line": 3188,
+      "selector": ".panorama-cell-editor-row",
+      "tokens": [
+        "panorama-cell-editor-row"
+      ]
+    },
+    {
+      "line": 3191,
+      "selector": ".panorama-cell-coordinate",
+      "tokens": [
+        "panorama-cell-coordinate"
+      ]
+    },
+    {
+      "line": 3203,
+      "selector": ".stage-link-arrow",
+      "tokens": [
+        "stage-link-arrow"
+      ]
+    },
+    {
+      "line": 3207,
+      "selector": ".stage-tip",
+      "tokens": [
+        "stage-tip"
+      ]
+    },
+    {
+      "line": 3216,
+      "selector": ".proc-subdrawer",
+      "tokens": [
+        "proc-subdrawer"
+      ]
+    },
+    {
+      "line": 3238,
+      "selector": ".subdrawer-head",
+      "tokens": [
+        "subdrawer-head"
+      ]
+    },
+    {
+      "line": 3248,
+      "selector": ".subdrawer-body",
+      "tokens": [
+        "subdrawer-body"
+      ]
+    },
+    {
+      "line": 3253,
+      "selector": ".subdrawer-toolbar",
+      "tokens": [
+        "subdrawer-toolbar"
+      ]
+    },
+    {
+      "line": 3260,
+      "selector": ".orch-list",
+      "tokens": [
+        "orch-list"
+      ]
+    },
+    {
+      "line": 3265,
+      "selector": ".orch-card",
+      "tokens": [
+        "orch-card"
+      ]
+    },
+    {
+      "line": 3274,
+      "selector": ".asset-focus-flash",
+      "tokens": [
+        "asset-focus-flash"
+      ]
+    },
+    {
+      "line": 3282,
+      "selector": ".orch-row",
+      "tokens": [
+        "orch-row"
+      ]
+    },
+    {
+      "line": 3288,
+      "selector": ".orch-row + .orch-row",
+      "tokens": [
+        "orch-row"
+      ]
+    },
+    {
+      "line": 3294,
+      "selector": ".orch-spacer",
+      "tokens": [
+        "orch-spacer"
+      ]
+    },
+    {
+      "line": 3298,
+      "selector": ".node-summary-row",
+      "tokens": [
+        "node-summary-row"
+      ]
+    },
+    {
+      "line": 3304,
+      "selector": ".node-summary-pill",
+      "tokens": [
+        "node-summary-pill"
+      ]
+    },
+    {
+      "line": 3316,
+      "selector": "/* 可退回节点勾选 */ .repeat-toggle",
+      "tokens": [
+        "repeat-toggle"
+      ]
+    },
+    {
+      "line": 3322,
+      "selector": ".repeat-toggle input",
+      "tokens": [
+        "repeat-toggle"
+      ]
+    },
+    {
+      "line": 3323,
+      "selector": ".repeat-toggle:has(input:checked)",
+      "tokens": [
+        "repeat-toggle"
+      ]
+    },
+    {
+      "line": 3325,
+      "selector": "/* ─── 旧有两栏（保留给 data 兜底） ─────────────────────── */ .two-col",
+      "tokens": [
+        "two-col"
+      ]
+    },
+    {
+      "line": 3327,
+      "selector": ".list-panel",
+      "tokens": [
+        "list-panel"
+      ]
+    },
+    {
+      "line": 3331,
+      "selector": ".detail-panel",
+      "tokens": [
+        "detail-panel"
+      ]
+    },
+    {
+      "line": 3332,
+      "selector": ".list-panel-header",
+      "tokens": [
+        "list-panel-header"
+      ]
+    },
+    {
+      "line": 3337,
+      "selector": ".list-panel-body",
+      "tokens": [
+        "list-panel-body"
+      ]
+    },
+    {
+      "line": 3338,
+      "selector": ".list-item",
+      "tokens": [
+        "list-item"
+      ]
+    },
+    {
+      "line": 3342,
+      "selector": ".list-item:hover",
+      "tokens": [
+        "list-item"
+      ]
+    },
+    {
+      "line": 3344,
+      "selector": ".list-item-id",
+      "tokens": [
+        "list-item-id"
+      ]
+    },
+    {
+      "line": 3345,
+      "selector": ".list-item-name",
+      "tokens": [
+        "list-item-name"
+      ]
+    },
+    {
+      "line": 3346,
+      "selector": ".list-item-del",
+      "tokens": [
+        "list-item-del"
+      ]
+    },
+    {
+      "line": 3350,
+      "selector": ".list-item:hover .list-item-del",
+      "tokens": [
+        "list-item",
+        "list-item-del"
+      ]
+    },
+    {
+      "line": 3351,
+      "selector": ".list-item-del:hover",
+      "tokens": [
+        "list-item-del"
+      ]
+    },
+    {
+      "line": 3373,
+      "selector": ".orch-toolbar-actions",
+      "tokens": [
+        "orch-toolbar-actions"
+      ]
+    },
+    {
+      "line": 3380,
+      "selector": ".orch-toolbar-actions select",
+      "tokens": [
+        "orch-toolbar-actions"
+      ]
+    },
+    {
+      "line": 3390,
+      "selector": ".orch-reuse-block",
+      "tokens": [
+        "orch-reuse-block"
+      ]
+    },
+    {
+      "line": 3400,
+      "selector": ".orch-block-head, .orch-compose-head",
+      "tokens": [
+        "orch-block-head",
+        "orch-compose-head"
+      ]
+    },
+    {
+      "line": 3407,
+      "selector": ".orch-block-head strong, .orch-compose-head strong",
+      "tokens": [
+        "orch-block-head",
+        "orch-compose-head"
+      ]
+    },
+    {
+      "line": 3413,
+      "selector": ".orch-block-head span, .orch-compose-head span",
+      "tokens": [
+        "orch-block-head",
+        "orch-compose-head"
+      ]
+    },
+    {
+      "line": 3423,
+      "selector": ".orch-compose-head",
+      "tokens": [
+        "orch-compose-head"
+      ]
+    },
+    {
+      "line": 3426,
+      "selector": ".task-definition-node-actions",
+      "tokens": [
+        "task-definition-node-actions"
+      ]
+    },
+    {
+      "line": 3434,
+      "selector": ".orch-reuse-panel",
+      "tokens": [
+        "orch-reuse-panel"
+      ]
+    },
+    {
+      "line": 3442,
+      "selector": ".orch-reuse-panel select, .orch-reuse-panel input",
+      "tokens": [
+        "orch-reuse-panel"
+      ]
+    },
+    {
+      "line": 3453,
+      "selector": ".orch-reuse-panel select:disabled, .orch-reuse-panel input:disabled",
+      "tokens": [
+        "orch-reuse-panel"
+      ]
+    },
+    {
+      "line": 3458,
+      "selector": ".orch-reuse-more",
+      "tokens": [
+        "orch-reuse-more"
+      ]
+    },
+    {
+      "line": 3475,
+      "selector": ".task-form-list",
+      "tokens": [
+        "task-form-list"
+      ]
+    },
+    {
+      "line": 3505,
+      "selector": ".task-form-entity-summary",
+      "tokens": [
+        "task-form-entity-summary"
+      ]
+    },
+    {
+      "line": 3598,
+      "selector": ".task-rule-actions",
+      "tokens": [
+        "task-rule-actions"
+      ]
+    },
+    {
+      "line": 3605,
+      "selector": ".task-rule-list",
+      "tokens": [
+        "task-rule-list"
+      ]
+    },
+    {
+      "line": 3610,
+      "selector": ".task-rule-card",
+      "tokens": [
+        "task-rule-card"
+      ]
+    },
+    {
+      "line": 3619,
+      "selector": ".task-rule-head",
+      "tokens": [
+        "task-rule-head"
+      ]
+    },
+    {
+      "line": 3625,
+      "selector": ".task-rule-head input",
+      "tokens": [
+        "task-rule-head"
+      ]
+    },
+    {
+      "line": 3636,
+      "selector": ".task-rule-content",
+      "tokens": [
+        "task-rule-content"
+      ]
+    },
+    {
+      "line": 3649,
+      "selector": ".task-rule-content:focus",
+      "tokens": [
+        "task-rule-content"
+      ]
+    },
+    {
+      "line": 3653,
+      "selector": ".task-rule-content-preview",
+      "tokens": [
+        "task-rule-content-preview"
+      ]
+    },
+    {
+      "line": 3664,
+      "selector": ".task-rule-empty-content",
+      "tokens": [
+        "task-rule-empty-content"
+      ]
+    },
+    {
+      "line": 3668,
+      "selector": ".task-rule-content-actions",
+      "tokens": [
+        "task-rule-content-actions"
+      ]
+    },
+    {
+      "line": 3675,
+      "selector": ".task-rule-draft-hint",
+      "tokens": [
+        "task-rule-draft-hint"
+      ]
+    },
+    {
+      "line": 3681,
+      "selector": ".rich-text-field",
+      "tokens": [
+        "rich-text-field"
+      ]
+    },
+    {
+      "line": 3685,
+      "selector": ".rich-text-toolbar",
+      "tokens": [
+        "rich-text-toolbar"
+      ]
+    },
+    {
+      "line": 3701,
+      "selector": ".rich-text-field:focus-within .rich-text-toolbar, .rich-text-toolbar:hover",
+      "tokens": [
+        "rich-text-field",
+        "rich-text-toolbar"
+      ]
+    },
+    {
+      "line": 3706,
+      "selector": ".rich-text-btn",
+      "tokens": [
+        "rich-text-btn"
+      ]
+    },
+    {
+      "line": 3718,
+      "selector": ".rich-text-btn:hover",
+      "tokens": [
+        "rich-text-btn"
+      ]
+    },
+    {
+      "line": 3721,
+      "selector": ".rich-text-storage",
+      "tokens": [
+        "rich-text-storage"
+      ]
+    },
+    {
+      "line": 3724,
+      "selector": ".rich-text-editor",
+      "tokens": [
+        "rich-text-editor"
+      ]
+    },
+    {
+      "line": 3728,
+      "selector": ".rich-text-editor.step-note, .rich-text-editor.task-rule-content",
+      "tokens": [
+        "rich-text-editor",
+        "step-note",
+        "task-rule-content"
+      ]
+    },
+    {
+      "line": 3732,
+      "selector": ".rich-text-editor:empty::before",
+      "tokens": [
+        "rich-text-editor"
+      ]
+    },
+    {
+      "line": 3736,
+      "selector": ".rich-text-editor ul, .rich-text-editor ol, .rich-text-rendered ul, .rich-text-rendered ol",
+      "tokens": [
+        "rich-text-editor",
+        "rich-text-rendered"
+      ]
+    },
+    {
+      "line": 3743,
+      "selector": ".rich-text-editor ol, .rich-text-rendered ol",
+      "tokens": [
+        "rich-text-editor",
+        "rich-text-rendered"
+      ]
+    },
+    {
+      "line": 3747,
+      "selector": ".rich-text-editor ol ol, .rich-text-rendered ol ol",
+      "tokens": [
+        "rich-text-editor",
+        "rich-text-rendered"
+      ]
+    },
+    {
+      "line": 3753,
+      "selector": ".rich-text-editor ul ul, .rich-text-rendered ul ul",
+      "tokens": [
+        "rich-text-editor",
+        "rich-text-rendered"
+      ]
+    },
+    {
+      "line": 3759,
+      "selector": ".rich-text-editor li::marker, .rich-text-rendered li::marker",
+      "tokens": [
+        "rich-text-editor",
+        "rich-text-rendered"
+      ]
+    },
+    {
+      "line": 3764,
+      "selector": ".rich-text-editor li, .rich-text-rendered li",
+      "tokens": [
+        "rich-text-editor",
+        "rich-text-rendered"
+      ]
+    },
+    {
+      "line": 3768,
+      "selector": ".rich-text-editor strong, .rich-text-rendered strong, .rich-text-editor b, .rich-text-rendered b",
+      "tokens": [
+        "rich-text-editor",
+        "rich-text-rendered"
+      ]
+    },
+    {
+      "line": 3775,
+      "selector": ".orch-card .step-note-empty, .orch-card .step-note-preview, .orch-card .step-note-editor",
+      "tokens": [
+        "orch-card",
+        "step-note-editor",
+        "step-note-empty",
+        "step-note-preview"
+      ]
+    },
+    {
+      "line": 3780,
+      "selector": ".node-perspective-switch",
+      "tokens": [
+        "node-perspective-switch"
+      ]
+    },
+    {
+      "line": 3790,
+      "selector": ".preview-matrix-stage-list",
+      "tokens": [
+        "preview-matrix-stage-list"
+      ]
+    },
+    {
+      "line": 3796,
+      "selector": ".preview-matrix-stage",
+      "tokens": [
+        "preview-matrix-stage"
+      ]
+    },
+    {
+      "line": 3810,
+      "selector": ".preview-matrix-stage strong",
+      "tokens": [
+        "preview-matrix-stage"
+      ]
+    },
+    {
+      "line": 3815,
+      "selector": ".preview-matrix-stage em",
+      "tokens": [
+        "preview-matrix-stage"
+      ]
+    },
+    {
+      "line": 3821,
+      "selector": ".node-perspective-btn",
+      "tokens": [
+        "node-perspective-btn"
+      ]
+    },
+    {
+      "line": 3836,
+      "selector": ".node-perspective-panel",
+      "tokens": [
+        "node-perspective-panel"
+      ]
+    },
+    {
+      "line": 3846,
+      "selector": ".orch-index",
+      "tokens": [
+        "orch-index"
+      ]
+    },
+    {
+      "line": 3858,
+      "selector": ".orch-row-main",
+      "tokens": [
+        "orch-row-main"
+      ]
+    },
+    {
+      "line": 3861,
+      "selector": ".orch-row-secondary",
+      "tokens": [
+        "orch-row-secondary"
+      ]
+    },
+    {
+      "line": 3864,
+      "selector": ".orch-tech-field",
+      "tokens": [
+        "orch-tech-field"
+      ]
+    },
+    {
+      "line": 3871,
+      "selector": ".orch-tech-field-wide",
+      "tokens": [
+        "orch-tech-field-wide"
+      ]
+    },
+    {
+      "line": 3874,
+      "selector": ".orch-tech-field span",
+      "tokens": [
+        "orch-tech-field"
+      ]
+    },
+    {
+      "line": 3880,
+      "selector": ".orch-actions",
+      "tokens": [
+        "orch-actions"
+      ]
+    },
+    {
+      "line": 3886,
+      "selector": ".orch-name",
+      "tokens": [
+        "orch-name"
+      ]
+    },
+    {
+      "line": 3889,
+      "selector": ".orch-flow-frame",
+      "tokens": [
+        "orch-flow-frame"
+      ]
+    },
+    {
+      "line": 3896,
+      "selector": ".orch-flow-node-label",
+      "tokens": [
+        "orch-flow-node-label"
+      ]
+    },
+    {
+      "line": 3907,
+      "selector": ".orch-flow-track",
+      "tokens": [
+        "orch-flow-track"
+      ]
+    },
+    {
+      "line": 3914,
+      "selector": ".orch-flow-item",
+      "tokens": [
+        "orch-flow-item"
+      ]
+    },
+    {
+      "line": 3919,
+      "selector": ".orch-flow-card",
+      "tokens": [
+        "orch-flow-card"
+      ]
+    },
+    {
+      "line": 3931,
+      "selector": ".orch-flow-card strong",
+      "tokens": [
+        "orch-flow-card"
+      ]
+    },
+    {
+      "line": 3937,
+      "selector": ".orch-flow-card span",
+      "tokens": [
+        "orch-flow-card"
+      ]
+    },
+    {
+      "line": 3943,
+      "selector": ".orch-flow-card.tone-query",
+      "tokens": [
+        "orch-flow-card",
+        "tone-query"
+      ]
+    },
+    {
+      "line": 3947,
+      "selector": ".orch-flow-card.tone-check",
+      "tokens": [
+        "orch-flow-card",
+        "tone-check"
+      ]
+    },
+    {
+      "line": 3951,
+      "selector": ".orch-flow-card.tone-compute",
+      "tokens": [
+        "orch-flow-card",
+        "tone-compute"
+      ]
+    },
+    {
+      "line": 3955,
+      "selector": ".orch-flow-card.tone-service",
+      "tokens": [
+        "orch-flow-card",
+        "tone-service"
+      ]
+    },
+    {
+      "line": 3959,
+      "selector": ".orch-flow-card.tone-mutate",
+      "tokens": [
+        "orch-flow-card",
+        "tone-mutate"
+      ]
+    },
+    {
+      "line": 3963,
+      "selector": ".orch-flow-card.tone-custom",
+      "tokens": [
+        "orch-flow-card",
+        "tone-custom"
+      ]
+    },
+    {
+      "line": 3967,
+      "selector": ".orch-flow-index",
+      "tokens": [
+        "orch-flow-index"
+      ]
+    },
+    {
+      "line": 3980,
+      "selector": ".orch-flow-text",
+      "tokens": [
+        "orch-flow-text"
+      ]
+    },
+    {
+      "line": 3983,
+      "selector": ".orch-flow-arrow",
+      "tokens": [
+        "orch-flow-arrow"
+      ]
+    },
+    {
+      "line": 3989,
+      "selector": ".orch-flow-empty",
+      "tokens": [
+        "orch-flow-empty"
+      ]
+    },
+    {
+      "line": 3999,
+      "selector": ".ptf-wrap",
+      "tokens": [
+        "ptf-wrap"
+      ]
+    },
+    {
+      "line": 4006,
+      "selector": ".ptf-se",
+      "tokens": [
+        "ptf-se"
+      ]
+    },
+    {
+      "line": 4021,
+      "selector": ".ptf-outer-arrow, .ptf-inner-arrow",
+      "tokens": [
+        "ptf-inner-arrow",
+        "ptf-outer-arrow"
+      ]
+    },
+    {
+      "line": 4032,
+      "selector": ".ptf-node-frame",
+      "tokens": [
+        "ptf-node-frame"
+      ]
+    },
+    {
+      "line": 4049,
+      "selector": ".ptf-node-head",
+      "tokens": [
+        "ptf-node-head"
+      ]
+    },
+    {
+      "line": 4056,
+      "selector": ".ptf-node-id",
+      "tokens": [
+        "ptf-node-id"
+      ]
+    },
+    {
+      "line": 4069,
+      "selector": ".ptf-node-name",
+      "tokens": [
+        "ptf-node-name"
+      ]
+    },
+    {
+      "line": 4074,
+      "selector": ".ptf-node-track",
+      "tokens": [
+        "ptf-node-track"
+      ]
+    },
+    {
+      "line": 4080,
+      "selector": ".ptf-task-item",
+      "tokens": [
+        "ptf-task-item"
+      ]
+    },
+    {
+      "line": 4092,
+      "selector": ".ptf-task-item.tone-query",
+      "tokens": [
+        "ptf-task-item",
+        "tone-query"
+      ]
+    },
+    {
+      "line": 4093,
+      "selector": ".ptf-task-item.tone-check",
+      "tokens": [
+        "ptf-task-item",
+        "tone-check"
+      ]
+    },
+    {
+      "line": 4094,
+      "selector": ".ptf-task-item.tone-compute",
+      "tokens": [
+        "ptf-task-item",
+        "tone-compute"
+      ]
+    },
+    {
+      "line": 4095,
+      "selector": ".ptf-task-item.tone-service",
+      "tokens": [
+        "ptf-task-item",
+        "tone-service"
+      ]
+    },
+    {
+      "line": 4096,
+      "selector": ".ptf-task-item.tone-mutate",
+      "tokens": [
+        "ptf-task-item",
+        "tone-mutate"
+      ]
+    },
+    {
+      "line": 4097,
+      "selector": ".ptf-task-item.tone-custom",
+      "tokens": [
+        "ptf-task-item",
+        "tone-custom"
+      ]
+    },
+    {
+      "line": 4098,
+      "selector": ".ptf-task-index",
+      "tokens": [
+        "ptf-task-index"
+      ]
+    },
+    {
+      "line": 4111,
+      "selector": ".ptf-task-text",
+      "tokens": [
+        "ptf-task-text"
+      ]
+    },
+    {
+      "line": 4114,
+      "selector": ".ptf-task-text strong",
+      "tokens": [
+        "ptf-task-text"
+      ]
+    },
+    {
+      "line": 4120,
+      "selector": ".ptf-task-text span",
+      "tokens": [
+        "ptf-task-text"
+      ]
+    },
+    {
+      "line": 4126,
+      "selector": ".ptf-empty",
+      "tokens": [
+        "ptf-empty"
+      ]
+    },
+    {
+      "line": 4137,
+      "selector": "/* ─── 步骤列表 ───────────────────────────────────────────── */ .step-list",
+      "tokens": [
+        "step-list"
+      ]
+    },
+    {
+      "line": 4139,
+      "selector": ".step-row",
+      "tokens": [
+        "step-row"
+      ]
+    },
+    {
+      "line": 4143,
+      "selector": ".step-row-top",
+      "tokens": [
+        "step-row-top"
+      ]
+    },
+    {
+      "line": 4149,
+      "selector": ".step-num",
+      "tokens": [
+        "step-num"
+      ]
+    },
+    {
+      "line": 4150,
+      "selector": ".step-name",
+      "tokens": [
+        "step-name"
+      ]
+    },
+    {
+      "line": 4151,
+      "selector": ".step-name:focus, .step-name[style*=\"height\"]",
+      "tokens": [
+        "step-name"
+      ]
+    },
+    {
+      "line": 4153,
+      "selector": ".step-type",
+      "tokens": [
+        "step-type"
+      ]
+    },
+    {
+      "line": 4154,
+      "selector": "input.step-type-custom",
+      "tokens": [
+        "step-type-custom"
+      ]
+    },
+    {
+      "line": 4192,
+      "selector": "/* 条件/备注 textarea — 全宽，自动撑高 */ .step-note",
+      "tokens": [
+        "step-note"
+      ]
+    },
+    {
+      "line": 4200,
+      "selector": ".step-note:focus",
+      "tokens": [
+        "step-note"
+      ]
+    },
+    {
+      "line": 4205,
+      "selector": ".step-note-empty",
+      "tokens": [
+        "step-note-empty"
+      ]
+    },
+    {
+      "line": 4209,
+      "selector": ".step-note-preview",
+      "tokens": [
+        "step-note-preview"
+      ]
+    },
+    {
+      "line": 4218,
+      "selector": ".step-note-preview span",
+      "tokens": [
+        "step-note-preview"
+      ]
+    },
+    {
+      "line": 4224,
+      "selector": ".step-note-editor",
+      "tokens": [
+        "step-note-editor"
+      ]
+    },
+    {
+      "line": 4230,
+      "selector": ".step-note-actions",
+      "tokens": [
+        "step-note-actions"
+      ]
+    },
+    {
+      "line": 4237,
+      "selector": ".step-note-tip",
+      "tokens": [
+        "step-note-tip"
+      ]
+    },
+    {
+      "line": 4252,
+      "selector": ".badge-Query",
+      "tokens": [
+        "badge-Query"
+      ]
+    },
+    {
+      "line": 4253,
+      "selector": ".badge-Check",
+      "tokens": [
+        "badge-Check"
+      ]
+    },
+    {
+      "line": 4254,
+      "selector": ".badge-Compute",
+      "tokens": [
+        "badge-Compute"
+      ]
+    },
+    {
+      "line": 4255,
+      "selector": ".badge-Mutate",
+      "tokens": [
+        "badge-Mutate"
+      ]
+    },
+    {
+      "line": 4256,
+      "selector": ".badge-Fill",
+      "tokens": [
+        "badge-Fill"
+      ]
+    },
+    {
+      "line": 4257,
+      "selector": ".badge-Select",
+      "tokens": [
+        "badge-Select"
+      ]
+    },
+    {
+      "line": 4259,
+      "selector": "/* ─── 实体操作标签 ───────────────────────────────────────── */ .eop-list",
+      "tokens": [
+        "eop-list"
+      ]
+    },
+    {
+      "line": 4261,
+      "selector": ".eop-tag",
+      "tokens": [
+        "eop-tag"
+      ]
+    },
+    {
+      "line": 4266,
+      "selector": ".eop-name",
+      "tokens": [
+        "eop-name"
+      ]
+    },
+    {
+      "line": 4269,
+      "selector": ".eop-name:hover",
+      "tokens": [
+        "eop-name"
+      ]
+    },
+    {
+      "line": 4270,
+      "selector": ".eop-ops",
+      "tokens": [
+        "eop-ops"
+      ]
+    },
+    {
+      "line": 4271,
+      "selector": ".op-cb",
+      "tokens": [
+        "op-cb"
+      ]
+    },
+    {
+      "line": 4272,
+      "selector": ".op-cb input",
+      "tokens": [
+        "op-cb"
+      ]
+    },
+    {
+      "line": 4273,
+      "selector": ".op-c",
+      "tokens": [
+        "op-c"
+      ]
+    },
+    {
+      "line": 4274,
+      "selector": ".op-u",
+      "tokens": [
+        "op-u"
+      ]
+    },
+    {
+      "line": 4275,
+      "selector": ".op-d",
+      "tokens": [
+        "op-d"
+      ]
+    },
+    {
+      "line": 4276,
+      "selector": ".eop-del",
+      "tokens": [
+        "eop-del"
+      ]
+    },
+    {
+      "line": 4278,
+      "selector": ".eop-del:hover",
+      "tokens": [
+        "eop-del"
+      ]
+    },
+    {
+      "line": 4280,
+      "selector": "/* 关联实体选择行 */ .add-eop-row",
+      "tokens": [
+        "add-eop-row"
+      ]
+    },
+    {
+      "line": 4286,
+      "selector": ".add-eop-row select",
+      "tokens": [
+        "add-eop-row"
+      ]
+    },
+    {
+      "line": 4396,
+      "selector": ".prototype-upload-hint",
+      "tokens": [
+        "prototype-upload-hint"
+      ]
+    },
+    {
+      "line": 4403,
+      "selector": "/* ─── 任务引用标签 ───────────────────────────────────────── */ .task-ref-list",
+      "tokens": [
+        "task-ref-list"
+      ]
+    },
+    {
+      "line": 4405,
+      "selector": ".task-ref",
+      "tokens": [
+        "task-ref"
+      ]
+    },
+    {
+      "line": 4409,
+      "selector": ".task-ref:hover",
+      "tokens": [
+        "task-ref"
+      ]
+    },
+    {
+      "line": 4412,
+      "selector": "/* ─── 字段表格 ───────────────────────────────────────────── */ .field-table",
+      "tokens": [
+        "field-table"
+      ]
+    },
+    {
+      "line": 4414,
+      "selector": ".field-table th",
+      "tokens": [
+        "field-table"
+      ]
+    },
+    {
+      "line": 4418,
+      "selector": ".field-table td",
+      "tokens": [
+        "field-table"
+      ]
+    },
+    {
+      "line": 4419,
+      "selector": ".field-table tr:hover td",
+      "tokens": [
+        "field-table"
+      ]
+    },
+    {
+      "line": 4420,
+      "selector": ".field-table input[type=text]",
+      "tokens": [
+        "field-table"
+      ]
+    },
+    {
+      "line": 4421,
+      "selector": ".field-table input[type=checkbox]",
+      "tokens": [
+        "field-table"
+      ]
+    },
+    {
+      "line": 4422,
+      "selector": ".field-status-cell",
+      "tokens": [
+        "field-status-cell"
+      ]
+    },
+    {
+      "line": 4423,
+      "selector": ".field-status-role-wrap",
+      "tokens": [
+        "field-status-role-wrap"
+      ]
+    },
+    {
+      "line": 4431,
+      "selector": ".field-status-role-select",
+      "tokens": [
+        "field-status-role-select"
+      ]
+    },
+    {
+      "line": 4442,
+      "selector": ".field-status-role-select:focus",
+      "tokens": [
+        "field-status-role-select"
+      ]
+    },
+    {
+      "line": 4445,
+      "selector": ".field-status-role-wrap:focus-within",
+      "tokens": [
+        "field-status-role-wrap"
+      ]
+    },
+    {
+      "line": 4448,
+      "selector": ".field-status-role-wrap-none",
+      "tokens": [
+        "field-status-role-wrap-none"
+      ]
+    },
+    {
+      "line": 4452,
+      "selector": ".field-status-role-select-none",
+      "tokens": [
+        "field-status-role-select-none"
+      ]
+    },
+    {
+      "line": 4455,
+      "selector": ".field-status-role-wrap-primary",
+      "tokens": [
+        "field-status-role-wrap-primary"
+      ]
+    },
+    {
+      "line": 4459,
+      "selector": ".field-status-role-select-primary",
+      "tokens": [
+        "field-status-role-select-primary"
+      ]
+    },
+    {
+      "line": 4462,
+      "selector": ".field-status-role-wrap-secondary",
+      "tokens": [
+        "field-status-role-wrap-secondary"
+      ]
+    },
+    {
+      "line": 4466,
+      "selector": ".field-status-role-select-secondary",
+      "tokens": [
+        "field-status-role-select-secondary"
+      ]
+    },
+    {
+      "line": 4469,
+      "selector": ".field-actions-cell",
+      "tokens": [
+        "field-actions-cell"
+      ]
+    },
+    {
+      "line": 4470,
+      "selector": ".field-actions",
+      "tokens": [
+        "field-actions"
+      ]
+    },
+    {
+      "line": 4476,
+      "selector": ".field-action",
+      "tokens": [
+        "field-action"
+      ]
+    },
+    {
+      "line": 4491,
+      "selector": ".field-action:hover",
+      "tokens": [
+        "field-action"
+      ]
+    },
+    {
+      "line": 4496,
+      "selector": ".field-action:disabled",
+      "tokens": [
+        "field-action"
+      ]
+    },
+    {
+      "line": 4502,
+      "selector": ".field-del",
+      "tokens": [
+        "field-del"
+      ]
+    },
+    {
+      "line": 4504,
+      "selector": ".field-del:hover",
+      "tokens": [
+        "field-del"
+      ]
+    },
+    {
+      "line": 4505,
+      "selector": ".field-actions .field-del",
+      "tokens": [
+        "field-actions",
+        "field-del"
+      ]
+    },
+    {
+      "line": 4516,
+      "selector": "/* ─── 关系行 ─────────────────────────────────────────────── */ .rel-list",
+      "tokens": [
+        "rel-list"
+      ]
+    },
+    {
+      "line": 4518,
+      "selector": ".rel-row",
+      "tokens": [
+        "rel-row"
+      ]
+    },
+    {
+      "line": 4522,
+      "selector": ".rel-row select, .rel-row input",
+      "tokens": [
+        "rel-row"
+      ]
+    },
+    {
+      "line": 4523,
+      "selector": ".rel-row .rel-label-input",
+      "tokens": [
+        "rel-label-input",
+        "rel-row"
+      ]
+    },
+    {
+      "line": 4527,
+      "selector": ".rel-actions",
+      "tokens": [
+        "rel-actions"
+      ]
+    },
+    {
+      "line": 4534,
+      "selector": ".rel-action",
+      "tokens": [
+        "rel-action"
+      ]
+    },
+    {
+      "line": 4549,
+      "selector": ".rel-action:hover",
+      "tokens": [
+        "rel-action"
+      ]
+    },
+    {
+      "line": 4554,
+      "selector": ".rel-action:disabled",
+      "tokens": [
+        "rel-action"
+      ]
+    },
+    {
+      "line": 4560,
+      "selector": ".rel-actions .field-del",
+      "tokens": [
+        "field-del",
+        "rel-actions"
+      ]
+    },
+    {
+      "line": 4570,
+      "selector": ".rel-sym",
+      "tokens": [
+        "rel-sym"
+      ]
+    },
+    {
+      "line": 4571,
+      "selector": ".rel-scope-tip",
+      "tokens": [
+        "rel-scope-tip"
+      ]
+    },
+    {
+      "line": 4577,
+      "selector": "/* ─── 规则标签 ───────────────────────────────────────────── */ .rule-type-StepRule",
+      "tokens": [
+        "rule-type-StepRule"
+      ]
+    },
+    {
+      "line": 4579,
+      "selector": ".rule-type-DataRule",
+      "tokens": [
+        "rule-type-DataRule"
+      ]
+    },
+    {
+      "line": 4580,
+      "selector": ".rule-type-ComputeRule",
+      "tokens": [
+        "rule-type-ComputeRule"
+      ]
+    },
+    {
+      "line": 4582,
+      "selector": "/* ─── 业务域 Tab ─────────────────────────────────────────── */ .domain-scroll",
+      "tokens": [
+        "domain-scroll"
+      ]
+    },
+    {
+      "line": 4584,
+      "selector": ".domain-scroll.value-domain-scroll",
+      "tokens": [
+        "domain-scroll",
+        "value-domain-scroll"
+      ]
+    },
+    {
+      "line": 4595,
+      "selector": ".domain-scroll.value-domain-scroll > .workbench-subtab-shell",
+      "tokens": [
+        "domain-scroll",
+        "value-domain-scroll",
+        "workbench-subtab-shell"
+      ]
+    },
+    {
+      "line": 4599,
+      "selector": ".domain-scroll.value-domain-scroll > #value-domain-angular-host",
+      "tokens": [
+        "domain-scroll",
+        "value-domain-angular-host",
+        "value-domain-scroll"
+      ]
+    },
+    {
+      "line": 4605,
+      "selector": ".domain-subtab-bar",
+      "tokens": [
+        "domain-subtab-bar"
+      ]
+    },
+    {
+      "line": 4609,
+      "selector": ".domain-subtab-btn",
+      "tokens": [
+        "domain-subtab-btn"
+      ]
+    },
+    {
+      "line": 4615,
+      "selector": ".domain-subtab-btn:hover",
+      "tokens": [
+        "domain-subtab-btn"
+      ]
+    },
+    {
+      "line": 4622,
+      "selector": "/* 紧凑信息栏（业务域 / 角色 / 统一语言）*/ .domain-info-bar",
+      "tokens": [
+        "domain-info-bar"
+      ]
+    },
+    {
+      "line": 4624,
+      "selector": ".info-bar-row",
+      "tokens": [
+        "info-bar-row"
+      ]
+    },
+    {
+      "line": 4628,
+      "selector": ".info-bar-row:last-child",
+      "tokens": [
+        "info-bar-row"
+      ]
+    },
+    {
+      "line": 4629,
+      "selector": ".info-bar-label",
+      "tokens": [
+        "info-bar-label"
+      ]
+    },
+    {
+      "line": 4633,
+      "selector": "/* 统一语言行 hover 提示可交互 */ .info-bar-lang:hover",
+      "tokens": [
+        "info-bar-lang"
+      ]
+    },
+    {
+      "line": 4635,
+      "selector": ".lang-collapse-btn",
+      "tokens": [
+        "lang-collapse-btn"
+      ]
+    },
+    {
+      "line": 4641,
+      "selector": ".lang-summary",
+      "tokens": [
+        "lang-summary"
+      ]
+    },
+    {
+      "line": 4650,
+      "selector": "/* ─── 预览 Tab ───────────────────────────────────────────── */ .preview-wrap",
+      "tokens": [
+        "preview-wrap"
+      ]
+    },
+    {
+      "line": 4654,
+      "selector": ".preview-topbar",
+      "tokens": [
+        "preview-topbar"
+      ]
+    },
+    {
+      "line": 4659,
+      "selector": ".preview-loading-placeholder",
+      "tokens": [
+        "preview-loading-placeholder"
+      ]
+    },
+    {
+      "line": 4667,
+      "selector": ".pv-lazy-section",
+      "tokens": [
+        "pv-lazy-section"
+      ]
+    },
+    {
+      "line": 4674,
+      "selector": ".pv-lazy-section h3",
+      "tokens": [
+        "pv-lazy-section"
+      ]
+    },
+    {
+      "line": 4677,
+      "selector": ".pv-lazy-placeholder",
+      "tokens": [
+        "pv-lazy-placeholder"
+      ]
+    },
+    {
+      "line": 4697,
+      "selector": "/* 原文 */ .preview-md",
+      "tokens": [
+        "preview-md"
+      ]
+    },
+    {
+      "line": 4705,
+      "selector": "/* 大纲 + 渲染 */ .preview-body",
+      "tokens": [
+        "preview-body"
+      ]
+    },
+    {
+      "line": 4713,
+      "selector": ".preview-outline",
+      "tokens": [
+        "preview-outline"
+      ]
+    },
+    {
+      "line": 4719,
+      "selector": ".preview-outline-title",
+      "tokens": [
+        "preview-outline-title"
+      ]
+    },
+    {
+      "line": 4725,
+      "selector": ".preview-outline-list",
+      "tokens": [
+        "preview-outline-list"
+      ]
+    },
+    {
+      "line": 4730,
+      "selector": ".preview-outline-link",
+      "tokens": [
+        "preview-outline-link"
+      ]
+    },
+    {
+      "line": 4741,
+      "selector": ".preview-outline-link:hover",
+      "tokens": [
+        "preview-outline-link"
+      ]
+    },
+    {
+      "line": 4750,
+      "selector": "/* 渲染视图（Typora 风格） */ .preview-rendered",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4756,
+      "selector": ".preview-rendered h1",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4757,
+      "selector": ".preview-rendered h2",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4758,
+      "selector": ".preview-rendered h3",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4759,
+      "selector": ".preview-rendered h4",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4760,
+      "selector": ".preview-rendered p",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4761,
+      "selector": ".preview-rendered hr",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4762,
+      "selector": ".preview-rendered table",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4763,
+      "selector": ".preview-rendered th",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4764,
+      "selector": ".preview-rendered td",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4765,
+      "selector": ".preview-rendered tr:nth-child(even) td",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4766,
+      "selector": ".pv-rule-table td:last-child",
+      "tokens": [
+        "pv-rule-table"
+      ]
+    },
+    {
+      "line": 4769,
+      "selector": ".preview-rendered .pv-rich-text",
+      "tokens": [
+        "preview-rendered",
+        "pv-rich-text"
+      ]
+    },
+    {
+      "line": 4773,
+      "selector": ".preview-rendered .pv-rich-text ul, .preview-rendered .pv-rich-text ol",
+      "tokens": [
+        "preview-rendered",
+        "pv-rich-text"
+      ]
+    },
+    {
+      "line": 4778,
+      "selector": ".preview-rendered .pv-rich-text li + li",
+      "tokens": [
+        "preview-rendered",
+        "pv-rich-text"
+      ]
+    },
+    {
+      "line": 4781,
+      "selector": ".preview-rendered code",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4782,
+      "selector": ".preview-rendered pre",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4783,
+      "selector": ".preview-rendered pre code",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4784,
+      "selector": ".preview-rendered strong",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4785,
+      "selector": ".preview-rendered blockquote",
+      "tokens": [
+        "preview-rendered"
+      ]
+    },
+    {
+      "line": 4801,
+      "selector": ".ps-wrap",
+      "tokens": [
+        "ps-wrap"
+      ]
+    },
+    {
+      "line": 4809,
+      "selector": ".ps-lane",
+      "tokens": [
+        "ps-lane"
+      ]
+    },
+    {
+      "line": 4818,
+      "selector": ".ps-lane-title",
+      "tokens": [
+        "ps-lane-title"
+      ]
+    },
+    {
+      "line": 4832,
+      "selector": ".ps-lane-body",
+      "tokens": [
+        "ps-lane-body"
+      ]
+    },
+    {
+      "line": 4839,
+      "selector": ".ps-cell",
+      "tokens": [
+        "ps-cell"
+      ]
+    },
+    {
+      "line": 4845,
+      "selector": ".ps-task",
+      "tokens": [
+        "ps-task"
+      ]
+    },
+    {
+      "line": 4857,
+      "selector": ".ps-clickable",
+      "tokens": [
+        "ps-clickable"
+      ]
+    },
+    {
+      "line": 4858,
+      "selector": ".ps-clickable:hover",
+      "tokens": [
+        "ps-clickable"
+      ]
+    },
+    {
+      "line": 4859,
+      "selector": ".ps-draggable, .ps-lane-draggable",
+      "tokens": [
+        "ps-draggable",
+        "ps-lane-draggable"
+      ]
+    },
+    {
+      "line": 4863,
+      "selector": ".ps-draggable:active, .ps-lane-draggable:active",
+      "tokens": [
+        "ps-draggable",
+        "ps-lane-draggable"
+      ]
+    },
+    {
+      "line": 4867,
+      "selector": ".ps-draggable.is-dragging-ready, .ps-lane-draggable.is-dragging-ready",
+      "tokens": [
+        "is-dragging-ready",
+        "ps-draggable",
+        "ps-lane-draggable"
+      ]
+    },
+    {
+      "line": 4872,
+      "selector": ".ps-task-shared",
+      "tokens": [
+        "ps-task-shared"
+      ]
+    },
+    {
+      "line": 4875,
+      "selector": ".ps-task-shared::after",
+      "tokens": [
+        "ps-task-shared"
+      ]
+    },
+    {
+      "line": 4892,
+      "selector": ".ps-tn",
+      "tokens": [
+        "ps-tn"
+      ]
+    },
+    {
+      "line": 4898,
+      "selector": ".ps-role-list",
+      "tokens": [
+        "ps-role-list"
+      ]
+    },
+    {
+      "line": 4904,
+      "selector": ".ps-role-chip",
+      "tokens": [
+        "ps-role-chip"
+      ]
+    },
+    {
+      "line": 4914,
+      "selector": ".ps-edge-list",
+      "tokens": [
+        "ps-edge-list"
+      ]
+    },
+    {
+      "line": 4920,
+      "selector": ".ps-start, .ps-end",
+      "tokens": [
+        "ps-end",
+        "ps-start"
+      ]
+    },
+    {
+      "line": 4932,
+      "selector": ".ps-wrap",
+      "tokens": [
+        "ps-wrap"
+      ]
+    },
+    {
+      "line": 4941,
+      "selector": ".ps-lane",
+      "tokens": [
+        "ps-lane"
+      ]
+    },
+    {
+      "line": 4951,
+      "selector": ".ps-lane:last-of-type",
+      "tokens": [
+        "ps-lane"
+      ]
+    },
+    {
+      "line": 4954,
+      "selector": ".ps-lane-title",
+      "tokens": [
+        "ps-lane-title"
+      ]
+    },
+    {
+      "line": 4967,
+      "selector": ".ps-lane-title.ps-lane-draggable",
+      "tokens": [
+        "ps-lane-draggable",
+        "ps-lane-title"
+      ]
+    },
+    {
+      "line": 4970,
+      "selector": ".ps-link-layer",
+      "tokens": [
+        "ps-link-layer"
+      ]
+    },
+    {
+      "line": 4977,
+      "selector": ".ps-board-bg",
+      "tokens": [
+        "ps-board-bg"
+      ]
+    },
+    {
+      "line": 4981,
+      "selector": ".ps-board-border",
+      "tokens": [
+        "ps-board-border"
+      ]
+    },
+    {
+      "line": 4987,
+      "selector": ".ps-lane-title-bg",
+      "tokens": [
+        "ps-lane-title-bg"
+      ]
+    },
+    {
+      "line": 4991,
+      "selector": ".ps-lane-title-sep, .ps-lane-sep",
+      "tokens": [
+        "ps-lane-sep",
+        "ps-lane-title-sep"
+      ]
+    },
+    {
+      "line": 4997,
+      "selector": ".ps-link",
+      "tokens": [
+        "ps-link"
+      ]
+    },
+    {
+      "line": 5005,
+      "selector": ".ps-loop-link, .ps-return-link",
+      "tokens": [
+        "ps-loop-link",
+        "ps-return-link"
+      ]
+    },
+    {
+      "line": 5010,
+      "selector": ".ps-task",
+      "tokens": [
+        "ps-task"
+      ]
+    },
+    {
+      "line": 5022,
+      "selector": ".ps-tn",
+      "tokens": [
+        "ps-tn"
+      ]
+    },
+    {
+      "line": 5026,
+      "selector": ".ps-role-list",
+      "tokens": [
+        "ps-role-list"
+      ]
+    },
+    {
+      "line": 5029,
+      "selector": ".ps-gateway",
+      "tokens": [
+        "ps-gateway"
+      ]
+    },
+    {
+      "line": 5036,
+      "selector": ".ps-gateway-x",
+      "tokens": [
+        "ps-gateway-x"
+      ]
+    },
+    {
+      "line": 5042,
+      "selector": ".ps-gateway-x::before, .ps-gateway-x::after",
+      "tokens": [
+        "ps-gateway-x"
+      ]
+    },
+    {
+      "line": 5053,
+      "selector": ".ps-gateway-x::after",
+      "tokens": [
+        "ps-gateway-x"
+      ]
+    },
+    {
+      "line": 5056,
+      "selector": ".ps-start, .ps-end",
+      "tokens": [
+        "ps-end",
+        "ps-start"
+      ]
+    },
+    {
+      "line": 5069,
+      "selector": ".ps-start span, .ps-end span",
+      "tokens": [
+        "ps-end",
+        "ps-start"
+      ]
+    },
+    {
+      "line": 5080,
+      "selector": ".ps-end span",
+      "tokens": [
+        "ps-end"
+      ]
+    },
+    {
+      "line": 5083,
+      "selector": ".ps-edge-label",
+      "tokens": [
+        "ps-edge-label"
+      ]
+    },
+    {
+      "line": 5095,
+      "selector": ".ps-entity-tags",
+      "tokens": [
+        "ps-entity-tags"
+      ]
+    },
+    {
+      "line": 5104,
+      "selector": ".ps-entity-tag",
+      "tokens": [
+        "ps-entity-tag"
+      ]
+    },
+    {
+      "line": 5121,
+      "selector": "/* Mermaid 图嵌入 */ .md-mermaid",
+      "tokens": [
+        "md-mermaid"
+      ]
+    },
+    {
+      "line": 5123,
+      "selector": ".md-mermaid svg",
+      "tokens": [
+        "md-mermaid"
+      ]
+    },
+    {
+      "line": 5125,
+      "selector": "/* live diagram 里放开宽度（主规则在上方，此处仅确保 preview 场景也生效） */ .md-code",
+      "tokens": [
+        "md-code"
+      ]
+    },
+    {
+      "line": 5128,
+      "selector": "/* 兼容旧的 diagram-block（预览 fallback） */ .preview-diagrams",
+      "tokens": [
+        "preview-diagrams"
+      ]
+    },
+    {
+      "line": 5130,
+      "selector": ".diagram-block",
+      "tokens": [
+        "diagram-block"
+      ]
+    },
+    {
+      "line": 5131,
+      "selector": ".diagram-block h4",
+      "tokens": [
+        "diagram-block"
+      ]
+    },
+    {
+      "line": 5132,
+      "selector": ".diagram-svg",
+      "tokens": [
+        "diagram-svg"
+      ]
+    },
+    {
+      "line": 5135,
+      "selector": ".open-modal-shell",
+      "tokens": [
+        "open-modal-shell"
+      ]
+    },
+    {
+      "line": 5141,
+      "selector": ".open-modal-tabs",
+      "tokens": [
+        "open-modal-tabs"
+      ]
+    },
+    {
+      "line": 5147,
+      "selector": ".open-modal-tab",
+      "tokens": [
+        "open-modal-tab"
+      ]
+    },
+    {
+      "line": 5161,
+      "selector": ".open-modal-body",
+      "tokens": [
+        "open-modal-body"
+      ]
+    },
+    {
+      "line": 5166,
+      "selector": ".open-modal-panel",
+      "tokens": [
+        "open-modal-panel"
+      ]
+    },
+    {
+      "line": 5173,
+      "selector": ".open-modal-scroll",
+      "tokens": [
+        "open-modal-scroll"
+      ]
+    },
+    {
+      "line": 5180,
+      "selector": ".open-space-head",
+      "tokens": [
+        "open-space-head"
+      ]
+    },
+    {
+      "line": 5186,
+      "selector": ".open-space-title",
+      "tokens": [
+        "open-space-title"
+      ]
+    },
+    {
+      "line": 5191,
+      "selector": ".open-file-search",
+      "tokens": [
+        "open-file-search"
+      ]
+    },
+    {
+      "line": 5343,
+      "selector": ".open-pagination-info",
+      "tokens": [
+        "open-pagination-info"
+      ]
+    },
+    {
+      "line": 5347,
+      "selector": ".open-pagination-actions",
+      "tokens": [
+        "open-pagination-actions"
+      ]
+    },
+    {
+      "line": 5354,
+      "selector": ".trash-doc-check",
+      "tokens": [
+        "trash-doc-check"
+      ]
+    },
+    {
+      "line": 5360,
+      "selector": ".trash-toolbar",
+      "tokens": [
+        "trash-toolbar"
+      ]
+    },
+    {
+      "line": 5383,
+      "selector": ".trash-item",
+      "tokens": [
+        "trash-item"
+      ]
+    },
+    {
+      "line": 5421,
+      "selector": ".merge-modal",
+      "tokens": [
+        "merge-modal"
+      ]
+    },
+    {
+      "line": 5426,
+      "selector": ".compare-modal",
+      "tokens": [
+        "compare-modal"
+      ]
+    },
+    {
+      "line": 5431,
+      "selector": ".compare-modal .modal-title-row",
+      "tokens": [
+        "compare-modal",
+        "modal-title-row"
+      ]
+    },
+    {
+      "line": 5440,
+      "selector": ".compare-modal > .compare-select-grid",
+      "tokens": [
+        "compare-modal",
+        "compare-select-grid"
+      ]
+    },
+    {
+      "line": 5443,
+      "selector": ".compare-modal > .merge-inline-note",
+      "tokens": [
+        "compare-modal",
+        "merge-inline-note"
+      ]
+    },
+    {
+      "line": 5446,
+      "selector": ".compare-modal > .compare-action-row",
+      "tokens": [
+        "compare-action-row",
+        "compare-modal"
+      ]
+    },
+    {
+      "line": 5449,
+      "selector": ".compare-modal > .compare-result",
+      "tokens": [
+        "compare-modal",
+        "compare-result"
+      ]
+    },
+    {
+      "line": 5452,
+      "selector": ".merge-select-grid",
+      "tokens": [
+        "merge-select-grid"
+      ]
+    },
+    {
+      "line": 5458,
+      "selector": ".compare-select-grid",
+      "tokens": [
+        "compare-select-grid"
+      ]
+    },
+    {
+      "line": 5461,
+      "selector": ".merge-select-field",
+      "tokens": [
+        "merge-select-field"
+      ]
+    },
+    {
+      "line": 5466,
+      "selector": ".merge-select-field span",
+      "tokens": [
+        "merge-select-field"
+      ]
+    },
+    {
+      "line": 5471,
+      "selector": ".merge-select-field select",
+      "tokens": [
+        "merge-select-field"
+      ]
+    },
+    {
+      "line": 5474,
+      "selector": ".merge-target-grid",
+      "tokens": [
+        "merge-target-grid"
+      ]
+    },
+    {
+      "line": 5479,
+      "selector": ".merge-target-card",
+      "tokens": [
+        "merge-target-card"
+      ]
+    },
+    {
+      "line": 5485,
+      "selector": ".merge-target-head",
+      "tokens": [
+        "merge-target-head"
+      ]
+    },
+    {
+      "line": 5495,
+      "selector": ".merge-target-actions",
+      "tokens": [
+        "merge-target-actions"
+      ]
+    },
+    {
+      "line": 5500,
+      "selector": ".merge-source-summary",
+      "tokens": [
+        "merge-source-summary"
+      ]
+    },
+    {
+      "line": 5507,
+      "selector": ".merge-workspace-block",
+      "tokens": [
+        "merge-workspace-block"
+      ]
+    },
+    {
+      "line": 5513,
+      "selector": ".merge-workspace-title",
+      "tokens": [
+        "merge-workspace-title"
+      ]
+    },
+    {
+      "line": 5519,
+      "selector": ".merge-workspace-list",
+      "tokens": [
+        "merge-workspace-list"
+      ]
+    },
+    {
+      "line": 5526,
+      "selector": ".merge-workspace-item",
+      "tokens": [
+        "merge-workspace-item"
+      ]
+    },
+    {
+      "line": 5536,
+      "selector": ".merge-workspace-item.is-left, .merge-workspace-item.is-right",
+      "tokens": [
+        "is-left",
+        "is-right",
+        "merge-workspace-item"
+      ]
+    },
+    {
+      "line": 5541,
+      "selector": ".merge-workspace-main",
+      "tokens": [
+        "merge-workspace-main"
+      ]
+    },
+    {
+      "line": 5547,
+      "selector": ".merge-workspace-name",
+      "tokens": [
+        "merge-workspace-name"
+      ]
+    },
+    {
+      "line": 5552,
+      "selector": ".merge-workspace-tags",
+      "tokens": [
+        "merge-workspace-tags"
+      ]
+    },
+    {
+      "line": 5557,
+      "selector": ".merge-workspace-tag",
+      "tokens": [
+        "merge-workspace-tag"
+      ]
+    },
+    {
+      "line": 5567,
+      "selector": ".merge-workspace-actions",
+      "tokens": [
+        "merge-workspace-actions"
+      ]
+    },
+    {
+      "line": 5573,
+      "selector": ".merge-inline-note",
+      "tokens": [
+        "merge-inline-note"
+      ]
+    },
+    {
+      "line": 5578,
+      "selector": ".merge-analysis",
+      "tokens": [
+        "merge-analysis"
+      ]
+    },
+    {
+      "line": 5583,
+      "selector": ".merge-summary",
+      "tokens": [
+        "merge-summary"
+      ]
+    },
+    {
+      "line": 5588,
+      "selector": ".merge-summary-card",
+      "tokens": [
+        "merge-summary-card"
+      ]
+    },
+    {
+      "line": 5597,
+      "selector": ".merge-summary-card strong",
+      "tokens": [
+        "merge-summary-card"
+      ]
+    },
+    {
+      "line": 5601,
+      "selector": ".merge-summary-card span",
+      "tokens": [
+        "merge-summary-card"
+      ]
+    },
+    {
+      "line": 5605,
+      "selector": ".merge-block",
+      "tokens": [
+        "merge-block"
+      ]
+    },
+    {
+      "line": 5613,
+      "selector": ".merge-ok",
+      "tokens": [
+        "merge-ok"
+      ]
+    },
+    {
+      "line": 5619,
+      "selector": ".merge-empty",
+      "tokens": [
+        "merge-empty"
+      ]
+    },
+    {
+      "line": 5626,
+      "selector": ".compare-summary",
+      "tokens": [
+        "compare-summary"
+      ]
+    },
+    {
+      "line": 5631,
+      "selector": ".compare-summary > div",
+      "tokens": [
+        "compare-summary"
+      ]
+    },
+    {
+      "line": 5638,
+      "selector": ".compare-summary strong, .compare-summary span",
+      "tokens": [
+        "compare-summary"
+      ]
+    },
+    {
+      "line": 5642,
+      "selector": ".compare-summary strong",
+      "tokens": [
+        "compare-summary"
+      ]
+    },
+    {
+      "line": 5647,
+      "selector": ".compare-summary span",
+      "tokens": [
+        "compare-summary"
+      ]
+    },
+    {
+      "line": 5654,
+      "selector": ".compare-report",
+      "tokens": [
+        "compare-report"
+      ]
+    },
+    {
+      "line": 5659,
+      "selector": ".compare-report-head",
+      "tokens": [
+        "compare-report-head"
+      ]
+    },
+    {
+      "line": 5665,
+      "selector": ".compare-report-head > div",
+      "tokens": [
+        "compare-report-head"
+      ]
+    },
+    {
+      "line": 5668,
+      "selector": ".compare-report-head span",
+      "tokens": [
+        "compare-report-head"
+      ]
+    },
+    {
+      "line": 5674,
+      "selector": ".compare-action-row",
+      "tokens": [
+        "compare-action-row"
+      ]
+    },
+    {
+      "line": 5680,
+      "selector": ".compare-progress",
+      "tokens": [
+        "compare-progress"
+      ]
+    },
+    {
+      "line": 5688,
+      "selector": ".compare-progress-track",
+      "tokens": [
+        "compare-progress-track"
+      ]
+    },
+    {
+      "line": 5697,
+      "selector": ".compare-progress-track span",
+      "tokens": [
+        "compare-progress-track"
+      ]
+    },
+    {
+      "line": 5707,
+      "selector": ".compare-progress strong",
+      "tokens": [
+        "compare-progress"
+      ]
+    },
+    {
+      "line": 5714,
+      "selector": ".operation-progress, .prototype-upload-progress",
+      "tokens": [
+        "operation-progress",
+        "prototype-upload-progress"
+      ]
+    },
+    {
+      "line": 5722,
+      "selector": ".operation-progress",
+      "tokens": [
+        "operation-progress"
+      ]
+    },
+    {
+      "line": 5732,
+      "selector": ".operation-progress-card",
+      "tokens": [
+        "operation-progress-card"
+      ]
+    },
+    {
+      "line": 5744,
+      "selector": ".operation-spinner",
+      "tokens": [
+        "operation-spinner"
+      ]
+    },
+    {
+      "line": 5755,
+      "selector": ".operation-progress-track, .prototype-upload-progress-track",
+      "tokens": [
+        "operation-progress-track",
+        "prototype-upload-progress-track"
+      ]
+    },
+    {
+      "line": 5764,
+      "selector": ".operation-progress-track",
+      "tokens": [
+        "operation-progress-track"
+      ]
+    },
+    {
+      "line": 5767,
+      "selector": ".prototype-upload-progress-track",
+      "tokens": [
+        "prototype-upload-progress-track"
+      ]
+    },
+    {
+      "line": 5770,
+      "selector": ".operation-progress-track span, .prototype-upload-progress-track span",
+      "tokens": [
+        "operation-progress-track",
+        "prototype-upload-progress-track"
+      ]
+    },
+    {
+      "line": 5779,
+      "selector": ".operation-progress strong, .prototype-upload-progress strong",
+      "tokens": [
+        "operation-progress",
+        "prototype-upload-progress"
+      ]
+    },
+    {
+      "line": 5783,
+      "selector": ".operation-progress strong",
+      "tokens": [
+        "operation-progress"
+      ]
+    },
+    {
+      "line": 5787,
+      "selector": ".operation-progress-detail",
+      "tokens": [
+        "operation-progress-detail"
+      ]
+    },
+    {
+      "line": 5796,
+      "selector": ".collab-reconnect-overlay",
+      "tokens": [
+        "collab-reconnect-overlay"
+      ]
+    },
+    {
+      "line": 5810,
+      "selector": ".collab-reconnect-card",
+      "tokens": [
+        "collab-reconnect-card"
+      ]
+    },
+    {
+      "line": 5823,
+      "selector": ".collab-reconnect-card strong",
+      "tokens": [
+        "collab-reconnect-card"
+      ]
+    },
+    {
+      "line": 5827,
+      "selector": ".collab-reconnect-card p",
+      "tokens": [
+        "collab-reconnect-card"
+      ]
+    },
+    {
+      "line": 5833,
+      "selector": ".collab-reconnect-dots",
+      "tokens": [
+        "collab-reconnect-dots"
+      ]
+    },
+    {
+      "line": 5839,
+      "selector": ".collab-reconnect-dots span",
+      "tokens": [
+        "collab-reconnect-dots"
+      ]
+    },
+    {
+      "line": 5846,
+      "selector": ".collab-reconnect-dots span:nth-child(2)",
+      "tokens": [
+        "collab-reconnect-dots"
+      ]
+    },
+    {
+      "line": 5849,
+      "selector": ".collab-reconnect-dots span:nth-child(3)",
+      "tokens": [
+        "collab-reconnect-dots"
+      ]
+    },
+    {
+      "line": 5856,
+      "selector": "body.is-saving, body.is-saving *, body.is-collab-reconnecting, body.is-collab-reconnecting *",
+      "tokens": [
+        "is-collab-reconnecting",
+        "is-saving"
+      ]
+    },
+    {
+      "line": 5862,
+      "selector": ".compare-report h3",
+      "tokens": [
+        "compare-report"
+      ]
+    },
+    {
+      "line": 5867,
+      "selector": ".compare-report-section",
+      "tokens": [
+        "compare-report-section"
+      ]
+    },
+    {
+      "line": 5873,
+      "selector": ".compare-report-section h4",
+      "tokens": [
+        "compare-report-section"
+      ]
+    },
+    {
+      "line": 5877,
+      "selector": ".compare-level-grid",
+      "tokens": [
+        "compare-level-grid"
+      ]
+    },
+    {
+      "line": 5882,
+      "selector": ".compare-level-card",
+      "tokens": [
+        "compare-level-card"
+      ]
+    },
+    {
+      "line": 5888,
+      "selector": ".compare-level-card strong, .compare-level-card span, .compare-level-card em",
+      "tokens": [
+        "compare-level-card"
+      ]
+    },
+    {
+      "line": 5893,
+      "selector": ".compare-level-card strong",
+      "tokens": [
+        "compare-level-card"
+      ]
+    },
+    {
+      "line": 5897,
+      "selector": ".compare-level-card span",
+      "tokens": [
+        "compare-level-card"
+      ]
+    },
+    {
+      "line": 5903,
+      "selector": ".compare-level-card em",
+      "tokens": [
+        "compare-level-card"
+      ]
+    },
+    {
+      "line": 5910,
+      "selector": ".compare-business-table-wrap",
+      "tokens": [
+        "compare-business-table-wrap"
+      ]
+    },
+    {
+      "line": 5915,
+      "selector": ".compare-business-sections",
+      "tokens": [
+        "compare-business-sections"
+      ]
+    },
+    {
+      "line": 5921,
+      "selector": ".compare-business-section",
+      "tokens": [
+        "compare-business-section"
+      ]
+    },
+    {
+      "line": 5926,
+      "selector": ".compare-business-section h5",
+      "tokens": [
+        "compare-business-section"
+      ]
+    },
+    {
+      "line": 5931,
+      "selector": ".compare-business-table",
+      "tokens": [
+        "compare-business-table"
+      ]
+    },
+    {
+      "line": 5939,
+      "selector": ".compare-business-table th, .compare-business-table td",
+      "tokens": [
+        "compare-business-table"
+      ]
+    },
+    {
+      "line": 5947,
+      "selector": ".compare-business-table th",
+      "tokens": [
+        "compare-business-table"
+      ]
+    },
+    {
+      "line": 5953,
+      "selector": ".compare-business-table th:nth-child(1)",
+      "tokens": [
+        "compare-business-table"
+      ]
+    },
+    {
+      "line": 5954,
+      "selector": ".compare-business-table th:nth-child(2)",
+      "tokens": [
+        "compare-business-table"
+      ]
+    },
+    {
+      "line": 5955,
+      "selector": ".compare-business-table th:nth-child(3)",
+      "tokens": [
+        "compare-business-table"
+      ]
+    },
+    {
+      "line": 5956,
+      "selector": ".compare-no-diff-row td",
+      "tokens": [
+        "compare-no-diff-row"
+      ]
+    },
+    {
+      "line": 5960,
+      "selector": ".compare-layout-table",
+      "tokens": [
+        "compare-layout-table"
+      ]
+    },
+    {
+      "line": 5968,
+      "selector": ".compare-layout-table th, .compare-layout-table td",
+      "tokens": [
+        "compare-layout-table"
+      ]
+    },
+    {
+      "line": 5976,
+      "selector": ".compare-layout-table th",
+      "tokens": [
+        "compare-layout-table"
+      ]
+    },
+    {
+      "line": 5982,
+      "selector": ".compare-layout-table th:nth-child(1)",
+      "tokens": [
+        "compare-layout-table"
+      ]
+    },
+    {
+      "line": 5983,
+      "selector": ".compare-layout-table th:nth-child(2)",
+      "tokens": [
+        "compare-layout-table"
+      ]
+    },
+    {
+      "line": 5984,
+      "selector": ".compare-th-help",
+      "tokens": [
+        "compare-th-help"
+      ]
+    },
+    {
+      "line": 6000,
+      "selector": ".compare-business-item",
+      "tokens": [
+        "compare-business-item"
+      ]
+    },
+    {
+      "line": 6005,
+      "selector": ".compare-business-item strong",
+      "tokens": [
+        "compare-business-item"
+      ]
+    },
+    {
+      "line": 6009,
+      "selector": ".compare-business-item span",
+      "tokens": [
+        "compare-business-item"
+      ]
+    },
+    {
+      "line": 6013,
+      "selector": ".compare-type-badge",
+      "tokens": [
+        "compare-type-badge"
+      ]
+    },
+    {
+      "line": 6024,
+      "selector": ".compare-type-新增",
+      "tokens": [
+        "compare-type-"
+      ]
+    },
+    {
+      "line": 6028,
+      "selector": ".compare-type-删除",
+      "tokens": [
+        "compare-type-"
+      ]
+    },
+    {
+      "line": 6032,
+      "selector": ".compare-type-修改",
+      "tokens": [
+        "compare-type-"
+      ]
+    },
+    {
+      "line": 6036,
+      "selector": ".compare-report-list",
+      "tokens": [
+        "compare-report-list"
+      ]
+    },
+    {
+      "line": 6043,
+      "selector": ".compare-highlight-list",
+      "tokens": [
+        "compare-highlight-list"
+      ]
+    },
+    {
+      "line": 6048,
+      "selector": ".compare-highlight-item",
+      "tokens": [
+        "compare-highlight-item"
+      ]
+    },
+    {
+      "line": 6058,
+      "selector": ".compare-highlight-item span",
+      "tokens": [
+        "compare-highlight-item"
+      ]
+    },
+    {
+      "line": 6066,
+      "selector": ".compare-highlight-item.impact-medium span",
+      "tokens": [
+        "compare-highlight-item",
+        "impact-medium"
+      ]
+    },
+    {
+      "line": 6070,
+      "selector": ".compare-highlight-item strong",
+      "tokens": [
+        "compare-highlight-item"
+      ]
+    },
+    {
+      "line": 6077,
+      "selector": ".compare-highlight-item em",
+      "tokens": [
+        "compare-highlight-item"
+      ]
+    },
+    {
+      "line": 6082,
+      "selector": ".compare-layout-list",
+      "tokens": [
+        "compare-layout-list"
+      ]
+    },
+    {
+      "line": 6087,
+      "selector": ".compare-layout-list span",
+      "tokens": [
+        "compare-layout-list"
+      ]
+    },
+    {
+      "line": 6094,
+      "selector": ".compare-detail-panel",
+      "tokens": [
+        "compare-detail-panel"
+      ]
+    },
+    {
+      "line": 6100,
+      "selector": ".compare-detail-panel summary",
+      "tokens": [
+        "compare-detail-panel"
+      ]
+    },
+    {
+      "line": 6105,
+      "selector": ".compare-detail-panel .compare-diff-section",
+      "tokens": [
+        "compare-detail-panel",
+        "compare-diff-section"
+      ]
+    },
+    {
+      "line": 6108,
+      "selector": ".compare-diff-section",
+      "tokens": [
+        "compare-diff-section"
+      ]
+    },
+    {
+      "line": 6114,
+      "selector": ".compare-diff-section h4",
+      "tokens": [
+        "compare-diff-section"
+      ]
+    },
+    {
+      "line": 6121,
+      "selector": ".compare-diff-section h4 span",
+      "tokens": [
+        "compare-diff-section"
+      ]
+    },
+    {
+      "line": 6124,
+      "selector": ".compare-diff-list",
+      "tokens": [
+        "compare-diff-list"
+      ]
+    },
+    {
+      "line": 6129,
+      "selector": ".compare-model-group",
+      "tokens": [
+        "compare-model-group"
+      ]
+    },
+    {
+      "line": 6135,
+      "selector": ".compare-model-group h5",
+      "tokens": [
+        "compare-model-group"
+      ]
+    },
+    {
+      "line": 6143,
+      "selector": ".compare-model-group h5 span",
+      "tokens": [
+        "compare-model-group"
+      ]
+    },
+    {
+      "line": 6147,
+      "selector": ".compare-diff-item",
+      "tokens": [
+        "compare-diff-item"
+      ]
+    },
+    {
+      "line": 6153,
+      "selector": ".compare-diff-item + .compare-diff-item",
+      "tokens": [
+        "compare-diff-item"
+      ]
+    },
+    {
+      "line": 6156,
+      "selector": ".compare-diff-model-head",
+      "tokens": [
+        "compare-diff-model-head"
+      ]
+    },
+    {
+      "line": 6163,
+      "selector": ".compare-diff-model-head strong",
+      "tokens": [
+        "compare-diff-model-head"
+      ]
+    },
+    {
+      "line": 6171,
+      "selector": ".compare-diff-model-head span",
+      "tokens": [
+        "compare-diff-model-head"
+      ]
+    },
+    {
+      "line": 6180,
+      "selector": ".compare-diff-values",
+      "tokens": [
+        "compare-diff-values"
+      ]
+    },
+    {
+      "line": 6185,
+      "selector": ".compare-diff-values span",
+      "tokens": [
+        "compare-diff-values"
+      ]
+    },
+    {
+      "line": 6195,
+      "selector": ".compare-diff-values em",
+      "tokens": [
+        "compare-diff-values"
+      ]
+    },
+    {
+      "line": 6202,
+      "selector": ".merge-conflict-list",
+      "tokens": [
+        "merge-conflict-list"
+      ]
+    },
+    {
+      "line": 6207,
+      "selector": ".merge-conflict-card",
+      "tokens": [
+        "merge-conflict-card"
+      ]
+    },
+    {
+      "line": 6216,
+      "selector": ".merge-conflict-head",
+      "tokens": [
+        "merge-conflict-head"
+      ]
+    },
+    {
+      "line": 6222,
+      "selector": ".merge-conflict-index",
+      "tokens": [
+        "merge-conflict-index"
+      ]
+    },
+    {
+      "line": 6235,
+      "selector": ".merge-conflict-path",
+      "tokens": [
+        "merge-conflict-path"
+      ]
+    },
+    {
+      "line": 6239,
+      "selector": ".merge-conflict-values",
+      "tokens": [
+        "merge-conflict-values"
+      ]
+    },
+    {
+      "line": 6244,
+      "selector": ".merge-conflict-values label",
+      "tokens": [
+        "merge-conflict-values"
+      ]
+    },
+    {
+      "line": 6250,
+      "selector": ".merge-conflict-values pre",
+      "tokens": [
+        "merge-conflict-values"
+      ]
+    },
+    {
+      "line": 6260,
+      "selector": ".merge-conflict-controls",
+      "tokens": [
+        "merge-conflict-controls"
+      ]
+    },
+    {
+      "line": 6265,
+      "selector": ".merge-custom-input",
+      "tokens": [
+        "merge-custom-input"
+      ]
+    },
+    {
+      "line": 6269,
+      "selector": ".merge-warning-list",
+      "tokens": [
+        "merge-warning-list"
+      ]
+    },
+    {
+      "line": 6273,
+      "selector": ".merge-warning-list li + li",
+      "tokens": [
+        "merge-warning-list"
+      ]
+    },
+    {
+      "line": 6276,
+      "selector": ".merge-validation-summary",
+      "tokens": [
+        "merge-validation-summary"
+      ]
+    },
+    {
+      "line": 6282,
+      "selector": ".merge-validation-summary span",
+      "tokens": [
+        "merge-validation-summary"
+      ]
+    },
+    {
+      "line": 6290,
+      "selector": ".merge-validation-list",
+      "tokens": [
+        "merge-validation-list"
+      ]
+    },
+    {
+      "line": 6295,
+      "selector": ".merge-validation-card",
+      "tokens": [
+        "merge-validation-card"
+      ]
+    },
+    {
+      "line": 6309,
+      "selector": ".merge-validation-card-head",
+      "tokens": [
+        "merge-validation-card-head"
+      ]
+    },
+    {
+      "line": 6315,
+      "selector": ".merge-validation-card-head span",
+      "tokens": [
+        "merge-validation-card-head"
+      ]
+    },
+    {
+      "line": 6323,
+      "selector": ".merge-validation-card-head strong",
+      "tokens": [
+        "merge-validation-card-head"
+      ]
+    },
+    {
+      "line": 6326,
+      "selector": ".merge-validation-card p",
+      "tokens": [
+        "merge-validation-card"
+      ]
+    },
+    {
+      "line": 6332,
+      "selector": ".merge-validation-suggestion",
+      "tokens": [
+        "merge-validation-suggestion"
+      ]
+    },
+    {
+      "line": 6337,
+      "selector": ".merge-validation-actions",
+      "tokens": [
+        "merge-validation-actions"
+      ]
+    },
+    {
+      "line": 6343,
+      "selector": ".merge-validation-actions select",
+      "tokens": [
+        "merge-validation-actions"
+      ]
+    },
+    {
+      "line": 6347,
+      "selector": ".merge-preview-metrics",
+      "tokens": [
+        "merge-preview-metrics"
+      ]
+    },
+    {
+      "line": 6374,
+      "selector": ".file-list",
+      "tokens": [
+        "file-list"
+      ]
+    },
+    {
+      "line": 6375,
+      "selector": ".file-list-item",
+      "tokens": [
+        "file-list-item"
+      ]
+    },
+    {
+      "line": 6380,
+      "selector": ".file-space-group",
+      "tokens": [
+        "file-space-group"
+      ]
+    },
+    {
+      "line": 6383,
+      "selector": ".file-space-head",
+      "tokens": [
+        "file-space-head"
+      ]
+    },
+    {
+      "line": 6392,
+      "selector": ".file-space-head small",
+      "tokens": [
+        "file-space-head"
+      ]
+    },
+    {
+      "line": 6396,
+      "selector": ".file-list-item-meta",
+      "tokens": [
+        "file-list-item-meta"
+      ]
+    },
+    {
+      "line": 6424,
+      "selector": ".history-load-sentinel",
+      "tokens": [
+        "history-load-sentinel"
+      ]
+    },
+    {
+      "line": 6434,
+      "selector": ".history-day-group",
+      "tokens": [
+        "history-day-group"
+      ]
+    },
+    {
+      "line": 6439,
+      "selector": ".history-day-title",
+      "tokens": [
+        "history-day-title"
+      ]
+    },
+    {
+      "line": 6444,
+      "selector": ".file-list-item:hover",
+      "tokens": [
+        "file-list-item"
+      ]
+    },
+    {
+      "line": 6445,
+      "selector": ".file-list-item-main",
+      "tokens": [
+        "file-list-item-main"
+      ]
+    },
+    {
+      "line": 6455,
+      "selector": ".file-list-item-name",
+      "tokens": [
+        "file-list-item-name"
+      ]
+    },
+    {
+      "line": 6456,
+      "selector": ".file-list-item-actions",
+      "tokens": [
+        "file-list-item-actions"
+      ]
+    },
+    {
+      "line": 6461,
+      "selector": ".file-list-item-del",
+      "tokens": [
+        "file-list-item-del"
+      ]
+    },
+    {
+      "line": 6463,
+      "selector": ".file-list-item:hover .file-list-item-del",
+      "tokens": [
+        "file-list-item",
+        "file-list-item-del"
+      ]
+    },
+    {
+      "line": 6464,
+      "selector": ".file-empty",
+      "tokens": [
+        "file-empty"
+      ]
+    },
+    {
+      "line": 6465,
+      "selector": ".file-loading",
+      "tokens": [
+        "file-loading"
+      ]
+    },
+    {
+      "line": 6466,
+      "selector": ".file-loading .operation-spinner",
+      "tokens": [
+        "file-loading",
+        "operation-spinner"
+      ]
+    },
+    {
+      "line": 6493,
+      "selector": ".recovery-item-title",
+      "tokens": [
+        "recovery-item-title"
+      ]
+    },
+    {
+      "line": 6498,
+      "selector": ".recovery-item-meta",
+      "tokens": [
+        "recovery-item-meta"
+      ]
+    },
+    {
+      "line": 6504,
+      "selector": "/* ─── 详情空状态 ─────────────────────────────────────────── */ .detail-empty",
+      "tokens": [
+        "detail-empty"
+      ]
+    },
+    {
+      "line": 6509,
+      "selector": ".detail-empty p",
+      "tokens": [
+        "detail-empty"
+      ]
+    },
+    {
+      "line": 6511,
+      "selector": "/* ─── 分隔线 ─────────────────────────────────────────────── */ .divider",
+      "tokens": [
+        "divider"
+      ]
+    },
+    {
+      "line": 6520,
+      "selector": "/* ─── move 按钮 ──────────────────────────────────────────── */ .move-btn",
+      "tokens": [
+        "move-btn"
+      ]
+    },
+    {
+      "line": 6523,
+      "selector": ".move-btn:hover",
+      "tokens": [
+        "move-btn"
+      ]
+    },
+    {
+      "line": 6525,
+      "selector": "/* ─── 侧边栏：新增按钮 ───────────────────────────────────── */ .sb-add-btn",
+      "tokens": [
+        "sb-add-btn"
+      ]
+    },
+    {
+      "line": 6531,
+      "selector": ".sb-add-btn:hover",
+      "tokens": [
+        "sb-add-btn"
+      ]
+    },
+    {
+      "line": 6549,
+      "selector": "/* 流程标题行 */ .sb-proc-head",
+      "tokens": [
+        "sb-proc-head"
+      ]
+    },
+    {
+      "line": 6558,
+      "selector": ".sb-proc-head:hover",
+      "tokens": [
+        "sb-proc-head"
+      ]
+    },
+    {
+      "line": 6572,
+      "selector": ".sb-proc-main",
+      "tokens": [
+        "sb-proc-main"
+      ]
+    },
+    {
+      "line": 6584,
+      "selector": ".sb-proc-tags",
+      "tokens": [
+        "sb-proc-tags"
+      ]
+    },
+    {
+      "line": 6590,
+      "selector": ".sb-proc-tag",
+      "tokens": [
+        "sb-proc-tag"
+      ]
+    },
+    {
+      "line": 6604,
+      "selector": "/* 任务条目（深缩进） */ .sb-task-item",
+      "tokens": [
+        "sb-task-item"
+      ]
+    },
+    {
+      "line": 6612,
+      "selector": ".sb-task-item:hover",
+      "tokens": [
+        "sb-task-item"
+      ]
+    },
+    {
+      "line": 6614,
+      "selector": ".sb-repeat",
+      "tokens": [
+        "sb-repeat"
+      ]
+    },
+    {
+      "line": 6681,
+      "selector": ".sb-subgrp-dot",
+      "tokens": [
+        "sb-subgrp-dot"
+      ]
+    },
+    {
+      "line": 6689,
+      "selector": ".sb-subgrp-badge",
+      "tokens": [
+        "sb-subgrp-badge"
+      ]
+    },
+    {
+      "line": 6873,
+      "selector": "/* 实体条目（主题域下缩进） */ .sb-entity-item",
+      "tokens": [
+        "sb-entity-item"
+      ]
+    },
+    {
+      "line": 6881,
+      "selector": ".sb-entity-item:hover",
+      "tokens": [
+        "sb-entity-item"
+      ]
+    },
+    {
+      "line": 6884,
+      "selector": "/* ─── 侧边栏移动按钮（hover 时浮现） ─── */ .sb-move-btns",
+      "tokens": [
+        "sb-move-btns"
+      ]
+    },
+    {
+      "line": 6898,
+      "selector": ".sb-move-btn",
+      "tokens": [
+        "sb-move-btn"
+      ]
+    },
+    {
+      "line": 6904,
+      "selector": ".sb-move-btn:hover",
+      "tokens": [
+        "sb-move-btn"
+      ]
+    },
+    {
+      "line": 6905,
+      "selector": ".sb-move-btn::before",
+      "tokens": [
+        "sb-move-btn"
+      ]
+    },
+    {
+      "line": 6906,
+      "selector": ".sb-move-up::before",
+      "tokens": [
+        "sb-move-up"
+      ]
+    },
+    {
+      "line": 6907,
+      "selector": ".sb-move-down::before",
+      "tokens": [
+        "sb-move-down"
+      ]
+    },
+    {
+      "line": 6909,
+      "selector": "/* ─── 流程新建栏 ─────────────────────────────────────────── */ .proc-add-bar",
+      "tokens": [
+        "proc-add-bar"
+      ]
+    },
+    {
+      "line": 6914,
+      "selector": "/* ─── 流程标题行 ─────────────────────────────────────────── */ .proc-row",
+      "tokens": [
+        "proc-row"
+      ]
+    },
+    {
+      "line": 6924,
+      "selector": ".proc-row:first-of-type",
+      "tokens": [
+        "proc-row"
+      ]
+    },
+    {
+      "line": 6925,
+      "selector": ".proc-row:hover",
+      "tokens": [
+        "proc-row"
+      ]
+    },
+    {
+      "line": 6927,
+      "selector": ".proc-row-id",
+      "tokens": [
+        "proc-row-id"
+      ]
+    },
+    {
+      "line": 6928,
+      "selector": ".proc-row-name",
+      "tokens": [
+        "proc-row-name"
+      ]
+    },
+    {
+      "line": 6929,
+      "selector": ".proc-del-btn",
+      "tokens": [
+        "proc-del-btn"
+      ]
+    },
+    {
+      "line": 6930,
+      "selector": ".proc-row:hover .proc-del-btn",
+      "tokens": [
+        "proc-del-btn",
+        "proc-row"
+      ]
+    },
+    {
+      "line": 6932,
+      "selector": "/* ─── 任务行 ─────────────────────────────────────────────── */ .task-row",
+      "tokens": [
+        "task-row"
+      ]
+    },
+    {
+      "line": 6940,
+      "selector": ".task-row:hover",
+      "tokens": [
+        "task-row"
+      ]
+    },
+    {
+      "line": 6942,
+      "selector": ".task-row-id",
+      "tokens": [
+        "task-row-id"
+      ]
+    },
+    {
+      "line": 6943,
+      "selector": ".task-row-name",
+      "tokens": [
+        "task-row-name"
+      ]
+    },
+    {
+      "line": 6944,
+      "selector": ".task-row-role",
+      "tokens": [
+        "task-row-role"
+      ]
+    },
+    {
+      "line": 6947,
+      "selector": ".task-row-actions",
+      "tokens": [
+        "task-row-actions"
+      ]
+    },
+    {
+      "line": 6948,
+      "selector": ".task-row:hover .task-row-actions",
+      "tokens": [
+        "task-row",
+        "task-row-actions"
+      ]
+    },
+    {
+      "line": 6950,
+      "selector": "/* ─── 任务添加行 ─────────────────────────────────────────── */ .task-add-row",
+      "tokens": [
+        "task-add-row"
+      ]
+    },
+    {
+      "line": 6952,
+      "selector": ".task-add-btn",
+      "tokens": [
+        "task-add-btn"
+      ]
+    },
+    {
+      "line": 6953,
+      "selector": ".task-add-btn:hover",
+      "tokens": [
+        "task-add-btn"
+      ]
+    },
+    {
+      "line": 6955,
+      "selector": "/* 危险按钮（小图标） */ .danger-btn",
+      "tokens": [
+        "danger-btn"
+      ]
+    },
+    {
+      "line": 6957,
+      "selector": ".danger-btn:hover",
+      "tokens": [
+        "danger-btn"
+      ]
+    },
+    {
+      "line": 6959,
+      "selector": "/* ─── 详情区标题 ─────────────────────────────────────────── */ .detail-section",
+      "tokens": [
+        "detail-section"
+      ]
+    },
+    {
+      "line": 6961,
+      "selector": ".detail-title",
+      "tokens": [
+        "detail-title"
+      ]
+    },
+    {
+      "line": 6967,
+      "selector": ".detail-id",
+      "tokens": [
+        "detail-id"
+      ]
+    },
+    {
+      "line": 6973,
+      "selector": "/* ─── 角色标签 ───────────────────────────────────────────── */ .role-tag-list",
+      "tokens": [
+        "role-tag-list"
+      ]
+    },
+    {
+      "line": 6975,
+      "selector": ".role-tag",
+      "tokens": [
+        "role-tag"
+      ]
+    },
+    {
+      "line": 6981,
+      "selector": ".role-del",
+      "tokens": [
+        "role-del"
+      ]
+    },
+    {
+      "line": 6985,
+      "selector": ".role-del:hover",
+      "tokens": [
+        "role-del"
+      ]
+    },
+    {
+      "line": 6986,
+      "selector": ".add-role-row",
+      "tokens": [
+        "add-role-row"
+      ]
+    },
+    {
+      "line": 6988,
+      "selector": ".domain-info-card",
+      "tokens": [
+        "domain-info-card"
+      ]
+    },
+    {
+      "line": 6989,
+      "selector": ".role-toolbar-actions",
+      "tokens": [
+        "role-toolbar-actions"
+      ]
+    },
+    {
+      "line": 6992,
+      "selector": ".role-toolbar-actions input",
+      "tokens": [
+        "role-toolbar-actions"
+      ]
+    },
+    {
+      "line": 6995,
+      "selector": ".role-mgmt-toolbar",
+      "tokens": [
+        "role-mgmt-toolbar"
+      ]
+    },
+    {
+      "line": 6999,
+      "selector": ".role-summary-badges",
+      "tokens": [
+        "role-summary-badges"
+      ]
+    },
+    {
+      "line": 7002,
+      "selector": ".role-summary-badge, .proc-role-badge",
+      "tokens": [
+        "proc-role-badge",
+        "role-summary-badge"
+      ]
+    },
+    {
+      "line": 7012,
+      "selector": ".role-search-input",
+      "tokens": [
+        "role-search-input"
+      ]
+    },
+    {
+      "line": 7015,
+      "selector": ".role-mgmt-layout",
+      "tokens": [
+        "role-mgmt-layout"
+      ]
+    },
+    {
+      "line": 7021,
+      "selector": ".role-mgmt-list, .proc-role-list",
+      "tokens": [
+        "proc-role-list",
+        "role-mgmt-list"
+      ]
+    },
+    {
+      "line": 7026,
+      "selector": ".role-mgmt-list",
+      "tokens": [
+        "role-mgmt-list"
+      ]
+    },
+    {
+      "line": 7030,
+      "selector": ".role-list-item, .proc-role-item",
+      "tokens": [
+        "proc-role-item",
+        "role-list-item"
+      ]
+    },
+    {
+      "line": 7040,
+      "selector": ".role-list-item:hover, .proc-role-item:hover",
+      "tokens": [
+        "proc-role-item",
+        "role-list-item"
+      ]
+    },
+    {
+      "line": 7052,
+      "selector": ".role-list-head, .proc-role-item-head",
+      "tokens": [
+        "proc-role-item-head",
+        "role-list-head"
+      ]
+    },
+    {
+      "line": 7056,
+      "selector": ".role-list-name, .proc-role-item-name, .role-detail-title, .proc-role-detail-title",
+      "tokens": [
+        "proc-role-detail-title",
+        "proc-role-item-name",
+        "role-detail-title",
+        "role-list-name"
+      ]
+    },
+    {
+      "line": 7062,
+      "selector": ".role-status-badge",
+      "tokens": [
+        "role-status-badge"
+      ]
+    },
+    {
+      "line": 7070,
+      "selector": ".role-status-badge.is-idle",
+      "tokens": [
+        "is-idle",
+        "role-status-badge"
+      ]
+    },
+    {
+      "line": 7076,
+      "selector": ".role-list-desc",
+      "tokens": [
+        "role-list-desc"
+      ]
+    },
+    {
+      "line": 7081,
+      "selector": ".role-list-desc-empty",
+      "tokens": [
+        "role-list-desc-empty"
+      ]
+    },
+    {
+      "line": 7084,
+      "selector": ".role-list-metrics, .proc-role-item-meta, .role-detail-subtitle, .proc-role-detail-subtitle",
+      "tokens": [
+        "proc-role-detail-subtitle",
+        "proc-role-item-meta",
+        "role-detail-subtitle",
+        "role-list-metrics"
+      ]
+    },
+    {
+      "line": 7091,
+      "selector": ".role-empty-list",
+      "tokens": [
+        "role-empty-list"
+      ]
+    },
+    {
+      "line": 7114,
+      "selector": ".role-detail-head, .proc-role-detail-head",
+      "tokens": [
+        "proc-role-detail-head",
+        "role-detail-head"
+      ]
+    },
+    {
+      "line": 7119,
+      "selector": ".role-detail-actions, .proc-role-detail-badges",
+      "tokens": [
+        "proc-role-detail-badges",
+        "role-detail-actions"
+      ]
+    },
+    {
+      "line": 7123,
+      "selector": ".role-merge-row",
+      "tokens": [
+        "role-merge-row"
+      ]
+    },
+    {
+      "line": 7126,
+      "selector": ".role-merge-row label",
+      "tokens": [
+        "role-merge-row"
+      ]
+    },
+    {
+      "line": 7129,
+      "selector": ".role-merge-actions",
+      "tokens": [
+        "role-merge-actions"
+      ]
+    },
+    {
+      "line": 7132,
+      "selector": ".role-merge-actions select",
+      "tokens": [
+        "role-merge-actions"
+      ]
+    },
+    {
+      "line": 7135,
+      "selector": ".role-usage-section h4",
+      "tokens": [
+        "role-usage-section"
+      ]
+    },
+    {
+      "line": 7139,
+      "selector": ".role-usage-card, .proc-role-usage-card",
+      "tokens": [
+        "proc-role-usage-card",
+        "role-usage-card"
+      ]
+    },
+    {
+      "line": 7146,
+      "selector": ".role-usage-card + .role-usage-card, .proc-role-usage-card + .proc-role-usage-card",
+      "tokens": [
+        "proc-role-usage-card",
+        "role-usage-card"
+      ]
+    },
+    {
+      "line": 7150,
+      "selector": ".role-usage-head, .proc-role-usage-head",
+      "tokens": [
+        "proc-role-usage-head",
+        "role-usage-head"
+      ]
+    },
+    {
+      "line": 7155,
+      "selector": ".role-usage-proc, .proc-role-usage-proc",
+      "tokens": [
+        "proc-role-usage-proc",
+        "role-usage-proc"
+      ]
+    },
+    {
+      "line": 7159,
+      "selector": ".role-usage-subdomain, .proc-role-usage-subdomain",
+      "tokens": [
+        "proc-role-usage-subdomain",
+        "role-usage-subdomain"
+      ]
+    },
+    {
+      "line": 7169,
+      "selector": ".role-usage-tasks, .proc-role-task-list",
+      "tokens": [
+        "proc-role-task-list",
+        "role-usage-tasks"
+      ]
+    },
+    {
+      "line": 7173,
+      "selector": ".role-task-chip",
+      "tokens": [
+        "role-task-chip"
+      ]
+    },
+    {
+      "line": 7182,
+      "selector": ".role-task-chip:hover",
+      "tokens": [
+        "role-task-chip"
+      ]
+    },
+    {
+      "line": 7185,
+      "selector": ".domain-language-card",
+      "tokens": [
+        "domain-language-card"
+      ]
+    },
+    {
+      "line": 7188,
+      "selector": ".domain-language-body",
+      "tokens": [
+        "domain-language-body"
+      ]
+    },
+    {
+      "line": 7203,
+      "selector": ".domain-panel-head",
+      "tokens": [
+        "domain-panel-head"
+      ]
+    },
+    {
+      "line": 7211,
+      "selector": ".domain-panel-head-button",
+      "tokens": [
+        "domain-panel-head-button"
+      ]
+    },
+    {
+      "line": 7218,
+      "selector": ".domain-panel-head-button:hover",
+      "tokens": [
+        "domain-panel-head-button"
+      ]
+    },
+    {
+      "line": 7221,
+      "selector": ".domain-panel-copy",
+      "tokens": [
+        "domain-panel-copy"
+      ]
+    },
+    {
+      "line": 7225,
+      "selector": ".domain-panel-title-row",
+      "tokens": [
+        "domain-panel-title-row"
+      ]
+    },
+    {
+      "line": 7231,
+      "selector": ".domain-panel-subtitle",
+      "tokens": [
+        "domain-panel-subtitle"
+      ]
+    },
+    {
+      "line": 7237,
+      "selector": ".domain-panel-actions",
+      "tokens": [
+        "domain-panel-actions"
+      ]
+    },
+    {
+      "line": 7260,
+      "selector": ".domain-panel-stat",
+      "tokens": [
+        "domain-panel-stat"
+      ]
+    },
+    {
+      "line": 7265,
+      "selector": ".domain-panel-body",
+      "tokens": [
+        "domain-panel-body"
+      ]
+    },
+    {
+      "line": 7271,
+      "selector": ".business-model-dialog-backdrop",
+      "tokens": [
+        "business-model-dialog-backdrop"
+      ]
+    },
+    {
+      "line": 7281,
+      "selector": ".business-model-dialog-panel",
+      "tokens": [
+        "business-model-dialog-panel"
+      ]
+    },
+    {
+      "line": 7292,
+      "selector": ".business-model-dialog-panel.task-definition-dialog",
+      "tokens": [
+        "business-model-dialog-panel",
+        "task-definition-dialog"
+      ]
+    },
+    {
+      "line": 7295,
+      "selector": ".task-detail-label-row",
+      "tokens": [
+        "task-detail-label-row"
+      ]
+    },
+    {
+      "line": 7301,
+      "selector": ".task-detail-label-row label",
+      "tokens": [
+        "task-detail-label-row"
+      ]
+    },
+    {
+      "line": 7302,
+      "selector": ".task-detail-label-row .rich-text-toolbar",
+      "tokens": [
+        "rich-text-toolbar",
+        "task-detail-label-row"
+      ]
+    },
+    {
+      "line": 7312,
+      "selector": ".task-detail-field:focus-within .rich-text-toolbar",
+      "tokens": [
+        "rich-text-toolbar",
+        "task-detail-field"
+      ]
+    },
+    {
+      "line": 7315,
+      "selector": ".task-detail-shortcuts",
+      "tokens": [
+        "task-detail-shortcuts"
+      ]
+    },
+    {
+      "line": 7321,
+      "selector": ".task-detail-field:focus-within .task-detail-shortcuts",
+      "tokens": [
+        "task-detail-field",
+        "task-detail-shortcuts"
+      ]
+    },
+    {
+      "line": 7324,
+      "selector": ".rich-text-shortcuts",
+      "tokens": [
+        "rich-text-shortcuts"
+      ]
+    },
+    {
+      "line": 7331,
+      "selector": ".rich-text-field:focus-within .rich-text-shortcuts",
+      "tokens": [
+        "rich-text-field",
+        "rich-text-shortcuts"
+      ]
+    },
+    {
+      "line": 7334,
+      "selector": ".task-detail-editor-box",
+      "tokens": [
+        "task-detail-editor-box"
+      ]
+    },
+    {
+      "line": 7338,
+      "selector": ".task-detail-editor-box .rich-text-editor",
+      "tokens": [
+        "rich-text-editor",
+        "task-detail-editor-box"
+      ]
+    },
+    {
+      "line": 7342,
+      "selector": ".business-model-dialog-panel.task-definition-manager-dialog",
+      "tokens": [
+        "business-model-dialog-panel",
+        "task-definition-manager-dialog"
+      ]
+    },
+    {
+      "line": 7345,
+      "selector": ".business-model-dialog-head",
+      "tokens": [
+        "business-model-dialog-head"
+      ]
+    },
+    {
+      "line": 7353,
+      "selector": ".business-model-dialog-head h3",
+      "tokens": [
+        "business-model-dialog-head"
+      ]
+    },
+    {
+      "line": 7357,
+      "selector": ".business-model-dialog-actions",
+      "tokens": [
+        "business-model-dialog-actions"
+      ]
+    },
+    {
+      "line": 7362,
+      "selector": ".business-model-dialog-actions .business-model-back-btn",
+      "tokens": [
+        "business-model-back-btn",
+        "business-model-dialog-actions"
+      ]
+    },
+    {
+      "line": 7368,
+      "selector": ".business-model-dialog-actions .business-model-back-btn:hover",
+      "tokens": [
+        "business-model-back-btn",
+        "business-model-dialog-actions"
+      ]
+    },
+    {
+      "line": 7371,
+      "selector": ".dialog-progress",
+      "tokens": [
+        "dialog-progress"
+      ]
+    },
+    {
+      "line": 7383,
+      "selector": ".dialog-progress-bar",
+      "tokens": [
+        "dialog-progress-bar"
+      ]
+    },
+    {
+      "line": 7390,
+      "selector": ".dialog-progress-bar .pb-seg",
+      "tokens": [
+        "dialog-progress-bar",
+        "pb-seg"
+      ]
+    },
+    {
+      "line": 7398,
+      "selector": ".dialog-progress-bar .pb-fill",
+      "tokens": [
+        "dialog-progress-bar",
+        "pb-fill"
+      ]
+    },
+    {
+      "line": 7405,
+      "selector": ".dialog-progress-bar .pb-label",
+      "tokens": [
+        "dialog-progress-bar",
+        "pb-label"
+      ]
+    },
+    {
+      "line": 7413,
+      "selector": ".business-model-dialog-body",
+      "tokens": [
+        "business-model-dialog-body"
+      ]
+    },
+    {
+      "line": 7419,
+      "selector": ".business-model-dialog-grid",
+      "tokens": [
+        "business-model-dialog-grid"
+      ]
+    },
+    {
+      "line": 7424,
+      "selector": ".business-model-dialog-section",
+      "tokens": [
+        "business-model-dialog-section"
+      ]
+    },
+    {
+      "line": 7447,
+      "selector": ".business-model-section-hint",
+      "tokens": [
+        "business-model-section-hint"
+      ]
+    },
+    {
+      "line": 7452,
+      "selector": ".business-model-move-list",
+      "tokens": [
+        "business-model-move-list"
+      ]
+    },
+    {
+      "line": 7456,
+      "selector": ".business-model-move-row",
+      "tokens": [
+        "business-model-move-row"
+      ]
+    },
+    {
+      "line": 7466,
+      "selector": ".business-model-move-row > span:first-child",
+      "tokens": [
+        "business-model-move-row"
+      ]
+    },
+    {
+      "line": 7472,
+      "selector": ".business-model-move-actions",
+      "tokens": [
+        "business-model-move-actions"
+      ]
+    },
+    {
+      "line": 7477,
+      "selector": ".business-model-manager-hint",
+      "tokens": [
+        "business-model-manager-hint"
+      ]
+    },
+    {
+      "line": 7483,
+      "selector": ".task-definition-manager-group",
+      "tokens": [
+        "task-definition-manager-group"
+      ]
+    },
+    {
+      "line": 7486,
+      "selector": ".task-definition-manager-main",
+      "tokens": [
+        "task-definition-manager-main"
+      ]
+    },
+    {
+      "line": 7492,
+      "selector": ".task-definition-manager-main strong",
+      "tokens": [
+        "task-definition-manager-main"
+      ]
+    },
+    {
+      "line": 7497,
+      "selector": ".task-definition-manager-main small",
+      "tokens": [
+        "task-definition-manager-main"
+      ]
+    },
+    {
+      "line": 7507,
+      "selector": ".task-definition-tech-group input",
+      "tokens": [
+        "task-definition-tech-group"
+      ]
+    },
+    {
+      "line": 7510,
+      "selector": ".task-definition-param-summary",
+      "tokens": [
+        "task-definition-param-summary"
+      ]
+    },
+    {
+      "line": 7513,
+      "selector": ".task-definition-param-bar",
+      "tokens": [
+        "task-definition-param-bar"
+      ]
+    },
+    {
+      "line": 7524,
+      "selector": ".task-definition-param-bar span",
+      "tokens": [
+        "task-definition-param-bar"
+      ]
+    },
+    {
+      "line": 7533,
+      "selector": ".task-parameter-modal",
+      "tokens": [
+        "task-parameter-modal"
+      ]
+    },
+    {
+      "line": 7536,
+      "selector": ".task-parameter-modal-body",
+      "tokens": [
+        "task-parameter-modal-body"
+      ]
+    },
+    {
+      "line": 7542,
+      "selector": ".task-param-address",
+      "tokens": [
+        "task-param-address"
+      ]
+    },
+    {
+      "line": 7548,
+      "selector": ".task-param-address label",
+      "tokens": [
+        "task-param-address"
+      ]
+    },
+    {
+      "line": 7552,
+      "selector": ".task-param-address input",
+      "tokens": [
+        "task-param-address"
+      ]
+    },
+    {
+      "line": 7560,
+      "selector": ".task-param-address span",
+      "tokens": [
+        "task-param-address"
+      ]
+    },
+    {
+      "line": 7565,
+      "selector": ".task-param-grid",
+      "tokens": [
+        "task-param-grid"
+      ]
+    },
+    {
+      "line": 7570,
+      "selector": ".task-param-panel",
+      "tokens": [
+        "task-param-panel"
+      ]
+    },
+    {
+      "line": 7577,
+      "selector": ".task-param-panel-head",
+      "tokens": [
+        "task-param-panel-head"
+      ]
+    },
+    {
+      "line": 7584,
+      "selector": ".task-param-panel-head h4",
+      "tokens": [
+        "task-param-panel-head"
+      ]
+    },
+    {
+      "line": 7588,
+      "selector": ".task-param-header, .task-param-row",
+      "tokens": [
+        "task-param-header",
+        "task-param-row"
+      ]
+    },
+    {
+      "line": 7595,
+      "selector": ".task-param-header",
+      "tokens": [
+        "task-param-header"
+      ]
+    },
+    {
+      "line": 7601,
+      "selector": ".task-param-row",
+      "tokens": [
+        "task-param-row"
+      ]
+    },
+    {
+      "line": 7608,
+      "selector": ".task-param-actions",
+      "tokens": [
+        "task-param-actions"
+      ]
+    },
+    {
+      "line": 7613,
+      "selector": ".task-param-row input[type=\"text\"], .task-param-row select",
+      "tokens": [
+        "task-param-row"
+      ]
+    },
+    {
+      "line": 7632,
+      "selector": ".task-param-children",
+      "tokens": [
+        "task-param-children"
+      ]
+    },
+    {
+      "line": 7639,
+      "selector": ".task-param-children-head",
+      "tokens": [
+        "task-param-children-head"
+      ]
+    },
+    {
+      "line": 7643,
+      "selector": ".task-param-children-head span",
+      "tokens": [
+        "task-param-children-head"
+      ]
+    },
+    {
+      "line": 7646,
+      "selector": ".task-param-child-row",
+      "tokens": [
+        "task-param-child-row"
+      ]
+    },
+    {
+      "line": 7649,
+      "selector": ".task-param-required",
+      "tokens": [
+        "task-param-required"
+      ]
+    },
+    {
+      "line": 7657,
+      "selector": ".task-param-empty",
+      "tokens": [
+        "task-param-empty"
+      ]
+    },
+    {
+      "line": 7667,
+      "selector": ".domain-info-card .domain-panel-head",
+      "tokens": [
+        "domain-info-card",
+        "domain-panel-head"
+      ]
+    },
+    {
+      "line": 7671,
+      "selector": ".domain-info-card .domain-panel-copy",
+      "tokens": [
+        "domain-info-card",
+        "domain-panel-copy"
+      ]
+    },
+    {
+      "line": 7674,
+      "selector": ".domain-info-card .domain-panel-actions",
+      "tokens": [
+        "domain-info-card",
+        "domain-panel-actions"
+      ]
+    },
+    {
+      "line": 7677,
+      "selector": ".domain-info-inline",
+      "tokens": [
+        "domain-info-inline"
+      ]
+    },
+    {
+      "line": 7686,
+      "selector": ".domain-info-inline-field",
+      "tokens": [
+        "domain-info-inline-field"
+      ]
+    },
+    {
+      "line": 7693,
+      "selector": ".domain-info-inline-field span",
+      "tokens": [
+        "domain-info-inline-field"
+      ]
+    },
+    {
+      "line": 7698,
+      "selector": ".domain-info-inline-field input",
+      "tokens": [
+        "domain-info-inline-field"
+      ]
+    },
+    {
+      "line": 7701,
+      "selector": ".domain-info-author-field input",
+      "tokens": [
+        "domain-info-author-field"
+      ]
+    },
+    {
+      "line": 7704,
+      "selector": ".domain-info-date-field input",
+      "tokens": [
+        "domain-info-date-field"
+      ]
+    },
+    {
+      "line": 7707,
+      "selector": ".domain-info-space-field input",
+      "tokens": [
+        "domain-info-space-field"
+      ]
+    },
+    {
+      "line": 7710,
+      "selector": ".domain-info-tags-field input",
+      "tokens": [
+        "domain-info-tags-field"
+      ]
+    },
+    {
+      "line": 7713,
+      "selector": ".domain-language-card .domain-panel-head-button",
+      "tokens": [
+        "domain-language-card",
+        "domain-panel-head-button"
+      ]
+    },
+    {
+      "line": 7716,
+      "selector": ".domain-language-toolbar",
+      "tokens": [
+        "domain-language-toolbar"
+      ]
+    },
+    {
+      "line": 7723,
+      "selector": ".domain-language-hint",
+      "tokens": [
+        "domain-language-hint"
+      ]
+    },
+    {
+      "line": 7728,
+      "selector": ".term-quick-actions",
+      "tokens": [
+        "term-quick-actions"
+      ]
+    },
+    {
+      "line": 7735,
+      "selector": ".domain-info-card-body",
+      "tokens": [
+        "domain-info-card-body"
+      ]
+    },
+    {
+      "line": 7740,
+      "selector": ".domain-info-map-block",
+      "tokens": [
+        "domain-info-map-block"
+      ]
+    },
+    {
+      "line": 7744,
+      "selector": ".domain-info-map-head",
+      "tokens": [
+        "domain-info-map-head"
+      ]
+    },
+    {
+      "line": 7750,
+      "selector": ".domain-info-scope-title",
+      "tokens": [
+        "domain-info-scope-title"
+      ]
+    },
+    {
+      "line": 7757,
+      "selector": ".domain-info-scope-title h3",
+      "tokens": [
+        "domain-info-scope-title"
+      ]
+    },
+    {
+      "line": 7761,
+      "selector": ".domain-info-scope-title span",
+      "tokens": [
+        "domain-info-scope-title"
+      ]
+    },
+    {
+      "line": 7769,
+      "selector": ".domain-subdomain-map-card .domain-panel-body",
+      "tokens": [
+        "domain-panel-body",
+        "domain-subdomain-map-card"
+      ]
+    },
+    {
+      "line": 7779,
+      "selector": ".domain-subdomain-actions",
+      "tokens": [
+        "domain-subdomain-actions"
+      ]
+    },
+    {
+      "line": 7786,
+      "selector": ".domain-model-integrated",
+      "tokens": [
+        "domain-model-integrated"
+      ]
+    },
+    {
+      "line": 7809,
+      "selector": ".subdomain-map-ovals",
+      "tokens": [
+        "subdomain-map-ovals"
+      ]
+    },
+    {
+      "line": 7814,
+      "selector": ".subdomain-oval",
+      "tokens": [
+        "subdomain-oval"
+      ]
+    },
+    {
+      "line": 7823,
+      "selector": ".subdomain-oval-core",
+      "tokens": [
+        "subdomain-oval-core"
+      ]
+    },
+    {
+      "line": 7827,
+      "selector": ".subdomain-oval-generic",
+      "tokens": [
+        "subdomain-oval-generic"
+      ]
+    },
+    {
+      "line": 7831,
+      "selector": ".subdomain-oval-title",
+      "tokens": [
+        "subdomain-oval-title"
+      ]
+    },
+    {
+      "line": 7843,
+      "selector": ".subdomain-oval-chips",
+      "tokens": [
+        "subdomain-oval-chips"
+      ]
+    },
+    {
+      "line": 7853,
+      "selector": ".subdomain-map-chip",
+      "tokens": [
+        "subdomain-map-chip"
+      ]
+    },
+    {
+      "line": 7873,
+      "selector": ".subdomain-map-chip-name",
+      "tokens": [
+        "subdomain-map-chip-name"
+      ]
+    },
+    {
+      "line": 7878,
+      "selector": ".subdomain-map-chip-meta",
+      "tokens": [
+        "subdomain-map-chip-meta"
+      ]
+    },
+    {
+      "line": 7887,
+      "selector": ".subdomain-classify-list",
+      "tokens": [
+        "subdomain-classify-list"
+      ]
+    },
+    {
+      "line": 7891,
+      "selector": ".subdomain-classify-row",
+      "tokens": [
+        "subdomain-classify-row"
+      ]
+    },
+    {
+      "line": 7901,
+      "selector": ".subdomain-classify-main",
+      "tokens": [
+        "subdomain-classify-main"
+      ]
+    },
+    {
+      "line": 7907,
+      "selector": ".subdomain-classify-main strong",
+      "tokens": [
+        "subdomain-classify-main"
+      ]
+    },
+    {
+      "line": 7911,
+      "selector": ".subdomain-classify-meta",
+      "tokens": [
+        "subdomain-classify-meta"
+      ]
+    },
+    {
+      "line": 7915,
+      "selector": ".subdomain-classify-actions",
+      "tokens": [
+        "subdomain-classify-actions"
+      ]
+    },
+    {
+      "line": 8051,
+      "selector": ".domain-panel-toggle",
+      "tokens": [
+        "domain-panel-toggle"
+      ]
+    },
+    {
+      "line": 8073,
+      "selector": ".panorama-map-actions",
+      "tokens": [
+        "panorama-map-actions"
+      ]
+    },
+    {
+      "line": 8359,
+      "selector": ".panorama-capability-constructs",
+      "tokens": [
+        "panorama-capability-constructs"
+      ]
+    },
+    {
+      "line": 8364,
+      "selector": ".panorama-capability-constructs em",
+      "tokens": [
+        "panorama-capability-constructs"
+      ]
+    },
+    {
+      "line": 8460,
+      "selector": "/* ─── 字段表格：列宽控制 ─────────────────────────────────── */ .field-td-name",
+      "tokens": [
+        "field-td-name"
+      ]
+    },
+    {
+      "line": 8462,
+      "selector": ".field-td-type",
+      "tokens": [
+        "field-td-type"
+      ]
+    },
+    {
+      "line": 8463,
+      "selector": ".field-td-note",
+      "tokens": [
+        "field-td-note"
+      ]
+    },
+    {
+      "line": 8464,
+      "selector": ".field-td-note textarea",
+      "tokens": [
+        "field-td-note"
+      ]
+    },
+    {
+      "line": 8470,
+      "selector": ".field-td-note textarea:focus, .field-td-note textarea[style*=\"height\"]",
+      "tokens": [
+        "field-td-note"
+      ]
+    },
+    {
+      "line": 8531,
+      "selector": ".inline-help-left::before",
+      "tokens": [
+        "inline-help-left"
+      ]
+    },
+    {
+      "line": 8539,
+      "selector": ".inline-help-left::after",
+      "tokens": [
+        "inline-help-left"
+      ]
+    },
+    {
+      "line": 8545,
+      "selector": ".inline-help-left:hover::before, .inline-help-left:hover::after, .inline-help-left:focus-visible::before, .inline-help-left:focus-visible::after",
+      "tokens": [
+        "inline-help-left"
+      ]
+    },
+    {
+      "line": 8551,
+      "selector": ".floating-help-tooltip",
+      "tokens": [
+        "floating-help-tooltip"
+      ]
+    },
+    {
+      "line": 8616,
+      "selector": "/* ─── section 副标题提示 ────────────────────────────────── */ .section-hint",
+      "tokens": [
+        "section-hint"
+      ]
+    },
+    {
+      "line": 8622,
+      "selector": ".task-role-picker",
+      "tokens": [
+        "task-role-picker"
+      ]
+    },
+    {
+      "line": 8631,
+      "selector": ".task-role-head",
+      "tokens": [
+        "task-role-head"
+      ]
+    },
+    {
+      "line": 8637,
+      "selector": ".task-role-toggle",
+      "tokens": [
+        "task-role-toggle"
+      ]
+    },
+    {
+      "line": 8655,
+      "selector": ".task-role-toggle:hover",
+      "tokens": [
+        "task-role-toggle"
+      ]
+    },
+    {
+      "line": 8659,
+      "selector": ".task-role-toggle:focus-visible",
+      "tokens": [
+        "task-role-toggle"
+      ]
+    },
+    {
+      "line": 8663,
+      "selector": ".task-role-toggle-main",
+      "tokens": [
+        "task-role-toggle-main"
+      ]
+    },
+    {
+      "line": 8672,
+      "selector": ".task-role-toggle-label",
+      "tokens": [
+        "task-role-toggle-label"
+      ]
+    },
+    {
+      "line": 8677,
+      "selector": ".task-role-toggle-count",
+      "tokens": [
+        "task-role-toggle-count"
+      ]
+    },
+    {
+      "line": 8689,
+      "selector": ".task-role-toggle-text",
+      "tokens": [
+        "task-role-toggle-text"
+      ]
+    },
+    {
+      "line": 8692,
+      "selector": ".task-role-toggle-caret",
+      "tokens": [
+        "task-role-toggle-caret"
+      ]
+    },
+    {
+      "line": 8702,
+      "selector": ".task-role-collapsed-preview",
+      "tokens": [
+        "task-role-collapsed-preview"
+      ]
+    },
+    {
+      "line": 8707,
+      "selector": ".task-role-collapsed-list",
+      "tokens": [
+        "task-role-collapsed-list"
+      ]
+    },
+    {
+      "line": 8712,
+      "selector": ".task-role-collapsed-chip, .task-role-collapsed-more",
+      "tokens": [
+        "task-role-collapsed-chip",
+        "task-role-collapsed-more"
+      ]
+    },
+    {
+      "line": 8725,
+      "selector": ".task-role-collapsed-more",
+      "tokens": [
+        "task-role-collapsed-more"
+      ]
+    },
+    {
+      "line": 8730,
+      "selector": ".task-role-collapsed-empty",
+      "tokens": [
+        "task-role-collapsed-empty"
+      ]
+    },
+    {
+      "line": 8734,
+      "selector": ".task-role-picker-empty",
+      "tokens": [
+        "task-role-picker-empty"
+      ]
+    },
+    {
+      "line": 8740,
+      "selector": ".task-role-picker-body",
+      "tokens": [
+        "task-role-picker-body"
+      ]
+    },
+    {
+      "line": 8745,
+      "selector": ".task-role-selected",
+      "tokens": [
+        "task-role-selected"
+      ]
+    },
+    {
+      "line": 8753,
+      "selector": ".task-role-selected-count, .task-role-selected-empty",
+      "tokens": [
+        "task-role-selected-count",
+        "task-role-selected-empty"
+      ]
+    },
+    {
+      "line": 8758,
+      "selector": ".task-role-selected-list",
+      "tokens": [
+        "task-role-selected-list"
+      ]
+    },
+    {
+      "line": 8763,
+      "selector": ".task-role-selected-chip",
+      "tokens": [
+        "task-role-selected-chip"
+      ]
+    },
+    {
+      "line": 8774,
+      "selector": ".task-role-group-list",
+      "tokens": [
+        "task-role-group-list"
+      ]
+    },
+    {
+      "line": 8779,
+      "selector": ".task-role-group",
+      "tokens": [
+        "task-role-group"
+      ]
+    },
+    {
+      "line": 8784,
+      "selector": ".task-role-group-head",
+      "tokens": [
+        "task-role-group-head"
+      ]
+    },
+    {
+      "line": 8790,
+      "selector": ".task-role-group-name",
+      "tokens": [
+        "task-role-group-name"
+      ]
+    },
+    {
+      "line": 8795,
+      "selector": ".task-role-group-count",
+      "tokens": [
+        "task-role-group-count"
+      ]
+    },
+    {
+      "line": 8808,
+      "selector": ".task-role-option-list",
+      "tokens": [
+        "task-role-option-list"
+      ]
+    },
+    {
+      "line": 8813,
+      "selector": ".task-role-option",
+      "tokens": [
+        "task-role-option"
+      ]
+    },
+    {
+      "line": 8826,
+      "selector": ".task-role-option:hover",
+      "tokens": [
+        "task-role-option"
+      ]
+    },
+    {
+      "line": 8836,
+      "selector": ".task-role-option input",
+      "tokens": [
+        "task-role-option"
+      ]
+    },
+    {
+      "line": 8840,
+      "selector": ".task-role-option-name",
+      "tokens": [
+        "task-role-option-name"
+      ]
+    },
+    {
+      "line": 8844,
+      "selector": ".task-role-picker-actions",
+      "tokens": [
+        "task-role-picker-actions"
+      ]
+    },
+    {
+      "line": 8850,
+      "selector": "/* ── Entity Flow Diagram ── */ .ef-canvas",
+      "tokens": [
+        "ef-canvas"
+      ]
+    },
+    {
+      "line": 8852,
+      "selector": ".ef-canvas:active",
+      "tokens": [
+        "ef-canvas"
+      ]
+    },
+    {
+      "line": 8853,
+      "selector": ".ef-board",
+      "tokens": [
+        "ef-board"
+      ]
+    },
+    {
+      "line": 8854,
+      "selector": ".ef-component-frame",
+      "tokens": [
+        "ef-component-frame"
+      ]
+    },
+    {
+      "line": 8862,
+      "selector": ".ef-component-title",
+      "tokens": [
+        "ef-component-title"
+      ]
+    },
+    {
+      "line": 8875,
+      "selector": ".ef-group-frame",
+      "tokens": [
+        "ef-group-frame"
+      ]
+    },
+    {
+      "line": 8884,
+      "selector": ".ef-group-title",
+      "tokens": [
+        "ef-group-title"
+      ]
+    },
+    {
+      "line": 8895,
+      "selector": ".ef-node",
+      "tokens": [
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8906,
+      "selector": ".ef-node.ef-clickable",
+      "tokens": [
+        "ef-clickable",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8907,
+      "selector": ".ef-node.ef-clickable:hover",
+      "tokens": [
+        "ef-clickable",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8908,
+      "selector": ".ef-node.ef-draggable",
+      "tokens": [
+        "ef-draggable",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8909,
+      "selector": ".ef-node.ef-draggable:active",
+      "tokens": [
+        "ef-draggable",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8910,
+      "selector": ".ef-node.ef-draggable.ef-clickable:hover",
+      "tokens": [
+        "ef-clickable",
+        "ef-draggable",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8911,
+      "selector": ".ef-node.ef-muted",
+      "tokens": [
+        "ef-muted",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8915,
+      "selector": ".ef-node.ef-neighbor",
+      "tokens": [
+        "ef-neighbor",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8918,
+      "selector": ".ef-node.ef-focus",
+      "tokens": [
+        "ef-focus",
+        "ef-node"
+      ]
+    },
+    {
+      "line": 8923,
+      "selector": "/* 选中状态 */ .ef-node.ef-selected",
+      "tokens": [
+        "ef-node",
+        "ef-selected"
+      ]
+    },
+    {
+      "line": 8929,
+      "selector": ".ef-rel",
+      "tokens": [
+        "ef-rel"
+      ]
+    },
+    {
+      "line": 8933,
+      "selector": "/* 框选矩形 */ .ef-rubber",
+      "tokens": [
+        "ef-rubber"
+      ]
+    },
+    {
+      "line": 8939,
+      "selector": ".ef-nid",
+      "tokens": [
+        "ef-nid"
+      ]
+    },
+    {
+      "line": 8940,
+      "selector": ".ef-nname",
+      "tokens": [
+        "ef-nname"
+      ]
+    },
+    {
+      "line": 8941,
+      "selector": ".ef-svg",
+      "tokens": [
+        "ef-svg"
+      ]
+    },
+    {
+      "line": 8947,
+      "selector": "/* ── Preview HTML ── */ .pv-content",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8949,
+      "selector": ".pv-content h1",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8950,
+      "selector": ".pv-content h2",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8951,
+      "selector": ".pv-content h3",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8952,
+      "selector": ".pv-content h4",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8953,
+      "selector": ".pv-content hr",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8954,
+      "selector": ".pv-content table",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8955,
+      "selector": ".pv-content th",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8956,
+      "selector": ".pv-content td",
+      "tokens": [
+        "pv-content"
+      ]
+    },
+    {
+      "line": 8957,
+      "selector": ".pv-content .pv-meta",
+      "tokens": [
+        "pv-content",
+        "pv-meta"
+      ]
+    },
+    {
+      "line": 8958,
+      "selector": ".pv-content .pv-diag",
+      "tokens": [
+        "pv-content",
+        "pv-diag"
+      ]
+    },
+    {
+      "line": 8959,
+      "selector": ".pv-content .pv-entity-diag",
+      "tokens": [
+        "pv-content",
+        "pv-entity-diag"
+      ]
+    },
+    {
+      "line": 8960,
+      "selector": ".pv-content .pv-tasks",
+      "tokens": [
+        "pv-content",
+        "pv-tasks"
+      ]
+    },
+    {
+      "line": 8961,
+      "selector": ".pv-content .pv-task-detail",
+      "tokens": [
+        "pv-content",
+        "pv-task-detail"
+      ]
+    },
+    {
+      "line": 8962,
+      "selector": ".pv-content .pv-role",
+      "tokens": [
+        "pv-content",
+        "pv-role"
+      ]
+    },
+    {
+      "line": 8963,
+      "selector": ".pv-content .pv-note",
+      "tokens": [
+        "pv-content",
+        "pv-note"
+      ]
+    },
+    {
+      "line": 8964,
+      "selector": ".pv-content .pv-role-usecase-section, .pv-content .pv-entity-state-graphs",
+      "tokens": [
+        "pv-content",
+        "pv-entity-state-graphs",
+        "pv-role-usecase-section"
+      ]
+    },
+    {
+      "line": 8968,
+      "selector": ".pv-content .pv-role-usecase-item, .pv-content .pv-entity-state-graph",
+      "tokens": [
+        "pv-content",
+        "pv-entity-state-graph",
+        "pv-role-usecase-item"
+      ]
+    },
+    {
+      "line": 8976,
+      "selector": ".pv-content .pv-entity-state-graph .entity-state-zoom-shell",
+      "tokens": [
+        "entity-state-zoom-shell",
+        "pv-content",
+        "pv-entity-state-graph"
+      ]
+    },
+    {
+      "line": 8980,
+      "selector": ".pv-content .pv-form-model",
+      "tokens": [
+        "pv-content",
+        "pv-form-model"
+      ]
+    },
+    {
+      "line": 8987,
+      "selector": ".pv-content .pv-form-model h5",
+      "tokens": [
+        "pv-content",
+        "pv-form-model"
+      ]
+    },
+    {
+      "line": 8992,
+      "selector": ".pv-content .pv-form-card + .pv-form-card",
+      "tokens": [
+        "pv-content",
+        "pv-form-card"
+      ]
+    },
+    {
+      "line": 8997,
+      "selector": ".pv-content .role-tag",
+      "tokens": [
+        "pv-content",
+        "role-tag"
+      ]
+    },
+    {
+      "line": 9027,
+      "selector": ".process-flow-title-wrap",
+      "tokens": [
+        "process-flow-title-wrap"
+      ]
+    },
+    {
+      "line": 9048,
+      "selector": ".process-flow-kicker",
+      "tokens": [
+        "process-flow-kicker"
+      ]
+    },
+    {
+      "line": 9075,
+      "selector": ".process-diagram-mode",
+      "tokens": [
+        "process-diagram-mode"
+      ]
+    },
+    {
+      "line": 9098,
+      "selector": ".process-diagram-mode .process-summary-help",
+      "tokens": [
+        "process-diagram-mode",
+        "process-summary-help"
+      ]
+    },
+    {
+      "line": 9102,
+      "selector": ".process-summary-help-wrap",
+      "tokens": [
+        "process-summary-help-wrap"
+      ]
+    },
+    {
+      "line": 9112,
+      "selector": ".process-summary-help-icon",
+      "tokens": [
+        "process-summary-help-icon"
+      ]
+    },
+    {
+      "line": 9126,
+      "selector": ".process-summary-help-panel",
+      "tokens": [
+        "process-summary-help-panel"
+      ]
+    },
+    {
+      "line": 9145,
+      "selector": ".process-summary-help-wrap:not(.is-suppressed):hover .process-summary-help-panel, .process-summary-help-wrap.is-open .process-summary-help-panel",
+      "tokens": [
+        "is-open",
+        "process-summary-help-panel",
+        "process-summary-help-wrap"
+      ]
+    },
+    {
+      "line": 9151,
+      "selector": ".summary-help-head",
+      "tokens": [
+        "summary-help-head"
+      ]
+    },
+    {
+      "line": 9157,
+      "selector": ".summary-help-head strong",
+      "tokens": [
+        "summary-help-head"
+      ]
+    },
+    {
+      "line": 9160,
+      "selector": ".summary-help-head span",
+      "tokens": [
+        "summary-help-head"
+      ]
+    },
+    {
+      "line": 9164,
+      "selector": ".summary-help-grid",
+      "tokens": [
+        "summary-help-grid"
+      ]
+    },
+    {
+      "line": 9169,
+      "selector": ".summary-help-card",
+      "tokens": [
+        "summary-help-card"
+      ]
+    },
+    {
+      "line": 9176,
+      "selector": ".summary-help-card strong",
+      "tokens": [
+        "summary-help-card"
+      ]
+    },
+    {
+      "line": 9181,
+      "selector": ".summary-help-card > span",
+      "tokens": [
+        "summary-help-card"
+      ]
+    },
+    {
+      "line": 9187,
+      "selector": ".summary-help-card svg",
+      "tokens": [
+        "summary-help-card"
+      ]
+    },
+    {
+      "line": 9195,
+      "selector": ".msh-node, .msh-boundary",
+      "tokens": [
+        "msh-boundary",
+        "msh-node"
+      ]
+    },
+    {
+      "line": 9201,
+      "selector": ".msh-blue",
+      "tokens": [
+        "msh-blue"
+      ]
+    },
+    {
+      "line": 9202,
+      "selector": ".msh-green",
+      "tokens": [
+        "msh-green"
+      ]
+    },
+    {
+      "line": 9203,
+      "selector": ".msh-yellow",
+      "tokens": [
+        "msh-yellow"
+      ]
+    },
+    {
+      "line": 9204,
+      "selector": ".msh-boundary",
+      "tokens": [
+        "msh-boundary"
+      ]
+    },
+    {
+      "line": 9208,
+      "selector": ".msh-node-text",
+      "tokens": [
+        "msh-node-text"
+      ]
+    },
+    {
+      "line": 9214,
+      "selector": ".msh-link",
+      "tokens": [
+        "msh-link"
+      ]
+    },
+    {
+      "line": 9222,
+      "selector": ".msh-return",
+      "tokens": [
+        "msh-return"
+      ]
+    },
+    {
+      "line": 9226,
+      "selector": ".msh-label-bg",
+      "tokens": [
+        "msh-label-bg"
+      ]
+    },
+    {
+      "line": 9230,
+      "selector": ".msh-label",
+      "tokens": [
+        "msh-label"
+      ]
+    },
+    {
+      "line": 9241,
+      "selector": ".process-diagram-entity-toggle",
+      "tokens": [
+        "process-diagram-entity-toggle"
+      ]
+    },
+    {
+      "line": 9254,
+      "selector": ".process-diagram-entity-toggle input",
+      "tokens": [
+        "process-diagram-entity-toggle"
+      ]
+    },
+    {
+      "line": 9257,
+      "selector": ".process-flow-summary",
+      "tokens": [
+        "process-flow-summary"
+      ]
+    },
+    {
+      "line": 9263,
+      "selector": ".process-flow-summary span",
+      "tokens": [
+        "process-flow-summary"
+      ]
+    },
+    {
+      "line": 9274,
+      "selector": ".process-main-diag",
+      "tokens": [
+        "process-main-diag"
+      ]
+    },
+    {
+      "line": 9284,
+      "selector": ".process-main-diag .live-diagram",
+      "tokens": [
+        "live-diagram",
+        "process-main-diag"
+      ]
+    },
+    {
+      "line": 9290,
+      "selector": ".process-main-diag .pf-wrap, .process-main-diag .ptf-wrap, .process-main-diag .ps-wrap",
+      "tokens": [
+        "pf-wrap",
+        "process-main-diag",
+        "ps-wrap",
+        "ptf-wrap"
+      ]
+    },
+    {
+      "line": 9295,
+      "selector": ".process-diagram-stack",
+      "tokens": [
+        "process-diagram-stack"
+      ]
+    },
+    {
+      "line": 9303,
+      "selector": ".process-diagram-panel",
+      "tokens": [
+        "process-diagram-panel"
+      ]
+    },
+    {
+      "line": 9313,
+      "selector": ".process-panel-header",
+      "tokens": [
+        "process-panel-header"
+      ]
+    },
+    {
+      "line": 9319,
+      "selector": ".process-panel-header-title",
+      "tokens": [
+        "process-panel-header-title"
+      ]
+    },
+    {
+      "line": 9324,
+      "selector": ".process-panel-toggle",
+      "tokens": [
+        "process-panel-toggle"
+      ]
+    },
+    {
+      "line": 9333,
+      "selector": ".process-panel-toggle:hover",
+      "tokens": [
+        "process-panel-toggle"
+      ]
+    },
+    {
+      "line": 9339,
+      "selector": ".process-flow-routing-editor .section-actions",
+      "tokens": [
+        "process-flow-routing-editor",
+        "section-actions"
+      ]
+    },
+    {
+      "line": 9343,
+      "selector": ".process-flow-routing-editor",
+      "tokens": [
+        "process-flow-routing-editor"
+      ]
+    },
+    {
+      "line": 9346,
+      "selector": ".flow-routing-hint",
+      "tokens": [
+        "flow-routing-hint"
+      ]
+    },
+    {
+      "line": 9352,
+      "selector": ".flow-validation",
+      "tokens": [
+        "flow-validation"
+      ]
+    },
+    {
+      "line": 9364,
+      "selector": ".flow-routing-grid",
+      "tokens": [
+        "flow-routing-grid"
+      ]
+    },
+    {
+      "line": 9370,
+      "selector": ".flow-routing-column",
+      "tokens": [
+        "flow-routing-column"
+      ]
+    },
+    {
+      "line": 9378,
+      "selector": ".flow-routing-column:last-child",
+      "tokens": [
+        "flow-routing-column"
+      ]
+    },
+    {
+      "line": 9382,
+      "selector": ".flow-routing-column h5",
+      "tokens": [
+        "flow-routing-column"
+      ]
+    },
+    {
+      "line": 9402,
+      "selector": ".flow-node-row",
+      "tokens": [
+        "flow-node-row"
+      ]
+    },
+    {
+      "line": 9420,
+      "selector": ".flow-node-role",
+      "tokens": [
+        "flow-node-role"
+      ]
+    },
+    {
+      "line": 9427,
+      "selector": ".flow-node-role-picker",
+      "tokens": [
+        "flow-node-role-picker"
+      ]
+    },
+    {
+      "line": 9431,
+      "selector": ".flow-node-role-trigger",
+      "tokens": [
+        "flow-node-role-trigger"
+      ]
+    },
+    {
+      "line": 9447,
+      "selector": ".flow-node-role-trigger span",
+      "tokens": [
+        "flow-node-role-trigger"
+      ]
+    },
+    {
+      "line": 9453,
+      "selector": ".flow-node-role-trigger b",
+      "tokens": [
+        "flow-node-role-trigger"
+      ]
+    },
+    {
+      "line": 9464,
+      "selector": ".flow-node-role-picker.is-open .flow-node-role-trigger",
+      "tokens": [
+        "flow-node-role-picker",
+        "flow-node-role-trigger",
+        "is-open"
+      ]
+    },
+    {
+      "line": 9468,
+      "selector": ".flow-node-role-menu",
+      "tokens": [
+        "flow-node-role-menu"
+      ]
+    },
+    {
+      "line": 9482,
+      "selector": ".flow-node-role-menu-head",
+      "tokens": [
+        "flow-node-role-menu-head"
+      ]
+    },
+    {
+      "line": 9488,
+      "selector": ".flow-node-role-option",
+      "tokens": [
+        "flow-node-role-option"
+      ]
+    },
+    {
+      "line": 9499,
+      "selector": ".flow-node-role-option:hover",
+      "tokens": [
+        "flow-node-role-option"
+      ]
+    },
+    {
+      "line": 9502,
+      "selector": ".flow-node-role-option input",
+      "tokens": [
+        "flow-node-role-option"
+      ]
+    },
+    {
+      "line": 9507,
+      "selector": ".flow-node-role-option input:checked + span",
+      "tokens": [
+        "flow-node-role-option"
+      ]
+    },
+    {
+      "line": 9511,
+      "selector": ".flow-node-role-empty",
+      "tokens": [
+        "flow-node-role-empty"
+      ]
+    },
+    {
+      "line": 9516,
+      "selector": ".flow-node-role-menu-footer",
+      "tokens": [
+        "flow-node-role-menu-footer"
+      ]
+    },
+    {
+      "line": 9523,
+      "selector": ".flow-node-role-menu-footer button",
+      "tokens": [
+        "flow-node-role-menu-footer"
+      ]
+    },
+    {
+      "line": 9565,
+      "selector": ".flow-edge-arrow",
+      "tokens": [
+        "flow-edge-arrow"
+      ]
+    },
+    {
+      "line": 9572,
+      "selector": ".process-diagram-panel-title",
+      "tokens": [
+        "process-diagram-panel-title"
+      ]
+    },
+    {
+      "line": 9578,
+      "selector": ".process-diagram-stack .process-main-diag",
+      "tokens": [
+        "process-diagram-stack",
+        "process-main-diag"
+      ]
+    },
+    {
+      "line": 9584,
+      "selector": ".process-context-main-diag",
+      "tokens": [
+        "process-context-main-diag"
+      ]
+    },
+    {
+      "line": 9589,
+      "selector": ".process-context-diag .pf-wrap",
+      "tokens": [
+        "pf-wrap",
+        "process-context-diag"
+      ]
+    },
+    {
+      "line": 9660,
+      "selector": ".manual-shell #tab-bar",
+      "tokens": [
+        "manual-shell",
+        "tab-bar"
+      ]
+    },
+    {
+      "line": 9663,
+      "selector": ".manual-shell #content",
+      "tokens": [
+        "content",
+        "manual-shell"
+      ]
+    },
+    {
+      "line": 9712,
+      "selector": "/* ─── AI Assistant Modal ────────────────────────────── */ .ai-modal",
+      "tokens": [
+        "ai-modal"
+      ]
+    },
+    {
+      "line": 9720,
+      "selector": ".ai-header",
+      "tokens": [
+        "ai-header"
+      ]
+    },
+    {
+      "line": 9727,
+      "selector": ".ai-header h3",
+      "tokens": [
+        "ai-header"
+      ]
+    },
+    {
+      "line": 9728,
+      "selector": ".ai-header-actions",
+      "tokens": [
+        "ai-header-actions"
+      ]
+    },
+    {
+      "line": 9734,
+      "selector": ".ai-workspace-label",
+      "tokens": [
+        "ai-workspace-label"
+      ]
+    },
+    {
+      "line": 9741,
+      "selector": ".ai-messages",
+      "tokens": [
+        "ai-messages"
+      ]
+    },
+    {
+      "line": 9751,
+      "selector": ".ai-welcome",
+      "tokens": [
+        "ai-welcome"
+      ]
+    },
+    {
+      "line": 9758,
+      "selector": ".ai-msg",
+      "tokens": [
+        "ai-msg"
+      ]
+    },
+    {
+      "line": 9766,
+      "selector": ".ai-msg-user",
+      "tokens": [
+        "ai-msg-user"
+      ]
+    },
+    {
+      "line": 9771,
+      "selector": ".ai-msg-ai",
+      "tokens": [
+        "ai-msg-ai"
+      ]
+    },
+    {
+      "line": 9776,
+      "selector": ".ai-msg-system",
+      "tokens": [
+        "ai-msg-system"
+      ]
+    },
+    {
+      "line": 9782,
+      "selector": ".ai-input-row",
+      "tokens": [
+        "ai-input-row"
+      ]
+    },
+    {
+      "line": 9788,
+      "selector": ".ai-input",
+      "tokens": [
+        "ai-input"
+      ]
+    },
+    {
+      "line": 9796,
+      "selector": ".ai-input:focus",
+      "tokens": [
+        "ai-input"
+      ]
+    },
+    {
+      "line": 9798,
+      "selector": "/* BLM AI 底部抽屉 */ .ai-drawer",
+      "tokens": [
+        "ai-drawer"
+      ]
+    },
+    {
+      "line": 9801,
+      "selector": ".ai-drawer-handle",
+      "tokens": [
+        "ai-drawer-handle"
+      ]
+    },
+    {
+      "line": 9802,
+      "selector": ".ai-drawer-handle:hover",
+      "tokens": [
+        "ai-drawer-handle"
+      ]
+    },
+    {
+      "line": 9803,
+      "selector": ".ai-drawer-handle::after",
+      "tokens": [
+        "ai-drawer-handle"
+      ]
+    },
+    {
+      "line": 9804,
+      "selector": "/* header */ .ai-drawer-header",
+      "tokens": [
+        "ai-drawer-header"
+      ]
+    },
+    {
+      "line": 9806,
+      "selector": ".ai-drawer-title",
+      "tokens": [
+        "ai-drawer-title"
+      ]
+    },
+    {
+      "line": 9807,
+      "selector": ".ai-session-select",
+      "tokens": [
+        "ai-session-select"
+      ]
+    },
+    {
+      "line": 9808,
+      "selector": ".ai-drawer-ws",
+      "tokens": [
+        "ai-drawer-ws"
+      ]
+    },
+    {
+      "line": 9809,
+      "selector": ".ai-drawer-close",
+      "tokens": [
+        "ai-drawer-close"
+      ]
+    },
+    {
+      "line": 9810,
+      "selector": "/* body */ .ai-body",
+      "tokens": [
+        "ai-body"
+      ]
+    },
+    {
+      "line": 9812,
+      "selector": "/* messages */ .ai-msg",
+      "tokens": [
+        "ai-msg"
+      ]
+    },
+    {
+      "line": 9814,
+      "selector": ".ai-msg-user",
+      "tokens": [
+        "ai-msg-user"
+      ]
+    },
+    {
+      "line": 9815,
+      "selector": ".ai-msg-assistant",
+      "tokens": [
+        "ai-msg-assistant"
+      ]
+    },
+    {
+      "line": 9816,
+      "selector": ".ai-msg-assistant p",
+      "tokens": [
+        "ai-msg-assistant"
+      ]
+    },
+    {
+      "line": 9817,
+      "selector": ".ai-msg-assistant code",
+      "tokens": [
+        "ai-msg-assistant"
+      ]
+    },
+    {
+      "line": 9818,
+      "selector": ".ai-msg-assistant pre",
+      "tokens": [
+        "ai-msg-assistant"
+      ]
+    },
+    {
+      "line": 9819,
+      "selector": ".ai-msg-system",
+      "tokens": [
+        "ai-msg-system"
+      ]
+    },
+    {
+      "line": 9820,
+      "selector": "/* welcome */ .ai-welcome",
+      "tokens": [
+        "ai-welcome"
+      ]
+    },
+    {
+      "line": 9822,
+      "selector": ".ai-honesty-note",
+      "tokens": [
+        "ai-honesty-note"
+      ]
+    },
+    {
+      "line": 9823,
+      "selector": "/* input */ .ai-input-row",
+      "tokens": [
+        "ai-input-row"
+      ]
+    },
+    {
+      "line": 9825,
+      "selector": ".ai-input",
+      "tokens": [
+        "ai-input"
+      ]
+    },
+    {
+      "line": 9826,
+      "selector": ".ai-input:focus",
+      "tokens": [
+        "ai-input"
+      ]
+    },
+    {
+      "line": 9827,
+      "selector": ".ai-send-btn,.ai-stop-btn",
+      "tokens": [
+        "ai-send-btn",
+        "ai-stop-btn"
+      ]
+    },
+    {
+      "line": 9828,
+      "selector": ".ai-send-btn",
+      "tokens": [
+        "ai-send-btn"
+      ]
+    },
+    {
+      "line": 9829,
+      "selector": ".ai-stop-btn",
+      "tokens": [
+        "ai-stop-btn"
+      ]
+    },
+    {
+      "line": 9830,
+      "selector": "/* tool cards */ .ai-tool",
+      "tokens": [
+        "ai-tool"
+      ]
+    },
+    {
+      "line": 9832,
+      "selector": ".ai-tool-head",
+      "tokens": [
+        "ai-tool-head"
+      ]
+    },
+    {
+      "line": 9833,
+      "selector": ".ai-tool-head:hover",
+      "tokens": [
+        "ai-tool-head"
+      ]
+    },
+    {
+      "line": 9834,
+      "selector": ".ai-tool-status",
+      "tokens": [
+        "ai-tool-status"
+      ]
+    },
+    {
+      "line": 9835,
+      "selector": ".ai-tool-status.running",
+      "tokens": [
+        "ai-tool-status",
+        "running"
+      ]
+    },
+    {
+      "line": 9837,
+      "selector": ".ai-tool-name",
+      "tokens": [
+        "ai-tool-name"
+      ]
+    },
+    {
+      "line": 9838,
+      "selector": ".ai-tool-arrow",
+      "tokens": [
+        "ai-tool-arrow"
+      ]
+    },
+    {
+      "line": 9839,
+      "selector": ".ai-tool-body",
+      "tokens": [
+        "ai-tool-body"
+      ]
+    },
+    {
+      "line": 9840,
+      "selector": ".ai-tool-args pre",
+      "tokens": [
+        "ai-tool-args"
+      ]
+    },
+    {
+      "line": 9841,
+      "selector": ".ai-tool-output",
+      "tokens": [
+        "ai-tool-output"
+      ]
+    },
+    {
+      "line": 9842,
+      "selector": "/* approval */ .ai-approval-overlay",
+      "tokens": [
+        "ai-approval-overlay"
+      ]
+    },
+    {
+      "line": 9844,
+      "selector": ".ai-approval-card",
+      "tokens": [
+        "ai-approval-card"
+      ]
+    },
+    {
+      "line": 9845,
+      "selector": ".ai-approval-card h4",
+      "tokens": [
+        "ai-approval-card"
+      ]
+    },
+    {
+      "line": 9846,
+      "selector": ".ai-approval-card p",
+      "tokens": [
+        "ai-approval-card"
+      ]
+    },
+    {
+      "line": 9847,
+      "selector": ".ai-approval-btns",
+      "tokens": [
+        "ai-approval-btns"
+      ]
+    },
+    {
+      "line": 9848,
+      "selector": ".ai-approval-allow,.ai-approval-deny",
+      "tokens": [
+        "ai-approval-allow",
+        "ai-approval-deny"
+      ]
+    },
+    {
+      "line": 9849,
+      "selector": ".ai-approval-allow",
+      "tokens": [
+        "ai-approval-allow"
+      ]
+    },
+    {
+      "line": 9851,
+      "selector": ".ai-status",
+      "tokens": [
+        "ai-status"
+      ]
+    }
+  ]
+}

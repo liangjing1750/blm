@@ -26,7 +26,7 @@ interface PanoramaDocument extends BlmDocument {
   selector: 'app-panorama-workbench',
   imports: [CommonModule, KnowledgeWorkbenchComponent, RoleWorkbenchComponent],
   templateUrl: './panorama-workbench.html',
-  styleUrls: ['../../shared/layout/workbench-section.css', './panorama-workbench.scss'],
+  styleUrls: ['../../shared/layout/workbench-section.scss', './panorama-workbench.scss'],
 })
 export class PanoramaWorkbench {
   // 模块意图：全景工作台是跨模型入口，只编排“视图投影”和已迁移子工作台，不在这里承接具体编辑命令。

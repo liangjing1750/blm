@@ -1,0 +1,25 @@
+/* CSS 自定义属性 — 项目级变量，全局可用 */
+:root {
+  --bg:          #f0f2f5;
+  --sidebar-bg:  #ffffff;
+  --content-bg:  #ffffff;
+  --header-bg:   #1e293b;
+  --header-text: #f1f5f9;
+  --accent:      #3b82f6;
+  --accent-h:    #2563eb;
+  --text:        #1e293b;
+  --text-m:      #64748b;
+  --border:      #e2e8f0;
+  --hover:       #f1f5f9;
+  --active-bg:   #eff6ff;
+  --active-bd:   #3b82f6;
+  --danger:      #ef4444;
+  --radius:      6px;
+  /* 步骤类型颜色 */
+  --query-bg:    #dbeafe; --query-tx:   #1d4ed8;
+  --check-bg:    #fef9c3; --check-tx:   #854d0e;
+  --compute-bg:  #dcfce7; --compute-tx: #166534;
+  --mutate-bg:   #fee2e2; --mutate-tx:  #991b1b;
+  /* 操作类型颜色 */
+  --op-c: #16a34a; --op-u: #d97706; --op-d: #dc2626;
+}

@@ -1,0 +1,25 @@
+/* 工作台通用滚动框 — 用于表格、矩阵、规则清单等双向增长区域 */
+.workbench-scroll-frame {
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workbench-scroll-body {
+  min-height: 0;
+  overflow: scroll;
+  scrollbar-color: #c7d2df transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.workbench-scroll-body::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.workbench-scroll-body::-webkit-scrollbar-thumb {
+  background: #c7d2df;
+  border-radius: 999px;
+}

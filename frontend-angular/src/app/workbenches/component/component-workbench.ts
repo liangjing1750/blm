@@ -6,7 +6,7 @@ import { BusinessComponent } from '../../core/document/document.model';
 @Component({
   selector: 'app-component-workbench',
   templateUrl: './component-workbench.html',
-  styleUrl: '../../shared/layout/workbench-section.css',
+  styleUrl: '../../shared/layout/workbench-section.scss',
 })
 export class ComponentWorkbench {
   private readonly documentStore = inject(DocumentStore);

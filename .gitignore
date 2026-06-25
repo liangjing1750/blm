@@ -27,5 +27,7 @@ __pycache__/
 .coverage
 htmlcov/
 
+*.bak
+
 .DS_Store
 Thumbs.db
