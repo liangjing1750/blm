@@ -1,39 +1,206 @@
-<section class="workbench">
-  <header class="workbench-header">
-    <h1>构件工作台</h1>
-    <p>后端研发维护逻辑实体、任务定义和业务组件，弱参考流程产物。</p>
-  </header>
+<section class="component-workbench">
+  <nav class="comp-tabs">
+    <button [class.active]="activeTab()==='component'" (click)="switchTab('component')">组件构件</button>
+    <button [class.active]="activeTab()==='taskDef'" (click)="switchTab('taskDef')">任务定义</button>
+    <button [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
+    <button [class.active]="activeTab()==='service'" (click)="switchTab('service')">应用服务</button>
+    <button [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
+  </nav>
 
-  <div class="grid">
-    <article class="panel">
-      <h2>构件管理</h2>
-      <ul class="list">
-        @for (component of document().businessComponents; track component.uid) {
-          <li>
-            <strong>{{ component.name }}</strong>
-            <div class="muted">类型：{{ component.kind === 'core' ? '核心' : '通用' }}</div>
-            <div class="muted">支撑阶段：{{ supportedStages(component) }}</div>
-          </li>
-        }
-      </ul>
-    </article>
+  <!-- Tab 1: 组件构件 -->
+  @if (activeTab() === 'component') {
+    <div class="comp-tab-body">
+      @for (comp of components(); track uid(comp)) {
+        <div class="comp-card">
+          <button class="comp-card-head" (click)="toggleExp(uid(comp))">
+            <span class="comp-card-name">{{ comp.name || uid(comp) }}</span>
+            <span class="comp-card-meta">{{ comp.kind === 'core' ? '核心' : '通用' }} · {{ constructsFor(comp).length }} 构件</span>
+            <span class="comp-card-arrow" [class.exp]="isExp(uid(comp))">▾</span>
+          </button>
+          @if (isExp(uid(comp))) {
+            <div class="comp-card-body">
+              @for (construct of constructsFor(comp); track uid(construct)) {
+                <div class="construct-block">
+                  <div class="construct-head">{{ construct.name || uid(construct) }}</div>
+                  <div class="construct-row">
+                    <span class="construct-label">实体</span>
+                    <div class="construct-tags">
+                      @for (e of entitiesFor(construct); track uid(e)) {
+                        <span class="tag tag-entity">{{ e.name }} <button (click)="removeEntity(e)" title="移除">×</button></span>
+                      }
+                      @if (unclassifiedEntities().length) {
+                        <select class="tag-select" (change)="addEntityTo(unclassifiedEntities()[$any($event.target).selectedIndex - 1], construct); $any($event.target).selectedIndex = 0">
+                          <option value="">+ 关联实体</option>
+                          @for (e of unclassifiedEntities(); track uid(e)) { <option [value]="uid(e)">{{ e.name }}</option> }
+                        </select>
+                      }
+                    </div>
+                  </div>
+                  <div class="construct-row">
+                    <span class="construct-label">任务</span>
+                    <div class="construct-tags">
+                      @for (t of taskDefsFor(construct); track uid(t)) {
+                        <span class="tag tag-task">{{ t.name }} <button (click)="removeTaskDef(t)" title="移除">×</button></span>
+                      }
+                      @if (unclassifiedTaskDefs().length) {
+                        <select class="tag-select" (change)="addTaskDefTo(unclassifiedTaskDefs()[$any($event.target).selectedIndex - 1], construct); $any($event.target).selectedIndex = 0">
+                          <option value="">+ 关联任务</option>
+                          @for (t of unclassifiedTaskDefs(); track uid(t)) { <option [value]="uid(t)">{{ t.name }}</option> }
+                        </select>
+                      }
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
 
-    <article class="panel">
-      <h2>逻辑实体</h2>
-      <ul class="list">
-        @for (entity of document().entities; track entity.uid) {
-          <li>{{ entity.name }} <span class="muted">{{ entity.fields.length }} 字段</span></li>
-        }
-      </ul>
-    </article>
+  <!-- Tab 2: 任务定义 -->
+  @if (activeTab() === 'taskDef') {
+    <div class="comp-tab-body">
+      <div class="comp-toolbar">
+        <input type="search" placeholder="搜索..." [ngModel]="taskDefKeyword()" (ngModelChange)="taskDefKeyword.set($event)" />
+        <button class="btn btn-primary btn-sm" (click)="startEdit()">+ 新建任务定义</button>
+      </div>
+      <div class="comp-table-wrap">
+        <table class="comp-table">
+          <thead><tr><th>名称</th><th>实现标识</th><th>构件</th><th>引用节点</th><th></th></tr></thead>
+          <tbody>
+            @for (td of filteredTaskDefs(); track uid(td)) {
+              <tr>
+                <td><button class="link" (click)="startEdit(td)">{{ td.name }}</button></td>
+                <td class="muted">{{ td.target || '-' }}</td>
+                <td class="muted">{{ td.businessConstructUid || '未归类' }}</td>
+                <td class="muted">{{ taskNodes(td).length }} 节点</td>
+                <td><button class="btn-ghost-sm" (click)="deleteTaskDef(td)">删除</button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
 
-    <article class="panel">
-      <h2>任务定义</h2>
-      <ul class="list">
-        @for (task of document().taskDefinitions; track task.uid) {
-          <li>{{ task.name }} <span class="muted">{{ task.target || '未绑定实现' }}</span></li>
+  <!-- Tab 3: 实体定义 -->
+  @if (activeTab() === 'entity') {
+    <div class="comp-tab-body">
+      <p class="comp-note">实体定义复用已有的实体设计工作台，请切换到「实体设计」进行编辑。</p>
+      <div class="comp-entity-list">
+        @for (e of entities(); track uid(e)) {
+          <span class="tag tag-entity">{{ e.name }} · {{ (e.fields || []).length }} 字段</span>
         }
-      </ul>
-    </article>
-  </div>
+      </div>
+    </div>
+  }
+
+  <!-- Tab 4: 应用服务 -->
+  @if (activeTab() === 'service') {
+    <div class="comp-tab-body">
+      <div class="comp-toolbar">
+        <input type="search" placeholder="搜索..." [ngModel]="svcKeyword()" (ngModelChange)="svcKeyword.set($event)" />
+        <button class="btn btn-primary btn-sm" (click)="startEditSvc()">+ 新建应用服务</button>
+      </div>
+      <div class="comp-cards">
+        @for (svc of filteredServices(); track svc.uid) {
+          <div class="svc-card">
+            <div class="svc-card-head">
+              <strong>{{ svc.name }}</strong>
+              <span class="svc-method">{{ svc.method || 'POST' }}</span>
+              <code>{{ svc.path || '/' }}</code>
+              <div class="svc-actions">
+                <button class="btn-ghost-sm" (click)="startEditSvc(svc)">编辑</button>
+                <button class="btn-ghost-sm danger" (click)="deleteService(svc)">删除</button>
+              </div>
+            </div>
+            @if (svc.desc) { <p class="svc-desc">{{ svc.desc }}</p> }
+            <div class="svc-refs">
+              <span class="svc-ref-label">关联节点:</span>
+              @for (ref of (svc.nodeRefs || []); track ref) {
+                <span class="tag tag-node">{{ nodeLabel(ref) }} <button (click)="removeNodeFromSvc(svc, ref)" title="移除">×</button></span>
+              }
+              <select class="tag-select" (change)="addNodeToSvc(svc, $any($event.target).value); $any($event.target).selectedIndex = 0">
+                <option value="">+ 关联节点</option>
+                @for (n of allNodes(); track n.uid) { <option [value]="n.uid">{{ n.name }}（{{ n.pname }}）</option> }
+              </select>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Tab 5: 应用编排 -->
+  @if (activeTab() === 'orchestration') {
+    <div class="comp-tab-body">
+      <div class="comp-toolbar">
+        <span>应用服务</span>
+        <select [ngModel]="orchSvcId()" (ngModelChange)="orchSvcId.set($event)">
+          <option value="">请选择</option>
+          @for (svc of services(); track svc.uid) { <option [value]="svc.uid">{{ svc.name }}</option> }
+        </select>
+      </div>
+      @if (orchSvcId(); as sid) {
+        @if (services().find(s => s.uid === sid); as svc) {
+          <div class="orch-panel">
+            <h3>{{ svc.name }} <span class="svc-method">{{ svc.method || 'POST' }}</span> <code>{{ svc.path || '/' }}</code></h3>
+            <div class="orch-tasks">
+              @for (td of orderedTaskDefs(svc); track uid(td); let i = $index) {
+                <div class="orch-task-row">
+                  <span class="orch-task-idx">{{ i + 1 }}</span>
+                  <span class="orch-task-name">{{ td.name }}</span>
+                  <span class="muted">{{ td.target || '-' }}</span>
+                  <div class="orch-task-actions">
+                    <button [disabled]="i===0" (click)="moveTaskDefInSvc(svc, i, -1)">↑</button>
+                    <button [disabled]="i===orderedTaskDefs(svc).length-1" (click)="moveTaskDefInSvc(svc, i, 1)">↓</button>
+                    <button class="danger" (click)="removeTaskDefFromSvc(svc, td.uid || td.id || '')">×</button>
+                  </div>
+                </div>
+              }
+              <select class="tag-select" (change)="addTaskDefToSvc(svc, $any($event.target).value); $any($event.target).selectedIndex = 0">
+                <option value="">+ 添加任务定义</option>
+                @for (td of taskDefs(); track uid(td)) { <option [value]="uid(td)">{{ td.name }}</option> }
+              </select>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+
+  <!-- Edit TaskDef Dialog -->
+  @if (editTaskDef(); as d) {
+    <div class="comp-overlay" (click)="editTaskDef.set(null)">
+      <div class="comp-dialog" (click)="$event.stopPropagation()">
+        <h3>{{ d.uid ? '编辑' : '新建' }}任务定义</h3>
+        <label>名称 <input [(ngModel)]="d.name" /></label>
+        <label>实现标识 <input [(ngModel)]="d.target" placeholder="如 receipt.submit" /></label>
+        <label>描述 <textarea [(ngModel)]="d.desc" rows="2"></textarea></label>
+        <div class="comp-dialog-actions">
+          <button class="btn btn-outline btn-sm" (click)="editTaskDef.set(null)">取消</button>
+          <button class="btn btn-primary btn-sm" (click)="saveTaskDef()">保存</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Edit Service Dialog -->
+  @if (editSvc(); as d) {
+    <div class="comp-overlay" (click)="editSvc.set(null)">
+      <div class="comp-dialog" (click)="$event.stopPropagation()">
+        <h3>{{ d.uid ? '编辑' : '新建' }}应用服务</h3>
+        <label>名称 <input [(ngModel)]="d.name" /></label>
+        <label>方法 <select [(ngModel)]="d.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></label>
+        <label>路径 <input [(ngModel)]="d.path" placeholder="/api/..." /></label>
+        <label>描述 <textarea [(ngModel)]="d.desc" rows="2"></textarea></label>
+        <div class="comp-dialog-actions">
+          <button class="btn btn-outline btn-sm" (click)="editSvc.set(null)">取消</button>
+          <button class="btn btn-primary btn-sm" (click)="saveService()">保存</button>
+        </div>
+      </div>
+    </div>
+  }
 </section>
