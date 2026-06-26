@@ -251,12 +251,16 @@
             <input class="modal-search open-search" type="search" [(ngModel)]="openQuery" placeholder="搜索文档名称" (ngModelChange)="selectWorkspacePage(1)">
           </div>
 
-          <div class="open-space-tabs" *ngIf="workspaceSpaces().length">
-            <button *ngFor="let space of workspaceSpaces()" class="open-space-tab" [class.active]="activeOpenSpace() === space.name" type="button" data-testid="open-space-tab" (click)="selectOpenSpace(space.name)">
-              <span>{{ space.name }}</span>
-              <em>{{ space.count }}</em>
-            </button>
+          @if (workspaceSpaces().length) {
+          <div class="open-space-tabs">
+            @for (space of workspaceSpaces(); track space.name) {
+              <button class="open-space-tab" [class.active]="activeOpenSpace() === space.name" type="button" data-testid="open-space-tab" (click)="selectOpenSpace(space.name)">
+                <span>{{ space.name }}</span>
+                <em>{{ space.count }}</em>
+              </button>
+            }
           </div>
+          }
 
           <div class="open-tag-filters">
             <button class="open-tag-filter" [class.active]="!activeOpenTag()" type="button" (click)="selectOpenTag('')">全部标签</button>
