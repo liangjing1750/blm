@@ -107,9 +107,10 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly laneTitleWidth = 116;
   protected readonly nodeWidth = 132;
   protected readonly nodeHeight = 54;
-  protected readonly graphStartX = 146;
-  protected readonly graphNodeStartX = 198;
-  protected readonly columnGap = 168;
+  // 对齐旧版 process.js 布局常量：firstNodeX=180, colW=180, startX=130
+  protected readonly graphStartX = 130;
+  protected readonly graphNodeStartX = 180;
+  protected readonly columnGap = 180;
   private readonly lanePalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#16a34a'];
 
   @Input() editing = true;
