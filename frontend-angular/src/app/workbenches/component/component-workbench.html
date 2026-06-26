@@ -15,7 +15,7 @@
           <div class="comp-grid-card">
             <div class="comp-grid-head">
               <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
-              <span class="comp-grid-kind">{{ comp.kind === 'core' ? '核心' : '通用' }}</span>
+              <span class="comp-grid-kind" [class.core]="comp.kind !== 'generic'" [class.generic]="comp.kind === 'generic'">{{ comp.kind === 'core' ? '核心' : '通用' }}</span>
               <button class="comp-grid-edit" (click)="openCompDrawer(comp)" title="编辑">编辑</button>
             </div>
             <div class="comp-grid-constructs">
