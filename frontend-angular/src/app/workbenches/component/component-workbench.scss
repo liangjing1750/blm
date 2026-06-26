@@ -11,30 +11,27 @@
 .comp-toolbar input { border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: 12px; max-width: 240px; }
 .comp-toolbar select { border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: 12px; }
 
-/* ─── Tab1: 金字塔（紧凑）─────────────────── */
-.comp-pyramid-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.comp-pyramid-title { font-size: 14px; font-weight: 700; color: #1e293b; }
+/* ─── Tab1: 组件卡片网格 ──────────────────── */
+.comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
 
-.pyramid-group { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; margin-bottom: 8px; overflow: hidden; }
-.pyramid-comp { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: linear-gradient(135deg, #f8fafc, #fff); border-bottom: 1px solid #e2e8f0; }
-.pyramid-comp-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-.pyramid-comp-name { font-size: 13px; font-weight: 700; color: #0f172a; }
-.pyramid-comp-kind { background: #dbeafe; color: #1d4ed8; border-radius: 4px; font-size: 10px; font-weight: 700; padding: 2px 6px; }
-.pyramid-comp-note { color: #94a3b8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pyramid-comp-stats { display: flex; gap: 10px; color: #94a3b8; font-size: 11px; flex-shrink: 0; }
-.pyramid-comp-edit { background: none; border: 1px solid #e2e8f0; border-radius: 6px; color: #64748b; cursor: pointer; font-size: 11px; padding: 3px 10px; }
-.pyramid-comp-edit:hover { background: #f1f5f9; color: #334155; }
+.comp-grid-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; display: flex; flex-direction: column; }
+.comp-grid-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: linear-gradient(135deg, #f8fafc, #fff); border-bottom: 1px solid #e2e8f0; }
+.comp-grid-name { flex: 1; font-size: 13px; font-weight: 700; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comp-grid-kind { background: #dbeafe; color: #1d4ed8; border-radius: 4px; font-size: 10px; font-weight: 700; padding: 2px 6px; flex-shrink: 0; }
+.comp-grid-edit { background: none; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; cursor: pointer; font-size: 11px; padding: 2px 8px; flex-shrink: 0; }
+.comp-grid-edit:hover { background: #f1f5f9; color: #334155; }
 
-.pyramid-constructs { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; padding: 8px 14px 10px; }
-.pyramid-construct-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: border-color .12s, box-shadow .12s; }
-.pyramid-construct-card:hover { border-color: #93c5fd; box-shadow: 0 1px 6px rgba(59,130,246,.05); }
-.pyramid-construct-name { font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px; }
-.pyramid-construct-tags { display: flex; flex-wrap: wrap; gap: 3px; }
-.pyramid-construct-tags .tag { font-size: 10px; padding: 2px 5px; }
-.pyramid-empty-hint { color: #cbd5e1; font-size: 11px; }
-.pyramid-construct-add { display: flex; align-items: center; justify-content: center; min-height: 48px; border: 2px dashed #e2e8f0; border-radius: 8px; background: none; color: #94a3b8; cursor: pointer; font: inherit; font-size: 12px; }
-.pyramid-construct-add:hover { border-color: #3b82f6; color: #3b82f6; }
-.pyramid-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 32px; }
+.comp-grid-constructs { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.comp-grid-construct { border: 1px solid #e2e8f0; border-radius: 7px; padding: 8px 10px; cursor: pointer; transition: border-color .12s; }
+.comp-grid-construct:hover { border-color: #93c5fd; }
+.comp-grid-construct-name { font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+.comp-grid-construct-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.comp-grid-construct-tags .tag { font-size: 10px; padding: 2px 5px; }
+.comp-grid-construct-add { display: flex; align-items: center; justify-content: center; min-height: 36px; border: 2px dashed #e2e8f0; border-radius: 7px; background: none; color: #94a3b8; cursor: pointer; font: inherit; font-size: 12px; }
+.comp-grid-construct-add:hover { border-color: #3b82f6; color: #3b82f6; }
+
+.comp-grid-add { display: flex; align-items: center; justify-content: center; min-height: 100px; border: 2px dashed #e2e8f0; border-radius: 10px; background: none; color: #94a3b8; cursor: pointer; font: inherit; font-size: 13px; }
+.comp-grid-add:hover { border-color: #3b82f6; color: #3b82f6; }
 
 .construct-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; flex: 1; min-height: 24px; }
 

@@ -7,45 +7,33 @@
     <button [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
   </nav>
 
-  <!-- Tab 1: 组件构件 — 金字塔 + 抽屉 -->
+  <!-- Tab 1: 组件构件 — 卡片网格 -->
   @if (activeTab() === 'component') {
     <div class="comp-tab-body">
-      <div class="comp-pyramid-topbar">
-        <span class="comp-pyramid-title">业务组件</span>
-        <button class="btn btn-outline btn-sm" (click)="openCompDrawer()">+ 新建组件</button>
-      </div>
-      @for (comp of components(); track uid(comp)) {
-        <div class="pyramid-group">
-          <div class="pyramid-comp">
-            <div class="pyramid-comp-main">
-              <span class="pyramid-comp-name">{{ comp.name || uid(comp) }}</span>
-              <span class="pyramid-comp-kind">{{ comp.kind === 'core' ? '核心' : '通用' }}</span>
-              @if (comp.note) { <span class="pyramid-comp-note">{{ comp.note }}</span> }
+      <div class="comp-grid">
+        @for (comp of components(); track uid(comp)) {
+          <div class="comp-grid-card">
+            <div class="comp-grid-head">
+              <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
+              <span class="comp-grid-kind">{{ comp.kind === 'core' ? '核心' : '通用' }}</span>
+              <button class="comp-grid-edit" (click)="openCompDrawer(comp)" title="编辑">编辑</button>
             </div>
-            <div class="pyramid-comp-stats">
-              <span>{{ constructsFor(comp).length }} 构件</span>
-              <span>{{ entities().filter(e => constructsFor(comp).some(c => (c.uid||c.id)===e.businessConstructUid)).length }} 实体</span>
-              <span>{{ taskDefs().filter(t => constructsFor(comp).some(c => (c.uid||c.id)===t.businessConstructUid)).length }} 任务</span>
-            </div>
-            <button class="pyramid-comp-edit" (click)="openCompDrawer(comp)" title="编辑组件">编辑</button>
-          </div>
-          <div class="pyramid-constructs">
-            @for (construct of constructsFor(comp); track uid(construct)) {
-              <div class="pyramid-construct-card" (click)="openConstructDrawer(construct)">
-                <div class="pyramid-construct-name">{{ construct.name || uid(construct) }}</div>
-                <div class="pyramid-construct-tags">
-                  @for (e of entitiesFor(construct); track uid(e)) { <span class="tag tag-entity">{{ e.name }}</span> }
-                  @for (t of taskDefsFor(construct); track uid(t)) { <span class="tag tag-task">{{ t.name }}</span> }
-                  @if (!entitiesFor(construct).length && !taskDefsFor(construct).length) { <span class="pyramid-empty-hint">点击管理实体和任务</span> }
+            <div class="comp-grid-constructs">
+              @for (construct of constructsFor(comp); track uid(construct)) {
+                <div class="comp-grid-construct" (click)="openConstructDrawer(construct)">
+                  <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
+                  <div class="comp-grid-construct-tags">
+                    @for (e of entitiesFor(construct); track uid(e)) { <span class="tag tag-entity">{{ e.name }}</span> }
+                    @for (t of taskDefsFor(construct); track uid(t)) { <span class="tag tag-task">{{ t.name }}</span> }
+                  </div>
                 </div>
-              </div>
-            }
-            <button class="pyramid-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 新建构件</button>
+              }
+              <button class="comp-grid-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 新建构件</button>
+            </div>
           </div>
-        </div>
-      } @empty {
-        <div class="pyramid-empty">暂无业务组件，点击「+ 新建组件」开始。</div>
-      }
+        }
+        <button class="comp-grid-card comp-grid-add" (click)="openCompDrawer()">+ 新建组件</button>
+      </div>
     </div>
   }
 
