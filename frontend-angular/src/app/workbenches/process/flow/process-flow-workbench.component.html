@@ -4,7 +4,7 @@
       <header class="process-flow-topbar" data-testid="process-flow-basic-fields">
         <label class="compact-field select-field">
           <span>阶段</span>
-          <select class="stage-select" data-testid="process-flow-stage-select" [disabled]="!editing" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
+          <select class="stage-select" data-testid="process-flow-stage-select" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
             @for (stage of stages(); track stageId(stage)) {
               <option [value]="stageId(stage)">{{ stageName(stage) }}</option>
             }
@@ -12,7 +12,7 @@
         </label>
         <label class="compact-field select-field">
           <span>流程</span>
-          <select class="process-select" data-testid="process-flow-select" [disabled]="!editing" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
+          <select class="process-select" data-testid="process-flow-select" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
             @for (item of processesForCurrentStage(); track processId(item)) {
               <option [value]="processId(item)">{{ item.name || '\u672a\u547d\u540d\u6d41\u7a0b' }}</option>
             }
