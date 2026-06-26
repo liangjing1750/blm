@@ -12,23 +12,38 @@
     <div class="comp-tab-body">
       <div class="comp-grid">
         @for (comp of components(); track uid(comp)) {
-          <div class="comp-grid-card">
+          <div class="comp-grid-card" [class.is-generic]="comp.kind === 'generic'">
             <div class="comp-grid-head">
+              <span class="comp-grid-label">组件</span>
               <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
-              <span class="comp-grid-kind" [class.core]="comp.kind !== 'generic'" [class.generic]="comp.kind === 'generic'">{{ comp.kind === 'core' ? '核心' : '通用' }}</span>
               <button class="comp-grid-edit" (click)="openCompDrawer(comp)" title="编辑">编辑</button>
             </div>
             <div class="comp-grid-constructs">
               @for (construct of constructsFor(comp); track uid(construct)) {
                 <div class="comp-grid-construct" (click)="openConstructDrawer(construct)">
-                  <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
-                  <div class="comp-grid-construct-tags">
-                    @for (e of entitiesFor(construct); track uid(e)) { <span class="tag tag-entity">{{ e.name }}</span> }
-                    @for (t of taskDefsFor(construct); track uid(t)) { <span class="tag tag-task">{{ t.name }}</span> }
+                  <div class="comp-grid-construct-head">
+                    <span class="comp-grid-construct-label">构件</span>
+                    <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
                   </div>
+                  @if (entitiesFor(construct).length || taskDefsFor(construct).length) {
+                    <div class="comp-grid-construct-body">
+                      @if (entitiesFor(construct).length) {
+                        <div class="comp-tag-box tag-box-entity">
+                          <span class="comp-tag-box-label">实体</span>
+                          @for (e of entitiesFor(construct); track uid(e)) { <span class="tag tag-entity">{{ e.name }}</span> }
+                        </div>
+                      }
+                      @if (taskDefsFor(construct).length) {
+                        <div class="comp-tag-box tag-box-task">
+                          <span class="comp-tag-box-label">任务</span>
+                          @for (t of taskDefsFor(construct); track uid(t)) { <span class="tag tag-task">{{ t.name }}</span> }
+                        </div>
+                      }
+                    </div>
+                  }
                 </div>
               }
-              <button class="comp-grid-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 新建构件</button>
+              <button class="comp-grid-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 构件</button>
             </div>
           </div>
         }
