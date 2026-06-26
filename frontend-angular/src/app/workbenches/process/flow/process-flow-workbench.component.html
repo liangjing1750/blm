@@ -80,8 +80,8 @@
                 <button class="flow-gateway" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)"><span>{{ node.name }}</span></button>
               } @else {
                 <div class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" [class.is-editing]="editing" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y"
-                  (pointerdown)="editing ? startNodeDrag($event, node) : null"
-                  (pointerup)="editing ? endNodeDrag($event, node) : null"
+                  (pointerdown)="startNodeDrag($event, node)"
+                  (pointerup)="endNodeDrag($event, node)"
                   (click)="$event.stopPropagation(); editing ? handleNodeClick(node) : openNodeEditor(node)">
                   @if (node.shared) { <span class="shared-badge">&#x5171;&#x4eab;</span> }
                   <div class="flow-node-name-row">

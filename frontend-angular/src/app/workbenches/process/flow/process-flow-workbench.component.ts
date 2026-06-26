@@ -706,6 +706,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected startNodeDrag(event: MouseEvent | PointerEvent, node: FlowCanvasNode): void {
+    if (!this.editing) return;
     if (typeof event.button === 'number' && event.button !== 0) return;
     event.preventDefault();
     const process = this.currentProcess();

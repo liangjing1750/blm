@@ -102,6 +102,6 @@
 /* 只读模式 */
 .flow-readonly {
   .process-flow-side-tools { display: none; }
-  .process-flow-topbar input,
-  .process-flow-topbar select { pointer-events: none; opacity: .6; background: #f8fafc; }
+  .process-flow-topbar input { pointer-events: none; opacity: .6; background: #f8fafc; }
+  .flow-node, .flow-terminal, .flow-gateway { pointer-events: auto; cursor: pointer; } /* 允许点击跳转 */
 }
