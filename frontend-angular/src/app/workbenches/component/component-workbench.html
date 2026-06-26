@@ -7,54 +7,44 @@
     <button [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
   </nav>
 
-  <!-- Tab 1: 组件构件 -->
+  <!-- Tab 1: 组件构件 — 金字塔 + 抽屉 -->
   @if (activeTab() === 'component') {
     <div class="comp-tab-body">
+      <div class="comp-pyramid-topbar">
+        <span class="comp-pyramid-title">业务组件</span>
+        <button class="btn btn-outline btn-sm" (click)="openCompDrawer()">+ 新建组件</button>
+      </div>
       @for (comp of components(); track uid(comp)) {
-        <div class="comp-card">
-          <button class="comp-card-head" (click)="toggleExp(uid(comp))">
-            <span class="comp-card-name">{{ comp.name || uid(comp) }}</span>
-            <span class="comp-card-meta">{{ comp.kind === 'core' ? '核心' : '通用' }} · {{ constructsFor(comp).length }} 构件</span>
-            <span class="comp-card-arrow" [class.exp]="isExp(uid(comp))">▾</span>
-          </button>
-          @if (isExp(uid(comp))) {
-            <div class="comp-card-body">
-              @for (construct of constructsFor(comp); track uid(construct)) {
-                <div class="construct-block">
-                  <div class="construct-head">{{ construct.name || uid(construct) }}</div>
-                  <div class="construct-row">
-                    <span class="construct-label">实体</span>
-                    <div class="construct-tags">
-                      @for (e of entitiesFor(construct); track uid(e)) {
-                        <span class="tag tag-entity">{{ e.name }} <button (click)="removeEntity(e)" title="移除">×</button></span>
-                      }
-                      @if (unclassifiedEntities().length) {
-                        <select class="tag-select" (change)="addEntityTo(unclassifiedEntities()[$any($event.target).selectedIndex - 1], construct); $any($event.target).selectedIndex = 0">
-                          <option value="">+ 关联实体</option>
-                          @for (e of unclassifiedEntities(); track uid(e)) { <option [value]="uid(e)">{{ e.name }}</option> }
-                        </select>
-                      }
-                    </div>
-                  </div>
-                  <div class="construct-row">
-                    <span class="construct-label">任务</span>
-                    <div class="construct-tags">
-                      @for (t of taskDefsFor(construct); track uid(t)) {
-                        <span class="tag tag-task">{{ t.name }} <button (click)="removeTaskDef(t)" title="移除">×</button></span>
-                      }
-                      @if (unclassifiedTaskDefs().length) {
-                        <select class="tag-select" (change)="addTaskDefTo(unclassifiedTaskDefs()[$any($event.target).selectedIndex - 1], construct); $any($event.target).selectedIndex = 0">
-                          <option value="">+ 关联任务</option>
-                          @for (t of unclassifiedTaskDefs(); track uid(t)) { <option [value]="uid(t)">{{ t.name }}</option> }
-                        </select>
-                      }
-                    </div>
-                  </div>
-                </div>
-              }
+        <div class="pyramid-group">
+          <div class="pyramid-comp">
+            <div class="pyramid-comp-main">
+              <span class="pyramid-comp-name">{{ comp.name || uid(comp) }}</span>
+              <span class="pyramid-comp-kind">{{ comp.kind === 'core' ? '核心' : '通用' }}</span>
+              @if (comp.note) { <span class="pyramid-comp-note">{{ comp.note }}</span> }
             </div>
-          }
+            <div class="pyramid-comp-stats">
+              <span>{{ constructsFor(comp).length }} 构件</span>
+              <span>{{ entities().filter(e => constructsFor(comp).some(c => (c.uid||c.id)===e.businessConstructUid)).length }} 实体</span>
+              <span>{{ taskDefs().filter(t => constructsFor(comp).some(c => (c.uid||c.id)===t.businessConstructUid)).length }} 任务</span>
+            </div>
+            <button class="pyramid-comp-edit" (click)="openCompDrawer(comp)" title="编辑组件">编辑</button>
+          </div>
+          <div class="pyramid-constructs">
+            @for (construct of constructsFor(comp); track uid(construct)) {
+              <div class="pyramid-construct-card" (click)="openConstructDrawer(construct)">
+                <div class="pyramid-construct-name">{{ construct.name || uid(construct) }}</div>
+                <div class="pyramid-construct-tags">
+                  @for (e of entitiesFor(construct); track uid(e)) { <span class="tag tag-entity">{{ e.name }}</span> }
+                  @for (t of taskDefsFor(construct); track uid(t)) { <span class="tag tag-task">{{ t.name }}</span> }
+                  @if (!entitiesFor(construct).length && !taskDefsFor(construct).length) { <span class="pyramid-empty-hint">点击管理实体和任务</span> }
+                </div>
+              </div>
+            }
+            <button class="pyramid-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 新建构件</button>
+          </div>
         </div>
+      } @empty {
+        <div class="pyramid-empty">暂无业务组件，点击「+ 新建组件」开始。</div>
       }
     </div>
   }
@@ -182,6 +172,62 @@
         <div class="comp-dialog-actions">
           <button class="btn btn-outline btn-sm" (click)="editTaskDef.set(null)">取消</button>
           <button class="btn btn-primary btn-sm" (click)="saveTaskDef()">保存</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- 组件编辑抽屉 -->
+  @if (compDrawer(); as d) {
+    <div class="drawer-overlay" (click)="compDrawer.set(null)">
+      <div class="drawer" (click)="$event.stopPropagation()">
+        <div class="drawer-head">
+          <h3>{{ d.uid ? '编辑组件' : '新建组件' }}</h3>
+          <button class="drawer-close" (click)="compDrawer.set(null)">×</button>
+        </div>
+        <div class="drawer-body">
+          <label>名称 <input [(ngModel)]="d.name" placeholder="组件名称" /></label>
+          <label>类型 <select [(ngModel)]="d.kind"><option value="core">核心</option><option value="generic">通用</option></select></label>
+          <label>描述 <textarea [(ngModel)]="d.note" rows="3" placeholder="组件描述"></textarea></label>
+        </div>
+        <div class="drawer-actions">
+          @if (d.uid) { <button class="btn btn-outline btn-sm danger" (click)="deleteDrawerComp()">删除组件</button> }
+          <button class="btn btn-outline btn-sm" (click)="compDrawer.set(null)">取消</button>
+          <button class="btn btn-primary btn-sm" (click)="saveComp()">保存</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- 构件编辑抽屉 -->
+  @if (constructDrawer(); as d) {
+    <div class="drawer-overlay" (click)="constructDrawer.set(null)">
+      <div class="drawer" (click)="$event.stopPropagation()">
+        <div class="drawer-head">
+          <h3>{{ d.uid ? '编辑构件' : '新建构件' }}</h3>
+          <button class="drawer-close" (click)="constructDrawer.set(null)">×</button>
+        </div>
+        <div class="drawer-body">
+          <label>名称 <input [(ngModel)]="d.name" placeholder="构件名称" /></label>
+          <label>所属组件 <select [(ngModel)]="d.businessComponentUid">
+            <option value="">未归属</option>
+            @for (c of components(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
+          </select></label>
+          @if (d.uid) {
+            <div class="drawer-section">
+              <div class="drawer-section-head">关联实体 <select class="tag-select" (change)="addEntityToDrawerConstruct($any($event.target).value); $any($event.target).selectedIndex=0"><option value="">+ 关联</option>@for(e of unclassifiedEntities(); track uid(e)){<option [value]="uid(e)">{{e.name}}</option>}</select></div>
+              <div class="construct-tags">@for(e of entitiesFor(drawerConstruct()); track uid(e)){<span class="tag tag-entity">{{e.name}} <button (click)="removeEntity(e)">×</button></span>}</div>
+            </div>
+            <div class="drawer-section">
+              <div class="drawer-section-head">关联任务 <select class="tag-select" (change)="addTaskDefToDrawerConstruct($any($event.target).value); $any($event.target).selectedIndex=0"><option value="">+ 关联</option>@for(t of unclassifiedTaskDefs(); track uid(t)){<option [value]="uid(t)">{{t.name}}</option>}</select></div>
+              <div class="construct-tags">@for(t of taskDefsFor(drawerConstruct()); track uid(t)){<span class="tag tag-task">{{t.name}} <button (click)="removeTaskDef(t)">×</button></span>}</div>
+            </div>
+          }
+        </div>
+        <div class="drawer-actions">
+          @if (d.uid) { <button class="btn btn-outline btn-sm danger" (click)="deleteDrawerConstruct()">删除构件</button> }
+          <button class="btn btn-outline btn-sm" (click)="constructDrawer.set(null)">取消</button>
+          <button class="btn btn-primary btn-sm" (click)="saveConstruct()">保存</button>
         </div>
       </div>
     </div>

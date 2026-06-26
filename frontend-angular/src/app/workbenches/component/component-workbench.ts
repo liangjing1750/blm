@@ -27,6 +27,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly editSvc = signal<Partial<LegacyService> | null>(null);
   protected readonly orchSvcId = signal('');
   protected readonly taskDefKeyword = signal('');
+  // 抽屉状态
+  protected readonly compDrawer = signal<Partial<LegacyComp> | null>(null);
+  protected readonly constructDrawer = signal<Partial<LegacyConstruct> | null>(null);
+  protected readonly newConstructCompId = signal('');
   protected readonly svcKeyword = signal('');
 
   protected doc(): any { this.version(); return getAngularRuntimeState().doc || {}; }
@@ -61,6 +65,55 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected removeEntity(entity: LegacyEntity): void { entity.businessConstructUid = ''; entity.businessConstructUids = []; this.touch(); }
   protected addTaskDefTo(td: LegacyTaskDef, construct: LegacyConstruct): void { td.businessConstructUid = this.uid(construct); this.touch(); }
   protected removeTaskDef(td: LegacyTaskDef): void { td.businessConstructUid = ''; this.touch(); }
+
+  // ─── 组件编辑抽屉 ──────────────────────────────
+  protected openCompDrawer(comp?: LegacyComp): void {
+    this.compDrawer.set(comp ? { ...comp } : { uid: '', name: '', kind: 'core', note: '' });
+  }
+  protected saveComp(): void {
+    const d = this.compDrawer(); if (!d || !d.name?.trim()) return;
+    const doc = this.doc();
+    if (!d.uid) { d.uid = 'COMP' + Date.now(); doc.businessComponents ||= []; doc.businessComponents.push(d); }
+    else { const ex = (doc.businessComponents || []).find((c: any) => (c.uid || c.id) === d.uid); if (ex) Object.assign(ex, d); }
+    this.compDrawer.set(null); this.touch();
+  }
+  protected deleteComp(comp: LegacyComp): void {
+    this.doc().businessComponents = this.components().filter((c) => (c.uid || c.id) !== (comp.uid || comp.id));
+    this.compDrawer.set(null); this.touch();
+  }
+  // 抽屉内部操作：类型转换由方法内部处理
+  protected saveDrawerComp(): void { this.saveComp(); }
+  protected deleteDrawerComp(): void { const d = this.compDrawer(); if (d) this.deleteComp(d as LegacyComp); }
+
+  // ─── 构件编辑抽屉 ──────────────────────────────
+  protected openConstructDrawer(construct?: LegacyConstruct, compId?: string): void {
+    this.constructDrawer.set(construct ? { ...construct } : { uid: '', name: '', businessComponentUid: compId || '' });
+  }
+  protected saveConstruct(): void {
+    const d = this.constructDrawer(); if (!d || !d.name?.trim()) return;
+    const doc = this.doc();
+    if (!d.uid) { d.uid = 'CSTR' + Date.now(); doc.businessConstructs ||= []; doc.businessConstructs.push(d); }
+    else { const ex = (doc.businessConstructs || []).find((c: any) => (c.uid || c.id) === d.uid); if (ex) Object.assign(ex, d); }
+    this.constructDrawer.set(null); this.touch();
+  }
+  protected deleteConstruct(construct: LegacyConstruct): void {
+    this.doc().businessConstructs = this.constructs().filter((c) => (c.uid || c.id) !== (construct.uid || construct.id));
+    this.constructDrawer.set(null); this.touch();
+  }
+  protected saveDrawerConstruct(): void { this.saveConstruct(); }
+  protected deleteDrawerConstruct(): void { const d = this.constructDrawer(); if (d) this.deleteConstruct(d as LegacyConstruct); }
+  protected drawerConstruct(): LegacyConstruct { return this.constructDrawer() as LegacyConstruct; }
+  // 抽屉内关联操作
+  protected addEntityToDrawerConstruct(entityId: string): void {
+    const e = this.unclassifiedEntities().find((x) => this.uid(x) === entityId);
+    const c = this.constructDrawer();
+    if (e && c) { e.businessConstructUid = this.uid(c as any); e.businessConstructUids = [this.uid(c as any)]; this.touch(); }
+  }
+  protected addTaskDefToDrawerConstruct(taskDefId: string): void {
+    const t = this.unclassifiedTaskDefs().find((x) => this.uid(x) === taskDefId);
+    const c = this.constructDrawer();
+    if (t && c) { t.businessConstructUid = this.uid(c as any); this.touch(); }
+  }
 
   // ─── Tab 2: 任务定义 ──────────────────────────────
   protected filteredTaskDefs(): LegacyTaskDef[] {
