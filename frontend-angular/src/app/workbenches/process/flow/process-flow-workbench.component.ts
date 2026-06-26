@@ -199,6 +199,58 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     return names.length ? names.join('、') : '选择执行角色';
   }
 
+  // 编辑态点击节点：选中并显示连线锚点
+  protected handleNodeClick(node: any): void {
+    if (this.connectingFromId()) {
+      this.finishConnect(node.baseId);
+    } else {
+      this.selectElement(node.baseId);
+    }
+  }
+
+  // 非编辑态点击节点：跳转节点视图
+  protected openNodeEditor(node: any): void {
+    if (node.task) {
+      this.adapter.selectTask(this.taskId(node.task));
+      this.taskEditorRequested.emit(this.taskId(node.task));
+    }
+  }
+
+  // 节点角色名列表
+  protected nodeRoleNames(node: any): string[] {
+    if (!node.task) return [];
+    return this.taskRoleIds(node.task).map((roleId: string) => this.roleName(roleId)).filter(Boolean);
+  }
+
+  // 移除节点角色
+  protected removeNodeRole(node: any, roleName: string, event: MouseEvent): void {
+    event.stopPropagation();
+    if (!node.task) return;
+    const roleId = this.taskRoleIds(node.task).find((id: string) => this.roleName(id) === roleName);
+    if (roleId) {
+      this.flowModel.setTaskRoleIds(node.task, this.taskRoleIds(node.task).filter((id: string) => id !== roleId));
+      this.adapter.touch();
+      this.refresh();
+    }
+  }
+
+  // 打开角色选择器（小内联下拉）
+  protected openNodeRolePicker(node: any, event: MouseEvent): void {
+    event.stopPropagation();
+    this.selectedElementId.set(node.baseId || node.id);
+    this.rolePickerOpen.set(true);
+  }
+
+  // 重命名节点
+  protected renameFlowNode(node: any, event: MouseEvent): void {
+    event.stopPropagation();
+    const name = window.prompt('修改节点名称', node.name || '');
+    if (name !== null && name.trim() && node.task) {
+      this.setTaskName(node.task, name.trim());
+      this.refresh();
+    }
+  }
+
   protected currentStageId(): string {
     this.version();
     const explicit = this.selectedStageId();

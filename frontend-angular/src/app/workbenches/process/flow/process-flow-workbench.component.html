@@ -79,11 +79,26 @@
               } @else if (node.kind === 'gateway') {
                 <button class="flow-gateway" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)"><span>{{ node.name }}</span></button>
               } @else {
-                <button class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)">
+                <div class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" [class.is-editing]="editing" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y"
+                  (pointerdown)="editing ? startNodeDrag($event, node) : null"
+                  (pointerup)="editing ? endNodeDrag($event, node) : null"
+                  (click)="$event.stopPropagation(); editing ? handleNodeClick(node) : openNodeEditor(node)">
                   @if (node.shared) { <span class="shared-badge">&#x5171;&#x4eab;</span> }
-                  <strong>{{ node.name }}</strong>
-                  <small>{{ node.role || '\u672a\u5206\u914d\u89d2\u8272' }}</small>
-                </button>
+                  <div class="flow-node-name-row">
+                    <strong>{{ node.name }}</strong>
+                    @if (editing) { <span class="flow-node-edit-icon" (click)="renameFlowNode(node, $event)" title="\u4fee\u6539\u540d\u79f0">\u270e</span> }
+                  </div>
+                  @if (editing) {
+                    <div class="flow-node-role-tags">
+                      @for (roleName of nodeRoleNames(node); track roleName) {
+                        <span class="flow-node-role-tag">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="\u79fb\u9664\u89d2\u8272">\u00d7</button></span>
+                      }
+                      <button class="flow-node-role-add" (click)="openNodeRolePicker(node, $event)" title="\u6dfb\u52a0\u89d2\u8272">+ \u89d2\u8272</button>
+                    </div>
+                  } @else {
+                    <small>{{ node.role || '\u672a\u5206\u914d\u89d2\u8272' }}</small>
+                  }
+                </div>
               }
               @if (selectedElementId() === node.baseId || selectedElementId() === node.id) {
                 <div class="flow-connect-box" [style.left.px]="node.x - 2" [style.top.px]="node.y - 2" [style.width.px]="node.width + 4" [style.height.px]="node.height + 4" (click)="$event.stopPropagation()">
@@ -94,7 +109,7 @@
               }
             }
 
-            @if (selectedNode(process); as node) {
+            @if (editing && selectedNode(process); as node) {
               <div class="flow-inline-panel" data-testid="process-flow-inline-panel" [style.left.px]="inlinePanelLeft(process, node)" [style.top.px]="inlinePanelTop(process, node)" (click)="$event.stopPropagation()">
                 @if (node.task) {
                   <label><span>&#x8282;&#x70b9;&#x540d;&#x79f0;</span><input type="text" [ngModel]="node.task.name || ''" (ngModelChange)="setTaskName(node.task, $event)" /></label>

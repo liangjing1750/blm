@@ -317,8 +317,8 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     this.refresh();
   }
 
-  protected flowEditing = signal(true);
-  protected editorEditing = signal(true);
+  protected flowEditing = signal(false);
+  protected editorEditing = signal(false);
 
   protected setStageEditing(editing: boolean): void {
     this.adapter.setStageEditing(editing);
