@@ -4,7 +4,7 @@
       <header class="process-flow-topbar" data-testid="process-flow-basic-fields">
         <label class="compact-field select-field">
           <span>阶段</span>
-          <select class="stage-select" data-testid="process-flow-stage-select" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
+          <select class="stage-select" data-testid="process-flow-stage-select" [disabled]="!editing" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
             @for (stage of stages(); track stageId(stage)) {
               <option [value]="stageId(stage)">{{ stageName(stage) }}</option>
             }
@@ -12,7 +12,7 @@
         </label>
         <label class="compact-field select-field">
           <span>流程</span>
-          <select class="process-select" data-testid="process-flow-select" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
+          <select class="process-select" data-testid="process-flow-select" [disabled]="!editing" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
             @for (item of processesForCurrentStage(); track processId(item)) {
               <option [value]="processId(item)">{{ item.name || '\u672a\u547d\u540d\u6d41\u7a0b' }}</option>
             }
@@ -86,14 +86,14 @@
                   @if (node.shared) { <span class="shared-badge">&#x5171;&#x4eab;</span> }
                   <div class="flow-node-name-row">
                     <strong>{{ node.name }}</strong>
-                    @if (editing) { <span class="flow-node-edit-icon" (click)="renameFlowNode(node, $event)" title="\u4fee\u6539\u540d\u79f0">\u270e</span> }
+                    @if (editing) { <span class="flow-node-edit-icon" (click)="renameFlowNode(node, $event)" title="\u4fee\u6539\u540d\u79f0">&#x270e;</span> }
                   </div>
                   @if (editing) {
                     <div class="flow-node-role-tags">
                       @for (roleName of nodeRoleNames(node); track roleName) {
-                        <span class="flow-node-role-tag">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="移除角色">×</button></span>
+                        <span class="flow-node-role-tag">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="\u79fb\u9664\u89d2\u8272">&#x00d7;</button></span>
                       }
-                      <button class="flow-node-role-add" (click)="openNodeRolePicker(node, $event)" title="\u6dfb\u52a0\u89d2\u8272">+ \u89d2\u8272</button>
+                      <button class="flow-node-role-add" (click)="openNodeRolePicker(node, $event)" title="\u6dfb\u52a0\u89d2\u8272">+ &#x89d2;&#x8272;</button>
                     </div>
                   } @else {
                     <small>{{ node.role || '\u672a\u5206\u914d\u89d2\u8272' }}</small>
