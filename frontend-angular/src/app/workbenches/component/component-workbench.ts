@@ -183,5 +183,26 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected switchTab(t: ComponentTab): void { this.activeTab.set(t); }
   protected toggleExp(id: string): void { this.expandedComp.set(this.expandedComp() === id ? '' : id); }
   protected isExp(id: string): boolean { return this.expandedComp() === id; }
+  // ─── 抽屉宽度拖拽 ──────────────────────────
+  protected readonly drawerWidth = signal(400);
+  private resizeStartX = 0;
+  private resizeStartWidth = 0;
+
+  protected startDrawerResize(event: MouseEvent): void {
+    event.preventDefault();
+    this.resizeStartX = event.clientX;
+    this.resizeStartWidth = this.drawerWidth();
+    const onMove = (e: MouseEvent) => {
+      const dx = this.resizeStartX - e.clientX;
+      this.drawerWidth.set(Math.max(280, Math.min(900, this.resizeStartWidth + dx)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
   protected touch(): void { markAngularRuntimeModified(); this.version.update((v) => v + 1); }
 }

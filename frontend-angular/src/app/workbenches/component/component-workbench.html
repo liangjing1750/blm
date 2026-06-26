@@ -180,7 +180,8 @@
   <!-- 组件编辑抽屉 -->
   @if (compDrawer(); as d) {
     <div class="drawer-overlay" (click)="compDrawer.set(null)">
-      <div class="drawer" (click)="$event.stopPropagation()">
+      <div class="drawer" [style.width.px]="drawerWidth()" (click)="$event.stopPropagation()">
+        <div class="drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
         <div class="drawer-head">
           <h3>{{ d.uid ? '编辑组件' : '新建组件' }}</h3>
           <button class="drawer-close" (click)="compDrawer.set(null)">×</button>
@@ -202,7 +203,8 @@
   <!-- 构件编辑抽屉 -->
   @if (constructDrawer(); as d) {
     <div class="drawer-overlay" (click)="constructDrawer.set(null)">
-      <div class="drawer" (click)="$event.stopPropagation()">
+      <div class="drawer" [style.width.px]="drawerWidth()" (click)="$event.stopPropagation()">
+        <div class="drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
         <div class="drawer-head">
           <h3>{{ d.uid ? '编辑构件' : '新建构件' }}</h3>
           <button class="drawer-close" (click)="constructDrawer.set(null)">×</button>
