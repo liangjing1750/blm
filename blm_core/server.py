@@ -922,7 +922,7 @@ def run_server(
     migration_result = storage.migrate_workspace_layout()
     handler = create_handler(app_dir, storage, collab)
     try:
-        server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
         server.allow_reuse_address = True
     except OSError as exc:
         print(f"\n?? 端口 {port} 已被占用，无法启动 BLM 服务。")
@@ -939,7 +939,7 @@ def run_server(
                 app_port=port,
                 started_at=started_at,
             )
-            admin_server = http.server.ThreadingHTTPServer(("0.0.0.0", admin_port), admin_handler)
+            admin_server = http.server.ThreadingHTTPServer(("127.0.0.1", admin_port), admin_handler)
             admin_thread = threading.Thread(target=admin_server.serve_forever, daemon=True)
             admin_thread.start()
             log_admin_start(admin_port, workspace_dir)
@@ -947,13 +947,13 @@ def run_server(
             admin_server = None
             log_error("blm.admin", "admin.start.error", port=admin_port, error=str(exc))
             print(f"管理端启动失败: 端口 {admin_port} 不可用，主服务继续运行。")
-    url = f"http://0.0.0.0:{port}"
+    url = f"http://127.0.0.1:{port}"
 
     print(f"BLM Tool 已启动: {url}")
     print(f"文档目录: {workspace_dir}")
     print(f"日志目录: {log_dir}")
     if admin_server:
-        print(f"管理端: http://0.0.0.0:{admin_port}")
+        print(f"管理端: http://127.0.0.1:{admin_port}")
     log_event(
         "blm.server",
         "server.start",
