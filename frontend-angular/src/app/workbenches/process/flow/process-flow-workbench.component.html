@@ -91,7 +91,7 @@
                   @if (editing) {
                     <div class="flow-node-role-tags">
                       @for (roleName of nodeRoleNames(node); track roleName) {
-                        <span class="flow-node-role-tag">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="\u79fb\u9664\u89d2\u8272">\u00d7</button></span>
+                        <span class="flow-node-role-tag">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="移除角色">×</button></span>
                       }
                       <button class="flow-node-role-add" (click)="openNodeRolePicker(node, $event)" title="\u6dfb\u52a0\u89d2\u8272">+ \u89d2\u8272</button>
                     </div>
