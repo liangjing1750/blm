@@ -395,16 +395,21 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
       const toNodes = nodes.filter((node) => node.baseId === String(edge.to || ''));
       if (!fromNodes.length || !toNodes.length) return [];
       return fromNodes.flatMap((from, fromIndex) => toNodes.map((to, toIndex) => {
-        const startX = from.x + from.width;
-        const startY = from.y + from.height / 2;
-        const endX = to.x;
-        const endY = to.y + to.height / 2;
+        const startX = Math.round(from.x + from.width);
+        const startY = Math.round(from.y + from.height / 2);
+        const endX = Math.round(to.x);
+        const endY = Math.round(to.y + to.height / 2);
+        const sameRow = Math.abs(startY - endY) < 2;
         const midX = Math.max(startX + 24, Math.round((startX + endX) / 2));
+        // 对齐旧版 renderProcessFlowView：同行节点用直线，否则用肘形路径
+        const d = sameRow
+          ? `M ${startX} ${startY} L ${endX} ${endY}`
+          : `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`;
         return {
           id: `${this.edgeId(edge) || `edge-${index}`}::${from.id}::${to.id}`,
           baseId: this.edgeId(edge) || `edge-${index}`,
           label: fromIndex === 0 && toIndex === 0 ? String(edge.label || edge.condition || '') : '',
-          d: `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`,
+          d,
           labelX: midX + 6,
           labelY: (startY + endY) / 2 - 8,
         };
