@@ -6,6 +6,7 @@ export const routes: Routes = [
   { path: 'panorama', component: ShellComponent },
   { path: 'process', component: ShellComponent },
   { path: 'component', component: ShellComponent },
+  { path: 'application', component: ShellComponent },
   { path: 'preview', component: ShellComponent },
   { path: 'orchestration', component: ShellComponent },
   { path: 'entity', component: ShellComponent },

@@ -1,0 +1,97 @@
+<section class="app-workbench">
+  <nav class="comp-tabs">
+    <button [class.active]="activeTab()==='service'" (click)="switchTab('service')">应用服务</button>
+    <button [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
+  </nav>
+
+  <!-- Tab 1: 应用服务 -->
+  @if (activeTab() === 'service') {
+    <div class="comp-tab-body">
+      <div class="comp-toolbar">
+        <input type="search" placeholder="搜索..." [ngModel]="svcKeyword()" (ngModelChange)="svcKeyword.set($event)" />
+        <button class="btn btn-primary btn-sm" (click)="startEditSvc()">+ 新建应用服务</button>
+      </div>
+      <div class="comp-cards">
+        @for (svc of filteredServices(); track svc.uid) {
+          <div class="svc-card">
+            <div class="svc-card-head">
+              <strong>{{ svc.name }}</strong>
+              <span class="svc-method">{{ svc.method || 'POST' }}</span>
+              <code>{{ svc.path || '/' }}</code>
+              <div class="svc-actions">
+                <button class="btn-ghost-sm" (click)="startEditSvc(svc)">编辑</button>
+                <button class="btn-ghost-sm danger" (click)="deleteService(svc)">删除</button>
+              </div>
+            </div>
+            @if (svc.desc) { <p class="svc-desc">{{ svc.desc }}</p> }
+            <div class="svc-refs">
+              <span class="svc-ref-label">关联节点:</span>
+              @for (ref of (svc.nodeRefs || []); track ref) {
+                <span class="tag tag-node">{{ nodeLabel(ref) }} <button (click)="removeNodeFromSvc(svc, ref)" title="移除">×</button></span>
+              }
+              <select class="tag-select" (change)="addNodeToSvc(svc, $any($event.target).value); $any($event.target).selectedIndex = 0">
+                <option value="">+ 关联节点</option>
+                @for (n of allNodes(); track n.uid) { <option [value]="n.uid">{{ n.name }}（{{ n.pname }}）</option> }
+              </select>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Tab 2: 应用编排 -->
+  @if (activeTab() === 'orchestration') {
+    <div class="comp-tab-body">
+      <div class="comp-toolbar">
+        <span>应用服务</span>
+        <select [ngModel]="orchSvcId()" (ngModelChange)="orchSvcId.set($event)">
+          <option value="">请选择</option>
+          @for (svc of services(); track svc.uid) { <option [value]="svc.uid">{{ svc.name }}</option> }
+        </select>
+      </div>
+      @if (orchSvcId(); as sid) {
+        @if (services().find(s => s.uid === sid); as svc) {
+          <div class="orch-panel">
+            <h3>{{ svc.name }} <span class="svc-method">{{ svc.method || 'POST' }}</span> <code>{{ svc.path || '/' }}</code></h3>
+            <div class="orch-tasks">
+              @for (td of orderedTaskDefs(svc); track uid(td); let i = $index) {
+                <div class="orch-task-row">
+                  <span class="orch-task-idx">{{ i + 1 }}</span>
+                  <span class="orch-task-name">{{ td.name }}</span>
+                  <span class="muted">{{ td.target || '-' }}</span>
+                  <div class="orch-task-actions">
+                    <button [disabled]="i===0" (click)="moveTaskDefInSvc(svc, i, -1)">↑</button>
+                    <button [disabled]="i===orderedTaskDefs(svc).length-1" (click)="moveTaskDefInSvc(svc, i, 1)">↓</button>
+                    <button class="danger" (click)="removeTaskDefFromSvc(svc, td.uid || td.id || '')">×</button>
+                  </div>
+                </div>
+              }
+              <select class="tag-select" (change)="addTaskDefToSvc(svc, $any($event.target).value); $any($event.target).selectedIndex = 0">
+                <option value="">+ 添加任务定义</option>
+                @for (td of taskDefs(); track uid(td)) { <option [value]="uid(td)">{{ td.name }}</option> }
+              </select>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+
+  <!-- Edit Service Dialog -->
+  @if (editSvc(); as d) {
+    <div class="comp-overlay" (click)="editSvc.set(null)">
+      <div class="comp-dialog" (click)="$event.stopPropagation()">
+        <h3>{{ d.uid ? '编辑' : '新建' }}应用服务</h3>
+        <label>名称 <input [(ngModel)]="d.name" /></label>
+        <label>方法 <select [(ngModel)]="d.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></label>
+        <label>路径 <input [(ngModel)]="d.path" placeholder="/api/..." /></label>
+        <label>描述 <textarea [(ngModel)]="d.desc" rows="2"></textarea></label>
+        <div class="comp-dialog-actions">
+          <button class="btn btn-outline btn-sm" (click)="editSvc.set(null)">取消</button>
+          <button class="btn btn-primary btn-sm" (click)="saveService()">保存</button>
+        </div>
+      </div>
+    </div>
+  }
+</section>

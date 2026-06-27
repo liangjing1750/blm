@@ -1,0 +1,50 @@
+.app-workbench { display: flex; flex-direction: column; height: 100%; }
+.comp-tabs { display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; padding: 0 12px; background: #fff; flex-shrink: 0; }
+.comp-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: #64748b; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; padding: 10px 16px; }
+.comp-tabs button:hover { color: #334155; }
+.comp-tabs button.active { border-bottom-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
+.comp-tab-body { flex: 1; overflow: auto; padding: 12px 16px; }
+.comp-toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
+.comp-toolbar input { border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-size: 13px; max-width: 280px; }
+.comp-toolbar select { border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+
+.comp-cards { display: flex; flex-direction: column; gap: 8px; }
+.svc-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; background: #fff; }
+.svc-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.svc-card-head strong { color: #1e293b; font-size: 14px; }
+.svc-method { background: #dbeafe; color: #1d4ed8; border-radius: 5px; font-size: 11px; font-weight: 700; padding: 2px 7px; }
+.svc-card code { color: #64748b; font-size: 12px; }
+.svc-desc { color: #64748b; font-size: 13px; margin: 0 0 8px; }
+.svc-refs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.svc-ref-label { color: #94a3b8; font-size: 12px; font-weight: 600; }
+.svc-actions { margin-left: auto; display: flex; gap: 4px; }
+
+.tag { display: inline-flex; align-items: center; gap: 3px; border-radius: 5px; font-size: 12px; font-weight: 600; padding: 3px 8px; }
+.tag button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 13px; opacity: .5; padding: 0 1px; }
+.tag button:hover { opacity: 1; }
+.tag-node { background: #dcfce7; color: #166534; }
+.tag-select { border: 1px dashed #cbd5e1; border-radius: 5px; font-size: 12px; padding: 3px 6px; color: #94a3b8; background: none; cursor: pointer; }
+
+.orch-panel { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; background: #fff; }
+.orch-panel h3 { margin: 0 0 12px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.orch-tasks { display: flex; flex-direction: column; gap: 4px; }
+.orch-task-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #f1f5f9; border-radius: 8px; background: #f8fafc; }
+.orch-task-idx { color: #94a3b8; font-size: 12px; font-weight: 700; min-width: 20px; }
+.orch-task-name { flex: 1; font-size: 13px; font-weight: 600; color: #334155; }
+.orch-task-actions { display: flex; gap: 4px; }
+.orch-task-actions button { background: #fff; border: 1px solid #e2e8f0; border-radius: 5px; cursor: pointer; font-size: 12px; padding: 2px 6px; }
+.orch-task-actions button:disabled { opacity: .3; cursor: default; }
+.orch-task-actions button.danger { color: #ef4444; border-color: #fecaca; }
+
+.comp-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.2); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.comp-dialog { background: #fff; border-radius: 12px; box-shadow: 0 16px 40px rgba(15,23,42,.16); min-width: 380px; max-width: 480px; padding: 20px 24px; }
+.comp-dialog h3 { margin: 0 0 14px; font-size: 15px; }
+.comp-dialog label { display: block; margin-bottom: 10px; font-size: 12px; color: #64748b; font-weight: 600; }
+.comp-dialog input, .comp-dialog select, .comp-dialog textarea { width: 100%; border: 1px solid #e2e8f0; border-radius: 7px; padding: 7px 10px; font: inherit; font-size: 13px; margin-top: 4px; }
+.comp-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+.muted { color: #94a3b8; font-size: 12px; }
+.btn-ghost-sm { background: none; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 12px; padding: 3px 8px; }
+.btn-ghost-sm:hover { background: #f1f5f9; }
+.btn-ghost-sm.danger { color: #ef4444; }
+.btn-ghost-sm.danger:hover { background: #fef2f2; }

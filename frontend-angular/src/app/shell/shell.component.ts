@@ -18,6 +18,7 @@ import { ShellTabBarComponent } from '../core/shell/tab-bar/shell-tab-bar.compon
 import { WaitDialogComponent } from '../core/shell/wait-dialog/wait-dialog.component';
 import { SyncService } from '../core/sync/sync.service';
 import { ComponentWorkbenchShellComponent } from '../workbenches/component/shell/component-workbench-shell.component';
+import { ApplicationWorkbenchShellComponent } from '../workbenches/application/app-workbench-shell.component';
 import { EntityWorkbench } from '../workbenches/entity/entity-workbench';
 import { KnowledgeWorkbenchComponent } from '../workbenches/knowledge/knowledge-workbench';
 import { OrchestrationWorkbench } from '../workbenches/orchestration/orchestration-workbench';
@@ -65,6 +66,7 @@ export const TRANSITION_SHELL = 'angular-shell';
     PanoramaWorkbench,
     ProcessWorkbenchShellComponent,
     ComponentWorkbenchShellComponent,
+    ApplicationWorkbenchShellComponent,
     OrchestrationWorkbench,
     EntityWorkbench,
     KnowledgeWorkbenchComponent,

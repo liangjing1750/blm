@@ -29,6 +29,7 @@ const MAIN_TABS: ShellMainTab[] = [
   { id: 'panoramaWorkbench', label: '全景工作台' },
   { id: 'processWorkbench', label: '流程工作台' },
   { id: 'constructWorkbench', label: '构件工作台' },
+  { id: 'applicationWorkbench', label: '应用工作台' },
   { id: 'preview', label: '预览/导出' },
 ];
 

@@ -117,6 +117,8 @@ export function normalizeMainWorkbenchId(tabId?: string): string {
     panorama: 'panoramaWorkbench',
     process: 'processWorkbench',
     component: 'constructWorkbench',
+    application: 'applicationWorkbench',
+    appService: 'applicationWorkbench',
     orchestration: 'orchestrationWorkbench',
     knowledge: 'knowledge',
     role: 'role',
@@ -124,7 +126,7 @@ export function normalizeMainWorkbenchId(tabId?: string): string {
     feedback: 'feedback',
   };
   const normalized = aliases[String(tabId || '')] || String(tabId || 'panoramaWorkbench');
-  return ['panoramaWorkbench', 'processWorkbench', 'constructWorkbench', 'orchestrationWorkbench', 'entity', 'knowledge', 'role', 'preview', 'manual', 'feedback'].includes(normalized)
+  return ['panoramaWorkbench', 'processWorkbench', 'constructWorkbench', 'applicationWorkbench', 'orchestrationWorkbench', 'entity', 'knowledge', 'role', 'preview', 'manual', 'feedback'].includes(normalized)
     ? normalized
     : 'panoramaWorkbench';
 }
