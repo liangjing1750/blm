@@ -118,10 +118,28 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   // ─── Tab 2: 任务定义 ──────────────────────────────
+  protected readonly taskDefCompId = signal('');
+  protected readonly taskDefConstructId = signal('');
+
+  // 按已选组件筛选的构件列表（联动）
+  protected filteredConstructsForTaskDef(): LegacyConstruct[] {
+    const cid = this.taskDefCompId();
+    if (!cid) return this.constructs();
+    return this.constructs().filter((c) => this.uid({ uid: c.businessComponentUid }) === cid);
+  }
+
+  protected selectTaskDefComp(compId: string): void {
+    this.taskDefCompId.set(compId);
+    this.taskDefConstructId.set(''); // 切换组件时重置构件筛选
+  }
+
   protected filteredTaskDefs(): LegacyTaskDef[] {
+    const cid = this.taskDefConstructId();
     const kw = this.taskDefKeyword().toLowerCase();
-    if (!kw) return this.taskDefs();
-    return this.taskDefs().filter((t) => [t.name, t.target, t.address].join(' ').toLowerCase().includes(kw));
+    let list = this.taskDefs();
+    if (cid) list = list.filter((t) => t.businessConstructUid === cid);
+    if (kw) list = list.filter((t) => [t.name, t.target, t.address].join(' ').toLowerCase().includes(kw));
+    return list;
   }
   protected taskNodes(td: LegacyTaskDef): Array<{ uid: string; name: string; pname: string }> {
     const nodes: Array<{ uid: string; name: string; pname: string }> = [];

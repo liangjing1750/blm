@@ -54,6 +54,14 @@
   @if (activeTab() === 'taskDef') {
     <div class="comp-tab-body">
       <div class="comp-toolbar">
+        <select [ngModel]="taskDefCompId()" (ngModelChange)="selectTaskDefComp($event)">
+          <option value="">全部组件</option>
+          @for(c of components(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
+        </select>
+        <select [ngModel]="taskDefConstructId()" (ngModelChange)="taskDefConstructId.set($event)">
+          <option value="">全部构件</option>
+          @for(c of filteredConstructsForTaskDef(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
+        </select>
         <input type="search" placeholder="搜索..." [ngModel]="taskDefKeyword()" (ngModelChange)="taskDefKeyword.set($event)" />
         <button class="btn btn-primary btn-sm" (click)="startEdit()">+ 新建任务</button>
       </div>
