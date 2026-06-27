@@ -171,6 +171,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return nodes;
   }
   protected editingTaskId = signal('');
+  protected expandedTaskIds = signal(new Set<string>());
+  protected toggleTaskExpand(id: string): void {
+    this.expandedTaskIds.update((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  protected isTaskExpanded(id: string): boolean { return this.expandedTaskIds().has(id); }
   protected startEditInline(td?: LegacyTaskDef): void {
     if (td) { this.editingTaskId.set(this.uid(td)); return; }
     // 新建

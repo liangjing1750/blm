@@ -96,16 +96,17 @@
             } @else {
               <!-- 查看模式 -->
               <div class="taskdef-view">
-                <div class="taskdef-head">
+                <div class="taskdef-head" (click)="toggleTaskExpand(uid(td))">
                   <span class="taskdef-type" [class.query]="td.type !== 'Service'" [class.service]="td.type === 'Service'">{{ td.type === 'Service' ? 'Service' : 'Query' }}</span>
                   <strong>{{ td.name || uid(td) }}</strong>
                   @if (td.target) { <code>{{ td.target }}</code> }
                   @if (td.address) { <span class="taskdef-addr">{{ td.address }}</span> }
                   <span class="taskdef-meta">{{ constructName(tdConstructId(td)) }} · {{ taskNodes(td).length }} 节点引用</span>
-                  <button class="btn-ghost-sm" (click)="startEditInline(td)">编辑</button>
-                  <button class="btn-ghost-sm danger" (click)="deleteTaskDef(td)">删除</button>
+                  <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
+                  <button class="btn-ghost-sm" (click)="startEditInline(td); $event.stopPropagation()">编辑</button>
+                  <button class="btn-ghost-sm danger" (click)="deleteTaskDef(td); $event.stopPropagation()">删除</button>
                 </div>
-                @if ((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note) {
+                @if (isTaskExpanded(uid(td)) && ((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note)) {
                 <div class="taskdef-detail">
                   @if ((td.parameters?.inputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输入参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.inputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
                   @if ((td.parameters?.outputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输出参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.outputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
