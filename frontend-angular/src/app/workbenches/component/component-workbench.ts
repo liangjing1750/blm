@@ -159,32 +159,36 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     for (const p of this.doc().processes || []) for (const n of p.nodes || p.tasks || []) if (n.taskDefinitionUid === (td.uid || td.id)) nodes.push({ uid: n.uid || n.id, name: n.name || '节点', pname: p.name || '' });
     return nodes;
   }
-  protected parameterRows(params?: TaskParam[]): TaskParam[] { return params || []; }
-  protected addParam(params: TaskParam[]): void { params.push({ name: '', type: 'String', required: false, note: '' }); }
-  protected removeParam(params: TaskParam[], idx: number): void { params.splice(idx, 1); }
-  protected expandedTaskDef = signal('');
-  protected toggleTaskDef(id: string): void { this.expandedTaskDef.set(this.expandedTaskDef() === id ? '' : id); }
-  protected isTaskExpanded(id: string): boolean { return this.expandedTaskDef() === id; }
-
-  protected startEdit(td?: LegacyTaskDef): void {
-    const base: Partial<LegacyTaskDef> = td ? { ...td } : { uid: '', name: '', type: 'Query', target: '', address: '', note: '', parameters: { inputs: [], outputs: [] } };
-    base.parameters ||= { inputs: [], outputs: [] };
-    base.parameters.inputs ||= [];
-    base.parameters.outputs ||= [];
-    this.editTaskDef.set(base);
+  protected editingTaskId = signal('');
+  protected startEditInline(td?: LegacyTaskDef): void {
+    if (td) { this.editingTaskId.set(this.uid(td)); return; }
+    // 新建
+    const base: LegacyTaskDef = { uid: '', name: '', type: 'Query', target: '', address: '', note: '', constructUid: '', parameters: { inputs: [], outputs: [] } };
+    this.doc().taskDefinitions ||= [];
+    this.doc().taskDefinitions.push(base);
+    this.editingTaskId.set('');
+    this.touch();
   }
-  protected saveTaskDef(): void {
-    const d = this.editTaskDef(); if (!d || !d.name?.trim()) return;
-    const doc = this.doc();
-    if (!d.uid) { d.uid = 'TD' + Date.now(); doc.taskDefinitions ||= []; doc.taskDefinitions.push(d); }
-    else { const ex = (doc.taskDefinitions || []).find((t: any) => (t.uid || t.id) === d.uid); if (ex) Object.assign(ex, d); }
-    this.editTaskDef.set(null); this.touch();
+  protected saveInlineEdit(td: LegacyTaskDef): void {
+    td.parameters ||= { inputs: [], outputs: [] };
+    this.editingTaskId.set('');
+    this.touch();
   }
-  protected deleteTaskDef(td: LegacyTaskDef): void { this.doc().taskDefinitions = this.taskDefs().filter((t) => (t.uid || t.id) !== (td.uid || td.id)); this.touch(); }
-  protected deleteDrawerTaskDef(): void { const d = this.editTaskDef(); if (d) { this.deleteTaskDef(d as LegacyTaskDef); this.editTaskDef.set(null); } }
-  protected stopProp(e: Event): void { e.stopPropagation(); }
-  protected addParamInput(d: any): void { if (d?.parameters) { (d.parameters.inputs ||= []).push({ name: '', type: 'String', required: false, note: '' }); } }
-  protected addParamOutput(d: any): void { if (d?.parameters) { (d.parameters.outputs ||= []).push({ name: '', type: 'String', required: false, note: '' }); } }
+  protected cancelInlineEdit(td: LegacyTaskDef): void {
+    if (!td.uid) {
+      this.doc().taskDefinitions = this.taskDefs().filter((t) => t !== td);
+    }
+    this.editingTaskId.set('');
+    this.touch();
+  }
+  protected async deleteTaskDef(td: LegacyTaskDef): Promise<void> {
+    if (!window.confirm(`确认删除"${td.name || this.uid(td)}"吗？`)) return;
+    this.doc().taskDefinitions = this.taskDefs().filter((t) => (t.uid || t.id) !== (td.uid || td.id));
+    this.touch();
+  }
+  protected addParam(arr: TaskParam[]): void { arr.push({ name: '', type: 'String', required: false, note: '' }); }
+  protected removeParam(arr: TaskParam[], idx: number): void { arr.splice(idx, 1); }
+  protected isEditingTask(td: LegacyTaskDef): boolean { return this.editingTaskId() === this.uid(td) || (!td.uid && this.editingTaskId() === ''); }
 
   // ─── Tab 4: 应用服务 ──────────────────────────────
   protected filteredServices(): LegacyService[] {
