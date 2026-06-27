@@ -129,7 +129,7 @@
           <label>类型 <select [(ngModel)]="d.type"><option value="Query">Query（查询）</option><option value="Service">Service（服务/提交）</option></select></label>
           <label>实现标识 <input [(ngModel)]="d.target" placeholder="如 receipt.submit" /></label>
           <label>地址 <input [(ngModel)]="d.address" placeholder="/api/..." /></label>
-          <label>所属构件 <select [(ngModel)]="d.businessConstructUid"><option value="">未归属</option>@for(c of constructs(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}</select></label>
+          <label>所属构件 <select [(ngModel)]="d.constructUid"><option value="">未归属</option>@for(c of constructs(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}</select></label>
           @if (d.parameters; as params) {
           <div class="drawer-section">
             <div class="drawer-section-head">输入参数 <button class="btn-ghost-sm" (click)="addParamInput(d)">+ 添加</button></div>

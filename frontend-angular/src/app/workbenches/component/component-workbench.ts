@@ -10,7 +10,7 @@ interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; 
 interface LegacyConstruct { uid?: string; id?: string; name?: string; businessComponentUid?: string; }
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructUids?: string[]; }
 interface TaskParam { name: string; type: string; required: boolean; note: string; }
-interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; businessConstructUid?: string; businessComponentUid?: string; }
+interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; businessComponentUid?: string; }
 interface LegacyService { uid?: string; name?: string; method?: string; path?: string; desc?: string; taskDefinitionUids?: string[]; nodeRefs?: string[]; }
 
 @Component({
@@ -53,20 +53,20 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected taskDefsFor(construct: LegacyConstruct): LegacyTaskDef[] {
     const cid = this.uid(construct);
-    return this.taskDefs().filter((t) => t.businessConstructUid === cid);
+    return this.taskDefs().filter((t) => t.constructUid === cid);
   }
   protected unclassifiedEntities(): LegacyEntity[] {
     const used = new Set(this.entities().filter((e) => e.businessConstructUid || (e.businessConstructUids || [])[0]).map((e) => e.uid || e.id));
     return this.entities().filter((e) => !used.has(e.uid || e.id));
   }
   protected unclassifiedTaskDefs(): LegacyTaskDef[] {
-    const used = new Set(this.taskDefs().filter((t) => t.businessConstructUid).map((t) => t.uid || t.id));
+    const used = new Set(this.taskDefs().filter((t) => t.constructUid).map((t) => t.uid || t.id));
     return this.taskDefs().filter((t) => !used.has(t.uid || t.id));
   }
   protected addEntityTo(entity: LegacyEntity, construct: LegacyConstruct): void { entity.businessConstructUid = this.uid(construct); entity.businessConstructUids = [this.uid(construct)]; this.touch(); }
   protected removeEntity(entity: LegacyEntity): void { entity.businessConstructUid = ''; entity.businessConstructUids = []; this.touch(); }
-  protected addTaskDefTo(td: LegacyTaskDef, construct: LegacyConstruct): void { td.businessConstructUid = this.uid(construct); this.touch(); }
-  protected removeTaskDef(td: LegacyTaskDef): void { td.businessConstructUid = ''; this.touch(); }
+  protected addTaskDefTo(td: LegacyTaskDef, construct: LegacyConstruct): void { td.constructUid = this.uid(construct); this.touch(); }
+  protected removeTaskDef(td: LegacyTaskDef): void { td.constructUid = ''; this.touch(); }
 
   // ─── 组件编辑抽屉 ──────────────────────────────
   protected openCompDrawer(comp?: LegacyComp): void {
@@ -114,7 +114,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected addTaskDefToDrawerConstruct(taskDefId: string): void {
     const t = this.unclassifiedTaskDefs().find((x) => this.uid(x) === taskDefId);
     const c = this.constructDrawer();
-    if (t && c) { t.businessConstructUid = this.uid(c as any); this.touch(); }
+    if (t && c) { t.constructUid = this.uid(c as any); this.touch(); }
   }
 
   // ─── Tab 2: 任务定义 ──────────────────────────────
@@ -133,9 +133,8 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.taskDefConstructId.set(''); // 切换组件时重置构件筛选
   }
 
-  // 旧版字段 constructUid / businessComponentUid，新版用 businessConstructUid
   protected tdConstructId(td: LegacyTaskDef): string {
-    return String((td as any).constructUid || td.businessConstructUid || '').trim();
+    return String(td.constructUid || '').trim();
   }
 
   protected filteredTaskDefs(): LegacyTaskDef[] {
