@@ -9,7 +9,8 @@ type ComponentTab = 'component' | 'taskDef' | 'entity' | 'service' | 'orchestrat
 interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; note?: string; entityUids?: string[]; taskDefinitionUids?: string[]; constructUids?: string[]; }
 interface LegacyConstruct { uid?: string; id?: string; name?: string; businessComponentUid?: string; }
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructUids?: string[]; }
-interface LegacyTaskDef { uid?: string; id?: string; name?: string; target?: string; desc?: string; businessConstructUid?: string; }
+interface TaskParam { name: string; type: string; required: boolean; note: string; }
+interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; businessConstructUid?: string; businessComponentUid?: string; }
 interface LegacyService { uid?: string; name?: string; method?: string; path?: string; desc?: string; taskDefinitionUids?: string[]; nodeRefs?: string[]; }
 
 @Component({
@@ -120,18 +121,27 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected filteredTaskDefs(): LegacyTaskDef[] {
     const kw = this.taskDefKeyword().toLowerCase();
     if (!kw) return this.taskDefs();
-    return this.taskDefs().filter((t) => (t.name || '').toLowerCase().includes(kw) || (t.target || '').toLowerCase().includes(kw));
+    return this.taskDefs().filter((t) => [t.name, t.target, t.address].join(' ').toLowerCase().includes(kw));
   }
   protected taskNodes(td: LegacyTaskDef): Array<{ uid: string; name: string; pname: string }> {
     const nodes: Array<{ uid: string; name: string; pname: string }> = [];
-    for (const p of this.doc().processes || []) {
-      for (const n of p.nodes || p.tasks || []) {
-        if (n.taskDefinitionUid === (td.uid || td.id)) nodes.push({ uid: n.uid || n.id, name: n.name || '节点', pname: p.name || '' });
-      }
-    }
+    for (const p of this.doc().processes || []) for (const n of p.nodes || p.tasks || []) if (n.taskDefinitionUid === (td.uid || td.id)) nodes.push({ uid: n.uid || n.id, name: n.name || '节点', pname: p.name || '' });
     return nodes;
   }
-  protected startEdit(td?: LegacyTaskDef): void { this.editTaskDef.set(td ? { ...td } : { uid: '', name: '', target: '', desc: '' }); }
+  protected parameterRows(params?: TaskParam[]): TaskParam[] { return params || []; }
+  protected addParam(params: TaskParam[]): void { params.push({ name: '', type: 'String', required: false, note: '' }); }
+  protected removeParam(params: TaskParam[], idx: number): void { params.splice(idx, 1); }
+  protected expandedTaskDef = signal('');
+  protected toggleTaskDef(id: string): void { this.expandedTaskDef.set(this.expandedTaskDef() === id ? '' : id); }
+  protected isTaskExpanded(id: string): boolean { return this.expandedTaskDef() === id; }
+
+  protected startEdit(td?: LegacyTaskDef): void {
+    const base: Partial<LegacyTaskDef> = td ? { ...td } : { uid: '', name: '', type: 'Query', target: '', address: '', note: '', parameters: { inputs: [], outputs: [] } };
+    base.parameters ||= { inputs: [], outputs: [] };
+    base.parameters.inputs ||= [];
+    base.parameters.outputs ||= [];
+    this.editTaskDef.set(base);
+  }
   protected saveTaskDef(): void {
     const d = this.editTaskDef(); if (!d || !d.name?.trim()) return;
     const doc = this.doc();
@@ -140,6 +150,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.editTaskDef.set(null); this.touch();
   }
   protected deleteTaskDef(td: LegacyTaskDef): void { this.doc().taskDefinitions = this.taskDefs().filter((t) => (t.uid || t.id) !== (td.uid || td.id)); this.touch(); }
+  protected deleteDrawerTaskDef(): void { const d = this.editTaskDef(); if (d) { this.deleteTaskDef(d as LegacyTaskDef); this.editTaskDef.set(null); } }
+  protected stopProp(e: Event): void { e.stopPropagation(); }
+  protected addParamInput(d: any): void { if (d?.parameters) { (d.parameters.inputs ||= []).push({ name: '', type: 'String', required: false, note: '' }); } }
+  protected addParamOutput(d: any): void { if (d?.parameters) { (d.parameters.outputs ||= []).push({ name: '', type: 'String', required: false, note: '' }); } }
 
   // ─── Tab 4: 应用服务 ──────────────────────────────
   protected filteredServices(): LegacyService[] {

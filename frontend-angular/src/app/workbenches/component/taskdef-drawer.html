@@ -1,0 +1,41 @@
+  <!-- Edit TaskDef Drawer -->
+  @if (editTaskDef(); as d) {
+    <div class="drawer-overlay" (click)="editTaskDef.set(null)">
+      <div class="drawer" [style.width.px]="drawerWidth()" (click)="stopProp($event)">
+        <div class="drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
+        <div class="drawer-head">
+          <h3>{{ d.uid ? '编辑' : '新建' }}任务定义</h3>
+          <button class="drawer-close" (click)="editTaskDef.set(null)">×</button>
+        </div>
+        <div class="drawer-body">
+          <label>名称 <input [(ngModel)]="d.name" /></label>
+          <label>类型 <select [(ngModel)]="d.type"><option value="Query">Query（查询）</option><option value="Service">Service（服务/提交）</option></select></label>
+          <label>实现标识 <input [(ngModel)]="d.target" placeholder="如 receipt.submit" /></label>
+          <label>地址 <input [(ngModel)]="d.address" placeholder="/api/..." /></label>
+          <label>所属构件 <select [(ngModel)]="d.businessConstructUid"><option value="">未归属</option>@for(c of constructs(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}</select></label>
+          @if (d.parameters; as params) {
+          <div class="drawer-section">
+            <div class="drawer-section-head">输入参数 <button class="btn-ghost-sm" (click)="addParamInput(d)">+ 添加</button></div>
+            @if ((params.inputs||[]).length) {
+            <table class="taskdef-edit-table"><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+            <tbody>@for(p of params.inputs||[]; track $index) {<tr><td><input [(ngModel)]="p.name" placeholder="参数名"/></td><td><input [(ngModel)]="p.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="p.required"/></td><td><input [(ngModel)]="p.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(params.inputs||[], $index)">×</button></td></tr>}</tbody></table>
+            }
+          </div>
+          <div class="drawer-section">
+            <div class="drawer-section-head">输出参数 <button class="btn-ghost-sm" (click)="addParamOutput(d)">+ 添加</button></div>
+            @if ((params.outputs||[]).length) {
+            <table class="taskdef-edit-table"><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+            <tbody>@for(p of params.outputs||[]; track $index) {<tr><td><input [(ngModel)]="p.name" placeholder="参数名"/></td><td><input [(ngModel)]="p.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="p.required"/></td><td><input [(ngModel)]="p.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(params.outputs||[], $index)">×</button></td></tr>}</tbody></table>
+            }
+          </div>
+          }
+          <label style="margin-top:14px">描述 <textarea [(ngModel)]="d.note" rows="3" placeholder="详细描述"></textarea></label>
+        </div>
+        <div class="drawer-actions">
+          @if (d.uid) { <button class="btn btn-outline btn-sm danger" (click)="deleteDrawerTaskDef()">删除任务</button> }
+          <button class="btn btn-outline btn-sm" (click)="editTaskDef.set(null)">取消</button>
+          <button class="btn btn-primary btn-sm" (click)="saveTaskDef()">保存</button>
+        </div>
+      </div>
+    </div>
+  }
