@@ -134,10 +134,17 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected filteredTaskDefs(): LegacyTaskDef[] {
-    const cid = this.taskDefConstructId();
+    const compId = this.taskDefCompId();
+    const constructId = this.taskDefConstructId();
     const kw = this.taskDefKeyword().toLowerCase();
     let list = this.taskDefs();
-    if (cid) list = list.filter((t) => t.businessConstructUid === cid);
+    if (constructId) {
+      list = list.filter((t) => t.businessConstructUid === constructId);
+    } else if (compId) {
+      // 只选组件时：显示该组件下所有构件关联的任务
+      const compConstructIds = new Set(this.constructsFor({ uid: compId } as any).map((c) => this.uid(c)));
+      list = list.filter((t) => compConstructIds.has(t.businessConstructUid || ''));
+    }
     if (kw) list = list.filter((t) => [t.name, t.target, t.address].join(' ').toLowerCase().includes(kw));
     return list;
   }
