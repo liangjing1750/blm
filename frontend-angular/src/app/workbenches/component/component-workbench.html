@@ -76,7 +76,7 @@
                 @if (td.address) { <span class="taskdef-addr">{{ td.address }}</span> }
               </div>
               <div class="taskdef-head-right">
-                <span class="taskdef-meta">{{ td.businessConstructUid || '未归类' }} · {{ taskNodes(td).length }} 节点引用</span>
+                <span class="taskdef-meta">{{ constructName(tdConstructId(td)) }} · {{ taskNodes(td).length }} 节点引用</span>
                 <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
               </div>
             </div>

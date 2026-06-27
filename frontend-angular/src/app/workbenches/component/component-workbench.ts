@@ -133,19 +133,23 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.taskDefConstructId.set(''); // 切换组件时重置构件筛选
   }
 
+  // 旧版字段 constructUid / businessComponentUid，新版用 businessConstructUid
+  protected tdConstructId(td: LegacyTaskDef): string {
+    return String((td as any).constructUid || td.businessConstructUid || '').trim();
+  }
+
   protected filteredTaskDefs(): LegacyTaskDef[] {
     const compId = this.taskDefCompId();
     const constructId = this.taskDefConstructId();
     const kw = this.taskDefKeyword().toLowerCase();
     let list = this.taskDefs();
     if (constructId) {
-      list = list.filter((t) => t.businessConstructUid === constructId);
+      list = list.filter((t) => this.tdConstructId(t) === constructId);
     } else if (compId) {
-      // 选组件时：显示该组件下所有构件关联的任务（包括未归类到构件的任务）
       const comp = this.components().find((c) => this.uid(c) === compId);
       if (comp) {
         const cids = new Set(this.constructsFor(comp).map((c) => this.uid(c)));
-        list = list.filter((t) => cids.has(t.businessConstructUid || ''));
+        list = list.filter((t) => cids.has(this.tdConstructId(t)));
       }
     }
     if (kw) list = list.filter((t) => [t.name, t.target, t.address].join(' ').toLowerCase().includes(kw));
@@ -223,6 +227,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   // ─── Utils ────────────────────────────────────────
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
+  protected constructName(constructId: string): string { const c = this.constructs().find((x) => this.uid(x) === constructId); return c?.name || constructId || '未归类'; }
   protected switchTab(t: ComponentTab): void { this.activeTab.set(t); }
   protected toggleExp(id: string): void { this.expandedComp.set(this.expandedComp() === id ? '' : id); }
   protected isExp(id: string): boolean { return this.expandedComp() === id; }
