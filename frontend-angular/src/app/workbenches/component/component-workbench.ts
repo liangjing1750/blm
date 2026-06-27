@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { EntityDesignWorkbenchComponent } from '../entity-design/entity-design-workbench.component';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
 type ComponentTab = 'component' | 'taskDef' | 'entity' | 'service' | 'orchestration';
@@ -12,7 +13,7 @@ interface LegacyTaskDef { uid?: string; id?: string; name?: string; target?: str
 interface LegacyService { uid?: string; name?: string; method?: string; path?: string; desc?: string; taskDefinitionUids?: string[]; nodeRefs?: string[]; }
 
 @Component({
-  selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule],
+  selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent],
   templateUrl: './component-workbench.html', styleUrl: './component-workbench.scss',
 })
 export class ComponentWorkbenchComponent implements OnInit, OnDestroy {

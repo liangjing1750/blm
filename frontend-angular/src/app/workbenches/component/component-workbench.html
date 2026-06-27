@@ -80,14 +80,7 @@
 
   <!-- Tab 3: 实体定义 -->
   @if (activeTab() === 'entity') {
-    <div class="comp-tab-body">
-      <p class="comp-note">实体定义复用已有的实体设计工作台，请切换到「实体设计」进行编辑。</p>
-      <div class="comp-entity-list">
-        @for (e of entities(); track uid(e)) {
-          <span class="tag tag-entity">{{ e.name }} · {{ (e.fields || []).length }} 字段</span>
-        }
-      </div>
-    </div>
+    <app-entity-design-workbench />
   }
 
   <!-- Tab 4: 应用服务 -->
