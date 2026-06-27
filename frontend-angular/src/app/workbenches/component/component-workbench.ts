@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { EntityDesignWorkbenchComponent } from '../entity-design/entity-design-workbench.component';
+import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
 type ComponentTab = 'component' | 'taskDef' | 'entity' | 'service' | 'orchestration';
