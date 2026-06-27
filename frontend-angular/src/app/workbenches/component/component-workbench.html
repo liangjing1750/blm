@@ -66,7 +66,7 @@
         <button class="btn btn-primary btn-sm" (click)="startEditInline()">+ 新建任务</button>
       </div>
       <div class="taskdef-cards">
-        @for (td of filteredTaskDefs(); track uid(td)) {
+        @for (td of pagedTaskDefs(); track uid(td)) {
           <div class="taskdef-card" [class.editing]="isEditingTask(td)">
             @if (isEditingTask(td)) {
               <!-- 编辑模式 -->
@@ -117,6 +117,13 @@
           </div>
         }
       </div>
+      @if (taskDefTotalPages() > 1) {
+        <div class="comp-pagination">
+          <button [disabled]="taskDefPage()===1" (click)="taskDefPage.set(taskDefPage()-1)">‹ 上一页</button>
+          <span>{{ taskDefPage() }} / {{ taskDefTotalPages() }}（{{ filteredTaskDefs().length }} 条）</span>
+          <button [disabled]="taskDefPage()===taskDefTotalPages()" (click)="taskDefPage.set(taskDefPage()+1)">下一页 ›</button>
+        </div>
+      }
     </div>
   }
 

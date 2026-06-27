@@ -120,6 +120,8 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   // ─── Tab 2: 任务定义 ──────────────────────────────
   protected readonly taskDefCompId = signal('');
   protected readonly taskDefConstructId = signal('');
+  protected readonly taskDefPage = signal(1);
+  readonly taskDefPageSize = 15;
 
   // 按已选组件筛选的构件列表（联动）
   protected filteredConstructsForTaskDef(): LegacyConstruct[] {
@@ -130,7 +132,16 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   protected selectTaskDefComp(compId: string): void {
     this.taskDefCompId.set(compId);
-    this.taskDefConstructId.set(''); // 切换组件时重置构件筛选
+    this.taskDefConstructId.set('');
+    this.taskDefPage.set(1);
+  }
+  protected pagedTaskDefs(): LegacyTaskDef[] {
+    const list = this.filteredTaskDefs();
+    const start = (this.taskDefPage() - 1) * this.taskDefPageSize;
+    return list.slice(start, start + this.taskDefPageSize);
+  }
+  protected taskDefTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredTaskDefs().length / this.taskDefPageSize));
   }
 
   protected tdConstructId(td: LegacyTaskDef): string {
