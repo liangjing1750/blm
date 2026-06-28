@@ -9,7 +9,8 @@ interface TaskParam { name: string; type: string; required: boolean; note: strin
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; target?: string; address?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; }
 interface OrchStep { taskDefUid: string; order: number; }
 interface ParamMapping { fromTaskDefUid: string; fromParamName: string; toTaskDefUid: string; toParamName: string; note: string; }
-interface LegacyService { uid?: string; name?: string; method?: string; path?: string; desc?: string; steps?: OrchStep[]; parameterMappings?: ParamMapping[]; nodeRefs?: string[]; }
+interface ServiceParam { name: string; type: string; required: boolean; note: string; }
+interface LegacyService { uid?: string; name?: string; method?: string; path?: string; desc?: string; inputs: ServiceParam[]; outputs: ServiceParam[]; steps: OrchStep[]; parameterMappings: ParamMapping[]; nodeRefs: string[]; }
 
 @Component({
   selector: 'app-application-workbench', standalone: true, imports: [CommonModule, FormsModule],
@@ -57,7 +58,10 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     return uid;
   }
 
-  protected startEdit(svc?: LegacyService): void { this.editingSvcId.set(svc ? this.uid(svc) : ''); }
+  protected startEdit(svc?: LegacyService): void {
+    if (svc) { svc.inputs ||= []; svc.outputs ||= []; svc.steps ||= []; svc.parameterMappings ||= []; }
+    this.editingSvcId.set(svc ? this.uid(svc) : '');
+  }
   protected saveInline(svc: LegacyService): void { svc.steps ||= []; svc.parameterMappings ||= []; this.editingSvcId.set(''); this.touch(); }
   protected cancelEdit(): void { this.editingSvcId.set(''); }
   protected async deleteService(svc: LegacyService): Promise<void> {
@@ -67,11 +71,49 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected isEditing(svc: LegacyService): boolean { return this.editingSvcId() === this.uid(svc) || (!svc.uid && this.editingSvcId() === ''); }
   protected createService(): void {
-    const svc: LegacyService = { uid: '', name: '', method: 'POST', path: '', desc: '', steps: [], parameterMappings: [], nodeRefs: [] };
+    const svc: LegacyService = { uid: '', name: '', method: 'POST', path: '', desc: '', inputs: [], outputs: [], steps: [], parameterMappings: [], nodeRefs: [] };
     this.doc().services ||= [];
     this.doc().services.push(svc);
     this.editingSvcId.set('');
     this.touch();
+  }
+  protected addSvcParam(arr: ServiceParam[]): void { arr.push({ name: '', type: 'String', required: false, note: '' }); }
+  protected removeSvcParam(arr: ServiceParam[], idx: number): void { arr.splice(idx, 1); }
+
+  // JSON 导入
+  protected importJsonVisible = signal(false);
+  protected importJsonText = signal('');
+  protected importJsonTarget = signal<'inputs'|'outputs'>('inputs');
+
+  protected startImportJson(target: 'inputs'|'outputs'): void { this.importJsonTarget.set(target); this.importJsonText.set(''); this.importJsonVisible.set(true); }
+  protected doImportJson(svc: LegacyService): void {
+    try {
+      const obj = JSON.parse(this.importJsonText());
+      const arr = svc[this.importJsonTarget()] || [];
+      const inferType = (v: any): string => {
+        if (v === null || v === undefined) return 'String';
+        if (typeof v === 'boolean') return 'Boolean';
+        if (typeof v === 'number') return 'Number';
+        if (Array.isArray(v)) return 'Array';
+        if (typeof v === 'object') return 'Object';
+        return 'String';
+      };
+      for (const [key, val] of Object.entries(obj)) {
+        if (!arr.some(p => p.name === key)) arr.push({ name: key, type: inferType(val), required: false, note: '' });
+      }
+      svc[this.importJsonTarget()] = arr as any;
+      this.importJsonVisible.set(false);
+      this.touch();
+    } catch { alert('JSON 格式错误'); }
+  }
+
+  // 复制为 JSON
+  protected copyParamsAsJson(svc: LegacyService, target: 'inputs'|'outputs'): void {
+    const arr = svc[target] || [];
+    const obj: Record<string, any> = {};
+    const defaults: Record<string, any> = { String: '', Number: 0, Boolean: false, Array: [], Object: {} };
+    for (const p of arr) obj[p.name] = defaults[p.type] ?? '';
+    navigator.clipboard?.writeText(JSON.stringify(obj, null, 2));
   }
 
   // ─── Tab 2: 应用编排 ──────────────────────────

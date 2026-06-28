@@ -22,6 +22,36 @@
                   <input [(ngModel)]="svc.path" placeholder="/api/..." />
                 </div>
                 <textarea [(ngModel)]="svc.desc" rows="2" placeholder="描述" class="svc-edit-note"></textarea>
+                <!-- 输入参数 -->
+                <div class="svc-params-section">
+                  <div class="svc-params-head">
+                    <span>输入参数（请求体）</span>
+                    <div class="svc-params-head-actions">
+                      <button class="btn-ghost-sm" (click)="startImportJson('inputs')">从JSON导入</button>
+                      <button class="btn-ghost-sm" (click)="copyParamsAsJson(svc, 'inputs')">复制为JSON</button>
+                      <button class="btn-ghost-sm" (click)="addSvcParam(svc.inputs)">+ 添加</button>
+                    </div>
+                  </div>
+                  @if (svc.inputs.length) {
+                  <table class="svc-params-table"><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                  <tbody>@for(p of svc.inputs; track $index){<tr><td><input [(ngModel)]="p.name" placeholder="参数名"/></td><td><select [(ngModel)]="p.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>Object</option></select></td><td class="td-cb"><input type="checkbox" [(ngModel)]="p.required"/></td><td><input [(ngModel)]="p.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeSvcParam(svc.inputs, $index)">×</button></td></tr>}</tbody></table>
+                  }
+                </div>
+                <!-- 输出参数 -->
+                <div class="svc-params-section">
+                  <div class="svc-params-head">
+                    <span>输出参数（响应体）</span>
+                    <div class="svc-params-head-actions">
+                      <button class="btn-ghost-sm" (click)="startImportJson('outputs')">从JSON导入</button>
+                      <button class="btn-ghost-sm" (click)="copyParamsAsJson(svc, 'outputs')">复制为JSON</button>
+                      <button class="btn-ghost-sm" (click)="addSvcParam(svc.outputs)">+ 添加</button>
+                    </div>
+                  </div>
+                  @if (svc.outputs.length) {
+                  <table class="svc-params-table"><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                  <tbody>@for(p of svc.outputs; track $index){<tr><td><input [(ngModel)]="p.name" placeholder="参数名"/></td><td><select [(ngModel)]="p.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>Object</option></select></td><td class="td-cb"><input type="checkbox" [(ngModel)]="p.required"/></td><td><input [(ngModel)]="p.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeSvcParam(svc.outputs, $index)">×</button></td></tr>}</tbody></table>
+                  }
+                </div>
                 <div class="svc-edit-actions"><button class="btn btn-primary btn-sm" (click)="saveInline(svc)">保存</button><button class="btn btn-outline btn-sm" (click)="cancelEdit()">取消</button></div>
               </div>
             } @else {
@@ -142,6 +172,19 @@
           </div>
         }
       }
+    </div>
+  }
+  <!-- JSON 导入对话框 -->
+  @if (importJsonVisible()) {
+    <div class="comp-overlay" (click)="importJsonVisible.set(false)">
+      <div class="comp-dialog" (click)="$event.stopPropagation()">
+        <h3>从 JSON 导入{{ importJsonTarget() === 'inputs' ? '输入' : '输出' }}参数</h3>
+        <textarea [ngModel]="importJsonText()" (ngModelChange)="importJsonText.set($event)" rows="8" placeholder='粘贴 JSON，如 {"orderId":"ORD-001","warehouse":"WH-A"}' class="svc-json-import"></textarea>
+        <div class="comp-dialog-actions">
+          <button class="btn btn-outline btn-sm" (click)="importJsonVisible.set(false)">取消</button>
+          <button class="btn btn-primary btn-sm" (click)="doImportJson(services().find(s => isEditing(s))!)">导入</button>
+        </div>
+      </div>
     </div>
   }
 </section>

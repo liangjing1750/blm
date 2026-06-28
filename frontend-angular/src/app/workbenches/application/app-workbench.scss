@@ -82,3 +82,21 @@
 .btn-ghost-sm:hover { background: #f1f5f9; }
 .btn-ghost-sm.danger { color: #ef4444; }
 .btn-ghost-sm.danger:hover { background: #fef2f2; }
+
+/* ─── 参数表 + JSON ─────────────────────── */
+.svc-params-section { border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px 12px; }
+.svc-params-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.svc-params-head span { font-size: 12px; font-weight: 700; color: #475569; }
+.svc-params-head-actions { display: flex; gap: 4px; }
+.svc-params-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.svc-params-table th { font-size: 10px; color: #94a3b8; font-weight: 600; padding: 3px 4px; text-align: left; }
+.svc-params-table td { padding: 2px 3px; }
+.svc-params-table input, .svc-params-table select { width: 100%; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+.svc-params-table select { min-width: 80px; }
+.td-cb { text-align: center; width: 36px; }
+.td-cb input { width: auto; }
+.svc-json-import { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font: inherit; font-size: 13px; font-family: monospace; resize: vertical; }
+.comp-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.2); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.comp-dialog { background: #fff; border-radius: 12px; box-shadow: 0 16px 40px rgba(15,23,42,.16); min-width: 420px; max-width: 520px; padding: 20px 24px; }
+.comp-dialog h3 { margin: 0 0 14px; font-size: 15px; }
+.comp-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
