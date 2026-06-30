@@ -433,6 +433,47 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="tab-entity"]')).toBeFalsy();
   });
 
+  it('should render document preview and export json from the preview workbench', async () => {
+    const createObjectUrl = vi.fn().mockReturnValue('blob:preview-json');
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'preview';
+    runtime.doc = {
+      meta: { domain: 'Agent', title: '交割监管平台' },
+      roles: [{ uid: 'role-1', name: '监管员' }],
+      stages: [{ uid: 'stage-1', name: '入库' }],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-1', name: '入库流程', nodes: [{ uid: 'node-1', name: '提交申请' }] }],
+      entities: [{ uid: 'entity-1', name: '仓单', fields: [{ uid: 'field-1', name: '仓单编号', type: 'String' }] }],
+      businessComponents: [{ uid: 'bc-1', name: '仓单组件' }],
+      taskDefinitions: [{ uid: 'task-1', name: '保存仓单' }],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/preview');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('[data-testid="preview-workbench"]')?.textContent).toContain('交割监管平台');
+    expect(compiled.querySelector('[data-testid="preview-summary"]')?.textContent).toContain('流程');
+    expect(compiled.querySelector('[data-testid="preview-summary"]')?.textContent).toContain('1');
+    expect(compiled.querySelector('[data-testid="preview-process-list"]')?.textContent).toContain('入库流程');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="preview-export-json"]')?.click();
+
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
   it('should edit task technical handover in the component workbench', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

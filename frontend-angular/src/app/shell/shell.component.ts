@@ -23,6 +23,7 @@ import { EntityWorkbench } from '../workbenches/entity/entity-workbench';
 import { KnowledgeWorkbenchComponent } from '../workbenches/knowledge/knowledge-workbench';
 import { OrchestrationWorkbench } from '../workbenches/orchestration/orchestration-workbench';
 import { PanoramaWorkbench } from '../workbenches/panorama/panorama-workbench';
+import { PreviewWorkbench } from '../workbenches/preview/preview-workbench';
 import { ProcessWorkbenchShellComponent } from '../workbenches/process/shell/process-workbench-shell.component';
 import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 import { FeedbackWorkbenchComponent } from '../workbenches/support/feedback/feedback-workbench.component';
@@ -75,6 +76,7 @@ export const TRANSITION_SHELL = 'angular-shell';
     ComponentWorkbenchShellComponent,
     ApplicationWorkbenchShellComponent,
     OrchestrationWorkbench,
+    PreviewWorkbench,
     EntityWorkbench,
     KnowledgeWorkbenchComponent,
     RoleWorkbenchComponent,
