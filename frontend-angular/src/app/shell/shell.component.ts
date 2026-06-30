@@ -31,7 +31,7 @@ import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-w
 
 type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
-type CompareSource = 'current' | 'version' | 'history';
+type CompareSource = 'current' | 'version' | 'history' | 'submit';
 
 interface WaitDialogState {
   title: string;
@@ -755,7 +755,9 @@ export class ShellComponent implements OnInit, OnDestroy {
           ? await this.api.loadVersion(this.compareRightName, this.compareRightVersionId)
           : this.compareRightSource === 'history'
             ? await this.api.loadHistory(this.compareRightName, this.compareRightVersionId)
-            : await this.api.load(this.compareRightName);
+            : this.compareRightSource === 'submit'
+              ? await this.api.loadCollabSubmit(this.compareRightName, this.compareRightVersionId)
+              : await this.api.load(this.compareRightName);
         this.compareResult.set(this.buildCompareResult(this.runtime.doc, loaded?.document || loaded));
       });
     } finally {
@@ -770,11 +772,13 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
     const versions = this.compareRightSource === 'history'
       ? await this.api.history(this.compareRightName).catch(() => [])
-      : await this.api.versions(this.compareRightName).catch(() => []);
+      : this.compareRightSource === 'submit'
+        ? ((await this.api.collabSubmits(this.compareRightName).catch(() => ({ submits: [] })))?.submits || [])
+        : await this.api.versions(this.compareRightName).catch(() => []);
     this.compareRightVersions.set(versions || []);
     if (!this.compareRightVersionId) {
       const first = (versions || [])[0];
-      this.compareRightVersionId = String(first?.id || first?.version_id || first?.snapshot_id || '');
+      this.compareRightVersionId = String(first?.id || first?.version_id || first?.snapshot_id || first?.submitId || '');
     }
   }
 

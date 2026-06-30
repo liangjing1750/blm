@@ -427,15 +427,16 @@
             <option value="current">当前版本</option>
             <option value="version">归档版本</option>
             <option value="history">历史快照</option>
+            <option value="submit">本地提交</option>
           </select>
         </label>
         @if (compareRightSource !== 'current') {
           <label class="property-field">
-            <span>{{ compareRightSource === 'history' ? '历史快照' : '归档版本' }}</span>
+            <span>{{ compareRightSource === 'submit' ? '本地提交' : compareRightSource === 'history' ? '历史快照' : '归档版本' }}</span>
             <select class="modal-search" data-testid="compare-right-version-select" [(ngModel)]="compareRightVersionId" (ngModelChange)="compareResult.set(null)">
-              <option value="">{{ compareRightSource === 'history' ? '请选择历史快照' : '请选择归档版本' }}</option>
-              @for (version of compareRightVersions(); track version.id || version.version_id || version.snapshot_id) {
-                <option [value]="version.id || version.version_id || version.snapshot_id">{{ version.label || version.message || version.reason || version.id || version.version_id || version.snapshot_id }}</option>
+              <option value="">{{ compareRightSource === 'submit' ? '请选择本地提交' : compareRightSource === 'history' ? '请选择历史快照' : '请选择归档版本' }}</option>
+              @for (version of compareRightVersions(); track version.id || version.version_id || version.snapshot_id || version.submitId) {
+                <option [value]="version.id || version.version_id || version.snapshot_id || version.submitId">{{ version.label || version.message || version.reason || version.user || version.id || version.version_id || version.snapshot_id || version.submitId }}</option>
               }
             </select>
           </label>
