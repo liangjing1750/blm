@@ -60,7 +60,7 @@ interface LocatorAction {
 
 interface CompareRow {
   section: string;
-  kind: '新增' | '删除' | '修改';
+  kind: '新增' | '删除' | '修改' | '相同';
   name: string;
   detail: string;
 }
@@ -69,6 +69,7 @@ interface CompareResult {
   added: number;
   removed: number;
   changed: number;
+  unchanged: number;
   rows: CompareRow[];
 }
 
@@ -134,6 +135,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly submitRows = signal<any[]>([]);
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly compareResult = signal<CompareResult | null>(null);
+  protected readonly compareReportMode = signal<'diff' | 'all'>('diff');
   protected readonly compareLeftVersions = signal<any[]>([]);
   protected readonly compareRightVersions = signal<any[]>([]);
   protected readonly mergeAnalysis = signal<MergeAnalysis | null>(null);
@@ -734,6 +736,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.compareRightVersionId = '';
     this.compareLeftVersions.set([]);
     await this.refreshCompareRightVersions();
+    this.compareReportMode.set('diff');
     this.compareResult.set(null);
     this.modal.set('compare');
   }
@@ -773,6 +776,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     });
     try {
       await this.runBusy(async () => {
+        this.compareReportMode.set('diff');
         const [leftLoaded, rightLoaded] = await Promise.all([
           this.loadCompareDocument(
             this.compareLeftName,
@@ -834,6 +838,16 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected compareEntryId(entry: any): string {
     return String(entry?.id || entry?.version_id || entry?.snapshot_id || entry?.submitId || '');
+  }
+
+  protected toggleCompareReportMode(): void {
+    this.compareReportMode.set(this.compareReportMode() === 'all' ? 'diff' : 'all');
+  }
+
+  protected visibleCompareRows(result: CompareResult): CompareRow[] {
+    return this.compareReportMode() === 'all'
+      ? result.rows
+      : result.rows.filter((row) => row.kind !== '相同');
   }
 
   // 模块意图：Shell 只恢复旧版“合并前检查”的入口和反馈，不在这里落地真正的合并写入。
@@ -1357,6 +1371,7 @@ export class ShellComponent implements OnInit, OnDestroy {
       added: rows.filter((row) => row.kind === '新增').length,
       removed: rows.filter((row) => row.kind === '删除').length,
       changed: rows.filter((row) => row.kind === '修改').length,
+      unchanged: rows.filter((row) => row.kind === '相同').length,
       rows,
     };
   }
@@ -1378,7 +1393,9 @@ export class ShellComponent implements OnInit, OnDestroy {
           name: this.compareName(leftItem, id),
           detail: `${this.compareName(rightItem, id)} → ${this.compareName(leftItem, id)}`,
         });
+        return;
       }
+      rows.push({ section, kind: '相同', name: this.compareName(leftItem, id), detail: '左右一致' });
     });
     right.forEach((rightItem, id) => {
       if (!left.has(id)) {

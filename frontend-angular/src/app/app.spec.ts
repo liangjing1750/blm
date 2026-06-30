@@ -1095,6 +1095,87 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).not.toContain('当前文档流程');
   });
 
+  it('should toggle the compare report between diff and all modes', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-old.json', title: '旧版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-old.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Old' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [
+              { uid: 'proc-same', name: '共同稳定流程', nodes: [] },
+              { uid: 'proc-old', name: '旧版独有流程', nodes: [] },
+            ],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent New' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        { uid: 'proc-same', name: '共同稳定流程', nodes: [] },
+        { uid: 'proc-new', name: '新版独有流程', nodes: [] },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const result = compiled.querySelector('[data-testid="compare-result"]')!;
+    expect(result.textContent).toContain('当前：只看差异');
+    expect(result.textContent).toContain('新版独有流程');
+    expect(result.textContent).toContain('旧版独有流程');
+    expect(result.textContent).not.toContain('共同稳定流程');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-report-mode-toggle"]')?.click();
+    fixture.detectChanges();
+    expect(result.textContent).toContain('当前：全部报告');
+    expect(result.textContent).toContain('共同稳定流程');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-report-mode-toggle"]')?.click();
+    fixture.detectChanges();
+    expect(result.textContent).toContain('当前：只看差异');
+    expect(result.textContent).not.toContain('共同稳定流程');
+  });
+
   it('should run a merge precheck for the current document and another workspace document', async () => {
     let mergePayload: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {

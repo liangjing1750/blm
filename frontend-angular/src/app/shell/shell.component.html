@@ -476,13 +476,23 @@
         </div>
         @if (compareResult(); as result) {
           <section class="compare-result" data-testid="compare-result">
+            <div class="compare-report-head">
+              <div>
+                <h3>版本比对报告</h3>
+                <span>当前：{{ compareReportMode() === 'all' ? '全部报告' : '只看差异' }}</span>
+              </div>
+              <button class="btn btn-outline btn-sm" type="button" data-testid="compare-report-mode-toggle" (click)="toggleCompareReportMode()">
+                {{ compareReportMode() === 'all' ? '只看差异' : '全部报告' }}
+              </button>
+            </div>
             <div class="preview-summary">
               <div class="preview-metric"><strong>新增 {{ result.added }}</strong><span>左侧新增</span></div>
               <div class="preview-metric"><strong>删除 {{ result.removed }}</strong><span>右侧独有</span></div>
               <div class="preview-metric"><strong>修改 {{ result.changed }}</strong><span>同一对象变化</span></div>
+              <div class="preview-metric"><strong>相同 {{ result.unchanged }}</strong><span>左右一致</span></div>
             </div>
             <div class="preview-list">
-              @for (row of result.rows; track row.section + row.kind + row.name) {
+              @for (row of visibleCompareRows(result); track row.section + row.kind + row.name) {
                 <div class="preview-row">
                   <span>{{ row.section }} · {{ row.kind }} · {{ row.name }}</span>
                   <em>{{ row.detail }}</em>
