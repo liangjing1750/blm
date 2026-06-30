@@ -65,6 +65,16 @@
 
   <div class="toolbar-right">
     <div class="tbar-dd">
+      <button class="btn btn-ghost tbar-dd-btn" type="button" data-testid="toolbar-locator-menu-button" [disabled]="!runtime.currentFile" (click)="toggleDropdown('locator', $event)">复制链接 ▼</button>
+      <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'locator'">
+        @for (action of locatorActions(); track action.id) {
+          <button class="tbar-dd-item" type="button" [attr.data-testid]="action.testId" (click)="copyLocatorAction(action)">{{ action.label }}</button>
+        } @empty {
+          <button class="tbar-dd-item" type="button" disabled>请先打开文档</button>
+        }
+      </div>
+    </div>
+    <div class="tbar-dd">
       <button class="btn btn-ghost tbar-dd-btn" type="button" (click)="toggleDropdown('file', $event)">文件 ▾</button>
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'file'">
         <button class="tbar-dd-item" type="button" data-testid="toolbar-new-button" (click)="createDocument()">新建</button>

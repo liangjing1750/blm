@@ -2061,5 +2061,98 @@ describe('App', () => {
 
     expect(runtime.collab.serverDocumentHash).toBe('mock-hash-def456');
   });
+
+  it('should copy a locator link for the current process node', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procId'] = 'proc-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-inbound',
+          name: '入库流程',
+          nodes: [{ uid: 'node-submit', name: '客户提交', userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-locator-menu-button"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-copy-node-link"]')?.click();
+    await fixture.whenStable();
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain('doc=agent.json');
+    expect(copied).toContain('tab=process');
+    expect(copied).toContain('proc=proc-inbound');
+    expect(copied).toContain('task=node-submit');
+  });
+
+  it('should open a startup locator and restore process node state', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/load/agent.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [
+              {
+                uid: 'proc-inbound',
+                name: '入库流程',
+                nodes: [{ uid: 'node-submit', name: '客户提交', userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+              },
+            ],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/process?doc=agent.json&tab=process&proc=proc-inbound&task=node-submit');
+
+    const runtime = getAngularRuntimeState();
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(runtime.currentFile).toBe('agent.json');
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['procId']).toBe('proc-inbound');
+    expect(runtime.ui['taskId']).toBe('node-submit');
+  });
 });
 

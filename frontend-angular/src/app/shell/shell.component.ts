@@ -12,7 +12,7 @@ import { HistoryDialogComponent, HistoryDialogTab } from '../core/shell/history/
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
 import { ShellNotificationComponent, ShellNotificationKind } from '../core/shell/notification/shell-notification.component';
 import { OpenDocumentQuery, OpenSpaceSummary } from '../core/shell/open-document/open-document-query';
-import { workbenchIdFromUrl } from '../core/shell/routing/main-workbench-route';
+import { routePathFromWorkbenchId, workbenchIdFromUrl } from '../core/shell/routing/main-workbench-route';
 import { SidebarDirectoryComponent } from '../core/shell/sidebar/sidebar-directory.component';
 import { ShellTabBarComponent } from '../core/shell/tab-bar/shell-tab-bar.component';
 import { WaitDialogComponent } from '../core/shell/wait-dialog/wait-dialog.component';
@@ -47,6 +47,13 @@ interface ConfirmDialogState {
   confirmLabel: string;
   cancelLabel: string;
   resolve: (confirmed: boolean) => void;
+}
+
+interface LocatorAction {
+  id: string;
+  label: string;
+  params: Record<string, string>;
+  testId: string;
 }
 
 export const TRANSITION_SHELL = 'angular-shell';
@@ -131,6 +138,7 @@ export class ShellComponent implements OnInit, OnDestroy {
       .subscribe((event) => this.syncMainTabFromRoute(event.urlAfterRedirects));
     if (this.runtime.currentFile) this.collaboration.start(this.runtime.currentFile);
     void this.refreshWorkspaceFiles();
+    void this.openStartupLocatorIfPresent();
   }
 
   ngOnDestroy(): void {
@@ -475,6 +483,53 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.historyTab.set(tab);
   }
 
+  protected locatorActions(): LocatorAction[] {
+    if (!this.runtime.currentFile) return [];
+    const mainTab = String(this.runtime.ui['mainTab'] || 'panoramaWorkbench');
+    const actions: LocatorAction[] = [{
+      id: 'view',
+      label: '复制当前视图链接',
+      params: { tab: this.locatorTabFromMainTab(mainTab) },
+      testId: 'toolbar-copy-view-link',
+    }];
+    const procId = String(this.runtime.ui['procId'] || '').trim();
+    const taskId = String(this.runtime.ui['taskId'] || '').trim();
+    if (mainTab === 'processWorkbench' || procId || taskId) {
+      if (procId) {
+        actions.push({
+          id: 'process',
+          label: '复制当前流程链接',
+          params: { tab: 'process', proc: procId },
+          testId: 'toolbar-copy-process-link',
+        });
+      }
+      if (procId && taskId) {
+        actions.push({
+          id: 'node',
+          label: '复制当前节点链接',
+          params: { tab: 'process', proc: procId, task: taskId },
+          testId: 'toolbar-copy-node-link',
+        });
+      }
+    }
+    const entityId = String(this.runtime.ui['entityId'] || '').trim();
+    if (entityId) {
+      actions.push({
+        id: 'entity',
+        label: '复制当前实体链接',
+        params: { tab: 'data', entity: entityId },
+        testId: 'toolbar-copy-entity-link',
+      });
+    }
+    return actions;
+  }
+
+  protected async copyLocatorAction(action: LocatorAction): Promise<void> {
+    const copied = await this.copyLocatorUrl(this.buildLocatorUrl(action.params));
+    this.activeDropdown.set('');
+    this.showToast(copied ? `已复制${action.label.replace(/^复制/, '')}` : '链接复制失败，请手动复制', copied ? 'success' : 'error');
+  }
+
   protected async openVersionReadOnly(row: any): Promise<void> {
     const id = String(row?.id || row?.version_id || '').trim();
     if (!this.runtime.currentFile || !id) return;
@@ -799,6 +854,69 @@ export class ShellComponent implements OnInit, OnDestroy {
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
+  private async openStartupLocatorIfPresent(): Promise<void> {
+    const params = this.startupLocatorParams();
+    const docName = String(params.get('doc') || '').trim();
+    if (!docName) return;
+    const at = String(params.get('at') || '').trim();
+    this.waitDialog.set({
+      title: '正在打开定位链接...',
+      description: '正在读取文档并恢复目标工作台位置。',
+    });
+    try {
+      await this.runBusy(async () => {
+        const payload = at && at !== 'latest'
+          ? await this.api.loadVersion(docName, at.startsWith('version:') ? at.slice('version:'.length) : at)
+          : await this.api.load(docName);
+        this.openLoadedDocument(docName, payload, Boolean(at && at !== 'latest'));
+        this.applyLocatorToRuntime(params);
+      });
+    } finally {
+      this.waitDialog.set(null);
+    }
+  }
+
+  private startupLocatorParams(): URLSearchParams {
+    const url = String(this.router.url || '');
+    const query = url.includes('?') ? url.slice(url.indexOf('?') + 1).split('#')[0] : window.location.search.replace(/^\?/, '');
+    const params = new URLSearchParams(query || '');
+    const hash = String(window.location.hash || '').replace(/^#/, '');
+    if (hash && !params.has('doc')) {
+      const [docPart, queryPart] = hash.split('?');
+      if (docPart) params.set('doc', decodeURIComponent(docPart.replace(/^\/+/, '')));
+      if (queryPart) {
+        const hashParams = new URLSearchParams(queryPart);
+        hashParams.forEach((value, key) => {
+          if (!params.has(key)) params.set(key, value);
+        });
+      }
+    }
+    return params;
+  }
+
+  private applyLocatorToRuntime(params: URLSearchParams): void {
+    const tab = String(params.get('tab') || '').trim();
+    const procId = String(params.get('proc') || params.get('procId') || '').trim();
+    const taskId = String(params.get('task') || params.get('taskId') || '').trim();
+    const entityId = String(params.get('entity') || params.get('entityId') || '').trim();
+    const mainTab = tab === 'process' || procId || taskId
+      ? 'processWorkbench'
+      : tab === 'data' || entityId
+        ? 'constructWorkbench'
+        : this.mainTabFromLocatorTab(tab);
+    this.runtime.ui['mainTab'] = mainTab;
+    if (procId) this.runtime.ui['procId'] = procId;
+    if (taskId) this.runtime.ui['taskId'] = taskId;
+    if (entityId) this.runtime.ui['entityId'] = entityId;
+    if (mainTab === 'processWorkbench') {
+      this.runtime.ui['processWorkbenchView'] = taskId ? 'node' : 'flow';
+      this.runtime.ui['procView'] = taskId ? 'list' : 'flow';
+    }
+    this.refreshShellView();
+    void this.router.navigateByUrl(routePathFromWorkbenchId(mainTab));
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
   private restoreLoadedDocument(name: string, document: any, baseSeq = 0): void {
     const restored = structuredClone(document || {});
     restored.meta = restored.meta && typeof restored.meta === 'object' ? restored.meta : {};
@@ -853,6 +971,10 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   private buildLocatorUrl(extra: Record<string, string>): string {
     const params = new URLSearchParams(window.location.search || '');
+    if (this.runtime.currentFile) params.set('doc', this.runtime.currentFile);
+    if (this.runtime.readOnly && this.runtime.doc?.meta?.version_id) {
+      params.set('at', `version:${this.runtime.doc.meta.version_id}`);
+    }
     Object.entries(extra).forEach(([key, value]) => {
       const text = String(value || '').trim();
       if (text) params.set(key, text);
@@ -882,6 +1004,38 @@ export class ShellComponent implements OnInit, OnDestroy {
     } finally {
       document.body.removeChild(textarea);
     }
+  }
+
+  private locatorTabFromMainTab(mainTab: string): string {
+    const map: Record<string, string> = {
+      panoramaWorkbench: 'domain',
+      processWorkbench: 'process',
+      constructWorkbench: 'data',
+      applicationWorkbench: 'application',
+      orchestrationWorkbench: 'orchestration',
+      entity: 'entity',
+      knowledge: 'knowledge',
+      role: 'role',
+      preview: 'preview',
+    };
+    return map[mainTab] || 'domain';
+  }
+
+  private mainTabFromLocatorTab(tab: string): string {
+    const map: Record<string, string> = {
+      domain: 'panoramaWorkbench',
+      panorama: 'panoramaWorkbench',
+      process: 'processWorkbench',
+      data: 'constructWorkbench',
+      component: 'constructWorkbench',
+      application: 'applicationWorkbench',
+      orchestration: 'orchestrationWorkbench',
+      entity: 'entity',
+      knowledge: 'knowledge',
+      role: 'role',
+      preview: 'preview',
+    };
+    return map[tab] || 'panoramaWorkbench';
   }
 
   private defaultCopyDocumentName(name: string): string {

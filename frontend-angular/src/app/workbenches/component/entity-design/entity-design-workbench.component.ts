@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, HostListener, computed, signal, OnInit, OnDestroy } from '@angular/core';
+import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import {
   EntityDesignAdapter,
   EntityDesignConstruct,
@@ -123,6 +124,12 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   };
 
   ngOnInit(): void {
+    const startupEntityId = String(getAngularRuntimeState().ui['entityId'] || '').trim();
+    if (startupEntityId) {
+      this.selectedEntityId.set(startupEntityId);
+      this.selectedEntityIds.set(new Set([startupEntityId]));
+      this.editorOpen.set(true);
+    }
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
   }
 
@@ -207,6 +214,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       this.selectedEntityIds.set(new Set([id]));
     }
     this.selectedEntityId.set(id);
+    this.syncRuntimeEntityId(id);
     this.editorOpen.set(true);
   }
 
@@ -255,6 +263,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     if (this.selectionBox()) return;
     this.selectedEntityIds.set(new Set());
     this.selectedEntityId.set('');
+    this.syncRuntimeEntityId('');
   }
 
   protected addEntity(): void {
@@ -271,6 +280,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     };
     entities.push(entity);
     this.selectedEntityId.set(id);
+    this.syncRuntimeEntityId(id);
     this.editorOpen.set(true);
     this.changed();
   }
@@ -295,6 +305,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       item.relations = (item.relations || []).filter((relation) => this.relationTo(relation) !== entityId && this.relationFrom(relation) !== entityId);
     }
     this.selectedEntityId.set(this.entityId(entities[0]) || '');
+    this.syncRuntimeEntityId(this.selectedEntityId());
     this.changed();
   }
 
@@ -588,6 +599,10 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   private changed(): void {
     this.adapter.markChanged();
     this.version.update((value) => value + 1);
+  }
+
+  private syncRuntimeEntityId(entityId: string): void {
+    getAngularRuntimeState().ui['entityId'] = entityId;
   }
 
   private layoutEntities(): EntityNodeLayout[] {
