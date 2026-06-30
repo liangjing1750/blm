@@ -906,6 +906,101 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('当前入库流程');
   });
 
+  it('should compare an archived version of the current document with another workspace document', async () => {
+    let leftVersionLoadPayload: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-old.json', title: '旧版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/agent.json')) {
+        return new Response(JSON.stringify([
+          { id: 'v-left', label: '左侧归档' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/agent-old.json')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/version/load')) {
+        leftVersionLoadPayload = JSON.parse(String(init?.body || '{}'));
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Archived Left' },
+            roles: [{ uid: 'role-1', name: '监管员' }],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-1', name: '左侧归档入库流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-old.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Old Current' },
+            roles: [{ uid: 'role-1', name: '监管员' }],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-1', name: '右侧当前入库流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent New' },
+      roles: [{ uid: 'role-1', name: '监管员' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-1', name: '当前入库流程', nodes: [] }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-source-select"]')!;
+    source.value = 'version';
+    source.dispatchEvent(new Event('change', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const version = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-version-select"]')!;
+    version.value = 'v-left';
+    version.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(leftVersionLoadPayload).toMatchObject({ name: 'agent.json', version_id: 'v-left' });
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('左侧归档入库流程');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('右侧当前入库流程');
+  });
+
   it('should run a merge precheck for the current document and another workspace document', async () => {
     let mergePayload: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {

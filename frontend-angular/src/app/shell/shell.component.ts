@@ -134,6 +134,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly submitRows = signal<any[]>([]);
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly compareResult = signal<CompareResult | null>(null);
+  protected readonly compareLeftVersions = signal<any[]>([]);
   protected readonly compareRightVersions = signal<any[]>([]);
   protected readonly mergeAnalysis = signal<MergeAnalysis | null>(null);
   protected readonly mergeResolutions = signal<Record<string, string>>({});
@@ -146,6 +147,8 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected openQuery = '';
   protected createDocumentName = '';
   protected copyDocumentName = '';
+  protected compareLeftSource: CompareSource = 'current';
+  protected compareLeftVersionId = '';
   protected compareRightName = '';
   protected compareRightSource: CompareSource = 'current';
   protected compareRightVersionId = '';
@@ -722,12 +725,21 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
     this.activeDropdown.set('');
     await this.refreshWorkspaceFiles();
+    this.compareLeftSource = 'current';
+    this.compareLeftVersionId = '';
     this.compareRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
     this.compareRightSource = 'current';
     this.compareRightVersionId = '';
+    this.compareLeftVersions.set([]);
     await this.refreshCompareRightVersions();
     this.compareResult.set(null);
     this.modal.set('compare');
+  }
+
+  protected async onCompareLeftSourceChanged(): Promise<void> {
+    this.compareResult.set(null);
+    this.compareLeftVersionId = '';
+    await this.refreshCompareLeftVersions();
   }
 
   protected async onCompareRightNameChanged(): Promise<void> {
@@ -744,42 +756,70 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected async runCompare(): Promise<void> {
     if (!this.compareRightName) return;
+    if (this.compareLeftSource !== 'current' && !this.compareLeftVersionId) return;
     if (this.compareRightSource !== 'current' && !this.compareRightVersionId) return;
     this.waitDialog.set({
       title: '正在比对文档...',
-      description: '正在加载右侧文档并生成业务模型差异摘要。',
+      description: '正在加载两侧文档并生成业务模型差异摘要。',
     });
     try {
       await this.runBusy(async () => {
-        const loaded = this.compareRightSource === 'version'
-          ? await this.api.loadVersion(this.compareRightName, this.compareRightVersionId)
-          : this.compareRightSource === 'history'
-            ? await this.api.loadHistory(this.compareRightName, this.compareRightVersionId)
-            : this.compareRightSource === 'submit'
-              ? await this.api.loadCollabSubmit(this.compareRightName, this.compareRightVersionId)
-              : await this.api.load(this.compareRightName);
-        this.compareResult.set(this.buildCompareResult(this.runtime.doc, loaded?.document || loaded));
+        const [leftLoaded, rightLoaded] = await Promise.all([
+          this.loadCompareDocument(this.runtime.currentFile, this.compareLeftSource, this.compareLeftVersionId, this.runtime.doc),
+          this.loadCompareDocument(this.compareRightName, this.compareRightSource, this.compareRightVersionId),
+        ]);
+        this.compareResult.set(this.buildCompareResult(leftLoaded, rightLoaded));
       });
     } finally {
       this.waitDialog.set(null);
     }
   }
 
+  private async refreshCompareLeftVersions(): Promise<void> {
+    const versions = await this.loadCompareOptions(this.runtime.currentFile, this.compareLeftSource);
+    this.compareLeftVersions.set(versions);
+    if (!this.compareLeftVersionId) {
+      this.compareLeftVersionId = this.compareEntryId(versions[0]);
+    }
+  }
+
   private async refreshCompareRightVersions(): Promise<void> {
-    if (!this.compareRightName) {
-      this.compareRightVersions.set([]);
-      return;
-    }
-    const versions = this.compareRightSource === 'history'
-      ? await this.api.history(this.compareRightName).catch(() => [])
-      : this.compareRightSource === 'submit'
-        ? ((await this.api.collabSubmits(this.compareRightName).catch(() => ({ submits: [] })))?.submits || [])
-        : await this.api.versions(this.compareRightName).catch(() => []);
-    this.compareRightVersions.set(versions || []);
+    const versions = await this.loadCompareOptions(this.compareRightName, this.compareRightSource);
+    this.compareRightVersions.set(versions);
     if (!this.compareRightVersionId) {
-      const first = (versions || [])[0];
-      this.compareRightVersionId = String(first?.id || first?.version_id || first?.snapshot_id || first?.submitId || '');
+      this.compareRightVersionId = this.compareEntryId(versions[0]);
     }
+  }
+
+  // 模块意图：比对弹窗恢复旧版“左右来源可选”的能力，但仍把后端加载细节封装在壳层 API 边界内。
+  // 关键流程：来源切换只刷新候选记录，点击开始比对时才按来源加载两侧文档，避免切换下拉框时产生隐式比对。
+  // 边界细节：左侧“当前版本”使用运行时文档以保留未提交编辑态；右侧“当前版本”按工作区文件重新加载，符合跨文档比对语义。
+  private async loadCompareDocument(name: string, source: CompareSource, versionId: string, currentDocument?: any): Promise<any> {
+    if (source === 'current') {
+      if (currentDocument) return currentDocument;
+      const loaded = await this.api.load(name);
+      return loaded?.document || loaded;
+    }
+    const loaded = source === 'version'
+      ? await this.api.loadVersion(name, versionId)
+      : source === 'history'
+        ? await this.api.loadHistory(name, versionId)
+        : await this.api.loadCollabSubmit(name, versionId);
+    return loaded?.document || loaded;
+  }
+
+  private async loadCompareOptions(name: string, source: CompareSource): Promise<any[]> {
+    if (!name) return [];
+    const entries = source === 'history'
+      ? await this.api.history(name).catch(() => [])
+      : source === 'submit'
+        ? ((await this.api.collabSubmits(name).catch(() => ({ submits: [] })))?.submits || [])
+        : await this.api.versions(name).catch(() => []);
+    return Array.isArray(entries) ? entries : [];
+  }
+
+  protected compareEntryId(entry: any): string {
+    return String(entry?.id || entry?.version_id || entry?.snapshot_id || entry?.submitId || '');
   }
 
   // 模块意图：Shell 只恢复旧版“合并前检查”的入口和反馈，不在这里落地真正的合并写入。
