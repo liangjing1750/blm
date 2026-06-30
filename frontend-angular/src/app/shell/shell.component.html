@@ -500,12 +500,24 @@
               @for (group of compareGroups(result); track group.section) {
                 <div class="compare-model-group" data-testid="compare-model-group">
                   <h4>{{ group.section }} <span>{{ group.rows.length }}</span></h4>
-                  @for (row of group.rows; track row.section + row.kind + row.name) {
-                    <div class="preview-row">
-                      <span>{{ row.kind }} · {{ row.name }}</span>
-                      <em>{{ row.detail }}</em>
-                    </div>
-                  }
+                  <table class="compare-business-table" data-testid="compare-business-table">
+                    <thead>
+                      <tr>
+                        <th>序号</th>
+                        <th>差异类型</th>
+                        <th>差异说明</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of group.rows; track row.section + row.kind + row.name; let rowIndex = $index) {
+                        <tr>
+                          <td>{{ rowIndex + 1 }}</td>
+                          <td>{{ row.kind }}</td>
+                          <td>{{ row.name }}：{{ row.detail }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
                 </div>
               } @empty {
                 <div class="preview-empty">没有发现模型差异。</div>

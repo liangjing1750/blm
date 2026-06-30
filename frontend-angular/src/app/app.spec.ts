@@ -1249,6 +1249,76 @@ describe('App', () => {
     expect(groups[2].textContent).toContain('归档任务');
   });
 
+  it('should render grouped compare rows as business diff tables', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-old.json', title: '旧版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-old.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Old' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent New' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-inbound', name: '入库流程', nodes: [] }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const group = compiled.querySelector<HTMLElement>('[data-testid="compare-model-group"]')!;
+    const table = group.querySelector<HTMLTableElement>('[data-testid="compare-business-table"]')!;
+    expect(group.querySelector('h4')?.textContent).toContain('流程');
+    expect(table.querySelector('thead')?.textContent).toContain('序号');
+    expect(table.querySelector('thead')?.textContent).toContain('差异类型');
+    expect(table.querySelector('thead')?.textContent).toContain('差异说明');
+    const firstRow = table.querySelector('tbody tr')!;
+    expect(firstRow.children[0]?.textContent).toContain('1');
+    expect(firstRow.children[1]?.textContent).toContain('新增');
+    expect(firstRow.children[2]?.textContent).toContain('入库流程');
+  });
+
   it('should run a merge precheck for the current document and another workspace document', async () => {
     let mergePayload: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
