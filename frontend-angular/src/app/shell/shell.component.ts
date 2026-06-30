@@ -448,19 +448,27 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.showToast('请先打开文档');
       return;
     }
-    await this.runBusy(async () => {
-      const [history, versions, submits] = await Promise.all([
-        this.api.history(this.runtime.currentFile).catch(() => []),
-        this.api.versions(this.runtime.currentFile).catch(() => []),
-        this.api.collabSubmits(this.runtime.currentFile).catch(() => ({ submits: [] })),
-      ]);
-      this.historyRows.set(history || []);
-      this.versionRows.set(versions || []);
-      this.submitRows.set(Array.isArray(submits?.submits) ? submits.submits : []);
-      this.historyTab.set('remote');
-      this.modal.set('history');
-      this.activeDropdown.set('');
+    this.waitDialog.set({
+      title: '正在加载历史版本...',
+      description: '正在读取远程历史、归档版本和本地恢复记录。',
     });
+    try {
+      await this.runBusy(async () => {
+        const [history, versions, submits] = await Promise.all([
+          this.api.history(this.runtime.currentFile).catch(() => []),
+          this.api.versions(this.runtime.currentFile).catch(() => []),
+          this.api.collabSubmits(this.runtime.currentFile).catch(() => ({ submits: [] })),
+        ]);
+        this.historyRows.set(history || []);
+        this.versionRows.set(versions || []);
+        this.submitRows.set(Array.isArray(submits?.submits) ? submits.submits : []);
+        this.historyTab.set('remote');
+        this.modal.set('history');
+        this.activeDropdown.set('');
+      });
+    } finally {
+      this.waitDialog.set(null);
+    }
   }
 
   protected openManual(): void {

@@ -1755,6 +1755,50 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="current-version-badge"]')?.textContent).toContain('验收版');
   });
 
+  it('should show a wait dialog while loading history versions', async () => {
+    let resolveHistory: (value: Response) => void = () => undefined;
+    const historyPromise = new Promise<Response>((resolve) => {
+      resolveHistory = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/history/agent.json')) return historyPromise;
+      if (url.includes('/api/versions/agent.json')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/collab/submits/list')) {
+        return new Response(JSON.stringify({ submits: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = { meta: { domain: 'Agent' }, roles: [], stages: [], stageFlowRefs: [], processes: [], entities: [], businessComponents: [], taskDefinitions: [], terms: [], rules: [] };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/panorama');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance as unknown as {
+      openHistory: () => Promise<void>;
+      waitDialog: () => { title: string; description: string } | null;
+    };
+
+    const openHistoryPromise = component.openHistory();
+    fixture.detectChanges();
+
+    expect(component.waitDialog()?.title).toContain('历史');
+
+    resolveHistory(new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    await openHistoryPromise;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.waitDialog()).toBeNull();
+  });
+
   it('should render workspace and trash document cards with ten-item pagination in the open dialog', async () => {
     const documents = Array.from({ length: 11 }, (_, index) => ({
       name: `agent-${index + 1}.json`,
