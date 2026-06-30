@@ -1462,6 +1462,7 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('自动合并 2');
     expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('冲突 1');
     expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('流程引用缺失');
+    expect(compiled.querySelector('[data-testid="merge-validation-deferred"]')?.textContent).toContain('先处理上方冲突项');
   });
 
   it('should run a merge precheck for two selected workspace documents', async () => {
@@ -1639,6 +1640,90 @@ describe('App', () => {
     expect(preview).toContain('实体 1');
     expect(preview).toContain('任务 2');
     expect(preview).toContain('术语 1');
+  });
+
+  it('should show an internal validation warning when merge precheck has validation issues without conflicts', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-branch.json', title: '分支版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-branch.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Branch' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/analyze')) {
+        return new Response(JSON.stringify({
+          summary: { autoMergedCount: 2 },
+          conflicts: [],
+          validation_issues: [{ path: 'processes[0].nodes[0]', message: '节点引用缺失' }],
+          merged_document: {
+            meta: { title: 'Agent 合并结果', domain: 'Agent 合并域' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent Current' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-merge-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="merge-right-select"]')!;
+    select.value = 'agent-branch.json';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-analyze-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const warning = compiled.querySelector('[data-testid="merge-internal-validation-error"]')?.textContent || '';
+    expect(warning).toContain('模型内部引用异常');
+    expect(warning).toContain('不要手动删除引用');
+    expect(compiled.querySelector('[data-testid="merge-validation-deferred"]')).toBeNull();
   });
 
   it('should save and open a merge result when the precheck has no blockers', async () => {

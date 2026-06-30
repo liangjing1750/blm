@@ -2263,6 +2263,29 @@
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
+.merge-validation-guide {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+.merge-validation-guide.is-warning {
+  border-color: #facc15;
+  background: #fffbeb;
+}
+.merge-validation-guide h3 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+.merge-validation-guide p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
 .merge-validation-card.manual {
   border-color: #facc15;
   background: #fffbeb;

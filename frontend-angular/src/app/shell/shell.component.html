@@ -588,6 +588,18 @@
                   }
                 </div>
               }
+              @if (hasMergeValidationIssues(analysis) && hasMergeConflicts(analysis)) {
+                <div class="merge-validation-guide" data-testid="merge-validation-deferred">
+                  <h3>冲突处理后重新校验</h3>
+                  <p>当前存在预裁决临时校验项。请先处理上方冲突项，生成前系统会按裁决结果自动收敛附属引用并重新校验。</p>
+                </div>
+              }
+              @if (hasMergeValidationIssues(analysis) && !hasMergeConflicts(analysis)) {
+                <div class="merge-validation-guide is-warning" data-testid="merge-internal-validation-error">
+                  <h3>模型内部引用异常</h3>
+                  <p>合并结果仍有模型一致性问题。正常完成冲突裁决后不应出现这种情况，请不要手动删除引用；这通常表示历史数据或合并修复逻辑需要升级。</p>
+                </div>
+              }
               @for (issue of analysis.validation_issues || []; track issue.path || issue.message) {
                 <div class="preview-row">
                   <span>校验 · {{ issue.path || '' }}</span>

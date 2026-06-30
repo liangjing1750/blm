@@ -900,6 +900,14 @@ export class ShellComponent implements OnInit, OnDestroy {
     return Array.isArray(value) ? value.length : 0;
   }
 
+  protected hasMergeValidationIssues(analysis: MergeAnalysis): boolean {
+    return Boolean((analysis.validation_issues || []).length);
+  }
+
+  protected hasMergeConflicts(analysis: MergeAnalysis): boolean {
+    return Boolean((analysis.conflicts || []).length);
+  }
+
   // 模块意图：Shell 恢复旧版“左右文档合并”的入口、前置检查、冲突裁决和生成文档反馈。
   // 关键流程：选择左右文档 -> 加载两侧文档 -> 调用后端分析/应用接口 -> 在弹窗展示冲突、校验和保存结果。
   // 边界细节：左侧选中当前打开文档时使用 runtime.doc，保留未保存编辑态；其他文档从工作区重新加载。
