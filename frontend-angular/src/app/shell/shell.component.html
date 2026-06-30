@@ -477,11 +477,12 @@
                   <select class="modal-search" [attr.data-testid]="'merge-resolution-' + conflict.id" [ngModel]="mergeResolutions()[conflict.id]" (ngModelChange)="setMergeResolution(conflict.id, $event)">
                     <option value="">请选择处理方式</option>
                     @for (choice of conflict.resolution_options || ['left', 'right']; track choice) {
-                      @if (choice !== 'custom') {
-                        <option [value]="choice">{{ choice === 'left' ? '保留左侧' : choice === 'right' ? '保留右侧' : choice === 'keep_both' ? '两者都保留' : choice }}</option>
-                      }
+                      <option [value]="choice">{{ choice === 'left' ? '保留左侧' : choice === 'right' ? '保留右侧' : choice === 'keep_both' ? '两者都保留' : choice === 'custom' ? '自定义值' : choice }}</option>
                     }
                   </select>
+                  @if (mergeResolutions()[conflict.id] === 'custom') {
+                    <input class="modal-search" type="text" [attr.data-testid]="'merge-custom-' + conflict.id" [ngModel]="mergeCustomValues()[conflict.id] || ''" (ngModelChange)="setMergeCustomValue(conflict.id, $event)" placeholder="输入自定义值" />
+                  }
                 </div>
               }
               @for (issue of analysis.validation_issues || []; track issue.path || issue.message) {

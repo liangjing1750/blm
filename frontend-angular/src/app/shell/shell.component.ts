@@ -135,6 +135,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly compareResult = signal<CompareResult | null>(null);
   protected readonly mergeAnalysis = signal<MergeAnalysis | null>(null);
   protected readonly mergeResolutions = signal<Record<string, string>>({});
+  protected readonly mergeCustomValues = signal<Record<string, string>>({});
   protected readonly busy = signal(false);
   protected readonly toast = signal<ShellToastState | null>(null);
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
@@ -751,6 +752,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.mergeRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
     this.mergeAnalysis.set(null);
     this.mergeResolutions.set({});
+    this.mergeCustomValues.set({});
     this.modal.set('merge');
   }
 
@@ -771,6 +773,7 @@ export class ShellComponent implements OnInit, OnDestroy {
         });
         this.mergeAnalysis.set(result || {});
         this.mergeResolutions.set({});
+        this.mergeCustomValues.set({});
       });
     } finally {
       this.waitDialog.set(null);
@@ -793,6 +796,12 @@ export class ShellComponent implements OnInit, OnDestroy {
     if (choice) next[key] = choice;
     else delete next[key];
     this.mergeResolutions.set(next);
+  }
+
+  protected setMergeCustomValue(conflictId: string, value: string): void {
+    const key = String(conflictId || '').trim();
+    if (!key) return;
+    this.mergeCustomValues.set({ ...this.mergeCustomValues(), [key]: value });
   }
 
   protected async saveMergeResult(): Promise<void> {
@@ -840,7 +849,13 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.showToast('请先处理所有冲突项，再生成合并文档。', 'error');
       return analysis;
     }
-    const resolutions = Object.fromEntries(Object.entries(selected).map(([id, choice]) => [id, { choice }]));
+    const customValues = this.mergeCustomValues();
+    const resolutions = Object.fromEntries(Object.entries(selected).map(([id, choice]) => [
+      id,
+      choice === 'custom'
+        ? { choice, custom_value: customValues[id] || '' }
+        : { choice },
+    ]));
     const rightLoaded = await this.api.load(this.mergeRightName);
     const result = await this.api.applyMerge({
       left_name: this.runtime.currentFile,

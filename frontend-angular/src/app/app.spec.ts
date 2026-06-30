@@ -955,6 +955,123 @@ describe('App', () => {
     expect(runtime.currentFile).toBe('Agent 冲突合并版');
   });
 
+  it('should send a custom merge conflict value when the custom option is selected', async () => {
+    let applyPayload: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-branch.json', title: '分支版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-branch.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Branch' },
+            roles: [{ uid: 'role-1', name: '分支角色', desc: '右侧' }],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/analyze')) {
+        return new Response(JSON.stringify({
+          suggested_name: 'Agent 自定义合并版',
+          summary: { autoMergedCount: 1, validationIssueCount: 0 },
+          conflicts: [{
+            id: 'conflict-custom',
+            path: 'roles.role-1.desc',
+            label: '角色描述冲突',
+            resolution_options: ['left', 'right', 'custom'],
+            left_value: '左侧',
+            right_value: '右侧',
+          }],
+          validation_issues: [],
+          merged_document: { meta: { domain: 'Draft' }, roles: [] },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/apply')) {
+        applyPayload = JSON.parse(String(init?.body || '{}'));
+        return new Response(JSON.stringify({
+          suggested_name: 'Agent 自定义合并版',
+          summary: { autoMergedCount: 1, validationIssueCount: 0 },
+          conflicts: [],
+          validation_issues: [],
+          merged_document: {
+            meta: { domain: 'Applied Draft' },
+            roles: [{ uid: 'role-1', name: '自定义角色', desc: '自定义描述' }],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/save/')) {
+        const document = JSON.parse(String(init?.body || '{}')).document;
+        return new Response(JSON.stringify({ name: 'Agent 自定义合并版', document }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent Current' },
+      roles: [{ uid: 'role-1', name: '当前角色', desc: '左侧' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-merge-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-analyze-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="merge-resolution-conflict-custom"]')!;
+    select.value = 'custom';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    const input = compiled.querySelector<HTMLInputElement>('[data-testid="merge-custom-conflict-custom"]')!;
+    input.value = '自定义描述';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-save-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(applyPayload?.resolutions).toEqual({
+      'conflict-custom': { choice: 'custom', custom_value: '自定义描述' },
+    });
+    expect(runtime.doc.roles[0].desc).toBe('自定义描述');
+  });
+
   it('should edit task technical handover in the component workbench', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
