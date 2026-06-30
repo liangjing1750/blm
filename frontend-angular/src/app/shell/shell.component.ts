@@ -29,7 +29,7 @@ import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 import { FeedbackWorkbenchComponent } from '../workbenches/support/feedback/feedback-workbench.component';
 import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-workbench.component';
 
-type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'placeholder';
+type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
 
 interface WaitDialogState {
@@ -55,6 +55,20 @@ interface LocatorAction {
   label: string;
   params: Record<string, string>;
   testId: string;
+}
+
+interface CompareRow {
+  section: string;
+  kind: '新增' | '删除' | '修改';
+  name: string;
+  detail: string;
+}
+
+interface CompareResult {
+  added: number;
+  removed: number;
+  changed: number;
+  rows: CompareRow[];
 }
 
 export const TRANSITION_SHELL = 'angular-shell';
@@ -107,6 +121,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly versionRows = signal<any[]>([]);
   protected readonly submitRows = signal<any[]>([]);
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
+  protected readonly compareResult = signal<CompareResult | null>(null);
   protected readonly busy = signal(false);
   protected readonly toast = signal<ShellToastState | null>(null);
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
@@ -115,6 +130,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected openQuery = '';
   protected createDocumentName = '';
   protected copyDocumentName = '';
+  protected compareRightName = '';
   protected archiveVersionMessage = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
   private routeSubscription: Subscription | null = null;
@@ -680,6 +696,34 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.activeDropdown.set('');
   }
 
+  protected async openCompareDialog(): Promise<void> {
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档');
+      return;
+    }
+    this.activeDropdown.set('');
+    await this.refreshWorkspaceFiles();
+    this.compareRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
+    this.compareResult.set(null);
+    this.modal.set('compare');
+  }
+
+  protected async runCompare(): Promise<void> {
+    if (!this.compareRightName) return;
+    this.waitDialog.set({
+      title: '正在比对文档...',
+      description: '正在加载右侧文档并生成业务模型差异摘要。',
+    });
+    try {
+      await this.runBusy(async () => {
+        const loaded = await this.api.load(this.compareRightName);
+        this.compareResult.set(this.buildCompareResult(this.runtime.doc, loaded?.document || loaded));
+      });
+    } finally {
+      this.waitDialog.set(null);
+    }
+  }
+
   protected closeModal(): void {
     this.modal.set('');
   }
@@ -1046,6 +1090,68 @@ export class ShellComponent implements OnInit, OnDestroy {
       preview: 'preview',
     };
     return map[tab] || 'panoramaWorkbench';
+  }
+
+  private buildCompareResult(leftDocument: any, rightDocument: any): CompareResult {
+    const rows: CompareRow[] = [];
+    [
+      { section: '角色', key: 'roles' },
+      { section: '流程', key: 'processes' },
+      { section: '实体', key: 'entities' },
+      { section: '构件', key: 'businessComponents' },
+      { section: '任务', key: 'taskDefinitions' },
+    ].forEach((entry) => {
+      rows.push(...this.compareCollection(entry.section, leftDocument?.[entry.key], rightDocument?.[entry.key]));
+    });
+    return {
+      added: rows.filter((row) => row.kind === '新增').length,
+      removed: rows.filter((row) => row.kind === '删除').length,
+      changed: rows.filter((row) => row.kind === '修改').length,
+      rows,
+    };
+  }
+
+  private compareCollection(section: string, leftItems: any[] = [], rightItems: any[] = []): CompareRow[] {
+    const left = new Map(this.asArray(leftItems).map((item, index) => [this.compareIdentity(item, index), item]));
+    const right = new Map(this.asArray(rightItems).map((item, index) => [this.compareIdentity(item, index), item]));
+    const rows: CompareRow[] = [];
+    left.forEach((leftItem, id) => {
+      const rightItem = right.get(id);
+      if (!rightItem) {
+        rows.push({ section, kind: '新增', name: this.compareName(leftItem, id), detail: '仅左侧存在' });
+        return;
+      }
+      if (this.compareSignature(leftItem) !== this.compareSignature(rightItem)) {
+        rows.push({
+          section,
+          kind: '修改',
+          name: this.compareName(leftItem, id),
+          detail: `${this.compareName(rightItem, id)} → ${this.compareName(leftItem, id)}`,
+        });
+      }
+    });
+    right.forEach((rightItem, id) => {
+      if (!left.has(id)) {
+        rows.push({ section, kind: '删除', name: this.compareName(rightItem, id), detail: '仅右侧存在' });
+      }
+    });
+    return rows;
+  }
+
+  private compareIdentity(item: any, index: number): string {
+    return String(item?.uid || item?.id || item?.name || `item-${index}`);
+  }
+
+  private compareName(item: any, fallback: string): string {
+    return String(item?.name || item?.title || fallback);
+  }
+
+  private compareSignature(item: any): string {
+    return JSON.stringify(item || {});
+  }
+
+  private asArray<T = any>(value: T[] | null | undefined): T[] {
+    return Array.isArray(value) ? value : [];
   }
 
   private defaultCopyDocumentName(name: string): string {

@@ -474,6 +474,76 @@ describe('App', () => {
     expect(clickSpy).toHaveBeenCalled();
   });
 
+  it('should compare the current document with another workspace document', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-old.json', title: '旧版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-old.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Old' },
+            roles: [{ uid: 'role-1', name: '监管员' }],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-1', name: '旧入库流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent New' },
+      roles: [{ uid: 'role-1', name: '监管员' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        { uid: 'proc-1', name: '新入库流程', nodes: [] },
+        { uid: 'proc-2', name: '出库流程', nodes: [] },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="compare-dialog"]')?.textContent).toContain('版本比对');
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-select"]')!;
+    select.value = 'agent-old.json';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新增 1');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('修改 1');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('出库流程');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新入库流程');
+  });
+
   it('should edit task technical handover in the component workbench', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

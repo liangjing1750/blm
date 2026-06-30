@@ -98,7 +98,7 @@
       <button class="btn btn-ghost tbar-dd-btn" type="button" (click)="toggleDropdown('tools', $event)">工具 ▾</button>
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'tools'">
         <button class="tbar-dd-item" type="button" data-testid="toolbar-save-as-button" (click)="openCopyDocument()">复制</button>
-        <button class="tbar-dd-item" type="button" data-testid="toolbar-compare-button" (click)="showPlaceholder('比对')">比对</button>
+        <button class="tbar-dd-item" type="button" data-testid="toolbar-compare-button" (click)="openCompareDialog()">比对</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-merge-button" (click)="showPlaceholder('合并')">合并</button>
         <div class="tbar-dd-sep"></div>
         <button class="tbar-dd-item tbar-dd-primary" type="button" data-testid="toolbar-ai-button" (click)="showPlaceholder('AI 助手')">AI 助手</button>
@@ -408,6 +408,43 @@
         (openSubmit)="openSubmitReadOnly($event)"
         (restoreSubmit)="restoreSubmitSnapshot($event)"
       ></app-history-dialog>
+
+      <section *ngSwitchCase="'compare'" class="compare-dialog" data-testid="compare-dialog">
+        <h2>版本比对</h2>
+        <p class="placeholder-copy">以当前打开文档作为左侧版本，选择另一个工作区文档作为右侧版本，生成业务模型差异摘要。</p>
+        <label class="property-field">
+          <span>右侧文档</span>
+          <select class="modal-search" data-testid="compare-right-select" [(ngModel)]="compareRightName" (ngModelChange)="compareResult.set(null)">
+            <option value="">请选择文档</option>
+            @for (file of workspaceFiles(); track file.name) {
+              <option [value]="file.name" [disabled]="file.name === runtime.currentFile">{{ file.title || file.name }}</option>
+            }
+          </select>
+        </label>
+        <div class="modal-actions">
+          <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
+          <button class="btn btn-primary" type="button" data-testid="compare-run-button" [disabled]="busy() || !compareRightName" (click)="runCompare()">开始比对</button>
+        </div>
+        @if (compareResult(); as result) {
+          <section class="compare-result" data-testid="compare-result">
+            <div class="preview-summary">
+              <div class="preview-metric"><strong>新增 {{ result.added }}</strong><span>左侧新增</span></div>
+              <div class="preview-metric"><strong>删除 {{ result.removed }}</strong><span>右侧独有</span></div>
+              <div class="preview-metric"><strong>修改 {{ result.changed }}</strong><span>同一对象变化</span></div>
+            </div>
+            <div class="preview-list">
+              @for (row of result.rows; track row.section + row.kind + row.name) {
+                <div class="preview-row">
+                  <span>{{ row.section }} · {{ row.kind }} · {{ row.name }}</span>
+                  <em>{{ row.detail }}</em>
+                </div>
+              } @empty {
+                <div class="preview-empty">没有发现模型差异。</div>
+              }
+            </div>
+          </section>
+        }
+      </section>
 
       <section *ngSwitchDefault>
         <h2>{{ placeholderTitle() }}</h2>
