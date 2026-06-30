@@ -160,6 +160,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected compareRightName = '';
   protected compareRightSource: CompareSource = 'current';
   protected compareRightVersionId = '';
+  protected mergeLeftName = '';
   protected mergeRightName = '';
   protected archiveVersionMessage = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
@@ -873,9 +874,9 @@ export class ShellComponent implements OnInit, OnDestroy {
     return group.rows.length > this.visibleCompareGroupRows(group).length;
   }
 
-  // 模块意图：Shell 只恢复旧版“合并前检查”的入口和反馈，不在这里落地真正的合并写入。
-  // 关键流程：选择右侧文档 -> 加载右侧文档 -> 调用后端分析接口 -> 在弹窗展示冲突和校验问题。
-  // 边界细节：merged_document 仅作为检查结果展示依据，applyMerge 与保存新文档留给后续合并确认切片。
+  // 模块意图：Shell 恢复旧版“左右文档合并”的入口、前置检查、冲突裁决和生成文档反馈。
+  // 关键流程：选择左右文档 -> 加载两侧文档 -> 调用后端分析/应用接口 -> 在弹窗展示冲突、校验和保存结果。
+  // 边界细节：左侧选中当前打开文档时使用 runtime.doc，保留未保存编辑态；其他文档从工作区重新加载。
   protected async openMergeDialog(): Promise<void> {
     if (!this.runtime.currentFile) {
       this.showToast('请先打开文档');
@@ -883,14 +884,22 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
     this.activeDropdown.set('');
     await this.refreshWorkspaceFiles();
-    this.mergeRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
+    this.mergeLeftName = this.runtime.currentFile;
+    this.mergeRightName = this.workspaceFiles().find((file) => file.name !== this.mergeLeftName)?.name || '';
     this.mergeAnalysis.set(null);
     this.mergeResolutions.set({});
     this.mergeCustomValues.set({});
     this.modal.set('merge');
   }
 
+  protected clearMergeAnalysis(): void {
+    this.mergeAnalysis.set(null);
+    this.mergeResolutions.set({});
+    this.mergeCustomValues.set({});
+  }
+
   protected async runMergeAnalyze(): Promise<void> {
+    if (!this.mergeLeftName) return;
     if (!this.mergeRightName) return;
     this.waitDialog.set({
       title: '正在执行合并前检查...',
@@ -898,12 +907,15 @@ export class ShellComponent implements OnInit, OnDestroy {
     });
     try {
       await this.runBusy(async () => {
-        const rightLoaded = await this.api.load(this.mergeRightName);
+        const [leftDocument, rightDocument] = await Promise.all([
+          this.loadMergeDocument(this.mergeLeftName),
+          this.loadMergeDocument(this.mergeRightName),
+        ]);
         const result = await this.api.analyzeMerge({
-          left_name: this.runtime.currentFile,
+          left_name: this.mergeLeftName,
           right_name: this.mergeRightName,
-          left_document: this.runtime.doc,
-          right_document: rightLoaded?.document || rightLoaded,
+          left_document: leftDocument,
+          right_document: rightDocument,
         });
         this.mergeAnalysis.set(result || {});
         this.mergeResolutions.set({});
@@ -990,16 +1002,25 @@ export class ShellComponent implements OnInit, OnDestroy {
         ? { choice, custom_value: customValues[id] || '' }
         : { choice },
     ]));
-    const rightLoaded = await this.api.load(this.mergeRightName);
+    const [leftDocument, rightDocument] = await Promise.all([
+      this.loadMergeDocument(this.mergeLeftName),
+      this.loadMergeDocument(this.mergeRightName),
+    ]);
     const result = await this.api.applyMerge({
-      left_name: this.runtime.currentFile,
+      left_name: this.mergeLeftName,
       right_name: this.mergeRightName,
-      left_document: this.runtime.doc,
-      right_document: rightLoaded?.document || rightLoaded,
+      left_document: leftDocument,
+      right_document: rightDocument,
       resolutions,
     });
     this.mergeAnalysis.set(result || analysis);
     return result || analysis;
+  }
+
+  private async loadMergeDocument(name: string): Promise<any> {
+    if (name === this.runtime.currentFile) return this.runtime.doc;
+    const loaded = await this.api.load(name);
+    return loaded?.document || loaded;
   }
 
   protected closeModal(): void {

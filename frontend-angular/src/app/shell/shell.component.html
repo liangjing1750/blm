@@ -532,19 +532,28 @@
 
       <section *ngSwitchCase="'merge'" class="merge-dialog" data-testid="merge-dialog">
         <h2>合并前检查</h2>
-        <p class="placeholder-copy">以当前打开文档作为左侧版本，选择另一个工作区文档作为右侧版本，先检查自动合并项、冲突项和模型校验问题。</p>
+        <p class="placeholder-copy">选择左右两个工作区文档，先检查自动合并项、冲突项和模型校验问题。</p>
         <label class="property-field">
-          <span>右侧文档</span>
-          <select class="modal-search" data-testid="merge-right-select" [(ngModel)]="mergeRightName" (ngModelChange)="mergeAnalysis.set(null)">
+          <span>左侧文档</span>
+          <select class="modal-search" data-testid="merge-left-select" [(ngModel)]="mergeLeftName" (ngModelChange)="clearMergeAnalysis()">
             <option value="">请选择文档</option>
             @for (file of workspaceFiles(); track file.name) {
-              <option [value]="file.name" [disabled]="file.name === runtime.currentFile">{{ file.title || file.name }}</option>
+              <option [value]="file.name">{{ file.title || file.name }}</option>
+            }
+          </select>
+        </label>
+        <label class="property-field">
+          <span>右侧文档</span>
+          <select class="modal-search" data-testid="merge-right-select" [(ngModel)]="mergeRightName" (ngModelChange)="clearMergeAnalysis()">
+            <option value="">请选择文档</option>
+            @for (file of workspaceFiles(); track file.name) {
+              <option [value]="file.name" [disabled]="file.name === mergeLeftName">{{ file.title || file.name }}</option>
             }
           </select>
         </label>
         <div class="modal-actions">
           <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
-          <button class="btn btn-primary" type="button" data-testid="merge-analyze-button" [disabled]="busy() || !mergeRightName" (click)="runMergeAnalyze()">合并前检查</button>
+          <button class="btn btn-primary" type="button" data-testid="merge-analyze-button" [disabled]="busy() || !mergeLeftName || !mergeRightName || mergeLeftName === mergeRightName" (click)="runMergeAnalyze()">合并前检查</button>
           <button class="btn btn-primary" type="button" data-testid="merge-save-button" [disabled]="busy() || !canSaveMergeResult(mergeAnalysis())" (click)="saveMergeResult()">生成合并文档</button>
         </div>
         @if (mergeAnalysis(); as analysis) {

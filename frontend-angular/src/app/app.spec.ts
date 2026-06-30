@@ -1464,6 +1464,94 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('流程引用缺失');
   });
 
+  it('should run a merge precheck for two selected workspace documents', async () => {
+    let mergePayload: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前文档' },
+          { name: 'agent-a.json', title: '文档A' },
+          { name: 'agent-b.json', title: '文档B' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-a.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent A' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-a', name: 'A 流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-b.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent B' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-b', name: 'B 流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/analyze')) {
+        mergePayload = JSON.parse(String(init?.body || '{}'));
+        return new Response(JSON.stringify({
+          suggested_name: 'A-B 合并版',
+          summary: { autoMergedCount: 1 },
+          conflicts: [],
+          validation_issues: [],
+          merged_document: { meta: { domain: 'Merged' }, processes: [] },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = { meta: { domain: 'Current' }, roles: [], stages: [], processes: [], entities: [], taskDefinitions: [] };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-merge-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const left = compiled.querySelector<HTMLSelectElement>('[data-testid="merge-left-select"]')!;
+    left.value = 'agent-a.json';
+    left.dispatchEvent(new Event('change', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const right = compiled.querySelector<HTMLSelectElement>('[data-testid="merge-right-select"]')!;
+    right.value = 'agent-b.json';
+    right.dispatchEvent(new Event('change', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-analyze-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(mergePayload).toMatchObject({ left_name: 'agent-a.json', right_name: 'agent-b.json' });
+    expect(mergePayload.left_document.processes[0].uid).toBe('proc-a');
+    expect(mergePayload.right_document.processes[0].uid).toBe('proc-b');
+    expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('自动合并 1');
+  });
+
   it('should save and open a merge result when the precheck has no blockers', async () => {
     let savedName = '';
     let savedDocument: any = null;
