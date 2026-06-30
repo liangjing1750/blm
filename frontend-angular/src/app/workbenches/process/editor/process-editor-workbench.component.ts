@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import {
   LegacyEntity,
   LegacyProcess,
@@ -50,6 +51,16 @@ interface ProcessNodeDirectory {
   id: string;
   name: string;
   tasks: LegacyProcessNode[];
+}
+
+interface ProcessApplicationService {
+  id?: string;
+  uid?: string;
+  name?: string;
+  method?: string;
+  path?: string;
+  desc?: string;
+  nodeRefs?: string[];
 }
 
 @Component({
@@ -174,6 +185,36 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   protected taskDefinitions(task: LegacyProcessNode): LegacyTaskDefinition[] {
     task.orchestrationTasks ||= [];
     return task.orchestrationTasks;
+  }
+
+  protected applicationServicesForTask(task: LegacyProcessNode): ProcessApplicationService[] {
+    this.version();
+    // 模块意图：流程节点只展示“这个节点会触发哪些应用服务”的产品视图，不接管应用编排编辑职责。
+    // 关键流程：优先用服务侧 nodeRefs 反查节点，同时兼容节点侧 serviceUids/serviceIds 引用，便于后续流程平台对接。
+    // 边界细节：这里不展开参数映射、步骤编排和技术承接，避免流程工作台重新暴露构件运行时细节。
+    const taskRefs = this.referenceKeys([this.taskId(task), task.uid, task.id]);
+    const nodeServiceRefs = this.referenceKeys([
+      ...((task as LegacyProcessNode & { serviceUids?: string[] }).serviceUids || []),
+      ...((task as LegacyProcessNode & { serviceIds?: string[] }).serviceIds || []),
+    ]);
+    return this.applicationServices().filter((service) => {
+      const serviceRefs = this.referenceKeys(service.nodeRefs || []);
+      const serviceId = this.serviceId(service);
+      return taskRefs.some((ref) => serviceRefs.includes(ref)) || (serviceId ? nodeServiceRefs.includes(serviceId) : false);
+    });
+  }
+
+  protected serviceId(service: ProcessApplicationService | null | undefined): string {
+    return String(service?.uid || service?.id || service?.name || '').trim();
+  }
+
+  private applicationServices(): ProcessApplicationService[] {
+    const doc = getAngularRuntimeState().doc as { services?: ProcessApplicationService[] } | null | undefined;
+    return Array.isArray(doc?.services) ? doc.services : [];
+  }
+
+  private referenceKeys(values: Array<string | undefined>): string[] {
+    return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
   }
 
   protected gateways(process: LegacyProcess): LegacyFlowGateway[] {

@@ -432,6 +432,808 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="tab-entity"]')).toBeFalsy();
   });
 
+  it('should edit task technical handover in the component workbench', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'constructWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [{ uid: 'bc-1', name: '仓储组件', kind: 'core', entityUids: [], taskDefinitionUids: ['task-save'] }],
+      businessConstructs: [{ uid: 'construct-1', name: '入库预约构件', businessComponentUid: 'bc-1' }],
+      taskDefinitions: [
+        {
+          uid: 'task-save',
+          name: '保存入库预约',
+          type: 'Command',
+          constructUid: 'construct-1',
+          parameters: {
+            inputs: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
+            outputs: [{ name: 'reservationId', type: 'String', required: false, note: '预约标识' }],
+          },
+          technicalHandover: {
+            runtimeKind: 'DomainServiceJar',
+            target: 'InboundReservationService.submit',
+            note: '由 FSM 内嵌领域服务承接。',
+          },
+        },
+      ],
+      services: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const constructTab = compiled.querySelector<HTMLButtonElement>('[data-testid="tab-constructWorkbench"]');
+    expect(constructTab).toBeTruthy();
+    constructTab!.click();
+    fixture.detectChanges();
+    const taskTab = compiled.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]');
+    expect(taskTab).toBeTruthy();
+    taskTab!.click();
+    fixture.detectChanges();
+    const taskHead = compiled.querySelector<HTMLElement>('[data-testid="taskdef-head-task-save"]');
+    expect(taskHead).toBeTruthy();
+    taskHead!.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="taskdef-technical-handover-task-save"]')?.textContent).toContain('技术承接');
+    expect(compiled.querySelector('[data-testid="taskdef-technical-handover-task-save"]')?.textContent).toContain('DomainServiceJar');
+    expect(compiled.querySelector('[data-testid="taskdef-technical-handover-task-save"]')?.textContent).toContain('InboundReservationService.submit');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="taskdef-edit-task-save"]')?.click();
+    fixture.detectChanges();
+
+    const runtimeKind = compiled.querySelector<HTMLInputElement>('[data-testid="taskdef-handover-runtime-kind"]')!;
+    const target = compiled.querySelector<HTMLInputElement>('[data-testid="taskdef-handover-target"]')!;
+    const note = compiled.querySelector<HTMLTextAreaElement>('[data-testid="taskdef-handover-note"]')!;
+    runtimeKind.value = 'QueryHttp';
+    runtimeKind.dispatchEvent(new Event('input', { bubbles: true }));
+    target.value = 'GET /query/inbound-reservations';
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    note.value = '查询服务通过事件溯源落库后提供。';
+    note.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="taskdef-save-task-save"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.taskDefinitions[0].technicalHandover).toEqual({
+      runtimeKind: 'QueryHttp',
+      target: 'GET /query/inbound-reservations',
+      note: '查询服务通过事件溯源落库后提供。',
+    });
+    expect(runtime.modified).toBe(true);
+  });
+
+  it('should edit application service request and response params through the unified services model', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      services: [
+        {
+          uid: 'service-submit',
+          name: '提交入库预约',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          desc: '客户提交入库预约时调用。',
+          requestParams: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
+          responseParams: [{ name: 'reservationNo', type: 'String', required: false, note: '预约编号' }],
+          nodeRefs: [],
+          orchestration: { variables: [], steps: [], returnMapping: [] },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const appTab = compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]');
+    expect(appTab).toBeTruthy();
+    appTab!.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="interface-card-service-submit"]')?.textContent).toContain('提交入库预约');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="interface-edit-service-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const requestName = compiled.querySelector<HTMLInputElement>('[data-testid="service-request-param-name-0"]')!;
+    const responseName = compiled.querySelector<HTMLInputElement>('[data-testid="service-response-param-name-0"]')!;
+    expect(requestName.value).toBe('warehouseId');
+    expect(responseName.value).toBe('reservationNo');
+
+    requestName.value = 'warehouseUid';
+    requestName.dispatchEvent(new Event('input', { bubbles: true }));
+    responseName.value = 'reservationCode';
+    responseName.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-save-service-submit"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.services[0].requestParams[0].name).toBe('warehouseUid');
+    expect(runtime.doc.services[0].responseParams[0].name).toBe('reservationCode');
+    expect(runtime.doc.services[0].inputs).toBeUndefined();
+    expect(runtime.doc.services[0].outputs).toBeUndefined();
+    expect(runtime.modified).toBe(true);
+  });
+
+  it('should group application interfaces under service groups', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [{ uid: 'group-inbound', name: '入库预约服务', desc: '入库预约相关接口' }],
+      services: [
+        {
+          uid: 'interface-submit',
+          name: '提交入库预约',
+          serviceGroupUid: 'group-inbound',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [],
+          responseParams: [],
+          nodeRefs: [],
+          orchestration: { variables: [], steps: [], returnMapping: [] },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+
+    const group = compiled.querySelector('[data-testid="service-group-group-inbound"]');
+    expect(group?.textContent).toContain('入库预约服务');
+    expect(group?.textContent).toContain('提交入库预约');
+    expect(group?.textContent).toContain('/inbound-reservations/submit');
+    expect(compiled.querySelector('[data-testid="interface-card-interface-submit"]')).toBeTruthy();
+  });
+
+  it('should let users maintain service groups and interfaces inside the selected group', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [
+        { uid: 'group-inbound', name: '入库服务', desc: '入库接口' },
+        { uid: 'group-outbound', name: '出库服务', desc: '' },
+      ],
+      services: [
+        {
+          uid: 'interface-submit',
+          name: '提交入库预约',
+          serviceGroupUid: 'group-inbound',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [],
+          responseParams: [],
+          nodeRefs: [],
+          orchestration: { variables: [], steps: [], returnMapping: [] },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+
+    const groupName = compiled.querySelector<HTMLInputElement>('[data-testid="service-group-name-group-inbound"]')!;
+    groupName.value = '入库预约服务';
+    groupName.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-toggle-group-inbound"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="interface-card-interface-submit"]')).toBeFalsy();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-toggle-group-inbound"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="interface-card-interface-submit"]')).toBeTruthy();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-add-interface-group-inbound"]')?.click();
+    fixture.detectChanges();
+    const newName = compiled.querySelector<HTMLInputElement>('[data-testid="interface-name-draft"]')!;
+    newName.value = '查询预约';
+    newName.dispatchEvent(new Event('input', { bubbles: true }));
+    const newPath = compiled.querySelector<HTMLInputElement>('[data-testid="interface-path-draft"]')!;
+    newPath.value = '/inbound-reservations/query';
+    newPath.dispatchEvent(new Event('input', { bubbles: true }));
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-save-draft"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.services.some((service: any) => service.name === '查询预约' && service.serviceGroupUid === 'group-inbound')).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="interface-edit-interface-submit"]')?.click();
+    fixture.detectChanges();
+    const groupSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="service-interface-group-select-interface-submit"]')!;
+    groupSelect.value = 'group-outbound';
+    groupSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-save-interface-submit"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.serviceGroups[0].name).toBe('入库预约服务');
+    expect(runtime.doc.services.find((service: any) => service.uid === 'interface-submit')?.serviceGroupUid).toBe('group-outbound');
+    expect(compiled.querySelector('[data-testid="service-group-group-outbound"]')?.textContent).toContain('提交入库预约');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-delete-group-inbound"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.doc.serviceGroups.some((group: any) => group.uid === 'group-inbound')).toBe(false);
+  });
+
+  it('should edit nested request parameters for an application interface', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [{ uid: 'group-inbound', name: '入库预约服务' }],
+      services: [
+        {
+          uid: 'interface-submit',
+          name: '提交入库预约',
+          serviceGroupUid: 'group-inbound',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [{ name: 'reservation', type: 'Object', required: true, note: '预约信息', children: [] }],
+          responseParams: [],
+          nodeRefs: [],
+          orchestration: { variables: [], steps: [], returnMapping: [] },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="interface-edit-interface-submit"]')?.click();
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-request-param-add-child-0"]')?.click();
+    fixture.detectChanges();
+    const childName = compiled.querySelector<HTMLInputElement>('[data-testid="service-request-param-name-0-0"]')!;
+    childName.value = 'warehouseUid';
+    childName.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-save-interface-submit"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.services[0].requestParams[0].children).toEqual([
+      { name: 'warehouseUid', type: 'String', required: false, note: '' },
+    ]);
+  });
+
+  it('should manage application orchestration steps through orchestration.steps with stable aliases', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [
+        { uid: 'task-check', name: '校验仓库状态', parameters: { inputs: [], outputs: [] } },
+        { uid: 'task-save', name: '保存入库预约', parameters: { inputs: [], outputs: [] } },
+      ],
+      services: [
+        {
+          uid: 'service-submit',
+          name: '提交入库预约',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [],
+          responseParams: [],
+          nodeRefs: [],
+          orchestration: {
+            variables: [],
+            steps: [
+              {
+                uid: 'step-check',
+                name: '校验仓库状态',
+                stepAlias: 'checkWarehouse',
+                taskDefinitionUid: 'task-check',
+                inputMapping: [],
+                outputMapping: [],
+              },
+            ],
+            returnMapping: [],
+          },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const appTab = compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]');
+    expect(appTab).toBeTruthy();
+    appTab!.click();
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
+    fixture.detectChanges();
+    const serviceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-select"]')!;
+    serviceSelect.value = 'service-submit';
+    serviceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="orchestration-step-select-step-check"]')?.textContent).toContain('checkWarehouse');
+
+    const addStep = compiled.querySelector<HTMLSelectElement>('[data-testid="orchestration-add-step"]')!;
+    addStep.value = 'task-save';
+    addStep.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.doc.services[0].orchestration.steps.map((step: any) => ({
+      taskDefinitionUid: step.taskDefinitionUid,
+      stepAlias: step.stepAlias,
+    }))).toEqual([
+      { taskDefinitionUid: 'task-check', stepAlias: 'checkWarehouse' },
+      { taskDefinitionUid: 'task-save', stepAlias: 'step2' },
+    ]);
+    expect(runtime.doc.services[0].steps).toBeUndefined();
+    expect(runtime.modified).toBe(true);
+  });
+
+  it('should show selected orchestration step details in a right side editor panel', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [
+        { uid: 'task-check', name: '校验仓库状态', parameters: { inputs: [{ name: 'warehouseUid', type: 'String', required: true }], outputs: [] } },
+        { uid: 'task-save', name: '保存入库预约', parameters: { inputs: [{ name: 'warehouseUid', type: 'String', required: true }], outputs: [{ name: 'reservationUid', type: 'String' }] } },
+      ],
+      services: [
+        {
+          uid: 'interface-submit',
+          name: '提交入库预约',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [],
+          responseParams: [],
+          nodeRefs: [],
+          orchestration: {
+            variables: [],
+            steps: [
+              { uid: 'step-check', name: '校验仓库状态', stepAlias: 'checkWarehouse', taskDefinitionUid: 'task-check', inputMapping: [], outputMapping: [] },
+              { uid: 'step-save', name: '保存入库预约', stepAlias: 'saveReservation', taskDefinitionUid: 'task-save', inputMapping: [], outputMapping: [] },
+            ],
+            returnMapping: [],
+          },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
+    fixture.detectChanges();
+    const serviceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-select"]')!;
+    serviceSelect.value = 'interface-submit';
+    serviceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="orchestration-step-select-step-save"]')?.click();
+    fixture.detectChanges();
+
+    const detail = compiled.querySelector('[data-testid="orchestration-step-detail"]');
+    expect(compiled.querySelector('[data-testid="orchestration-step-list"]')).toBeTruthy();
+    expect(detail?.textContent).toContain('保存入库预约');
+    expect(detail?.textContent).toContain('saveReservation');
+    expect(detail?.textContent).toContain('warehouseUid');
+    expect(detail?.textContent).toContain('reservationUid');
+    expect(getComputedStyle(compiled.querySelector<HTMLElement>('[data-testid="orchestration-step-list"]')!).overflowY).toBe('auto');
+  });
+
+  it('should map orchestration variables through step input output and return mappings', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [
+        {
+          uid: 'task-save',
+          name: '保存入库预约',
+          parameters: {
+            inputs: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
+            outputs: [{ name: 'reservationId', type: 'String', required: false, note: '预约标识' }],
+          },
+        },
+      ],
+      services: [
+        {
+          uid: 'service-submit',
+          name: '提交入库预约',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
+          responseParams: [{ name: 'reservationId', type: 'String', required: false, note: '预约标识' }],
+          nodeRefs: [],
+          orchestration: {
+            variables: [],
+            steps: [
+              {
+                uid: 'step-save',
+                name: '保存入库预约',
+                stepAlias: 'saveReservation',
+                taskDefinitionUid: 'task-save',
+                inputMapping: [],
+                outputMapping: [],
+              },
+            ],
+            returnMapping: [],
+          },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const appTab = compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')!;
+    appTab.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
+    fixture.detectChanges();
+    const serviceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-select"]')!;
+    serviceSelect.value = 'service-submit';
+    serviceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="mapping-add-input-step-save"]')?.click();
+    fixture.detectChanges();
+    const inputSource = compiled.querySelector<HTMLInputElement>('[data-testid="mapping-input-source-step-save-0"]')!;
+    const inputTarget = compiled.querySelector<HTMLInputElement>('[data-testid="mapping-input-target-step-save-0"]')!;
+    inputSource.value = 'request.warehouseId';
+    inputSource.dispatchEvent(new Event('input', { bubbles: true }));
+    inputTarget.value = 'warehouseId';
+    inputTarget.dispatchEvent(new Event('input', { bubbles: true }));
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="mapping-add-output-step-save"]')?.click();
+    fixture.detectChanges();
+    const outputSource = compiled.querySelector<HTMLInputElement>('[data-testid="mapping-output-source-step-save-0"]')!;
+    const outputTarget = compiled.querySelector<HTMLInputElement>('[data-testid="mapping-output-target-step-save-0"]')!;
+    outputSource.value = 'reservationId';
+    outputSource.dispatchEvent(new Event('input', { bubbles: true }));
+    outputTarget.value = 'step.saveReservation.reservationId';
+    outputTarget.dispatchEvent(new Event('input', { bubbles: true }));
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="mapping-add-return"]')?.click();
+    fixture.detectChanges();
+    const returnSource = compiled.querySelector<HTMLInputElement>('[data-testid="mapping-return-source-0"]')!;
+    const returnTarget = compiled.querySelector<HTMLInputElement>('[data-testid="mapping-return-target-0"]')!;
+    returnSource.value = 'step.saveReservation.reservationId';
+    returnSource.dispatchEvent(new Event('input', { bubbles: true }));
+    returnTarget.value = 'reservationId';
+    returnTarget.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.doc.services[0].orchestration.steps[0].inputMapping).toEqual([
+      { source: 'request.warehouseId', target: 'warehouseId' },
+    ]);
+    expect(runtime.doc.services[0].orchestration.steps[0].outputMapping).toEqual([
+      { source: 'reservationId', target: 'step.saveReservation.reservationId' },
+    ]);
+    expect(runtime.doc.services[0].orchestration.returnMapping).toEqual([
+      { source: 'step.saveReservation.reservationId', target: 'reservationId' },
+    ]);
+    expect(runtime.modified).toBe(true);
+  });
+
+  it('should choose orchestration mappings from accumulated nested variable options', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [
+        {
+          uid: 'task-check-warehouse',
+          name: '校验仓库',
+          parameters: {
+            inputs: [{ name: 'warehouseUid', type: 'String', required: true }],
+            outputs: [{ name: 'warehouseStatus', type: 'String', required: false }],
+          },
+        },
+        {
+          uid: 'task-check-items',
+          name: '校验品种',
+          parameters: {
+            inputs: [{ name: 'items', type: 'Array', required: true, children: [{ name: 'productCode', type: 'String' }] }],
+            outputs: [{ name: 'itemCheckResult', type: 'Map', required: false, children: [{ name: 'passed', type: 'Boolean' }] }],
+          },
+        },
+        {
+          uid: 'task-save',
+          name: '保存预约',
+          parameters: {
+            inputs: [
+              { name: 'warehouseUid', type: 'String', required: true },
+              { name: 'itemCheckResult', type: 'Map', required: true, children: [{ name: 'passed', type: 'Boolean' }] },
+            ],
+            outputs: [{ name: 'reservationUid', type: 'String', required: false }],
+          },
+        },
+      ],
+      services: [
+        {
+          uid: 'service-submit',
+          name: '提交入库预约',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [
+            {
+              name: 'reservation',
+              type: 'Object',
+              required: true,
+              note: '',
+              children: [
+                { name: 'warehouseUid', type: 'String', required: true, note: '' },
+                { name: 'items', type: 'Array', required: true, note: '', children: [{ name: 'productCode', type: 'String', required: true, note: '' }] },
+              ],
+            },
+          ],
+          responseParams: [{ name: 'reservationUid', type: 'String', required: false, note: '' }],
+          nodeRefs: [],
+          orchestration: {
+            variables: [],
+            steps: [
+              { uid: 'step-warehouse', name: '校验仓库', stepAlias: 'checkWarehouse', taskDefinitionUid: 'task-check-warehouse', inputMapping: [], outputMapping: [] },
+              { uid: 'step-items', name: '校验品种', stepAlias: 'checkItems', taskDefinitionUid: 'task-check-items', inputMapping: [], outputMapping: [] },
+              { uid: 'step-save', name: '保存预约', stepAlias: 'saveReservation', taskDefinitionUid: 'task-save', inputMapping: [], outputMapping: [] },
+            ],
+            returnMapping: [],
+          },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
+    fixture.detectChanges();
+    const serviceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-select"]')!;
+    serviceSelect.value = 'service-submit';
+    serviceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="orchestration-step-select-step-save"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="orchestration-variable-pool"]')?.textContent).toContain('request.reservation.items[].productCode');
+    expect(compiled.querySelector('[data-testid="orchestration-variable-pool"]')?.textContent).toContain('step.checkItems.output.itemCheckResult.passed');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="mapping-add-input-step-save"]')?.click();
+    fixture.detectChanges();
+    const sourceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="mapping-input-source-step-save-0"]')!;
+    const targetSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="mapping-input-target-step-save-0"]')!;
+    expect(Array.from(sourceSelect.options).map((option) => option.value)).toContain('step.checkItems.output.itemCheckResult.passed');
+    expect(Array.from(targetSelect.options).map((option) => option.value)).toContain('itemCheckResult.passed');
+
+    sourceSelect.value = 'step.checkItems.output.itemCheckResult.passed';
+    sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    targetSelect.value = 'itemCheckResult.passed';
+    targetSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.doc.services[0].orchestration.steps[2].inputMapping).toEqual([
+      { source: 'step.checkItems.output.itemCheckResult.passed', target: 'itemCheckResult.passed' },
+    ]);
+  });
+
+  it('should show application services associated with a process node without exposing orchestration internals', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['processView'] = 'node';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-customer', name: '客户' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'process-inbound',
+          name: '入库预约流程',
+          nodes: [
+            { uid: 'node-submit', name: '客户提交入库预约', roleIds: ['role-customer'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+          ],
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [
+        {
+          uid: 'task-save',
+          name: '保存入库预约',
+          parameters: {
+            inputs: [{ name: 'warehouseId', type: 'String', required: true }],
+            outputs: [{ name: 'reservationId', type: 'String' }],
+          },
+          technicalHandover: {
+            runtimeKind: 'DomainServiceJar',
+            target: 'InboundReservationService.submit',
+          },
+        },
+      ],
+      services: [
+        {
+          uid: 'service-submit',
+          name: '提交入库预约',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          desc: '客户提交入库预约时调用。',
+          nodeRefs: ['node-submit'],
+          requestParams: [{ name: 'warehouseId', type: 'String', required: true }],
+          responseParams: [{ name: 'reservationId', type: 'String' }],
+          orchestration: {
+            variables: [],
+            steps: [
+              {
+                uid: 'step-save',
+                taskDefinitionUid: 'task-save',
+                stepAlias: 'saveReservation',
+                inputMapping: [{ source: 'request.warehouseId', target: 'warehouseId' }],
+                outputMapping: [{ source: 'reservationId', target: 'step.saveReservation.reservationId' }],
+              },
+            ],
+            returnMapping: [{ source: 'step.saveReservation.reservationId', target: 'reservationId' }],
+          },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-processWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="process-switch-node"]')?.click();
+    fixture.detectChanges();
+
+    const section = compiled.querySelector('[data-testid="process-application-service-section"]');
+    expect(section).toBeTruthy();
+    expect(section?.textContent).toContain('提交入库预约');
+    expect(section?.textContent).toContain('POST');
+    expect(section?.textContent).toContain('/inbound-reservations/submit');
+    expect(section?.textContent).toContain('客户提交入库预约时调用。');
+    expect(section?.textContent).not.toContain('request.warehouseId');
+    expect(section?.textContent).not.toContain('InboundReservationService.submit');
+  });
+
   it('should switch main workbench without router navigation so collaboration stays mounted', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

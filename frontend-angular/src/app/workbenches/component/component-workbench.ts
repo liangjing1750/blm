@@ -10,7 +10,8 @@ interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; 
 interface LegacyConstruct { uid?: string; id?: string; name?: string; businessComponentUid?: string; }
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructUids?: string[]; }
 interface TaskParam { name: string; type: string; required: boolean; note: string; }
-interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; businessComponentUid?: string; }
+interface TechnicalHandover { runtimeKind?: string; target?: string; note?: string; }
+interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; technicalHandover?: TechnicalHandover; constructUid?: string; businessComponentUid?: string; }
 interface LegacyService { uid?: string; name?: string; method?: string; path?: string; desc?: string; taskDefinitionUids?: string[]; nodeRefs?: string[]; }
 
 @Component({
@@ -177,9 +178,9 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected isTaskExpanded(id: string): boolean { return this.expandedTaskIds().has(id); }
   protected startEditInline(td?: LegacyTaskDef): void {
-    if (td) { this.editingTaskId.set(this.uid(td)); return; }
+    if (td) { this.ensureTaskHandover(td); this.editingTaskId.set(this.uid(td)); return; }
     // 新建
-    const base: LegacyTaskDef = { uid: '', name: '', type: 'Query', target: '', address: '', note: '', constructUid: '', parameters: { inputs: [], outputs: [] } };
+    const base: LegacyTaskDef = { uid: '', name: '', type: 'Query', target: '', address: '', note: '', constructUid: '', parameters: { inputs: [], outputs: [] }, technicalHandover: { runtimeKind: '', target: '', note: '' } };
     this.doc().taskDefinitions ||= [];
     this.doc().taskDefinitions.push(base);
     this.editingTaskId.set('');
@@ -187,6 +188,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected saveInlineEdit(td: LegacyTaskDef): void {
     td.parameters ||= { inputs: [], outputs: [] };
+    this.ensureTaskHandover(td);
     this.editingTaskId.set('');
     this.touch();
   }
@@ -205,6 +207,14 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected addParam(arr: TaskParam[]): void { arr.push({ name: '', type: 'String', required: false, note: '' }); }
   protected removeParam(arr: TaskParam[], idx: number): void { arr.splice(idx, 1); }
   protected isEditingTask(td: LegacyTaskDef): boolean { return this.editingTaskId() === this.uid(td) || (!td.uid && this.editingTaskId() === ''); }
+  protected ensureTaskHandover(td: LegacyTaskDef): TechnicalHandover {
+    td.technicalHandover ||= { runtimeKind: '', target: '', note: '' };
+    return td.technicalHandover;
+  }
+  protected hasTaskHandover(td: LegacyTaskDef): boolean {
+    const handover = td.technicalHandover;
+    return Boolean(handover?.runtimeKind || handover?.target || handover?.note);
+  }
 
   // ─── Tab 4: 应用服务 ──────────────────────────────
   protected filteredServices(): LegacyService[] {

@@ -92,6 +92,31 @@
             }
           </section>
 
+          <section #nodeSection class="node-editor-card node-editor-card--service" id="process-application-service-section" data-testid="process-application-service-section">
+            <div class="node-section-head">
+              <div><h4>应用服务</h4><span class="node-count-pill">{{ applicationServicesForTask(task).length }} 个</span></div>
+            </div>
+            <p class="node-section-note">该节点关联的接入服务接口，仅用于确认流程节点和应用服务的对应关系。</p>
+            <div class="node-step-list">
+              @for (service of applicationServicesForTask(task); track serviceId(service)) {
+                <article class="node-step-row node-step-row--rich" data-testid="process-application-service-card">
+                  <div class="node-step-main-row">
+                    <span class="node-step-index">{{ service.method || 'HTTP' }}</span>
+                    <div class="node-step-name">
+                      <strong>{{ service.name || serviceId(service) || '未命名应用服务' }}</strong>
+                      <small>{{ service.path || '未配置路径' }}</small>
+                    </div>
+                  </div>
+                  @if (service.desc) {
+                    <p class="node-section-note">{{ service.desc }}</p>
+                  }
+                </article>
+              } @empty {
+                <p class="node-empty">暂无关联应用服务。后续可在应用服务中通过节点引用建立关联。</p>
+              }
+            </div>
+          </section>
+
           <section #nodeSection class="node-editor-card node-editor-card--step" id="process-user-step-section" data-testid="process-user-step-section">
             <div class="node-section-head">
               <div><h4>办理步骤</h4><span class="node-count-pill">{{ userSteps(task).length }} 项</span></div>

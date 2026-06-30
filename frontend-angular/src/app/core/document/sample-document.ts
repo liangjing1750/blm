@@ -63,10 +63,13 @@ export const SAMPLE_DOCUMENT: BlmDocument = {
     { uid: 'component-risk', id: 'C2', name: '风险监管组件', kind: 'core', entityUids: ['entity-inventory'], taskDefinitionUids: ['task-risk'] },
     { uid: 'component-platform', id: 'C3', name: '用户与权限组件', kind: 'common', entityUids: [], taskDefinitionUids: [] },
   ],
+  businessConstructs: [],
   taskDefinitions: [
     { uid: 'task-entry', id: 'TD1', name: '入库登记任务', target: 'receipt.register' },
     { uid: 'task-risk', id: 'TD2', name: '风险检查任务', target: 'risk.check' },
   ],
+  serviceGroups: [],
+  services: [],
   terms: [
     { uid: 'term-receipt', name: '仓单', desc: '用于表达货物入库、监管和交割状态的核心业务凭证。' },
   ],

@@ -1,188 +1,291 @@
 <section class="app-workbench">
   <nav class="comp-tabs">
     <button [class.active]="activeTab()==='service'" (click)="switchTab('service')">应用服务</button>
-    <button [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
+    <button data-testid="application-orchestration-tab" [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
   </nav>
 
-  <!-- Tab 1: 应用服务 -->
   @if (activeTab() === 'service') {
     <div class="comp-tab-body">
       <div class="comp-toolbar">
-        <input type="search" placeholder="搜索..." [ngModel]="svcKeyword()" (ngModelChange)="svcKeyword.set($event)" />
-        <button class="btn btn-primary btn-sm" (click)="createService()">+ 新建服务</button>
+        <input type="search" placeholder="搜索服务 / 接口 / 路径" [ngModel]="svcKeyword()" (ngModelChange)="svcKeyword.set($event)" />
+        <button class="btn btn-outline btn-sm" type="button" (click)="createServiceGroup()">+ 新建服务</button>
+        <button class="btn btn-primary btn-sm" type="button" (click)="createService()">+ 新建接口</button>
       </div>
-      <div class="svc-cards">
-        @for (svc of filteredServices(); track svc.uid) {
-          <div class="svc-card" [class.editing]="isEditing(svc)">
-            @if (isEditing(svc)) {
-              <div class="svc-edit-body">
-                <div class="svc-edit-row">
-                  <input [(ngModel)]="svc.name" placeholder="服务名称" class="svc-edit-name" />
-                  <select [(ngModel)]="svc.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
-                  <input [(ngModel)]="svc.path" placeholder="/api/..." />
+
+      <div class="svc-groups">
+        @for (item of groupedServices(); track item.group ? uid(item.group) : '__ungrouped__') {
+          <section class="svc-group" [attr.data-testid]="item.group ? 'service-group-' + uid(item.group) : 'service-group-ungrouped'">
+            <header class="svc-group-head">
+              @if (item.group; as group) {
+                <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-toggle-' + uid(group)" (click)="toggleGroup(uid(group))">
+                  {{ isGroupExpanded(uid(group)) ? '折叠' : '展开' }}
+                </button>
+                <div class="svc-group-fields">
+                  <strong>{{ group.name }}</strong>
+                  <input [attr.data-testid]="'service-group-name-' + uid(group)" [(ngModel)]="group.name" (ngModelChange)="updateServiceGroup()" placeholder="服务名称" />
+                  <input [attr.data-testid]="'service-group-desc-' + uid(group)" [(ngModel)]="group.desc" (ngModelChange)="updateServiceGroup()" placeholder="服务说明" />
                 </div>
-                <textarea [(ngModel)]="svc.desc" rows="2" placeholder="描述" class="svc-edit-note"></textarea>
-                <!-- 输入参数 -->
-                <div class="svc-params-section">
-                  <div class="svc-params-head">
-                    <span>输入参数（请求体）</span>
-                    <div class="svc-params-head-actions">
-                      <button class="btn-ghost-sm" (click)="startImportJson('inputs')">从JSON导入</button>
-                      <button class="btn-ghost-sm" (click)="copyParamsAsJson(svc, 'inputs')">复制为JSON</button>
-                      <button class="btn-ghost-sm" (click)="addSvcParam(svc.inputs)">+ 添加</button>
-                    </div>
-                  </div>
-                  @if (svc.inputs.length) {
-                  <table class="svc-params-table"><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                  <tbody>@for(p of svc.inputs; track $index){<tr><td><input [(ngModel)]="p.name" placeholder="参数名"/></td><td><select [(ngModel)]="p.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>Object</option></select></td><td class="td-cb"><input type="checkbox" [(ngModel)]="p.required"/></td><td><input [(ngModel)]="p.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeSvcParam(svc.inputs, $index)">×</button></td></tr>}</tbody></table>
-                  }
-                </div>
-                <!-- 输出参数 -->
-                <div class="svc-params-section">
-                  <div class="svc-params-head">
-                    <span>输出参数（响应体）</span>
-                    <div class="svc-params-head-actions">
-                      <button class="btn-ghost-sm" (click)="startImportJson('outputs')">从JSON导入</button>
-                      <button class="btn-ghost-sm" (click)="copyParamsAsJson(svc, 'outputs')">复制为JSON</button>
-                      <button class="btn-ghost-sm" (click)="addSvcParam(svc.outputs)">+ 添加</button>
-                    </div>
-                  </div>
-                  @if (svc.outputs.length) {
-                  <table class="svc-params-table"><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                  <tbody>@for(p of svc.outputs; track $index){<tr><td><input [(ngModel)]="p.name" placeholder="参数名"/></td><td><select [(ngModel)]="p.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>Object</option></select></td><td class="td-cb"><input type="checkbox" [(ngModel)]="p.required"/></td><td><input [(ngModel)]="p.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeSvcParam(svc.outputs, $index)">×</button></td></tr>}</tbody></table>
-                  }
-                </div>
-                <div class="svc-edit-actions"><button class="btn btn-primary btn-sm" (click)="saveInline(svc)">保存</button><button class="btn btn-outline btn-sm" (click)="cancelEdit()">取消</button></div>
-              </div>
-            } @else {
-              <div class="svc-head" (click)="toggleExpand(uid(svc))">
-                <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
-                <strong>{{ svc.name || uid(svc) }}</strong>
-                <code>{{ svc.path || '/' }}</code>
-                <span class="svc-meta">{{ stepCount(svc) }} 步骤 · {{ (svc.nodeRefs||[]).length }} 节点引用</span>
-                <span class="svc-arrow" [class.exp]="isExpanded(uid(svc))">▾</span>
-                <button class="btn-ghost-sm" (click)="startEdit(svc); $event.stopPropagation()">编辑</button>
-                <button class="btn-ghost-sm danger" (click)="deleteService(svc); $event.stopPropagation()">删除</button>
-              </div>
-            }
-            @if (!isEditing(svc) && isExpanded(uid(svc))) {
-              <div class="svc-detail">
-                @if (svc.desc) { <p class="svc-desc">{{ svc.desc }}</p> }
-                @if (orderedSteps(svc).length) {
-                  <div class="svc-steps">
-                    <span class="svc-section-label">编排步骤</span>
-                    @for (step of orderedSteps(svc); track step.taskDefUid; let i = $index) {
-                      <span class="svc-step-tag">{{ i + 1 }}. {{ stepTaskDef(step)?.name || step.taskDefUid }}</span>
+                <span>{{ item.services.length }} 个接口</span>
+                <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-add-interface-' + uid(group)" (click)="createInterface(uid(group))">+ 接口</button>
+                <button class="btn-ghost-sm danger" type="button" [attr.data-testid]="'service-group-delete-' + uid(group)" (click)="deleteServiceGroup(group)">删除</button>
+              } @else {
+                <strong>未分组接口</strong>
+                <span>{{ item.services.length }} 个接口</span>
+                <button class="btn-ghost-sm" type="button" data-testid="service-group-add-interface-ungrouped" (click)="createInterface('')">+ 接口</button>
+              }
+            </header>
+
+            @if (!item.group || isGroupExpanded(uid(item.group))) {
+              <div class="svc-cards">
+                @for (svc of item.services; track uid(svc)) {
+                  <div class="svc-card" [attr.data-testid]="'interface-card-' + uid(svc)" [class.editing]="isEditing(svc)">
+                    @if (isEditing(svc)) {
+                      <div class="svc-edit-body">
+                        <div class="svc-edit-row">
+                          <input [attr.data-testid]="'interface-name-' + uid(svc)" [(ngModel)]="svc.name" placeholder="接口名称" class="svc-edit-name" />
+                          <select [(ngModel)]="svc.serviceGroupUid" [attr.data-testid]="'service-interface-group-select-' + uid(svc)">
+                            <option value="">未分组</option>
+                            @for (group of serviceGroups(); track uid(group)) {
+                              <option [value]="uid(group)">{{ group.name }}</option>
+                            }
+                          </select>
+                          <select [(ngModel)]="svc.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+                          <input [attr.data-testid]="'interface-path-' + uid(svc)" [(ngModel)]="svc.path" placeholder="/api/..." />
+                        </div>
+                        <textarea [(ngModel)]="svc.desc" rows="2" placeholder="接口说明" class="svc-edit-note"></textarea>
+
+                        <div class="svc-params-section">
+                          <div class="svc-params-head">
+                            <span>输入参数（请求体）</span>
+                            <div class="svc-params-head-actions">
+                              <button class="btn-ghost-sm" type="button" (click)="startImportJson('requestParams')">从 JSON 导入</button>
+                              <button class="btn-ghost-sm" type="button" (click)="copyParamsAsJson(svc, 'requestParams')">复制为 JSON</button>
+                              <button class="btn-ghost-sm" type="button" (click)="addSvcParam(serviceRequestParams(svc))">+ 添加</button>
+                            </div>
+                          </div>
+                          <table class="svc-params-table">
+                            <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                            <tbody>
+                              @for (row of paramRows(serviceRequestParams(svc)); track row.testPath) {
+                                <tr>
+                                  <td><input [style.padding-left.px]="8 + row.level * 18" [attr.data-testid]="'service-request-param-name-' + row.testPath" [(ngModel)]="row.param.name" placeholder="参数名" /></td>
+                                  <td><select [(ngModel)]="row.param.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>List</option><option>Map</option><option>Object</option></select></td>
+                                  <td class="td-cb"><input type="checkbox" [(ngModel)]="row.param.required" /></td>
+                                  <td><input [(ngModel)]="row.param.note" placeholder="说明" /></td>
+                                  <td class="svc-param-actions">
+                                    @if (canHaveChildren(row.param)) {
+                                      <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-request-param-add-child-' + row.testPath" (click)="addSvcChildParam(row.param)">+ 子项</button>
+                                    }
+                                    <button class="btn-ghost-sm danger" type="button" (click)="removeParamByPath(serviceRequestParams(svc), row.path)">×</button>
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div class="svc-params-section">
+                          <div class="svc-params-head">
+                            <span>输出参数（响应体）</span>
+                            <div class="svc-params-head-actions">
+                              <button class="btn-ghost-sm" type="button" (click)="startImportJson('responseParams')">从 JSON 导入</button>
+                              <button class="btn-ghost-sm" type="button" (click)="copyParamsAsJson(svc, 'responseParams')">复制为 JSON</button>
+                              <button class="btn-ghost-sm" type="button" (click)="addSvcParam(serviceResponseParams(svc))">+ 添加</button>
+                            </div>
+                          </div>
+                          <table class="svc-params-table">
+                            <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                            <tbody>
+                              @for (row of paramRows(serviceResponseParams(svc)); track row.testPath) {
+                                <tr>
+                                  <td><input [style.padding-left.px]="8 + row.level * 18" [attr.data-testid]="'service-response-param-name-' + row.testPath" [(ngModel)]="row.param.name" placeholder="参数名" /></td>
+                                  <td><select [(ngModel)]="row.param.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>List</option><option>Map</option><option>Object</option></select></td>
+                                  <td class="td-cb"><input type="checkbox" [(ngModel)]="row.param.required" /></td>
+                                  <td><input [(ngModel)]="row.param.note" placeholder="说明" /></td>
+                                  <td class="svc-param-actions">
+                                    @if (canHaveChildren(row.param)) {
+                                      <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-response-param-add-child-' + row.testPath" (click)="addSvcChildParam(row.param)">+ 子项</button>
+                                    }
+                                    <button class="btn-ghost-sm danger" type="button" (click)="removeParamByPath(serviceResponseParams(svc), row.path)">×</button>
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div class="svc-edit-actions">
+                          <button class="btn btn-primary btn-sm" [attr.data-testid]="'service-save-' + uid(svc)" type="button" (click)="saveInline(svc)">保存</button>
+                          <button class="btn btn-outline btn-sm" type="button" (click)="cancelEdit()">取消</button>
+                        </div>
+                      </div>
+                    } @else {
+                      <div class="svc-head" (click)="toggleExpand(uid(svc))">
+                        <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
+                        <strong>{{ svc.name || uid(svc) }}</strong>
+                        <code>{{ svc.path || '/' }}</code>
+                        <span class="svc-meta">{{ stepCount(svc) }} 步骤 · {{ (svc.nodeRefs||[]).length }} 节点引用</span>
+                        <span class="svc-arrow" [class.exp]="isExpanded(uid(svc))">▸</span>
+                        <button class="btn-ghost-sm" type="button" [attr.data-testid]="'interface-edit-' + uid(svc)" (click)="startEdit(svc); $event.stopPropagation()">编辑</button>
+                        <button class="btn-ghost-sm danger" type="button" (click)="deleteService(svc); $event.stopPropagation()">删除</button>
+                      </div>
+                    }
+                    @if (!isEditing(svc) && isExpanded(uid(svc))) {
+                      <div class="svc-detail">
+                        @if (svc.desc) { <p class="svc-desc">{{ svc.desc }}</p> }
+                        @if (orderedSteps(svc).length) {
+                          <div class="svc-steps">
+                            <span class="svc-section-label">编排步骤</span>
+                            @for (step of orderedSteps(svc); track step.uid; let i = $index) {
+                              <span class="svc-step-tag">{{ i + 1 }}. {{ stepTaskDef(step)?.name || step.taskDefinitionUid }}</span>
+                            }
+                          </div>
+                        }
+                        @if ((svc.nodeRefs||[]).length) {
+                          <div class="svc-refs"><span class="svc-section-label">被引用节点</span>@for(ref of svc.nodeRefs||[]; track ref){<span class="tag tag-node">{{ nodeLabel(ref) }}</span>}</div>
+                        }
+                      </div>
                     }
                   </div>
                 }
-                @if ((svc.nodeRefs||[]).length) {
-                  <div class="svc-refs"><span class="svc-section-label">被引用节点</span>@for(ref of svc.nodeRefs||[]; track ref){<span class="tag tag-node">{{ nodeLabel(ref) }}</span>}</div>
-                }
               </div>
             }
-          </div>
+          </section>
         }
       </div>
     </div>
   }
 
-  <!-- Tab 2: 应用编排 -->
   @if (activeTab() === 'orchestration') {
     <div class="comp-tab-body orch-body">
-      <div class="comp-toolbar">
-        <span>应用服务</span>
-        <select [ngModel]="orchSvcId()" (ngModelChange)="orchSvcId.set($event)">
+      <div class="comp-toolbar orch-toolbar">
+        <span>接口</span>
+        <select data-testid="orchestration-service-select" [ngModel]="orchSvcId()" (ngModelChange)="selectOrchestrationService($event)">
           <option value="">请选择</option>
-          @for (svc of services(); track svc.uid) { <option [value]="svc.uid">{{ svc.name }}</option> }
+          @for (svc of services(); track uid(svc)) { <option [value]="uid(svc)">{{ svc.name }}</option> }
         </select>
       </div>
       @if (orchSvcId(); as sid) {
-        @if (services().find(s => s.uid === sid); as svc) {
+        @if (services().find(s => uid(s) === sid); as svc) {
           <div class="orch-layout">
-            <!-- 左侧：编排步骤 -->
-            <div class="orch-steps-panel">
+            <div class="orch-steps-panel" data-testid="orchestration-step-list">
               <div class="orch-panel-head"><strong>编排步骤</strong><span>{{ orderedSteps(svc).length }} 个</span></div>
-              @for (step of orderedSteps(svc); track step.taskDefUid; let i = $index) {
-                <div class="orch-step-card">
-                  <div class="orch-step-head">
-                    <span class="orch-step-idx">{{ i + 1 }}</span>
-                    <div class="orch-step-info">
-                      <strong>{{ stepTaskDef(step)?.name || step.taskDefUid }}</strong>
-                      <code>{{ stepTaskDef(step)?.target || '-' }}</code>
-                    </div>
-                    <div class="orch-step-actions">
-                      <button [disabled]="i===0" (click)="moveStep(svc, i, -1)">↑</button>
-                      <button [disabled]="i===orderedSteps(svc).length-1" (click)="moveStep(svc, i, 1)">↓</button>
-                      <button class="danger" (click)="removeStep(svc, i)">×</button>
-                    </div>
-                  </div>
-                  @if (stepTaskDef(step); as td) {
-                    <div class="orch-step-params">
-                      @if ((td.parameters?.inputs||[]).length) { <div class="orch-param-group"><span class="orch-param-label">输入</span>@for(p of td.parameters!.inputs!; track p.name){<span class="orch-param" [class.required]="p.required">{{ p.name }}</span>}</div> }
-                      @if ((td.parameters?.outputs||[]).length) { <div class="orch-param-group"><span class="orch-param-label">输出</span>@for(p of td.parameters!.outputs!; track p.name){<span class="orch-param" [class.required]="p.required">{{ p.name }}</span>}</div> }
-                    </div>
-                  }
+              @for (step of orderedSteps(svc); track step.uid; let i = $index) {
+                <div class="orch-step-card orch-step-card--select" role="button" tabindex="0" [class.active]="selectedStep(svc)?.uid === step.uid" [attr.data-testid]="'orchestration-step-select-' + step.uid" (click)="selectStep(step)">
+                  <span class="orch-step-idx">{{ i + 1 }}</span>
+                  <span class="orch-step-title">{{ stepTaskDef(step)?.name || step.taskDefinitionUid }}</span>
+                  <span class="muted">{{ stepAlias(step, i) }}</span>
+                  <span class="orch-step-actions">
+                    <button [disabled]="i===0" type="button" (click)="moveStep(svc, i, -1); $event.stopPropagation()">↑</button>
+                    <button [disabled]="i===orderedSteps(svc).length-1" type="button" (click)="moveStep(svc, i, 1); $event.stopPropagation()">↓</button>
+                    <button class="danger" type="button" (click)="removeStep(svc, i); $event.stopPropagation()">×</button>
+                  </span>
                 </div>
               }
-              <select class="tag-select" (change)="addStep(svc, $any($event.target).value); $any($event.target).selectedIndex=0">
+              <select class="tag-select" data-testid="orchestration-add-step" (change)="addStep(svc, $any($event.target).value); $any($event.target).selectedIndex=0">
                 <option value="">+ 添加任务定义</option>
                 @for (td of taskDefs(); track uid(td)) { <option [value]="uid(td)">{{ td.name }}</option> }
               </select>
             </div>
 
-            <!-- 右侧：参数映射 -->
-            <div class="orch-mappings-panel">
-              <div class="orch-panel-head"><strong>参数映射</strong><span>{{ mappings(svc).length }} 条</span></div>
-              @for (m of mappings(svc); track $index; let i = $index) {
-                <div class="orch-mapping-row">
-                  <select [(ngModel)]="m.fromTaskDefUid" (ngModelChange)="m.fromParamName=''; touch()">
-                    <option value="">源步骤</option>
-                    @for (step of svc.steps||[]; track step.taskDefUid) { <option [value]="step.taskDefUid">{{ stepTaskDef(step)?.name || step.taskDefUid }}</option> }
-                  </select>
-                  <span class="orch-mapping-arrow">↓</span>
-                  <select [(ngModel)]="m.fromParamName" (ngModelChange)="touch()">
-                    <option value="">输出参数</option>
-                    @for (td of taskDefs(); track uid(td)) {
-                      @if (uid(td)===m.fromTaskDefUid) {
-                        @for(p of td.parameters?.outputs||[]; track p.name){ <option [value]="p.name">{{ p.name }}</option> }
-                      }
-                    }
-                  </select>
-                  <span class="orch-mapping-arrow">→</span>
-                  <select [(ngModel)]="m.toTaskDefUid" (ngModelChange)="m.toParamName=''; touch()">
-                    <option value="">目标步骤</option>
-                    @for (step of svc.steps||[]; track step.taskDefUid) { <option [value]="step.taskDefUid">{{ stepTaskDef(step)?.name || step.taskDefUid }}</option> }
-                  </select>
-                  <span class="orch-mapping-arrow">↓</span>
-                  <select [(ngModel)]="m.toParamName" (ngModelChange)="touch()">
-                    <option value="">输入参数</option>
-                    @for (td of taskDefs(); track uid(td)) {
-                      @if (uid(td)===m.toTaskDefUid) {
-                        @for(p of td.parameters?.inputs||[]; track p.name){ <option [value]="p.name">{{ p.name }}</option> }
-                      }
-                    }
-                  </select>
-                  <input [(ngModel)]="m.note" placeholder="备注" class="orch-mapping-note" (ngModelChange)="touch()" />
-                  <button class="btn-ghost-sm danger" (click)="removeMapping(svc, i)">×</button>
+            <div class="orch-mappings-panel" data-testid="orchestration-step-detail">
+              @if (selectedStep(svc); as step) {
+                <div class="orch-panel-head">
+                  <strong>{{ stepTaskDef(step)?.name || step.taskDefinitionUid }}</strong>
+                  <span>{{ stepAlias(step, orderedSteps(svc).indexOf(step)) }}</span>
                 </div>
+                @if (stepTaskDef(step); as td) {
+                  <div class="orch-step-params">
+                    @if ((td.parameters?.inputs||[]).length) { <div class="orch-param-group"><span class="orch-param-label">输入</span>@for(p of td.parameters!.inputs!; track p.name){<span class="orch-param" [class.required]="p.required">{{ p.name }}</span>}</div> }
+                    @if ((td.parameters?.outputs||[]).length) { <div class="orch-param-group"><span class="orch-param-label">输出</span>@for(p of td.parameters!.outputs!; track p.name){<span class="orch-param" [class.required]="p.required">{{ p.name }}</span>}</div> }
+                  </div>
+                }
+
+                <div class="orch-variable-pool" data-testid="orchestration-variable-pool">
+                  <span class="orch-param-label">参数变量</span>
+                  @for (option of variablePoolOptions(svc, step); track option.value) {
+                    <code>{{ option.value }}</code>
+                  }
+                </div>
+
+                <div class="orch-step-mappings">
+                  <div class="orch-step-mapping-head">
+                    <span>输入映射</span>
+                    <button class="btn-ghost-sm" [attr.data-testid]="'mapping-add-input-' + step.uid" type="button" (click)="addInputMapping(step)">+ 添加</button>
+                  </div>
+                  @for (m of step.inputMapping; track $index; let mi = $index) {
+                    <div class="orch-mapping-row">
+                      <select [attr.data-testid]="'mapping-input-source-' + step.uid + '-' + mi" [(ngModel)]="m.source" (ngModelChange)="touch()" (input)="m.source=$any($event.target).value; touch()">
+                        <option value="">选择来源变量</option>
+                        @for (option of inputSourceOptions(svc, step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                      </select>
+                      <span class="orch-mapping-arrow">→</span>
+                      <select [attr.data-testid]="'mapping-input-target-' + step.uid + '-' + mi" [(ngModel)]="m.target" (ngModelChange)="touch()" (input)="m.target=$any($event.target).value; touch()">
+                        <option value="">选择任务输入</option>
+                        @for (option of inputTargetOptions(step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                      </select>
+                      <button class="btn-ghost-sm danger" type="button" (click)="removeInputMapping(step, mi)">×</button>
+                    </div>
+                  }
+
+                  <div class="orch-step-mapping-head">
+                    <span>输出绑定</span>
+                    <button class="btn-ghost-sm" [attr.data-testid]="'mapping-add-output-' + step.uid" type="button" (click)="addOutputMapping(step)">+ 添加</button>
+                  </div>
+                  @for (m of step.outputMapping; track $index; let mi = $index) {
+                    <div class="orch-mapping-row">
+                      <select [attr.data-testid]="'mapping-output-source-' + step.uid + '-' + mi" [(ngModel)]="m.source" (ngModelChange)="touch()" (input)="m.source=$any($event.target).value; touch()">
+                        <option value="">选择任务输出</option>
+                        @for (option of outputSourceOptions(step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                      </select>
+                      <span class="orch-mapping-arrow">→</span>
+                      <select [attr.data-testid]="'mapping-output-target-' + step.uid + '-' + mi" [(ngModel)]="m.target" (ngModelChange)="touch()" (input)="m.target=$any($event.target).value; touch()">
+                        <option value="">选择变量名</option>
+                        @for (option of outputTargetOptions(svc, step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                      </select>
+                      <button class="btn-ghost-sm danger" type="button" (click)="removeOutputMapping(step, mi)">×</button>
+                    </div>
+                  }
+                </div>
+
+                <div class="orch-return-section">
+                  <div class="orch-step-mapping-head">
+                    <span>返回映射</span>
+                    <button class="btn-ghost-sm" data-testid="mapping-add-return" type="button" (click)="addReturnMapping(svc)">+ 添加</button>
+                  </div>
+                  @for (m of returnMappings(svc); track $index; let i = $index) {
+                    <div class="orch-mapping-row">
+                      <select [attr.data-testid]="'mapping-return-source-' + i" [(ngModel)]="m.source" (ngModelChange)="touch()" (input)="m.source=$any($event.target).value; touch()">
+                        <option value="">选择返回来源</option>
+                        @for (option of returnSourceOptions(svc); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                      </select>
+                      <span class="orch-mapping-arrow">→</span>
+                      <select [attr.data-testid]="'mapping-return-target-' + i" [(ngModel)]="m.target" (ngModelChange)="touch()" (input)="m.target=$any($event.target).value; touch()">
+                        <option value="">选择返回字段</option>
+                        @for (option of returnTargetOptions(svc); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                      </select>
+                      <button class="btn-ghost-sm danger" type="button" (click)="removeReturnMapping(svc, i)">×</button>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="node-empty">请选择或新增一个编排步骤。</p>
               }
-              <button class="btn btn-outline btn-sm" (click)="addMapping(svc)">+ 添加映射</button>
             </div>
           </div>
         }
       }
     </div>
   }
-  <!-- JSON 导入对话框 -->
+
   @if (importJsonVisible()) {
     <div class="comp-overlay" (click)="importJsonVisible.set(false)">
       <div class="comp-dialog" (click)="$event.stopPropagation()">
-        <h3>从 JSON 导入{{ importJsonTarget() === 'inputs' ? '输入' : '输出' }}参数</h3>
-        <textarea [ngModel]="importJsonText()" (ngModelChange)="importJsonText.set($event)" rows="8" placeholder='粘贴 JSON，如 {"orderId":"ORD-001","warehouse":"WH-A"}' class="svc-json-import"></textarea>
+        <h3>从 JSON 导入{{ importJsonTarget() === 'requestParams' ? '输入' : '输出' }}参数</h3>
+        <textarea [ngModel]="importJsonText()" (ngModelChange)="importJsonText.set($event)" rows="8" placeholder='粘贴 JSON，如 {"reservation":{"warehouseUid":"WH-A","items":[{"productCode":"CU"}]}}' class="svc-json-import"></textarea>
         <div class="comp-dialog-actions">
-          <button class="btn btn-outline btn-sm" (click)="importJsonVisible.set(false)">取消</button>
-          <button class="btn btn-primary btn-sm" (click)="doImportJson(services().find(s => isEditing(s))!)">导入</button>
+          <button class="btn btn-outline btn-sm" type="button" (click)="importJsonVisible.set(false)">取消</button>
+          <button class="btn btn-primary btn-sm" type="button" (click)="doImportJson(services().find(s => isEditing(s))!)">导入</button>
         </div>
       </div>
     </div>

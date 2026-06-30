@@ -15,7 +15,10 @@ export interface BlmDocument {
   processes: Process[];
   entities: Entity[];
   businessComponents: BusinessComponent[];
+  businessConstructs: BusinessConstruct[];
   taskDefinitions: TaskDefinition[];
+  serviceGroups: ServiceGroup[];
+  services: ApplicationService[];
   terms: KnowledgeTerm[];
   rules: BusinessRule[];
 }
@@ -76,6 +79,7 @@ export interface ProcessNode {
   role?: string;
   entity_ops?: EntityOperation[];
   forms?: ProcessForm[];
+  serviceUids?: string[];
 }
 
 export interface EntityOperation {
@@ -119,24 +123,109 @@ export interface BusinessComponent {
   uid: string;
   id?: string;
   name: string;
-  kind: 'core' | 'common';
+  kind: 'core' | 'common' | 'generic';
   entityUids: string[];
   taskDefinitionUids: string[];
   stageUids?: string[];
+}
+
+export interface BusinessConstruct {
+  uid: string;
+  id?: string;
+  name: string;
+  businessComponentUid?: string;
+  businessComponentId?: string;
+  componentUid?: string;
+  componentId?: string;
 }
 
 export interface TaskDefinition {
   uid: string;
   id?: string;
   name: string;
+  type?: TaskIntent;
   target?: string;
-  parameters?: TaskParameter[];
+  address?: string;
+  note?: string;
+  constructUid?: string;
+  businessComponentUid?: string;
+  parameters?: TaskParameterBag;
+  technicalHandover?: TechnicalHandover;
 }
 
 export interface TaskParameter {
   name: string;
   type: string;
   required?: boolean;
+  note?: string;
+  desc?: string;
+}
+
+export interface TaskParameterBag {
+  inputs: TaskParameter[];
+  outputs: TaskParameter[];
+}
+
+export type TaskIntent = 'Query' | 'Command' | 'Validate' | 'Calculate' | 'Notify' | 'StateChange' | 'Event' | 'Service' | 'Process';
+
+export interface TechnicalHandover {
+  runtimeKind?: string;
+  target?: string;
+  note?: string;
+}
+
+export interface ServiceGroup {
+  uid: string;
+  id?: string;
+  name: string;
+  desc?: string;
+}
+
+export interface ApplicationService {
+  uid: string;
+  id?: string;
+  name: string;
+  serviceGroupUid?: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | string;
+  path?: string;
+  desc?: string;
+  taskDefinitionUids?: string[];
+  nodeRefs?: string[];
+  requestParams?: ServiceParameter[];
+  responseParams?: ServiceParameter[];
+  orchestration?: ServiceOrchestration;
+}
+
+export interface ServiceParameter extends TaskParameter {
+  children?: ServiceParameter[];
+}
+
+export interface ServiceOrchestration {
+  variables: OrchestrationVariable[];
+  steps: OrchestrationStep[];
+  returnMapping: OrchestrationMapping[];
+}
+
+export interface OrchestrationVariable {
+  name: string;
+  source: string;
+  type?: string;
+  note?: string;
+}
+
+export interface OrchestrationStep {
+  uid: string;
+  name: string;
+  stepAlias: string;
+  taskDefinitionUid: string;
+  inputMapping: OrchestrationMapping[];
+  outputMapping: OrchestrationMapping[];
+}
+
+export interface OrchestrationMapping {
+  source: string;
+  target: string;
+  note?: string;
 }
 
 export interface KnowledgeTerm {

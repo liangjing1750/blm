@@ -1,11 +1,20 @@
 import {
+  ApplicationService,
   BlmDocument,
   BusinessComponent,
+  BusinessConstruct,
+  OrchestrationStep,
   Process,
   Role,
   RoleUsage,
+  ServiceGroup,
+  ServiceOrchestration,
+  ServiceParameter,
   Stage,
   StageFlowRef,
+  TaskDefinition,
+  TaskParameter,
+  TaskParameterBag,
 } from './document.model';
 
 const EMPTY_ARRAY_FIELDS = [
@@ -15,7 +24,10 @@ const EMPTY_ARRAY_FIELDS = [
   'processes',
   'entities',
   'businessComponents',
+  'businessConstructs',
   'taskDefinitions',
+  'serviceGroups',
+  'services',
   'terms',
   'rules',
 ] as const;
@@ -79,11 +91,10 @@ export function normalizeDocument(raw: Partial<BlmDocument> | null | undefined):
     fields: Array.isArray(entity.fields) ? entity.fields : [],
   }));
   document.businessComponents = document.businessComponents.map((component, index) => normalizeComponent(component, index));
-  document.taskDefinitions = document.taskDefinitions.map((taskDefinition, index) => ({
-    ...taskDefinition,
-    uid: identityOf(taskDefinition) || `task-definition-${index + 1}`,
-    name: String(taskDefinition.name || `任务定义${index + 1}`).trim(),
-  }));
+  document.businessConstructs = document.businessConstructs.map((construct, index) => normalizeConstruct(construct, index));
+  document.taskDefinitions = document.taskDefinitions.map((taskDefinition, index) => normalizeTaskDefinition(taskDefinition, index));
+  document.serviceGroups = document.serviceGroups.map((group, index) => normalizeServiceGroup(group, index));
+  document.services = document.services.map((service, index) => normalizeService(document, service, index));
   document.terms = document.terms.map((term, index) => ({
     ...term,
     uid: String(term.uid || '').trim() || `term-${index + 1}`,
@@ -98,6 +109,15 @@ export function normalizeDocument(raw: Partial<BlmDocument> | null | undefined):
   return document;
 }
 
+function normalizeServiceGroup(group: ServiceGroup, index: number): ServiceGroup {
+  return {
+    ...group,
+    uid: identityOf(group) || `service-group-${index + 1}`,
+    name: String(group.name || `服务${index + 1}`).trim(),
+    desc: String(group.desc || '').trim(),
+  };
+}
+
 function normalizeComponent(component: BusinessComponent, index: number): BusinessComponent {
   const legacyEntityUids = (component as unknown as { entityIds?: string[]; entity_ids?: string[] }).entityIds
     || (component as unknown as { entity_ids?: string[] }).entity_ids
@@ -109,11 +129,152 @@ function normalizeComponent(component: BusinessComponent, index: number): Busine
     ...component,
     uid: identityOf(component) || `component-${index + 1}`,
     name: String(component.name || `业务组件${index + 1}`).trim(),
-    kind: component.kind === 'common' ? 'common' : 'core',
+    kind: component.kind === 'common' || component.kind === 'generic' ? component.kind : 'core',
     entityUids: uniqueStrings(component.entityUids || legacyEntityUids),
     taskDefinitionUids: uniqueStrings(component.taskDefinitionUids || legacyTaskUids),
     stageUids: uniqueStrings(component.stageUids || []),
   };
+}
+
+function normalizeConstruct(construct: BusinessConstruct, index: number): BusinessConstruct {
+  return {
+    ...construct,
+    uid: identityOf(construct) || `construct-${index + 1}`,
+    name: String(construct.name || `业务构件${index + 1}`).trim(),
+    businessComponentUid: String(construct.businessComponentUid || '').trim(),
+  };
+}
+
+function normalizeTaskDefinition(taskDefinition: TaskDefinition, index: number): TaskDefinition {
+  return {
+    ...taskDefinition,
+    uid: identityOf(taskDefinition) || `task-definition-${index + 1}`,
+    name: String(taskDefinition.name || `任务定义${index + 1}`).trim(),
+    parameters: normalizeTaskParameters(taskDefinition.parameters),
+  };
+}
+
+function normalizeTaskParameters(parameters: TaskDefinition['parameters'] | TaskParameter[] | null | undefined): TaskParameterBag {
+  if (Array.isArray(parameters)) {
+    return { inputs: normalizeParameters(parameters), outputs: [] };
+  }
+  return {
+    inputs: normalizeParameters(parameters?.inputs || []),
+    outputs: normalizeParameters(parameters?.outputs || []),
+  };
+}
+
+function normalizeParameters(parameters: TaskParameter[] | null | undefined): TaskParameter[] {
+  return (parameters || [])
+    .map((parameter) => ({
+      ...parameter,
+      name: String(parameter.name || '').trim(),
+      type: String(parameter.type || 'String').trim(),
+      required: Boolean(parameter.required),
+      note: parameter.note ?? parameter.desc,
+    }))
+    .filter((parameter) => parameter.name);
+}
+
+function normalizeServiceParameters(parameters: ServiceParameter[] | null | undefined): ServiceParameter[] {
+  return (parameters || [])
+    .map((parameter) => {
+      const children = normalizeServiceParameters(parameter.children || []);
+      return {
+        ...parameter,
+        name: String(parameter.name || '').trim(),
+        type: String(parameter.type || 'String').trim(),
+        required: Boolean(parameter.required),
+        note: parameter.note ?? parameter.desc ?? '',
+        ...(children.length ? { children } : {}),
+      };
+    })
+    .filter((parameter) => parameter.name);
+}
+
+function normalizeService(document: BlmDocument, service: ApplicationService, index: number): ApplicationService {
+  const uid = identityOf(service) || `service-${index + 1}`;
+  const legacyInputs = (service as unknown as { inputs?: ServiceParameter[] }).inputs || [];
+  const legacyOutputs = (service as unknown as { outputs?: ServiceParameter[] }).outputs || [];
+  const taskDefinitionUids = uniqueStrings(service.taskDefinitionUids || legacyStepTaskUids(service));
+  const orchestration = normalizeServiceOrchestration(document, uid, service);
+  const normalizedTaskDefinitionUids = taskDefinitionUids.length
+    ? taskDefinitionUids
+    : uniqueStrings(orchestration.steps.map((step) => step.taskDefinitionUid));
+  const normalized: ApplicationService = {
+    ...service,
+    uid,
+    name: String(service.name || `应用服务${index + 1}`).trim(),
+    method: String(service.method || 'POST').trim() || 'POST',
+    serviceGroupUid: String(service.serviceGroupUid || '').trim(),
+    path: String(service.path || '').trim(),
+    desc: String(service.desc || '').trim(),
+    taskDefinitionUids: normalizedTaskDefinitionUids,
+    nodeRefs: uniqueStrings(service.nodeRefs || []),
+    requestParams: normalizeServiceParameters(service.requestParams || legacyInputs),
+    responseParams: normalizeServiceParameters(service.responseParams || legacyOutputs),
+    orchestration,
+  };
+  return normalized;
+}
+
+function normalizeServiceOrchestration(
+  document: BlmDocument,
+  serviceUid: string,
+  service: ApplicationService,
+): ServiceOrchestration {
+  const existing = service.orchestration;
+  const legacySteps = legacyStepTaskUids(service).map((taskDefinitionUid, index) => legacyTaskStep(document, serviceUid, taskDefinitionUid, index));
+  const steps = existing?.steps?.length
+    ? existing.steps.map((step, index) => normalizeOrchestrationStep(document, serviceUid, step, index))
+    : legacySteps;
+  return {
+    variables: existing?.variables || [],
+    steps,
+    returnMapping: existing?.returnMapping || [],
+  };
+}
+
+function normalizeOrchestrationStep(
+  document: BlmDocument,
+  serviceUid: string,
+  step: OrchestrationStep,
+  index: number,
+): OrchestrationStep {
+  const taskDefinitionUid = String(step.taskDefinitionUid || '').trim();
+  const task = document.taskDefinitions.find((candidate) => candidate.uid === taskDefinitionUid || candidate.id === taskDefinitionUid);
+  return {
+    uid: String(step.uid || '').trim() || `step-${serviceUid}-${index + 1}-${taskDefinitionUid || 'task'}`,
+    name: String(step.name || task?.name || `步骤${index + 1}`).trim(),
+    stepAlias: String(step.stepAlias || `step${index + 1}`).trim(),
+    taskDefinitionUid,
+    inputMapping: step.inputMapping || [],
+    outputMapping: step.outputMapping || [],
+  };
+}
+
+function legacyStepTaskUids(service: ApplicationService): string[] {
+  const legacySteps = (service as unknown as { steps?: Array<{ taskDefUid?: string; taskDefinitionUid?: string }> }).steps || [];
+  return uniqueStrings([
+    ...(service.taskDefinitionUids || []),
+    ...legacySteps.map((step) => step.taskDefinitionUid || step.taskDefUid || ''),
+  ]);
+}
+
+function legacyTaskStep(document: BlmDocument, serviceUid: string, taskDefinitionUid: string, index: number): OrchestrationStep {
+  const task = document.taskDefinitions.find((candidate) => candidate.uid === taskDefinitionUid || candidate.id === taskDefinitionUid);
+  return {
+    uid: `step-${serviceUid}-${index + 1}-${taskDefinitionUid}`,
+    name: task?.name || `步骤${index + 1}`,
+    stepAlias: `step${index + 1}`,
+    taskDefinitionUid,
+    inputMapping: [],
+    outputMapping: [],
+  };
+}
+
+export function getServiceOrchestrationSteps(document: BlmDocument, service: ApplicationService): OrchestrationStep[] {
+  return normalizeServiceOrchestration(document, service.uid, service).steps;
 }
 
 export function normalizeStageFlowRefs(document: BlmDocument): StageFlowRef[] {

@@ -1,4 +1,5 @@
 import {
+  getServiceOrchestrationSteps,
   findProcessByIdentity,
   getComponentSupportedStages,
   getRoleUsage,
@@ -93,5 +94,153 @@ describe('document model algorithms', () => {
     } satisfies Partial<BlmDocument>);
 
     expect(getComponentSupportedStages(document, document.businessComponents[0]).map((stage) => stage.name)).toEqual(['入库']);
+  });
+
+  it('normalizes application services with empty orchestration state', () => {
+    const document = normalizeDocument({
+      meta: { domain: '测试模型' },
+      services: [{ uid: 'service-submit', name: '提交入库预约' }],
+    });
+
+    expect(document.services).toEqual([
+      {
+        uid: 'service-submit',
+        name: '提交入库预约',
+        method: 'POST',
+        serviceGroupUid: '',
+        path: '',
+        desc: '',
+        taskDefinitionUids: [],
+        nodeRefs: [],
+        requestParams: [],
+        responseParams: [],
+        orchestration: { variables: [], steps: [], returnMapping: [] },
+      },
+    ]);
+    expect(getServiceOrchestrationSteps(document, document.services[0])).toEqual([]);
+  });
+
+  it('normalizes service groups and keeps nested interface parameters', () => {
+    const document = normalizeDocument({
+      meta: { domain: '测试模型' },
+      serviceGroups: [{ uid: 'group-inbound', name: '入库预约服务', desc: '入库预约相关接口' }],
+      services: [
+        {
+          uid: 'interface-submit',
+          name: '提交入库预约',
+          serviceGroupUid: 'group-inbound',
+          requestParams: [
+            {
+              name: 'reservation',
+              type: 'Object',
+              required: true,
+              note: '预约信息',
+              children: [
+                { name: 'warehouseUid', type: 'String', required: true, note: '仓库 UID' },
+                {
+                  name: 'items',
+                  type: 'Array',
+                  required: true,
+                  note: '预约明细',
+                  children: [{ name: 'productCode', type: 'String', required: true, note: '品种代码' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as Partial<BlmDocument>);
+
+    expect((document as any).serviceGroups).toEqual([
+      { uid: 'group-inbound', name: '入库预约服务', desc: '入库预约相关接口' },
+    ]);
+    expect((document.services[0] as any).serviceGroupUid).toBe('group-inbound');
+    expect(document.services[0].requestParams).toEqual([
+      {
+        name: 'reservation',
+        type: 'Object',
+        required: true,
+        note: '预约信息',
+        children: [
+          { name: 'warehouseUid', type: 'String', required: true, note: '仓库 UID' },
+          {
+            name: 'items',
+            type: 'Array',
+            required: true,
+            note: '预约明细',
+            children: [{ name: 'productCode', type: 'String', required: true, note: '品种代码' }],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('converts legacy service taskDefinitionUids into compatible orchestration steps', () => {
+    const document = normalizeDocument({
+      meta: { domain: '测试模型' },
+      taskDefinitions: [
+        { uid: 'task-check-warehouse', name: '校验仓库状态' },
+        { uid: 'task-save-reservation', name: '保存入库预约' },
+      ],
+      services: [
+        {
+          uid: 'service-submit',
+          name: '提交入库预约',
+          taskDefinitionUids: ['task-check-warehouse', 'task-save-reservation'],
+        },
+      ],
+    });
+
+    expect(document.services[0].taskDefinitionUids).toEqual(['task-check-warehouse', 'task-save-reservation']);
+    expect(getServiceOrchestrationSteps(document, document.services[0]).map((step) => ({
+      uid: step.uid,
+      stepAlias: step.stepAlias,
+      taskDefinitionUid: step.taskDefinitionUid,
+      name: step.name,
+    }))).toEqual([
+      {
+        uid: 'step-service-submit-1-task-check-warehouse',
+        stepAlias: 'step1',
+        taskDefinitionUid: 'task-check-warehouse',
+        name: '校验仓库状态',
+      },
+      {
+        uid: 'step-service-submit-2-task-save-reservation',
+        stepAlias: 'step2',
+        taskDefinitionUid: 'task-save-reservation',
+        name: '保存入库预约',
+      },
+    ]);
+  });
+
+  it('keeps structured task parameters and technical handover metadata', () => {
+    const document = normalizeDocument({
+      meta: { domain: '测试模型' },
+      taskDefinitions: [
+        {
+          uid: 'task-save-reservation',
+          name: '保存入库预约',
+          parameters: {
+            inputs: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
+            outputs: [{ name: 'reservationId', type: 'String', note: '预约标识' }],
+          },
+          technicalHandover: {
+            runtimeKind: 'DomainServiceJar',
+            target: 'InboundReservationService.submit',
+            note: '由 FSM 内嵌领域服务承接。',
+          },
+        },
+      ],
+    });
+
+    expect(document.taskDefinitions[0].parameters).toEqual({
+      inputs: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
+      outputs: [{ name: 'reservationId', type: 'String', required: false, note: '预约标识' }],
+    });
+    expect(document.taskDefinitions[0].technicalHandover).toEqual({
+      runtimeKind: 'DomainServiceJar',
+      target: 'InboundReservationService.submit',
+      note: '由 FSM 内嵌领域服务承接。',
+    });
   });
 });
