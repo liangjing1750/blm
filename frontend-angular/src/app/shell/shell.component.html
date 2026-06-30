@@ -414,16 +414,34 @@
         <p class="placeholder-copy">以当前打开文档作为左侧版本，选择另一个工作区文档作为右侧版本，生成业务模型差异摘要。</p>
         <label class="property-field">
           <span>右侧文档</span>
-          <select class="modal-search" data-testid="compare-right-select" [(ngModel)]="compareRightName" (ngModelChange)="compareResult.set(null)">
+          <select class="modal-search" data-testid="compare-right-select" [(ngModel)]="compareRightName" (ngModelChange)="onCompareRightNameChanged()">
             <option value="">请选择文档</option>
             @for (file of workspaceFiles(); track file.name) {
               <option [value]="file.name" [disabled]="file.name === runtime.currentFile">{{ file.title || file.name }}</option>
             }
           </select>
         </label>
+        <label class="property-field">
+          <span>右侧来源</span>
+          <select class="modal-search" data-testid="compare-right-source-select" [(ngModel)]="compareRightSource" (ngModelChange)="compareResult.set(null)">
+            <option value="current">当前版本</option>
+            <option value="version">归档版本</option>
+          </select>
+        </label>
+        @if (compareRightSource === 'version') {
+          <label class="property-field">
+            <span>归档版本</span>
+            <select class="modal-search" data-testid="compare-right-version-select" [(ngModel)]="compareRightVersionId" (ngModelChange)="compareResult.set(null)">
+              <option value="">请选择归档版本</option>
+              @for (version of compareRightVersions(); track version.id || version.version_id) {
+                <option [value]="version.id || version.version_id">{{ version.label || version.message || version.id || version.version_id }}</option>
+              }
+            </select>
+          </label>
+        }
         <div class="modal-actions">
           <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
-          <button class="btn btn-primary" type="button" data-testid="compare-run-button" [disabled]="busy() || !compareRightName" (click)="runCompare()">开始比对</button>
+          <button class="btn btn-primary" type="button" data-testid="compare-run-button" [disabled]="busy() || !compareRightName || (compareRightSource === 'version' && !compareRightVersionId)" (click)="runCompare()">开始比对</button>
         </div>
         @if (compareResult(); as result) {
           <section class="compare-result" data-testid="compare-result">

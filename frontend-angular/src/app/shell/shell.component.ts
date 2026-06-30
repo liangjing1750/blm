@@ -31,6 +31,7 @@ import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-w
 
 type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
+type CompareSource = 'current' | 'version';
 
 interface WaitDialogState {
   title: string;
@@ -133,6 +134,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly submitRows = signal<any[]>([]);
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly compareResult = signal<CompareResult | null>(null);
+  protected readonly compareRightVersions = signal<any[]>([]);
   protected readonly mergeAnalysis = signal<MergeAnalysis | null>(null);
   protected readonly mergeResolutions = signal<Record<string, string>>({});
   protected readonly mergeCustomValues = signal<Record<string, string>>({});
@@ -145,6 +147,8 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected createDocumentName = '';
   protected copyDocumentName = '';
   protected compareRightName = '';
+  protected compareRightSource: CompareSource = 'current';
+  protected compareRightVersionId = '';
   protected mergeRightName = '';
   protected archiveVersionMessage = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
@@ -719,23 +723,48 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.activeDropdown.set('');
     await this.refreshWorkspaceFiles();
     this.compareRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
+    this.compareRightSource = 'current';
+    this.compareRightVersionId = '';
+    await this.refreshCompareRightVersions();
     this.compareResult.set(null);
     this.modal.set('compare');
   }
 
+  protected async onCompareRightNameChanged(): Promise<void> {
+    this.compareResult.set(null);
+    this.compareRightVersionId = '';
+    await this.refreshCompareRightVersions();
+  }
+
   protected async runCompare(): Promise<void> {
     if (!this.compareRightName) return;
+    if (this.compareRightSource === 'version' && !this.compareRightVersionId) return;
     this.waitDialog.set({
       title: '正在比对文档...',
       description: '正在加载右侧文档并生成业务模型差异摘要。',
     });
     try {
       await this.runBusy(async () => {
-        const loaded = await this.api.load(this.compareRightName);
+        const loaded = this.compareRightSource === 'version'
+          ? await this.api.loadVersion(this.compareRightName, this.compareRightVersionId)
+          : await this.api.load(this.compareRightName);
         this.compareResult.set(this.buildCompareResult(this.runtime.doc, loaded?.document || loaded));
       });
     } finally {
       this.waitDialog.set(null);
+    }
+  }
+
+  private async refreshCompareRightVersions(): Promise<void> {
+    if (!this.compareRightName) {
+      this.compareRightVersions.set([]);
+      return;
+    }
+    const versions = await this.api.versions(this.compareRightName).catch(() => []);
+    this.compareRightVersions.set(versions || []);
+    if (!this.compareRightVersionId && this.compareRightSource === 'version') {
+      const first = (versions || [])[0];
+      this.compareRightVersionId = String(first?.id || first?.version_id || '');
     }
   }
 
