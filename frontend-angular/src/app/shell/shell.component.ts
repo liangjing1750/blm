@@ -31,7 +31,7 @@ import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-w
 
 type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
-type CompareSource = 'current' | 'version';
+type CompareSource = 'current' | 'version' | 'history';
 
 interface WaitDialogState {
   title: string;
@@ -736,9 +736,15 @@ export class ShellComponent implements OnInit, OnDestroy {
     await this.refreshCompareRightVersions();
   }
 
+  protected async onCompareRightSourceChanged(): Promise<void> {
+    this.compareResult.set(null);
+    this.compareRightVersionId = '';
+    await this.refreshCompareRightVersions();
+  }
+
   protected async runCompare(): Promise<void> {
     if (!this.compareRightName) return;
-    if (this.compareRightSource === 'version' && !this.compareRightVersionId) return;
+    if (this.compareRightSource !== 'current' && !this.compareRightVersionId) return;
     this.waitDialog.set({
       title: '正在比对文档...',
       description: '正在加载右侧文档并生成业务模型差异摘要。',
@@ -747,7 +753,9 @@ export class ShellComponent implements OnInit, OnDestroy {
       await this.runBusy(async () => {
         const loaded = this.compareRightSource === 'version'
           ? await this.api.loadVersion(this.compareRightName, this.compareRightVersionId)
-          : await this.api.load(this.compareRightName);
+          : this.compareRightSource === 'history'
+            ? await this.api.loadHistory(this.compareRightName, this.compareRightVersionId)
+            : await this.api.load(this.compareRightName);
         this.compareResult.set(this.buildCompareResult(this.runtime.doc, loaded?.document || loaded));
       });
     } finally {
@@ -760,11 +768,13 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.compareRightVersions.set([]);
       return;
     }
-    const versions = await this.api.versions(this.compareRightName).catch(() => []);
+    const versions = this.compareRightSource === 'history'
+      ? await this.api.history(this.compareRightName).catch(() => [])
+      : await this.api.versions(this.compareRightName).catch(() => []);
     this.compareRightVersions.set(versions || []);
-    if (!this.compareRightVersionId && this.compareRightSource === 'version') {
+    if (!this.compareRightVersionId) {
       const first = (versions || [])[0];
-      this.compareRightVersionId = String(first?.id || first?.version_id || '');
+      this.compareRightVersionId = String(first?.id || first?.version_id || first?.snapshot_id || '');
     }
   }
 

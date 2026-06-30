@@ -748,6 +748,85 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('当前入库流程');
   });
 
+  it('should compare the current document with a history snapshot of another workspace document', async () => {
+    let historyLoadPayload: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-old.json', title: '旧版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/agent-old.json')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/history/agent-old.json')) {
+        return new Response(JSON.stringify([
+          { id: 'h-1', label: '历史快照 1', timestamp: '2026-06-24T11:38:19Z' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/history/load')) {
+        historyLoadPayload = JSON.parse(String(init?.body || '{}'));
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent History' },
+            roles: [{ uid: 'role-1', name: '监管员' }],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-1', name: '历史入库流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent New' },
+      roles: [{ uid: 'role-1', name: '监管员' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-1', name: '当前入库流程', nodes: [] }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-source-select"]')!;
+    source.value = 'history';
+    source.dispatchEvent(new Event('change', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const history = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-version-select"]')!;
+    history.value = 'h-1';
+    history.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(historyLoadPayload).toMatchObject({ name: 'agent-old.json', snapshot_id: 'h-1' });
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('历史入库流程');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('当前入库流程');
+  });
+
   it('should run a merge precheck for the current document and another workspace document', async () => {
     let mergePayload: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
