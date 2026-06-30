@@ -7,6 +7,7 @@
     <div class="preview-actions">
       <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-markdown" (click)="exportMarkdown()">导出 Markdown</button>
       <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-json" (click)="exportJson()">导出 JSON</button>
+      <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-docx" [disabled]="!runtime.currentFile || !!exportWait()" (click)="exportDocx()">导出 DOCX</button>
       <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-bundle" [disabled]="!runtime.currentFile" (click)="exportBundle()">导出 ZIP 文档包</button>
     </div>
   </header>
@@ -49,4 +50,10 @@
       </div>
     </article>
   </div>
+
+  <app-wait-dialog
+    *ngIf="exportWait() as wait"
+    [title]="wait.title"
+    [description]="wait.description"
+  ></app-wait-dialog>
 </section>

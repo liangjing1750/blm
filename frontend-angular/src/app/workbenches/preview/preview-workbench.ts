@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api/api.service';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
+import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 
 interface PreviewItem {
   id: string;
@@ -12,7 +13,7 @@ interface PreviewItem {
 @Component({
   selector: 'app-preview-workbench',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, WaitDialogComponent],
   templateUrl: './preview-workbench.html',
   styleUrl: './preview-workbench.scss',
 })
@@ -22,6 +23,7 @@ export class PreviewWorkbench {
   // 边界细节：本组件不保存、不同步、不自行组装附件；DOCX 异步任务和进度等待态留给后续完整导出切片。
   private readonly api = inject(ApiService);
   protected readonly runtime = getAngularRuntimeState();
+  protected readonly exportWait = signal<{ title: string; description: string } | null>(null);
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly summary = computed(() => {
     const doc = this.runtime.doc || {};
@@ -62,6 +64,30 @@ export class PreviewWorkbench {
     this.downloadBlob(blob, this.responseFilename(response) || `${this.baseFileName()}.zip`);
   }
 
+  protected async exportDocx(): Promise<void> {
+    if (!this.runtime.currentFile) return;
+    this.exportWait.set({
+      title: '正在提交 DOCX 导出任务...',
+      description: '系统会冻结当前已保存版本，并在生成完成后自动下载。',
+    });
+    try {
+      const job = await this.api.startDocxExport(this.runtime.currentFile);
+      if (!job?.id) return;
+      const latestJob = await this.waitForDocxJob(job.id, job);
+      if (latestJob?.status !== 'done') return;
+      this.exportWait.set({
+        title: 'DOCX 已生成，正在下载...',
+        description: latestJob.message || '正在把生成结果交给浏览器下载。',
+      });
+      const response = await this.api.downloadExportJob(job.id);
+      if (!response.ok) return;
+      const blob = await response.blob();
+      this.downloadBlob(blob, latestJob.filename || this.responseFilename(response) || `${this.baseFileName()}.docx`);
+    } finally {
+      this.exportWait.set(null);
+    }
+  }
+
   private buildMarkdown(): string {
     const lines = [`# ${this.title()}`, '', '## 概览'];
     this.summary().forEach((item) => lines.push(`- ${item.label}: ${item.value}`));
@@ -94,6 +120,25 @@ export class PreviewWorkbench {
     if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1].replace(/"/g, ''));
     const asciiMatch = disposition.match(/filename="?([^";]+)"?/i);
     return asciiMatch?.[1] || '';
+  }
+
+  private async waitForDocxJob(jobId: string, initialJob: any): Promise<any> {
+    let latestJob = initialJob;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (latestJob?.status === 'done' || latestJob?.status === 'failed') return latestJob;
+      this.exportWait.set({
+        title: '正在生成 DOCX...',
+        description: latestJob?.message || '正在转换图形并嵌入附件，请耐心等待。',
+      });
+      latestJob = await this.api.exportJob(jobId);
+      if (latestJob?.status === 'done' || latestJob?.status === 'failed') return latestJob;
+      await this.delay(100);
+    }
+    return latestJob;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private baseFileName(): string {

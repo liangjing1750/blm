@@ -524,6 +524,85 @@ describe('App', () => {
     expect(clickSpy).toHaveBeenCalled();
   });
 
+  it('should start a docx export job from the preview workbench and download it when done', async () => {
+    const createObjectUrl = vi.fn().mockReturnValue('blob:preview-docx');
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const requestedUrls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.includes('/api/export-docx/start')) {
+        return new Response(JSON.stringify({
+          id: 'job-1',
+          status: 'queued',
+          progress: 5,
+          message: '等待生成 DOCX',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/export-jobs/job-1/download')) {
+        return new Response(new Blob(['docx-content'], {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition': 'attachment; filename="agent.docx"',
+          },
+        });
+      }
+      if (url.includes('/api/export-jobs/job-1')) {
+        return new Response(JSON.stringify({
+          id: 'job-1',
+          status: 'done',
+          progress: 100,
+          filename: 'agent.docx',
+          message: 'DOCX 已生成',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'preview';
+    runtime.doc = {
+      meta: { domain: 'Agent', title: '交割监管平台' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/preview');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="preview-export-docx"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="wait-dialog"]')?.textContent).toContain('DOCX');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      expect(requestedUrls.some((url) => url.includes('/api/export-jobs/job-1/download'))).toBe(true);
+    });
+
+    expect(requestedUrls.some((url) => url.includes('/api/export-docx/start'))).toBe(true);
+    expect(requestedUrls.some((url) => url.includes('/api/export-jobs/job-1'))).toBe(true);
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
   it('should compare the current document with another workspace document', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);

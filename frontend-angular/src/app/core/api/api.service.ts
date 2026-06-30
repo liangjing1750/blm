@@ -166,6 +166,18 @@ export class ApiService {
     return fetch(`/api/export-bundle/${encodeURIComponent(name)}`);
   }
 
+  async startDocxExport(name: string): Promise<any> {
+    return this.postJson('/api/export-docx/start', { name });
+  }
+
+  async exportJob(jobId: string): Promise<any> {
+    return this.getJson(`/api/export-jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  async downloadExportJob(jobId: string): Promise<Response> {
+    return fetch(`/api/export-jobs/${encodeURIComponent(jobId)}/download`);
+  }
+
   async docs(): Promise<ManualDocSummary[]> {
     return this.getJson('/api/docs', []);
   }
