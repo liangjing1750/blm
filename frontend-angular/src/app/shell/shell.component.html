@@ -491,11 +491,21 @@
               <div class="preview-metric"><strong>修改 {{ result.changed }}</strong><span>同一对象变化</span></div>
               <div class="preview-metric"><strong>相同 {{ result.unchanged }}</strong><span>左右一致</span></div>
             </div>
+            <div class="preview-summary" data-testid="compare-group-summary">
+              @for (group of compareGroups(result); track group.section) {
+                <div class="preview-metric"><strong>{{ group.section }} {{ group.rows.length }}</strong><span>业务分组</span></div>
+              }
+            </div>
             <div class="preview-list">
-              @for (row of visibleCompareRows(result); track row.section + row.kind + row.name) {
-                <div class="preview-row">
-                  <span>{{ row.section }} · {{ row.kind }} · {{ row.name }}</span>
-                  <em>{{ row.detail }}</em>
+              @for (group of compareGroups(result); track group.section) {
+                <div class="compare-model-group" data-testid="compare-model-group">
+                  <h4>{{ group.section }} <span>{{ group.rows.length }}</span></h4>
+                  @for (row of group.rows; track row.section + row.kind + row.name) {
+                    <div class="preview-row">
+                      <span>{{ row.kind }} · {{ row.name }}</span>
+                      <em>{{ row.detail }}</em>
+                    </div>
+                  }
                 </div>
               } @empty {
                 <div class="preview-empty">没有发现模型差异。</div>

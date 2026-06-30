@@ -1176,6 +1176,79 @@ describe('App', () => {
     expect(result.textContent).not.toContain('共同稳定流程');
   });
 
+  it('should group compare report rows by business section', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-old.json', title: '旧版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-old.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Old' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [{ uid: 'entity-reservation', name: '预约单', fields: [{ name: 'oldCode' }] }],
+            businessComponents: [],
+            taskDefinitions: [{ uid: 'task-archive', name: '归档任务' }],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent New' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-inbound', name: '入库流程', nodes: [] }],
+      entities: [{ uid: 'entity-reservation', name: '预约单', fields: [{ name: 'newCode' }] }],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const summary = compiled.querySelector('[data-testid="compare-group-summary"]');
+    expect(summary?.textContent).toContain('流程');
+    expect(summary?.textContent).toContain('实体');
+    expect(summary?.textContent).toContain('任务');
+    const groups = Array.from(compiled.querySelectorAll<HTMLElement>('[data-testid="compare-model-group"]'));
+    expect(groups.map((group) => group.querySelector('h4')?.textContent || '')).toEqual([
+      expect.stringContaining('流程'),
+      expect.stringContaining('实体'),
+      expect.stringContaining('任务'),
+    ]);
+    expect(groups[0].textContent).toContain('入库流程');
+    expect(groups[1].textContent).toContain('预约单');
+    expect(groups[2].textContent).toContain('归档任务');
+  });
+
   it('should run a merge precheck for the current document and another workspace document', async () => {
     let mergePayload: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {

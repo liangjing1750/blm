@@ -73,6 +73,11 @@ interface CompareResult {
   rows: CompareRow[];
 }
 
+interface CompareGroup {
+  section: string;
+  rows: CompareRow[];
+}
+
 interface MergeAnalysis {
   suggested_name?: string;
   summary?: {
@@ -848,6 +853,16 @@ export class ShellComponent implements OnInit, OnDestroy {
     return this.compareReportMode() === 'all'
       ? result.rows
       : result.rows.filter((row) => row.kind !== '相同');
+  }
+
+  protected compareGroups(result: CompareResult): CompareGroup[] {
+    const groups = new Map<string, CompareRow[]>();
+    this.visibleCompareRows(result).forEach((row) => {
+      const rows = groups.get(row.section) || [];
+      rows.push(row);
+      groups.set(row.section, rows);
+    });
+    return Array.from(groups.entries()).map(([section, rows]) => ({ section, rows }));
   }
 
   // 模块意图：Shell 只恢复旧版“合并前检查”的入口和反馈，不在这里落地真正的合并写入。
