@@ -134,6 +134,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly compareResult = signal<CompareResult | null>(null);
   protected readonly mergeAnalysis = signal<MergeAnalysis | null>(null);
+  protected readonly mergeResolutions = signal<Record<string, string>>({});
   protected readonly busy = signal(false);
   protected readonly toast = signal<ShellToastState | null>(null);
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
@@ -749,6 +750,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     await this.refreshWorkspaceFiles();
     this.mergeRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
     this.mergeAnalysis.set(null);
+    this.mergeResolutions.set({});
     this.modal.set('merge');
   }
 
@@ -768,6 +770,7 @@ export class ShellComponent implements OnInit, OnDestroy {
           right_document: rightLoaded?.document || rightLoaded,
         });
         this.mergeAnalysis.set(result || {});
+        this.mergeResolutions.set({});
       });
     } finally {
       this.waitDialog.set(null);
@@ -775,11 +778,21 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   protected canSaveMergeResult(analysis: MergeAnalysis | null): boolean {
+    const conflicts = analysis?.conflicts || [];
     return Boolean(
       analysis?.merged_document &&
-      !(analysis?.conflicts || []).length &&
+      (!conflicts.length || conflicts.every((conflict) => this.mergeResolutions()[String(conflict?.id || '')])) &&
       !(analysis?.validation_issues || []).length,
     );
+  }
+
+  protected setMergeResolution(conflictId: string, choice: string): void {
+    const key = String(conflictId || '').trim();
+    if (!key) return;
+    const next = { ...this.mergeResolutions() };
+    if (choice) next[key] = choice;
+    else delete next[key];
+    this.mergeResolutions.set(next);
   }
 
   protected async saveMergeResult(): Promise<void> {
@@ -788,20 +801,25 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.showToast('请先执行合并前检查');
       return;
     }
-    if ((analysis.conflicts || []).length) {
-      this.showToast('请先处理所有冲突项，再生成合并文档。', 'error');
-      return;
+    let result = analysis;
+    if ((result.conflicts || []).length) {
+      result = await this.applyMergeResolutions(result);
+      if ((result.conflicts || []).length) {
+        this.mergeAnalysis.set(result);
+        this.showToast('仍有未解决的冲突项。', 'error');
+        return;
+      }
     }
-    if ((analysis.validation_issues || []).length) {
+    if ((result.validation_issues || []).length) {
       this.showToast('合并结果存在模型校验问题，暂不能生成文档。', 'error');
       return;
     }
-    const mergedDocument = analysis.merged_document;
+    const mergedDocument = result.merged_document;
     if (!mergedDocument) {
       this.showToast('合并检查没有返回可保存的文档。', 'error');
       return;
     }
-    const nextName = this.mergeResultName(analysis);
+    const nextName = this.mergeResultName(result);
     mergedDocument.meta = mergedDocument.meta || {};
     mergedDocument.meta.title = nextName;
     mergedDocument.meta.domain = nextName;
@@ -812,6 +830,27 @@ export class ShellComponent implements OnInit, OnDestroy {
       await this.refreshWorkspaceFiles();
       this.showToast('合并文档已生成');
     });
+  }
+
+  private async applyMergeResolutions(analysis: MergeAnalysis): Promise<MergeAnalysis> {
+    const conflicts = analysis.conflicts || [];
+    const selected = this.mergeResolutions();
+    const unresolved = conflicts.filter((conflict) => !selected[String(conflict?.id || '')]);
+    if (unresolved.length) {
+      this.showToast('请先处理所有冲突项，再生成合并文档。', 'error');
+      return analysis;
+    }
+    const resolutions = Object.fromEntries(Object.entries(selected).map(([id, choice]) => [id, { choice }]));
+    const rightLoaded = await this.api.load(this.mergeRightName);
+    const result = await this.api.applyMerge({
+      left_name: this.runtime.currentFile,
+      right_name: this.mergeRightName,
+      left_document: this.runtime.doc,
+      right_document: rightLoaded?.document || rightLoaded,
+      resolutions,
+    });
+    this.mergeAnalysis.set(result || analysis);
+    return result || analysis;
   }
 
   protected closeModal(): void {

@@ -473,8 +473,15 @@
             <div class="preview-list">
               @for (conflict of analysis.conflicts || []; track conflict.id || conflict.path) {
                 <div class="preview-row">
-                  <span>冲突 · {{ conflict.path || conflict.id }}</span>
-                  <em>{{ conflict.left || '' }} / {{ conflict.right || '' }}</em>
+                  <span>冲突 · {{ conflict.label || conflict.path || conflict.id }}</span>
+                  <select class="modal-search" [attr.data-testid]="'merge-resolution-' + conflict.id" [ngModel]="mergeResolutions()[conflict.id]" (ngModelChange)="setMergeResolution(conflict.id, $event)">
+                    <option value="">请选择处理方式</option>
+                    @for (choice of conflict.resolution_options || ['left', 'right']; track choice) {
+                      @if (choice !== 'custom') {
+                        <option [value]="choice">{{ choice === 'left' ? '保留左侧' : choice === 'right' ? '保留右侧' : choice === 'keep_both' ? '两者都保留' : choice }}</option>
+                      }
+                    }
+                  </select>
                 </div>
               }
               @for (issue of analysis.validation_issues || []; track issue.path || issue.message) {
