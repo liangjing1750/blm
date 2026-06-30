@@ -865,6 +865,14 @@ export class ShellComponent implements OnInit, OnDestroy {
     return Array.from(groups.entries()).map(([section, rows]) => ({ section, rows }));
   }
 
+  protected visibleCompareGroupRows(group: CompareGroup): CompareRow[] {
+    return group.rows.slice(0, 40);
+  }
+
+  protected isCompareGroupTruncated(group: CompareGroup): boolean {
+    return group.rows.length > this.visibleCompareGroupRows(group).length;
+  }
+
   // 模块意图：Shell 只恢复旧版“合并前检查”的入口和反馈，不在这里落地真正的合并写入。
   // 关键流程：选择右侧文档 -> 加载右侧文档 -> 调用后端分析接口 -> 在弹窗展示冲突和校验问题。
   // 边界细节：merged_document 仅作为检查结果展示依据，applyMerge 与保存新文档留给后续合并确认切片。

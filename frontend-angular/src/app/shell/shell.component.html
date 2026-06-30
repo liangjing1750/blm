@@ -509,7 +509,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      @for (row of group.rows; track row.section + row.kind + row.name; let rowIndex = $index) {
+                      @for (row of visibleCompareGroupRows(group); track row.section + row.kind + row.name; let rowIndex = $index) {
                         <tr>
                           <td>{{ rowIndex + 1 }}</td>
                           <td>{{ row.kind }}</td>
@@ -518,6 +518,9 @@
                       }
                     </tbody>
                   </table>
+                  @if (isCompareGroupTruncated(group)) {
+                    <p class="merge-inline-note">本小节仅显示前 {{ visibleCompareGroupRows(group).length }} 条，请优先确认高重要级别项目。</p>
+                  }
                 </div>
               } @empty {
                 <div class="preview-empty">没有发现模型差异。</div>

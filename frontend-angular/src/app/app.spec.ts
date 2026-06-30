@@ -1319,6 +1319,76 @@ describe('App', () => {
     expect(firstRow.children[2]?.textContent).toContain('入库流程');
   });
 
+  it('should truncate each compare business table group after forty rows', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-old.json', title: '旧版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-old.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Old' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent New' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: Array.from({ length: 45 }, (_, index) => ({
+        uid: `proc-${index + 1}`,
+        name: `流程 ${index + 1}`,
+        nodes: [],
+      })),
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const group = compiled.querySelector<HTMLElement>('[data-testid="compare-model-group"]')!;
+    const bodyRows = group.querySelectorAll('[data-testid="compare-business-table"] tbody tr');
+    expect(bodyRows.length).toBe(40);
+    expect(group.textContent).toContain('本小节仅显示前 40 条');
+    expect(group.textContent).toContain('流程 40');
+    expect(group.textContent).not.toContain('流程 41');
+  });
+
   it('should run a merge precheck for the current document and another workspace document', async () => {
     let mergePayload: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
