@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
+import { ApiService } from '../../core/api/api.service';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 
 interface PreviewItem {
@@ -16,9 +17,10 @@ interface PreviewItem {
   styleUrl: './preview-workbench.scss',
 })
 export class PreviewWorkbench {
-  // 模块意图：提供 Angular 版文档预览和基础导出，替代旧前端的预览占位状态。
-  // 关键流程：从 runtime 只读获取当前文档，生成可扫描摘要，并把导出限制在浏览器本地 Blob。
-  // 边界细节：本组件不保存、不同步、不调用后端导出任务；DOCX/ZIP 仍留给后续完整导出切片。
+  // 模块意图：提供 Angular 版文档预览和导出入口，本地导出负责快速检查，后端导出负责完整文档包。
+  // 关键流程：从 runtime 只读获取当前文档；JSON/Markdown 生成本地 Blob；ZIP 文档包复用后端已保存文档导出接口。
+  // 边界细节：本组件不保存、不同步、不自行组装附件；DOCX 异步任务和进度等待态留给后续完整导出切片。
+  private readonly api = inject(ApiService);
   protected readonly runtime = getAngularRuntimeState();
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly summary = computed(() => {
@@ -52,6 +54,14 @@ export class PreviewWorkbench {
     this.download(this.buildMarkdown(), 'text/markdown;charset=utf-8', `${this.baseFileName()}.md`);
   }
 
+  protected async exportBundle(): Promise<void> {
+    if (!this.runtime.currentFile) return;
+    const response = await this.api.exportBundle(this.runtime.currentFile);
+    if (!response.ok) return;
+    const blob = await response.blob();
+    this.downloadBlob(blob, this.responseFilename(response) || `${this.baseFileName()}.zip`);
+  }
+
   private buildMarkdown(): string {
     const lines = [`# ${this.title()}`, '', '## 概览'];
     this.summary().forEach((item) => lines.push(`- ${item.label}: ${item.value}`));
@@ -64,6 +74,10 @@ export class PreviewWorkbench {
 
   private download(content: string, type: string, filename: string): void {
     const blob = new Blob([content], { type });
+    this.downloadBlob(blob, filename);
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
@@ -72,6 +86,14 @@ export class PreviewWorkbench {
     link.click();
     link.remove();
     URL.revokeObjectURL(objectUrl);
+  }
+
+  private responseFilename(response: Response): string {
+    const disposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition') || '';
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1].replace(/"/g, ''));
+    const asciiMatch = disposition.match(/filename="?([^";]+)"?/i);
+    return asciiMatch?.[1] || '';
   }
 
   private baseFileName(): string {

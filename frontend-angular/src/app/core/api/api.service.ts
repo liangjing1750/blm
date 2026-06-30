@@ -162,6 +162,10 @@ export class ApiService {
     return this.postJson('/api/merge/apply', payload);
   }
 
+  async exportBundle(name: string): Promise<Response> {
+    return fetch(`/api/export-bundle/${encodeURIComponent(name)}`);
+  }
+
   async docs(): Promise<ManualDocSummary[]> {
     return this.getJson('/api/docs', []);
   }

@@ -474,6 +474,56 @@ describe('App', () => {
     expect(clickSpy).toHaveBeenCalled();
   });
 
+  it('should export a saved document as a zip bundle from the preview workbench', async () => {
+    const createObjectUrl = vi.fn().mockReturnValue('blob:preview-bundle');
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    let requestedUrl = '';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      requestedUrl = String(input);
+      return new Response(new Blob(['zip-content'], { type: 'application/zip' }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': 'attachment; filename="agent-bundle.zip"',
+        },
+      });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'preview';
+    runtime.doc = {
+      meta: { domain: 'Agent', title: '交割监管平台' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/preview');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="preview-export-bundle"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(requestedUrl).toContain('/api/export-bundle/agent.json');
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
   it('should compare the current document with another workspace document', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
