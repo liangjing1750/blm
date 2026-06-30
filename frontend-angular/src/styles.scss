@@ -2234,6 +2234,35 @@
   0%, 80%, 100% { opacity: .35; transform: translateY(0); }
   40% { opacity: 1; transform: translateY(-4px); }
 }
+.merge-preview-panel {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.merge-preview-panel h3 {
+  margin: 0 0 10px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+.merge-preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+.merge-preview-metrics span {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
 .merge-validation-card.manual {
   border-color: #facc15;
   background: #fffbeb;

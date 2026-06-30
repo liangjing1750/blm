@@ -564,6 +564,16 @@
               <div class="preview-metric"><strong>校验 {{ (analysis.validation_issues || []).length }}</strong><span>模型一致性</span></div>
             </div>
             <div class="preview-list">
+              @if (analysis.merged_document) {
+                <div class="merge-preview-panel" data-testid="merge-result-preview">
+                  <h3>合并结果预览</h3>
+                  <div class="merge-preview-metrics">
+                    @for (metric of mergePreviewMetrics(analysis.merged_document); track metric.label) {
+                      <span>{{ metric.label }} {{ metric.value }}</span>
+                    }
+                  </div>
+                </div>
+              }
               @for (conflict of analysis.conflicts || []; track conflict.id || conflict.path) {
                 <div class="preview-row">
                   <span>冲突 · {{ conflict.label || conflict.path || conflict.id }}</span>

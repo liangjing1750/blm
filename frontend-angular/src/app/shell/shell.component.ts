@@ -89,6 +89,11 @@ interface MergeAnalysis {
   merged_document?: any;
 }
 
+interface MergePreviewMetric {
+  label: string;
+  value: string | number;
+}
+
 export const TRANSITION_SHELL = 'angular-shell';
 
 @Component({
@@ -872,6 +877,27 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected isCompareGroupTruncated(group: CompareGroup): boolean {
     return group.rows.length > this.visibleCompareGroupRows(group).length;
+  }
+
+  // 模块意图：把合并结果文档压缩成旧版可读摘要，帮助用户在生成文档前先确认结果轮廓。
+  // 关键流程：模板只读取 merged_document，不触发保存、不修正文档，避免预览行为改变合并裁决链路。
+  // 边界细节：历史文档可能用 terms 或 language 表达术语，这里只兼容计数展示，不迁移字段。
+  protected mergePreviewMetrics(document: any): MergePreviewMetric[] {
+    if (!document) return [];
+    const terms = Array.isArray(document.terms) ? document.terms : document.language;
+    return [
+      { label: '标题', value: String(document.meta?.title || '未命名') },
+      { label: '业务域', value: String(document.meta?.domain || '') },
+      { label: '角色', value: this.arrayCount(document.roles) },
+      { label: '流程', value: this.arrayCount(document.processes) },
+      { label: '实体', value: this.arrayCount(document.entities) },
+      { label: '任务', value: this.arrayCount(document.taskDefinitions) },
+      { label: '术语', value: this.arrayCount(terms) },
+    ];
+  }
+
+  private arrayCount(value: unknown): number {
+    return Array.isArray(value) ? value.length : 0;
   }
 
   // 模块意图：Shell 恢复旧版“左右文档合并”的入口、前置检查、冲突裁决和生成文档反馈。
