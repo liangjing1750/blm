@@ -154,6 +154,14 @@ export class ApiService {
     return this.postJson('/api/collab/submits/load', { name, submitId });
   }
 
+  async analyzeMerge(payload: Record<string, unknown>): Promise<any> {
+    return this.postJson('/api/merge/analyze', payload);
+  }
+
+  async applyMerge(payload: Record<string, unknown>): Promise<any> {
+    return this.postJson('/api/merge/apply', payload);
+  }
+
   async docs(): Promise<ManualDocSummary[]> {
     return this.getJson('/api/docs', []);
   }

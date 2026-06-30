@@ -99,7 +99,7 @@
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'tools'">
         <button class="tbar-dd-item" type="button" data-testid="toolbar-save-as-button" (click)="openCopyDocument()">复制</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-compare-button" (click)="openCompareDialog()">比对</button>
-        <button class="tbar-dd-item" type="button" data-testid="toolbar-merge-button" (click)="showPlaceholder('合并')">合并</button>
+        <button class="tbar-dd-item" type="button" data-testid="toolbar-merge-button" (click)="openMergeDialog()">合并</button>
         <div class="tbar-dd-sep"></div>
         <button class="tbar-dd-item tbar-dd-primary" type="button" data-testid="toolbar-ai-button" (click)="showPlaceholder('AI 助手')">AI 助手</button>
       </div>
@@ -440,6 +440,47 @@
                 </div>
               } @empty {
                 <div class="preview-empty">没有发现模型差异。</div>
+              }
+            </div>
+          </section>
+        }
+      </section>
+
+      <section *ngSwitchCase="'merge'" class="merge-dialog" data-testid="merge-dialog">
+        <h2>合并前检查</h2>
+        <p class="placeholder-copy">以当前打开文档作为左侧版本，选择另一个工作区文档作为右侧版本，先检查自动合并项、冲突项和模型校验问题。</p>
+        <label class="property-field">
+          <span>右侧文档</span>
+          <select class="modal-search" data-testid="merge-right-select" [(ngModel)]="mergeRightName" (ngModelChange)="mergeAnalysis.set(null)">
+            <option value="">请选择文档</option>
+            @for (file of workspaceFiles(); track file.name) {
+              <option [value]="file.name" [disabled]="file.name === runtime.currentFile">{{ file.title || file.name }}</option>
+            }
+          </select>
+        </label>
+        <div class="modal-actions">
+          <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
+          <button class="btn btn-primary" type="button" data-testid="merge-analyze-button" [disabled]="busy() || !mergeRightName" (click)="runMergeAnalyze()">合并前检查</button>
+        </div>
+        @if (mergeAnalysis(); as analysis) {
+          <section class="compare-result" data-testid="merge-analysis">
+            <div class="preview-summary">
+              <div class="preview-metric"><strong>自动合并 {{ analysis.summary?.autoMergedCount || 0 }}</strong><span>可自动处理</span></div>
+              <div class="preview-metric"><strong>冲突 {{ (analysis.conflicts || []).length }}</strong><span>需要裁决</span></div>
+              <div class="preview-metric"><strong>校验 {{ (analysis.validation_issues || []).length }}</strong><span>模型一致性</span></div>
+            </div>
+            <div class="preview-list">
+              @for (conflict of analysis.conflicts || []; track conflict.id || conflict.path) {
+                <div class="preview-row">
+                  <span>冲突 · {{ conflict.path || conflict.id }}</span>
+                  <em>{{ conflict.left || '' }} / {{ conflict.right || '' }}</em>
+                </div>
+              }
+              @for (issue of analysis.validation_issues || []; track issue.path || issue.message) {
+                <div class="preview-row">
+                  <span>校验 · {{ issue.path || '' }}</span>
+                  <em>{{ issue.message || issue.reason || '' }}</em>
+                </div>
               }
             </div>
           </section>

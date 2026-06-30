@@ -544,6 +544,81 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新入库流程');
   });
 
+  it('should run a merge precheck for the current document and another workspace document', async () => {
+    let mergePayload: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-branch.json', title: '分支版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-branch.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Branch' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-branch', name: '分支流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/analyze')) {
+        mergePayload = JSON.parse(String(init?.body || '{}'));
+        return new Response(JSON.stringify({
+          summary: { autoMergedCount: 2, validationIssueCount: 1 },
+          conflicts: [{ id: 'c1', path: 'processes.proc-branch.name', left: '分支流程', right: '当前流程' }],
+          validation_issues: [{ path: 'stageFlowRefs[0]', message: '流程引用缺失' }],
+          merged_document: { meta: { domain: 'Merged' }, processes: [] },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent Current' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-current', name: '当前流程', nodes: [] }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-merge-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="merge-right-select"]')!;
+    select.value = 'agent-branch.json';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-analyze-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(mergePayload).toMatchObject({ left_name: 'agent.json', right_name: 'agent-branch.json' });
+    expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('自动合并 2');
+    expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('冲突 1');
+    expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('流程引用缺失');
+  });
+
   it('should edit task technical handover in the component workbench', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

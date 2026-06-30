@@ -29,7 +29,7 @@ import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 import { FeedbackWorkbenchComponent } from '../workbenches/support/feedback/feedback-workbench.component';
 import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-workbench.component';
 
-type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'placeholder';
+type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'placeholder';
 type OpenDocumentTab = 'workspace' | 'trash';
 
 interface WaitDialogState {
@@ -69,6 +69,16 @@ interface CompareResult {
   removed: number;
   changed: number;
   rows: CompareRow[];
+}
+
+interface MergeAnalysis {
+  summary?: {
+    autoMergedCount?: number;
+    validationIssueCount?: number;
+  };
+  conflicts?: any[];
+  validation_issues?: any[];
+  merged_document?: any;
 }
 
 export const TRANSITION_SHELL = 'angular-shell';
@@ -122,6 +132,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly submitRows = signal<any[]>([]);
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
   protected readonly compareResult = signal<CompareResult | null>(null);
+  protected readonly mergeAnalysis = signal<MergeAnalysis | null>(null);
   protected readonly busy = signal(false);
   protected readonly toast = signal<ShellToastState | null>(null);
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
@@ -131,6 +142,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected createDocumentName = '';
   protected copyDocumentName = '';
   protected compareRightName = '';
+  protected mergeRightName = '';
   protected archiveVersionMessage = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
   private routeSubscription: Subscription | null = null;
@@ -718,6 +730,43 @@ export class ShellComponent implements OnInit, OnDestroy {
       await this.runBusy(async () => {
         const loaded = await this.api.load(this.compareRightName);
         this.compareResult.set(this.buildCompareResult(this.runtime.doc, loaded?.document || loaded));
+      });
+    } finally {
+      this.waitDialog.set(null);
+    }
+  }
+
+  // 模块意图：Shell 只恢复旧版“合并前检查”的入口和反馈，不在这里落地真正的合并写入。
+  // 关键流程：选择右侧文档 -> 加载右侧文档 -> 调用后端分析接口 -> 在弹窗展示冲突和校验问题。
+  // 边界细节：merged_document 仅作为检查结果展示依据，applyMerge 与保存新文档留给后续合并确认切片。
+  protected async openMergeDialog(): Promise<void> {
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档');
+      return;
+    }
+    this.activeDropdown.set('');
+    await this.refreshWorkspaceFiles();
+    this.mergeRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
+    this.mergeAnalysis.set(null);
+    this.modal.set('merge');
+  }
+
+  protected async runMergeAnalyze(): Promise<void> {
+    if (!this.mergeRightName) return;
+    this.waitDialog.set({
+      title: '正在执行合并前检查...',
+      description: '正在加载右侧文档，并检查冲突项和模型校验问题。',
+    });
+    try {
+      await this.runBusy(async () => {
+        const rightLoaded = await this.api.load(this.mergeRightName);
+        const result = await this.api.analyzeMerge({
+          left_name: this.runtime.currentFile,
+          right_name: this.mergeRightName,
+          left_document: this.runtime.doc,
+          right_document: rightLoaded?.document || rightLoaded,
+        });
+        this.mergeAnalysis.set(result || {});
       });
     } finally {
       this.waitDialog.set(null);
