@@ -147,6 +147,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected openQuery = '';
   protected createDocumentName = '';
   protected copyDocumentName = '';
+  protected compareLeftName = '';
   protected compareLeftSource: CompareSource = 'current';
   protected compareLeftVersionId = '';
   protected compareRightName = '';
@@ -725,6 +726,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
     this.activeDropdown.set('');
     await this.refreshWorkspaceFiles();
+    this.compareLeftName = this.runtime.currentFile;
     this.compareLeftSource = 'current';
     this.compareLeftVersionId = '';
     this.compareRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
@@ -734,6 +736,12 @@ export class ShellComponent implements OnInit, OnDestroy {
     await this.refreshCompareRightVersions();
     this.compareResult.set(null);
     this.modal.set('compare');
+  }
+
+  protected async onCompareLeftNameChanged(): Promise<void> {
+    this.compareResult.set(null);
+    this.compareLeftVersionId = '';
+    await this.refreshCompareLeftVersions();
   }
 
   protected async onCompareLeftSourceChanged(): Promise<void> {
@@ -755,6 +763,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   protected async runCompare(): Promise<void> {
+    if (!this.compareLeftName) return;
     if (!this.compareRightName) return;
     if (this.compareLeftSource !== 'current' && !this.compareLeftVersionId) return;
     if (this.compareRightSource !== 'current' && !this.compareRightVersionId) return;
@@ -765,7 +774,12 @@ export class ShellComponent implements OnInit, OnDestroy {
     try {
       await this.runBusy(async () => {
         const [leftLoaded, rightLoaded] = await Promise.all([
-          this.loadCompareDocument(this.runtime.currentFile, this.compareLeftSource, this.compareLeftVersionId, this.runtime.doc),
+          this.loadCompareDocument(
+            this.compareLeftName,
+            this.compareLeftSource,
+            this.compareLeftVersionId,
+            this.compareLeftName === this.runtime.currentFile ? this.runtime.doc : null,
+          ),
           this.loadCompareDocument(this.compareRightName, this.compareRightSource, this.compareRightVersionId),
         ]);
         this.compareResult.set(this.buildCompareResult(leftLoaded, rightLoaded));
@@ -776,7 +790,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   private async refreshCompareLeftVersions(): Promise<void> {
-    const versions = await this.loadCompareOptions(this.runtime.currentFile, this.compareLeftSource);
+    const versions = await this.loadCompareOptions(this.compareLeftName, this.compareLeftSource);
     this.compareLeftVersions.set(versions);
     if (!this.compareLeftVersionId) {
       this.compareLeftVersionId = this.compareEntryId(versions[0]);

@@ -1001,6 +1001,100 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('右侧当前入库流程');
   });
 
+  it('should compare the current versions of two selected workspace documents', async () => {
+    const loadedNames: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-a.json', title: '文档A' },
+          { name: 'agent-b.json', title: '文档B' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/versions/')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-a.json')) {
+        loadedNames.push('agent-a.json');
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent A' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-a', name: 'A 文档入库流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-b.json')) {
+        loadedNames.push('agent-b.json');
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent B' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-b', name: 'B 文档出库流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent Current' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-current', name: '当前文档流程', nodes: [] }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const left = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-select"]')!;
+    left.value = 'agent-a.json';
+    left.dispatchEvent(new Event('change', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const right = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-select"]')!;
+    right.value = 'agent-b.json';
+    right.dispatchEvent(new Event('change', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-run-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(loadedNames).toEqual(expect.arrayContaining(['agent-a.json', 'agent-b.json']));
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('A 文档入库流程');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('B 文档出库流程');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).not.toContain('当前文档流程');
+  });
+
   it('should run a merge precheck for the current document and another workspace document', async () => {
     let mergePayload: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
