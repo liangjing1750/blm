@@ -15,6 +15,7 @@ describe('App', () => {
     runtime.modified = false;
     runtime.readOnly = false;
     runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['navHistory'] = [];
     runtime.collab.seq = 0;
     runtime.collab.acceptedSeq = 0;
     runtime.collab.pendingSnapshot = false;
@@ -1338,6 +1339,16 @@ describe('App', () => {
     expect(navigateSpy).not.toHaveBeenCalled();
     expect(compiled.querySelector('[data-testid="process-workbench-angular"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeFalsy();
+
+    const backButton = compiled.querySelector<HTMLButtonElement>('[data-testid="nav-back-button"]');
+    expect(backButton?.disabled).toBe(false);
+    expect(backButton?.getAttribute('title')).toContain('全景');
+    backButton?.click();
+    fixture.detectChanges();
+
+    expect(runtime.ui['mainTab']).toBe('panoramaWorkbench');
+    expect(locationSpy).toHaveBeenCalledWith('/panorama');
+    expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeTruthy();
   });
 
   it('should persist document properties through the existing save endpoint', async () => {

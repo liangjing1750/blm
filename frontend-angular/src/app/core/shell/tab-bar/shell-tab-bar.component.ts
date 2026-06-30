@@ -50,7 +50,8 @@ export class ShellTabBarComponent {
 
   protected goBack(): void {
     if (!this.canGoBack()) return;
-    this.adapter.goBack();
+    const targetTab = this.adapter.goBack();
+    if (targetTab) this.location.go(routePathFromWorkbenchId(targetTab));
     this.version.update((value) => value + 1);
   }
 

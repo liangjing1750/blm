@@ -41,6 +41,15 @@ export interface AngularRuntimeState {
   recovery: Record<string, any>;
 }
 
+interface AngularNavigationSnapshot {
+  mainTab: string;
+  procId?: string;
+  taskId?: string | null;
+  entityId?: string;
+}
+
+const ANGULAR_NAV_HISTORY_LIMIT = 30;
+
 // 模块意图：提供 Angular 内部的工作壳状态源，替代旧全局运行时的隐式状态。
 // 关键流程：DocumentStore、菜单壳层和过渡适配器共享这里的状态；状态变化统一派发轻量刷新事件。
 // 边界细节：这里保留与旧文档模型相近的字段名，但不再加载旧脚本，也不把状态挂到旧全局对象。
@@ -98,6 +107,7 @@ export function markAngularRuntimeModified(): void {
 export function switchAngularMainTab(tabId: string): void {
   const nextTab = normalizeMainWorkbenchId(tabId);
   if (runtimeState.ui['mainTab'] === nextTab) return;
+  recordAngularNavigationSnapshot();
   runtimeState.ui['mainTab'] = nextTab;
   if (nextTab === 'processWorkbench') {
     runtimeState.ui['procView'] = 'valueDomain';
@@ -132,6 +142,7 @@ export function normalizeMainWorkbenchId(tabId?: string): string {
 }
 
 export function navigateAngularWorkbench(tab: string, options: Record<string, unknown> = {}): void {
+  const before = captureAngularNavigationSnapshot();
   if (tab === 'process') {
     runtimeState.ui['mainTab'] = 'processWorkbench';
     runtimeState.ui['processWorkbenchView'] = 'flow';
@@ -140,6 +151,9 @@ export function navigateAngularWorkbench(tab: string, options: Record<string, un
   } else if (tab === 'data') {
     runtimeState.ui['mainTab'] = 'constructWorkbench';
     if (options['entityId']) runtimeState.ui['entityId'] = String(options['entityId']);
+  }
+  if (!areAngularNavigationSnapshotsEqual(before, captureAngularNavigationSnapshot())) {
+    pushAngularNavigationSnapshot(before);
   }
   emitRuntimeRefresh();
 }
@@ -179,4 +193,74 @@ export function confirmRuntimeAction(message: string, options: RuntimeConfirmOpt
     }));
     if (!handled) resolve(window.confirm(message));
   });
+}
+
+export function canGoBackAngularNavigation(): boolean {
+  return angularNavigationHistory().length > 0;
+}
+
+export function getAngularBackNavigationTitle(): string {
+  const previous = angularNavigationHistory()[angularNavigationHistory().length - 1];
+  if (!previous) return '当前没有可返回的位置';
+  const labels: Record<string, string> = {
+    panoramaWorkbench: '返回到全景工作台',
+    processWorkbench: previous.taskId ? '返回到流程节点' : '返回到流程工作台',
+    constructWorkbench: previous.entityId ? '返回到实体' : '返回到构件工作台',
+    applicationWorkbench: '返回到应用工作台',
+    orchestrationWorkbench: '返回到编排工作台',
+    preview: '返回到预览',
+  };
+  return labels[previous.mainTab] || '返回到上一位置';
+}
+
+export function goBackAngularNavigation(): string | null {
+  const history = angularNavigationHistory();
+  let previous = history.pop();
+  const current = captureAngularNavigationSnapshot();
+  while (previous && areAngularNavigationSnapshotsEqual(previous, current)) {
+    previous = history.pop();
+  }
+  if (!previous) return null;
+  runtimeState.ui['mainTab'] = normalizeMainWorkbenchId(previous.mainTab);
+  runtimeState.ui['procId'] = previous.procId || '';
+  runtimeState.ui['taskId'] = previous.taskId || null;
+  runtimeState.ui['entityId'] = previous.entityId || '';
+  emitRuntimeRefresh();
+  return runtimeState.ui['mainTab'];
+}
+
+function recordAngularNavigationSnapshot(): void {
+  pushAngularNavigationSnapshot(captureAngularNavigationSnapshot());
+}
+
+function captureAngularNavigationSnapshot(): AngularNavigationSnapshot {
+  return {
+    mainTab: normalizeMainWorkbenchId(runtimeState.ui['mainTab']),
+    procId: String(runtimeState.ui['procId'] || '').trim(),
+    taskId: runtimeState.ui['taskId'] ? String(runtimeState.ui['taskId']).trim() : null,
+    entityId: String(runtimeState.ui['entityId'] || '').trim(),
+  };
+}
+
+function pushAngularNavigationSnapshot(snapshot: AngularNavigationSnapshot): void {
+  const history = angularNavigationHistory();
+  const last = history[history.length - 1];
+  if (last && areAngularNavigationSnapshotsEqual(last, snapshot)) return;
+  history.push({ ...snapshot });
+  if (history.length > ANGULAR_NAV_HISTORY_LIMIT) {
+    history.splice(0, history.length - ANGULAR_NAV_HISTORY_LIMIT);
+  }
+}
+
+function angularNavigationHistory(): AngularNavigationSnapshot[] {
+  const ui = runtimeState.ui as Record<string, any>;
+  if (!Array.isArray(ui['navHistory'])) ui['navHistory'] = [];
+  return ui['navHistory'] as AngularNavigationSnapshot[];
+}
+
+function areAngularNavigationSnapshotsEqual(left: AngularNavigationSnapshot, right: AngularNavigationSnapshot): boolean {
+  return String(left.mainTab || '') === String(right.mainTab || '')
+    && String(left.procId || '') === String(right.procId || '')
+    && String(left.taskId || '') === String(right.taskId || '')
+    && String(left.entityId || '') === String(right.entityId || '');
 }

@@ -22,7 +22,7 @@ export interface ShellTabBarAdapter {
   canGoBack(): boolean;
   backTitle(): string;
   switchTab(tabId: string): void;
-  goBack(): void;
+  goBack(): string | null;
 }
 
 const MAIN_TABS: ShellMainTab[] = [
@@ -70,19 +70,30 @@ export function createShellTabBarLegacyAdapter(runtime: ShellTabBarRuntime = get
       return !!runtime.S?.isPreviewRendering;
     },
     canGoBack(): boolean {
-      return !!runtime.canGoBackNavigation?.();
+      return runtime.canGoBackNavigation ? !!runtime.canGoBackNavigation() : canGoBackAngularNavigation();
     },
     backTitle(): string {
-      return runtime.getBackNavigationTitle?.() || '褰撳墠娌℃湁鍙繑鍥炵殑浣嶇疆';
+      return runtime.getBackNavigationTitle?.() || getAngularBackNavigationTitle();
     },
     switchTab(tabId: string): void {
       if (runtime.switchMainTab) runtime.switchMainTab(tabId);
       else switchAngularMainTab(tabId);
     },
-    goBack(): void {
-      runtime.goBackNavigation?.();
+    goBack(): string | null {
+      if (runtime.goBackNavigation) {
+        runtime.goBackNavigation();
+        return normalize(ui()['mainTab']);
+      }
+      return goBackAngularNavigation();
     },
   };
 }
 
-import { getAngularRuntimeState, normalizeMainWorkbenchId, switchAngularMainTab } from '../../runtime/angular-runtime';
+import {
+  canGoBackAngularNavigation,
+  getAngularBackNavigationTitle,
+  getAngularRuntimeState,
+  goBackAngularNavigation,
+  normalizeMainWorkbenchId,
+  switchAngularMainTab,
+} from '../../runtime/angular-runtime';
