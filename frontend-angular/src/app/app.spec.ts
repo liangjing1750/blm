@@ -619,6 +619,100 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('流程引用缺失');
   });
 
+  it('should save and open a merge result when the precheck has no blockers', async () => {
+    let savedName = '';
+    let savedDocument: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-branch.json', title: '分支版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-branch.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Branch' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/analyze')) {
+        return new Response(JSON.stringify({
+          suggested_name: 'Agent 合并版',
+          summary: { autoMergedCount: 3, validationIssueCount: 0 },
+          conflicts: [],
+          validation_issues: [],
+          merged_document: {
+            meta: { domain: 'Merged Draft' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            processes: [{ uid: 'proc-merged', name: '合并流程', nodes: [] }],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/save/')) {
+        savedName = decodeURIComponent(url.split('/api/save/')[1] || '');
+        savedDocument = JSON.parse(String(init?.body || '{}')).document;
+        return new Response(JSON.stringify({ name: savedName, document: savedDocument }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent Current' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-merge-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-analyze-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-save-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(savedName).toBe('Agent 合并版');
+    expect(savedDocument?.meta?.title).toBe('Agent 合并版');
+    expect(runtime.currentFile).toBe('Agent 合并版');
+    expect(runtime.doc.processes[0].uid).toBe('proc-merged');
+  });
+
   it('should edit task technical handover in the component workbench', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

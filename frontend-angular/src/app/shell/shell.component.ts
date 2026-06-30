@@ -72,6 +72,7 @@ interface CompareResult {
 }
 
 interface MergeAnalysis {
+  suggested_name?: string;
   summary?: {
     autoMergedCount?: number;
     validationIssueCount?: number;
@@ -773,6 +774,46 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
   }
 
+  protected canSaveMergeResult(analysis: MergeAnalysis | null): boolean {
+    return Boolean(
+      analysis?.merged_document &&
+      !(analysis?.conflicts || []).length &&
+      !(analysis?.validation_issues || []).length,
+    );
+  }
+
+  protected async saveMergeResult(): Promise<void> {
+    const analysis = this.mergeAnalysis();
+    if (!analysis) {
+      this.showToast('请先执行合并前检查');
+      return;
+    }
+    if ((analysis.conflicts || []).length) {
+      this.showToast('请先处理所有冲突项，再生成合并文档。', 'error');
+      return;
+    }
+    if ((analysis.validation_issues || []).length) {
+      this.showToast('合并结果存在模型校验问题，暂不能生成文档。', 'error');
+      return;
+    }
+    const mergedDocument = analysis.merged_document;
+    if (!mergedDocument) {
+      this.showToast('合并检查没有返回可保存的文档。', 'error');
+      return;
+    }
+    const nextName = this.mergeResultName(analysis);
+    mergedDocument.meta = mergedDocument.meta || {};
+    mergedDocument.meta.title = nextName;
+    mergedDocument.meta.domain = nextName;
+    await this.runBusy(async () => {
+      const saved = await this.api.save(nextName, mergedDocument, { saveMessage: '通过合并检查生成文档' });
+      this.openLoadedDocument(saved?.name || nextName, saved?.document ? saved : { document: mergedDocument });
+      this.modal.set('');
+      await this.refreshWorkspaceFiles();
+      this.showToast('合并文档已生成');
+    });
+  }
+
   protected closeModal(): void {
     this.modal.set('');
   }
@@ -955,6 +996,15 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.refreshShellView();
     void this.router.navigateByUrl('/panorama');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
+  private mergeResultName(analysis: MergeAnalysis): string {
+    return String(
+      analysis.suggested_name ||
+      analysis.merged_document?.meta?.title ||
+      analysis.merged_document?.meta?.domain ||
+      `${this.runtime.currentFile || '合并文档'}-合并`,
+    ).trim();
   }
 
   private async openStartupLocatorIfPresent(): Promise<void> {

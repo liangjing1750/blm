@@ -461,6 +461,7 @@
         <div class="modal-actions">
           <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
           <button class="btn btn-primary" type="button" data-testid="merge-analyze-button" [disabled]="busy() || !mergeRightName" (click)="runMergeAnalyze()">合并前检查</button>
+          <button class="btn btn-primary" type="button" data-testid="merge-save-button" [disabled]="busy() || !canSaveMergeResult(mergeAnalysis())" (click)="saveMergeResult()">生成合并文档</button>
         </div>
         @if (mergeAnalysis(); as analysis) {
           <section class="compare-result" data-testid="merge-analysis">
