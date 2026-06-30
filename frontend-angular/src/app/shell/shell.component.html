@@ -600,10 +600,21 @@
                   <p>合并结果仍有模型一致性问题。正常完成冲突裁决后不应出现这种情况，请不要手动删除引用；这通常表示历史数据或合并修复逻辑需要升级。</p>
                 </div>
               }
-              @for (issue of analysis.validation_issues || []; track issue.path || issue.message) {
-                <div class="preview-row">
-                  <span>校验 · {{ issue.path || '' }}</span>
-                  <em>{{ issue.message || issue.reason || '' }}</em>
+              @for (issue of analysis.validation_issues || []; track issue.path || issue.message; let issueIndex = $index) {
+                <div class="merge-validation-card" [class.auto]="mergeValidationFix(issue).group === 'auto'" [class.manual]="mergeValidationFix(issue).group !== 'auto'" data-testid="merge-validation-card">
+                  <div class="merge-validation-card-head">
+                    <span>{{ mergeValidationFix(issue).group === 'auto' ? '可自动修复' : '需要人工确认' }}</span>
+                    <strong>{{ mergeValidationFix(issue).title }}</strong>
+                  </div>
+                  <p>{{ issue.message || issue.reason || '' }}</p>
+                  <div class="merge-validation-suggestion">{{ mergeValidationFix(issue).recommendation }}</div>
+                  @if (mergeValidationFix(issue).kind === 'stage_flow_ref') {
+                    <div class="merge-validation-actions">
+                      <button class="btn btn-outline btn-sm" type="button" data-testid="merge-validation-fix-stage-ref" [disabled]="busy()" (click)="applyMergeValidationFix(issueIndex)">
+                        {{ mergeValidationFix(issue).actionLabel }}
+                      </button>
+                    </div>
+                  }
                 </div>
               }
             </div>

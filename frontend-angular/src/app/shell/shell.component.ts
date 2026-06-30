@@ -94,6 +94,14 @@ interface MergePreviewMetric {
   value: string | number;
 }
 
+interface MergeValidationFixView {
+  kind: 'stage_flow_ref' | 'unknown';
+  group: 'auto' | 'manual';
+  title: string;
+  recommendation: string;
+  actionLabel?: string;
+}
+
 export const TRANSITION_SHELL = 'angular-shell';
 
 @Component({
@@ -911,6 +919,68 @@ export class ShellComponent implements OnInit, OnDestroy {
   // 模块意图：Shell 恢复旧版“左右文档合并”的入口、前置检查、冲突裁决和生成文档反馈。
   // 关键流程：选择左右文档 -> 加载两侧文档 -> 调用后端分析/应用接口 -> 在弹窗展示冲突、校验和保存结果。
   // 边界细节：左侧选中当前打开文档时使用 runtime.doc，保留未保存编辑态；其他文档从工作区重新加载。
+  protected mergeValidationFix(issue: any): MergeValidationFixView {
+    const path = String(issue?.path || '');
+    if (/^stageFlowRefs\./.test(path)) {
+      return {
+        kind: 'stage_flow_ref',
+        group: 'auto',
+        title: '阶段流程引用失效',
+        recommendation: '删除这条失效引用及相关连线，保留其他合并结果。',
+        actionLabel: '删除引用',
+      };
+    }
+    return {
+      kind: 'unknown',
+      group: 'manual',
+      title: '需要人工确认',
+      recommendation: String(issue?.message || issue?.reason || '请检查该问题对应的模型内容。'),
+    };
+  }
+
+  // 模块意图：恢复旧版合并校验项的最小自动修复能力，让用户能在生成合并文档前处理明确失效的引用。
+  // 关键流程：复制 merged_document 草稿 -> 应用本地修复 -> 调用服务端文档校验 -> 用返回结果刷新合并分析区。
+  // 边界细节：本轮只覆盖 stageFlowRefs 失效引用；修复只作用于弹窗内草稿，不保存工作区文档。
+  protected async applyMergeValidationFix(issueIndex: number): Promise<void> {
+    const analysis = this.mergeAnalysis();
+    const issue = (analysis?.validation_issues || [])[issueIndex];
+    if (!analysis || !issue || !analysis.merged_document) return;
+    const draft = this.cloneMergeDocument(analysis.merged_document);
+    if (!this.applyMergeValidationFixToDocument(draft, issue)) {
+      this.showToast('这个校验问题暂时不能自动修复，请手动调整源文档后再试。', 'error');
+      return;
+    }
+    await this.runBusy(async () => {
+      const validated = await this.api.validateDocument(draft);
+      this.mergeAnalysis.set({
+        ...analysis,
+        merged_document: validated?.document || draft,
+        validation_issues: validated?.validation_issues || [],
+        summary: {
+          ...(analysis.summary || {}),
+          validationIssueCount: (validated?.validation_issues || []).length,
+        },
+      });
+    });
+  }
+
+  private applyMergeValidationFixToDocument(document: any, issue: any): boolean {
+    const path = String(issue?.path || '');
+    const fix = this.mergeValidationFix(issue);
+    if (fix.kind === 'stage_flow_ref') {
+      const token = String(path.split('.')[1] || '').trim();
+      if (!token) return false;
+      document.stageFlowRefs = (document.stageFlowRefs || []).filter((ref: any) => String(ref.id || ref.uid || '').trim() !== token);
+      document.stageFlowLinks = (document.stageFlowLinks || []).filter((link: any) => link.fromRefId !== token && link.toRefId !== token);
+      return true;
+    }
+    return false;
+  }
+
+  private cloneMergeDocument(document: any): any {
+    return JSON.parse(JSON.stringify(document || {}));
+  }
+
   protected async openMergeDialog(): Promise<void> {
     if (!this.runtime.currentFile) {
       this.showToast('请先打开文档');

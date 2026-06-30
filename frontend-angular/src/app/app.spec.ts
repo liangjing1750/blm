@@ -1726,6 +1726,106 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="merge-validation-deferred"]')).toBeNull();
   });
 
+  it('should remove an invalid stage flow ref and revalidate the merge draft', async () => {
+    let validatedDocument: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-branch.json', title: '分支版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-branch.json')) {
+        return new Response(JSON.stringify({
+          document: {
+            meta: { domain: 'Agent Branch' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [],
+            stageFlowLinks: [],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/analyze')) {
+        return new Response(JSON.stringify({
+          summary: { autoMergedCount: 2, validationIssueCount: 1 },
+          conflicts: [],
+          validation_issues: [{ path: 'stageFlowRefs.ref-missing', message: '阶段流程引用失效' }],
+          merged_document: {
+            meta: { title: 'Agent 合并结果', domain: 'Agent 合并域' },
+            roles: [],
+            stages: [],
+            stageFlowRefs: [{ id: 'ref-missing', processId: 'proc-missing' }],
+            stageFlowLinks: [{ id: 'link-1', fromRefId: 'ref-missing', toRefId: 'ref-other' }],
+            processes: [],
+            entities: [],
+            businessComponents: [],
+            taskDefinitions: [],
+            terms: [],
+            rules: [],
+          },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/document/validate')) {
+        validatedDocument = JSON.parse(String(init?.body || '{}')).document;
+        return new Response(JSON.stringify({
+          ok: true,
+          document: validatedDocument,
+          validation_issues: [],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent Current' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      stageFlowLinks: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-merge-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="merge-right-select"]')!;
+    select.value = 'agent-branch.json';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-analyze-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-validation-fix-stage-ref"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(validatedDocument.stageFlowRefs).toEqual([]);
+    expect(validatedDocument.stageFlowLinks).toEqual([]);
+    expect(compiled.querySelector('[data-testid="merge-internal-validation-error"]')).toBeNull();
+    expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('校验 0');
+  });
+
   it('should save and open a merge result when the precheck has no blockers', async () => {
     let savedName = '';
     let savedDocument: any = null;

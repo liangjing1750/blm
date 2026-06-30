@@ -2294,6 +2294,40 @@
   border-color: #bae6fd;
   background: #f0f9ff;
 }
+.merge-validation-card {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.merge-validation-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.merge-validation-card-head span {
+  color: #475569;
+  font-size: 12px;
+}
+.merge-validation-card-head strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+.merge-validation-card p,
+.merge-validation-suggestion {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.merge-validation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 @media (max-width: 720px) {
   .merge-select-grid,
   .compare-select-grid,

@@ -162,6 +162,10 @@ export class ApiService {
     return this.postJson('/api/merge/apply', payload);
   }
 
+  async validateDocument(document: any): Promise<any> {
+    return this.postJson('/api/document/validate', { document });
+  }
+
   async exportBundle(name: string): Promise<Response> {
     return fetch(`/api/export-bundle/${encodeURIComponent(name)}`);
   }
