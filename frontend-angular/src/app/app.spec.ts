@@ -716,7 +716,74 @@ describe('App', () => {
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-delete-group-inbound"]')?.click();
     fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
     expect(runtime.doc.serviceGroups.some((group: any) => group.uid === 'group-inbound')).toBe(false);
+  });
+
+  it('should delete application interfaces and service groups through the custom confirm dialog', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [{ uid: 'group-inbound', name: '入库服务', desc: '' }],
+      services: [
+        {
+          uid: 'interface-submit',
+          name: '提交入库预约',
+          serviceGroupUid: 'group-inbound',
+          method: 'POST',
+          path: '/inbound-reservations/submit',
+          requestParams: [],
+          responseParams: [],
+          nodeRefs: [],
+          orchestration: { variables: [], steps: [], returnMapping: [] },
+        },
+      ],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="interface-delete-interface-submit"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('删除接口');
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('提交入库预约');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(runtime.doc.services).toHaveLength(0);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-delete-group-inbound"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('删除服务');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(runtime.doc.serviceGroups).toHaveLength(0);
+    expect(confirmSpy).not.toHaveBeenCalled();
   });
 
   it('should edit nested request parameters for an application interface', async () => {

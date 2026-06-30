@@ -28,11 +28,14 @@
 - GREEN：实现服务分组可维护、组内接口维护、变量池和下拉映射后，`npm.cmd test -- --watch=false --include src/app/app.spec.ts` 通过，34 个测试。
 - 全量回归：`npm.cmd test -- --watch=false` 通过，4 个测试文件、53 个测试。
 - 生产构建：`npm.cmd run build` 通过；仍有 bundle / SCSS budget warning，`app-workbench.scss` 仍超过 4 KB 预算。
+- 继续切片：新增删除确认测试，先失败于缺少统一确认弹窗；接入 `confirmRuntimeAction` 后，`npm.cmd test -- --watch=false --include src/app/app.spec.ts` 通过，35 个测试。
+- 删除确认切片全量回归：`npm.cmd test -- --watch=false` 通过，4 个测试文件、54 个测试。
+- 删除确认切片构建验证：`npm.cmd run build` 通过；仍只有既有预算 warning。
 
 ### 剩余风险
 
-- 服务分组删除目前没有自定义确认弹窗；这是可用性修复的最小版本，后续应接入项目统一确认组件。
-- 接口删除仍沿用旧逻辑，后续应一起替换原生确认。
+- 服务分组删除和接口删除已接入统一确认弹窗。
+- 仍未处理 shell 层历史恢复、回收站等其他原生 `window.confirm`，本轮只覆盖应用工作台。
 - 变量路径仍是轻量路径，不做类型兼容校验、缺失变量校验或运行时表达式求值。
 - 尚未完成浏览器截图验证。
 

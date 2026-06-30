@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
 type AppTab = 'service' | 'orchestration';
 
@@ -97,7 +97,11 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected cancelEdit(): void { this.editingSvcId.set(''); }
   protected async deleteService(svc: LegacyService): Promise<void> {
-    if (!window.confirm(`确认删除"${svc.name || this.uid(svc)}"吗？`)) return;
+    const confirmed = await confirmRuntimeAction(`确认删除接口“${svc.name || this.uid(svc)}”吗？`, {
+      title: '删除接口',
+      confirmLabel: '删除',
+    });
+    if (!confirmed) return;
     this.doc().services = this.services().filter((s) => s.uid !== svc.uid);
     this.touch();
   }
@@ -119,8 +123,13 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected updateServiceGroup(): void { this.touch(); }
-  protected deleteServiceGroup(group: LegacyServiceGroup): void {
+  protected async deleteServiceGroup(group: LegacyServiceGroup): Promise<void> {
     const groupUid = this.uid(group);
+    const confirmed = await confirmRuntimeAction(`确认删除服务“${group.name || groupUid}”吗？组内接口会移动到未分组。`, {
+      title: '删除服务',
+      confirmLabel: '删除',
+    });
+    if (!confirmed) return;
     this.doc().serviceGroups = this.serviceGroups().filter((item) => this.uid(item) !== groupUid);
     for (const service of this.services()) {
       if (service.serviceGroupUid === groupUid) service.serviceGroupUid = '';

@@ -77,3 +77,15 @@
 - [x] `npm.cmd test -- --watch=false --include src/app/app.spec.ts`
 - [x] `npm.cmd test -- --watch=false`
 - [x] `npm.cmd run build`
+
+## T7 删除操作统一确认
+
+确认状态：已完成。
+
+- [x] 失败测试：`should delete application interfaces and service groups through the custom confirm dialog`。
+- [x] 接口删除接入 `confirmRuntimeAction`。
+- [x] 服务分组删除接入 `confirmRuntimeAction`。
+- [x] 删除服务分组时保留接口，并移动到未分组。
+- [x] 验证不再调用浏览器原生 `window.confirm`。
+- [x] `npm.cmd test -- --watch=false`
+- [x] `npm.cmd run build`

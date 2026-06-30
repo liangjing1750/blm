@@ -127,7 +127,7 @@
                         <span class="svc-meta">{{ stepCount(svc) }} 步骤 · {{ (svc.nodeRefs||[]).length }} 节点引用</span>
                         <span class="svc-arrow" [class.exp]="isExpanded(uid(svc))">▸</span>
                         <button class="btn-ghost-sm" type="button" [attr.data-testid]="'interface-edit-' + uid(svc)" (click)="startEdit(svc); $event.stopPropagation()">编辑</button>
-                        <button class="btn-ghost-sm danger" type="button" (click)="deleteService(svc); $event.stopPropagation()">删除</button>
+                        <button class="btn-ghost-sm danger" type="button" [attr.data-testid]="'interface-delete-' + uid(svc)" (click)="deleteService(svc); $event.stopPropagation()">删除</button>
                       </div>
                     }
                     @if (!isEditing(svc) && isExpanded(uid(svc))) {
