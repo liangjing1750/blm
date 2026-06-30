@@ -95,7 +95,7 @@ interface MergePreviewMetric {
 }
 
 interface MergeValidationFixView {
-  kind: 'stage_flow_ref' | 'unknown';
+  kind: 'stage_flow_link' | 'stage_flow_ref' | 'stage_process_link' | 'relation' | 'unknown';
   group: 'auto' | 'manual';
   title: string;
   recommendation: string;
@@ -921,6 +921,15 @@ export class ShellComponent implements OnInit, OnDestroy {
   // 边界细节：左侧选中当前打开文档时使用 runtime.doc，保留未保存编辑态；其他文档从工作区重新加载。
   protected mergeValidationFix(issue: any): MergeValidationFixView {
     const path = String(issue?.path || '');
+    if (/^stageFlowLinks\./.test(path)) {
+      return {
+        kind: 'stage_flow_link',
+        group: 'auto',
+        title: '阶段流程连线失效',
+        recommendation: '删除这条失效连线，保留其他合并结果。',
+        actionLabel: '删除连线',
+      };
+    }
     if (/^stageFlowRefs\./.test(path)) {
       return {
         kind: 'stage_flow_ref',
@@ -928,6 +937,24 @@ export class ShellComponent implements OnInit, OnDestroy {
         title: '阶段流程引用失效',
         recommendation: '删除这条失效引用及相关连线，保留其他合并结果。',
         actionLabel: '删除引用',
+      };
+    }
+    if (/^stages\.[^.]+\.processLinks\./.test(path)) {
+      return {
+        kind: 'stage_process_link',
+        group: 'auto',
+        title: '阶段内流程连线失效',
+        recommendation: '删除这条阶段内失效连线，保留阶段和流程内容。',
+        actionLabel: '删除连线',
+      };
+    }
+    if (/^relations\./.test(path)) {
+      return {
+        kind: 'relation',
+        group: 'auto',
+        title: '实体关系失效',
+        recommendation: '删除这条引用不存在实体的关系，保留实体定义。',
+        actionLabel: '删除关系',
       };
     }
     return {
@@ -940,7 +967,7 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   // 模块意图：恢复旧版合并校验项的最小自动修复能力，让用户能在生成合并文档前处理明确失效的引用。
   // 关键流程：复制 merged_document 草稿 -> 应用本地修复 -> 调用服务端文档校验 -> 用返回结果刷新合并分析区。
-  // 边界细节：本轮只覆盖 stageFlowRefs 失效引用；修复只作用于弹窗内草稿，不保存工作区文档。
+  // 边界细节：本轮覆盖明确的删除类修复；修复只作用于弹窗内草稿，不保存工作区文档。
   protected async applyMergeValidationFix(issueIndex: number): Promise<void> {
     const analysis = this.mergeAnalysis();
     const issue = (analysis?.validation_issues || [])[issueIndex];
@@ -967,6 +994,12 @@ export class ShellComponent implements OnInit, OnDestroy {
   private applyMergeValidationFixToDocument(document: any, issue: any): boolean {
     const path = String(issue?.path || '');
     const fix = this.mergeValidationFix(issue);
+    if (fix.kind === 'stage_flow_link') {
+      const token = String(path.split('.')[1] || '').trim();
+      if (!token) return false;
+      document.stageFlowLinks = (document.stageFlowLinks || []).filter((link: any) => String(link.id || link.uid || '').trim() !== token);
+      return true;
+    }
     if (fix.kind === 'stage_flow_ref') {
       const token = String(path.split('.')[1] || '').trim();
       if (!token) return false;
@@ -974,7 +1007,31 @@ export class ShellComponent implements OnInit, OnDestroy {
       document.stageFlowLinks = (document.stageFlowLinks || []).filter((link: any) => link.fromRefId !== token && link.toRefId !== token);
       return true;
     }
+    if (fix.kind === 'stage_process_link') {
+      const parts = path.split('.');
+      const stageToken = String(parts[1] || '').trim();
+      const linkToken = String(parts[3] || '').trim();
+      const stage = this.findMergeItemByToken(document.stages || [], stageToken);
+      if (!stage || !linkToken) return false;
+      stage.processLinks = (stage.processLinks || []).filter((link: any) => String(link.uid || link.id || '').trim() !== linkToken);
+      return true;
+    }
+    if (fix.kind === 'relation') {
+      const token = String(path.split('.')[1] || '').trim();
+      if (!token) return false;
+      document.relations = (document.relations || []).filter((relation: any) => String(relation.uid || relation.id || '').trim() !== token);
+      return true;
+    }
     return false;
+  }
+
+  private findMergeItemByToken(items: any[], token: string): any {
+    const normalized = String(token || '').trim();
+    return (items || []).find((item) => (
+      String(item?.uid || '').trim() === normalized ||
+      String(item?.id || '').trim() === normalized ||
+      String(item?.name || '').trim() === normalized
+    )) || null;
   }
 
   private cloneMergeDocument(document: any): any {

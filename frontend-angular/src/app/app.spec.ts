@@ -1816,7 +1816,7 @@ describe('App', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-validation-fix-stage-ref"]')?.click();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="merge-validation-fix-auto"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -1824,6 +1824,114 @@ describe('App', () => {
     expect(validatedDocument.stageFlowLinks).toEqual([]);
     expect(compiled.querySelector('[data-testid="merge-internal-validation-error"]')).toBeNull();
     expect(compiled.querySelector('[data-testid="merge-analysis"]')?.textContent).toContain('校验 0');
+  });
+
+  it('should apply delete-style merge validation fixes and revalidate the merge draft', async () => {
+    const validatedDocuments: any[] = [];
+    let analyzeCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: '当前版本' },
+          { name: 'agent-branch.json', title: '分支版本' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent-branch.json')) {
+        return new Response(JSON.stringify({
+          document: { meta: { domain: 'Agent Branch' }, roles: [], stages: [], stageFlowRefs: [], stageFlowLinks: [], processes: [], entities: [], relations: [] },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/merge/analyze')) {
+        analyzeCount += 1;
+        const scenarios = [
+          {
+            validation_issues: [{ path: 'stageFlowLinks.link-missing', message: '阶段流程连线失效' }],
+            merged_document: {
+              meta: { title: 'Agent 合并结果', domain: 'Agent 合并域' },
+              roles: [],
+              stages: [],
+              stageFlowRefs: [],
+              stageFlowLinks: [{ id: 'link-missing', fromRefId: 'a', toRefId: 'b' }],
+              processes: [],
+              entities: [],
+              relations: [],
+            },
+          },
+          {
+            validation_issues: [{ path: 'stages.stage-a.processLinks.link-missing', message: '阶段内流程连线失效' }],
+            merged_document: {
+              meta: { title: 'Agent 合并结果', domain: 'Agent 合并域' },
+              roles: [],
+              stages: [{ uid: 'stage-a', processLinks: [{ uid: 'link-missing', from: 'p1', to: 'p2' }] }],
+              stageFlowRefs: [],
+              stageFlowLinks: [],
+              processes: [],
+              entities: [],
+              relations: [],
+            },
+          },
+          {
+            validation_issues: [{ path: 'relations.relation-missing', message: '实体关系失效' }],
+            merged_document: {
+              meta: { title: 'Agent 合并结果', domain: 'Agent 合并域' },
+              roles: [],
+              stages: [],
+              stageFlowRefs: [],
+              stageFlowLinks: [],
+              processes: [],
+              entities: [],
+              relations: [{ uid: 'relation-missing', source: 'entity-a', target: 'entity-missing' }],
+            },
+          },
+        ];
+        const scenario = scenarios[Math.min(analyzeCount - 1, scenarios.length - 1)];
+        return new Response(JSON.stringify({
+          summary: { autoMergedCount: 2, validationIssueCount: 1 },
+          conflicts: [],
+          ...scenario,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/document/validate')) {
+        const document = JSON.parse(String(init?.body || '{}')).document;
+        validatedDocuments.push(document);
+        return new Response(JSON.stringify({ ok: true, document, validation_issues: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = { meta: { domain: 'Agent Current' }, roles: [], stages: [], stageFlowRefs: [], stageFlowLinks: [], processes: [], entities: [], relations: [] };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-merge-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="merge-right-select"]')!;
+    select.value = 'agent-branch.json';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    for (let index = 0; index < 3; index += 1) {
+      compiled.querySelector<HTMLButtonElement>('[data-testid="merge-analyze-button"]')?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      compiled.querySelector<HTMLButtonElement>('[data-testid="merge-validation-fix-auto"]')?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    expect(validatedDocuments[0].stageFlowLinks).toEqual([]);
+    expect(validatedDocuments[1].stages[0].processLinks).toEqual([]);
+    expect(validatedDocuments[2].relations).toEqual([]);
   });
 
   it('should save and open a merge result when the precheck has no blockers', async () => {

@@ -608,9 +608,9 @@
                   </div>
                   <p>{{ issue.message || issue.reason || '' }}</p>
                   <div class="merge-validation-suggestion">{{ mergeValidationFix(issue).recommendation }}</div>
-                  @if (mergeValidationFix(issue).kind === 'stage_flow_ref') {
+                  @if (mergeValidationFix(issue).group === 'auto') {
                     <div class="merge-validation-actions">
-                      <button class="btn btn-outline btn-sm" type="button" data-testid="merge-validation-fix-stage-ref" [disabled]="busy()" (click)="applyMergeValidationFix(issueIndex)">
+                      <button class="btn btn-outline btn-sm" type="button" data-testid="merge-validation-fix-auto" [attr.data-stage-ref-testid]="mergeValidationFix(issue).kind === 'stage_flow_ref' ? 'merge-validation-fix-stage-ref' : null" [disabled]="busy()" (click)="applyMergeValidationFix(issueIndex)">
                         {{ mergeValidationFix(issue).actionLabel }}
                       </button>
                     </div>
