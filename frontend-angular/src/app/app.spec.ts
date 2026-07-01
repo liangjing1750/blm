@@ -503,6 +503,8 @@ describe('App', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const scrollSpy = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollSpy });
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.ui['mainTab'] = 'preview';
@@ -530,7 +532,18 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="preview-workbench"]')?.textContent).toContain('交割监管平台');
     expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('大纲视图');
     expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('流程视图');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="process"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="entity"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).not.toContain('流程节点: 提交申请');
+
+    const outlineButtons = Array.from(compiled.querySelectorAll<HTMLButtonElement>('.preview-outline-link'));
+    outlineButtons.find((button) => button.textContent?.includes('入库流程'))?.click();
+    fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('流程节点: 提交申请');
+    expect(scrollSpy).toHaveBeenCalled();
+
+    outlineButtons.find((button) => button.textContent?.includes('仓单'))?.click();
+    fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('实体: 仓单');
 
     compiled.querySelector<HTMLButtonElement>('#preview-raw-toggle')?.click();
@@ -4156,6 +4169,7 @@ describe('App', () => {
     runtime.ui['mainTab'] = 'processWorkbench';
     runtime.ui['procId'] = 'proc-inbound';
     runtime.ui['taskId'] = 'node-submit';
+    runtime.ui['procDiagramMode'] = 'swimlane';
     runtime.doc = {
       meta: { domain: 'Agent' },
       roles: [],
@@ -4179,9 +4193,16 @@ describe('App', () => {
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
 
-    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-locator-menu-button"]')?.click();
+    expect(compiled.querySelector('[data-testid="toolbar-locator-menu-button"]')).toBeFalsy();
+    compiled.querySelector<HTMLElement>('#tab-content')?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 320,
+      clientY: 180,
+    }));
     fixture.detectChanges();
-    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-copy-node-link"]')?.click();
+    expect(compiled.querySelector('[data-testid="locator-menu"]')?.textContent).toContain('复制当前节点链接');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="context-copy-node-link"]')?.click();
     await fixture.whenStable();
 
     expect(writeText).toHaveBeenCalledTimes(1);
@@ -4190,6 +4211,8 @@ describe('App', () => {
     expect(copied).toContain('tab=process');
     expect(copied).toContain('proc=proc-inbound');
     expect(copied).toContain('task=node-submit');
+    expect(copied).toContain('view=swimlane');
+    expect(compiled.querySelector('[data-testid="locator-menu"]')).toBeFalsy();
   });
 
   it('should open a startup locator and restore process node state', async () => {

@@ -58,6 +58,12 @@ interface LocatorAction {
   testId: string;
 }
 
+interface LocatorMenuState {
+  x: number;
+  y: number;
+  actions: LocatorAction[];
+}
+
 interface CompareRow {
   section: string;
   kind: '新增' | '删除' | '修改' | '相同';
@@ -163,6 +169,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly toast = signal<ShellToastState | null>(null);
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
   protected readonly collabUsersOpen = signal(false);
+  protected readonly locatorMenu = signal<LocatorMenuState | null>(null);
   private readonly shellVersion = signal(0);
   protected openQuery = '';
   protected createDocumentName = '';
@@ -211,10 +218,36 @@ export class ShellComponent implements OnInit, OnDestroy {
   @HostListener('document:click', ['$event'])
   protected closeDropdownOnOutsideClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
+    if (target?.closest('.locator-menu')) return;
     if (target?.closest('.tbar-dd')) return;
     if (target?.closest('.collab-users-popup') || target?.closest('.collab-status')) return;
     this.activeDropdown.set('');
     this.collabUsersOpen.set(false);
+    this.locatorMenu.set(null);
+  }
+
+  @HostListener('document:contextmenu', ['$event'])
+  protected showLocatorMenu(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest?.('#tab-content, #sidebar-content, .file-name, .collab-status');
+    if (!anchor || !this.runtime.currentFile) return;
+    const actions = this.locatorActions();
+    if (!actions.length) return;
+    event.preventDefault();
+    this.activeDropdown.set('');
+    this.collabUsersOpen.set(false);
+    const width = 210;
+    const height = Math.max(48, actions.length * 36 + 12);
+    this.locatorMenu.set({
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 12)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 12)),
+      actions,
+    });
+  }
+
+  @HostListener('window:blur')
+  protected hideLocatorMenu(): void {
+    this.locatorMenu.set(null);
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -556,11 +589,12 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected locatorActions(): LocatorAction[] {
     if (!this.runtime.currentFile) return [];
     const mainTab = String(this.runtime.ui['mainTab'] || 'panoramaWorkbench');
+    const processView = String(this.runtime.ui['procDiagramMode'] || '').trim() === 'linear' ? 'summary' : 'swimlane';
     const actions: LocatorAction[] = [{
       id: 'view',
       label: '复制当前视图链接',
       params: { tab: this.locatorTabFromMainTab(mainTab) },
-      testId: 'toolbar-copy-view-link',
+      testId: 'context-copy-view-link',
     }];
     const procId = String(this.runtime.ui['procId'] || '').trim();
     const taskId = String(this.runtime.ui['taskId'] || '').trim();
@@ -569,16 +603,16 @@ export class ShellComponent implements OnInit, OnDestroy {
         actions.push({
           id: 'process',
           label: '复制当前流程链接',
-          params: { tab: 'process', proc: procId },
-          testId: 'toolbar-copy-process-link',
+          params: { tab: 'process', proc: procId, view: processView },
+          testId: 'context-copy-process-link',
         });
       }
       if (procId && taskId) {
         actions.push({
           id: 'node',
           label: '复制当前节点链接',
-          params: { tab: 'process', proc: procId, task: taskId },
-          testId: 'toolbar-copy-node-link',
+          params: { tab: 'process', proc: procId, task: taskId, view: processView },
+          testId: 'context-copy-node-link',
         });
       }
     }
@@ -588,7 +622,15 @@ export class ShellComponent implements OnInit, OnDestroy {
         id: 'entity',
         label: '复制当前实体链接',
         params: { tab: 'data', entity: entityId },
-        testId: 'toolbar-copy-entity-link',
+        testId: 'context-copy-entity-link',
+      });
+    }
+    if (this.runtime.readOnly && this.runtime.doc?.meta?.version_id) {
+      actions.push({
+        id: 'readonly-version',
+        label: '复制当前只读版本链接',
+        params: { tab: this.locatorTabFromMainTab(mainTab) },
+        testId: 'context-copy-readonly-version-link',
       });
     }
     return actions;
@@ -597,6 +639,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected async copyLocatorAction(action: LocatorAction): Promise<void> {
     const copied = await this.copyLocatorUrl(this.buildLocatorUrl(action.params));
     this.activeDropdown.set('');
+    this.locatorMenu.set(null);
     this.showToast(copied ? `已复制${action.label.replace(/^复制/, '')}` : '链接复制失败，请手动复制', copied ? 'success' : 'error');
   }
 

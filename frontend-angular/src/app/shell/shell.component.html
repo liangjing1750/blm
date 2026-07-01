@@ -65,16 +65,6 @@
 
   <div class="toolbar-right">
     <div class="tbar-dd">
-      <button class="btn btn-ghost tbar-dd-btn" type="button" data-testid="toolbar-locator-menu-button" [disabled]="!runtime.currentFile" (click)="toggleDropdown('locator', $event)">复制链接 ▼</button>
-      <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'locator'">
-        @for (action of locatorActions(); track action.id) {
-          <button class="tbar-dd-item" type="button" [attr.data-testid]="action.testId" (click)="copyLocatorAction(action)">{{ action.label }}</button>
-        } @empty {
-          <button class="tbar-dd-item" type="button" disabled>请先打开文档</button>
-        }
-      </div>
-    </div>
-    <div class="tbar-dd">
       <button class="btn btn-ghost tbar-dd-btn" type="button" (click)="toggleDropdown('file', $event)">文件 ▾</button>
       <div class="tbar-dd-menu" [class.hidden]="activeDropdown() !== 'file'">
         <button class="tbar-dd-item" type="button" data-testid="toolbar-new-button" (click)="createDocument()">新建</button>
@@ -648,6 +638,14 @@
     [description]="wait.description"
   ></app-wait-dialog>
 </div>
+
+@if (locatorMenu(); as menu) {
+  <div class="locator-menu" data-testid="locator-menu" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
+    @for (action of menu.actions; track action.id) {
+      <button type="button" [attr.data-testid]="action.testId" (click)="copyLocatorAction(action)">{{ action.label }}</button>
+    }
+  </div>
+}
 
 <div *ngIf="confirmDialog() as confirm" class="modal-backdrop" data-testid="runtime-confirm-backdrop" (click)="closeConfirmDialog(false)">
   <section class="modal-card confirm-card" data-testid="runtime-confirm-dialog" (click)="$event.stopPropagation()">

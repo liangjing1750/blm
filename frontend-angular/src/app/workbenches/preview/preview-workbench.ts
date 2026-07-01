@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../core/api/api.service';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
@@ -17,25 +18,37 @@ interface PreviewOutlineItem {
   templateUrl: './preview-workbench.html',
   styleUrl: './preview-workbench.scss',
 })
-export class PreviewWorkbench {
+export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   // 模块意图：复刻旧版预览页的阅读式框架，同时保持 Angular 运行时和导出链路的单向依赖。
   // 关键流程：左侧大纲由文档结构生成，右侧正文直接渲染为阅读 HTML，原文 MD 与导出复用同一份 Markdown。
-  // 边界细节：这里只移植旧版相对独立的预览结构与排版，不重新挂回旧版全局脚本和复杂图形懒加载。
+  // 边界细节：正文 HTML 由本组件统一转义字段后生成，再放行旧版懒加载所需的 data-* 标记。
   private readonly api = inject(ApiService);
+  private readonly sanitizer = inject(DomSanitizer);
+  private previewLazyObserver: IntersectionObserver | null = null;
   protected readonly runtime = getAngularRuntimeState();
   protected readonly exportWait = signal<{ title: string; description: string } | null>(null);
   protected readonly showRaw = signal(false);
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly markdown = computed(() => this.buildMarkdown());
-  protected readonly renderedHtml = computed(() => this.renderDocumentHtml());
+  protected readonly renderedHtml = computed<SafeHtml>(() => this.sanitizer.bypassSecurityTrustHtml(this.renderDocumentHtml()));
   protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
 
   protected toggleRaw(): void {
     this.showRaw.update((value) => !value);
+    if (!this.showRaw()) window.setTimeout(() => this.initPreviewLazyRendering(), 0);
   }
 
   protected jumpTo(anchorId: string): void {
+    this.ensurePreviewSection(anchorId);
     document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  ngAfterViewInit(): void {
+    window.setTimeout(() => this.initPreviewLazyRendering(), 0);
+  }
+
+  ngOnDestroy(): void {
+    this.previewLazyObserver?.disconnect();
   }
 
   protected exportJson(): void {
@@ -144,25 +157,22 @@ export class PreviewWorkbench {
 
   private renderStages(stages: any[]): string {
     if (!stages.length) return '';
-    return `<h2 id="preview-stages">全景与阶段视图</h2>${stages.map((stage, index) => {
-      const processCount = this.asArray(this.runtime.doc?.stageFlowRefs).filter((ref) => ref.stageUid === stage.uid || ref.stageId === stage.uid).length;
-      return `<section id="${this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`))}" class="pv-stage-section">
-        <h3>阶段视图: ${this.esc(this.displayName(stage, '未命名业务阶段'))}</h3>
-        <p class="pv-note"><strong>所属业务域</strong>: ${this.esc(stage.subDomain || stage.businessDomain || '—')} | <strong>流程数</strong>: ${processCount}</p>
-      </section>`;
-    }).join('')}`;
+    return `<h2 id="preview-stages">全景与阶段视图</h2>${stages.map((stage, index) => this.previewLazySectionHtml(
+      this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`)),
+      'stage',
+      `阶段视图: ${this.displayName(stage, '未命名业务阶段')}`,
+      index,
+    )).join('')}`;
   }
 
   private renderProcesses(processes: any[]): string {
     if (!processes.length) return '';
-    return `<h2 id="preview-processes">流程视图</h2>${processes.map((process, index) => {
-      const nodes = this.asArray(process.nodes || process.tasks);
-      return `<section id="${this.anchorId('proc', this.identityOf(process, `process-${index + 1}`))}" class="pv-process-section">
-        <h3>${this.esc(this.displayName(process, '未命名流程'))}</h3>
-        ${process.trigger || process.outcome ? `<p class="pv-note"><strong>触发</strong>: ${this.esc(process.trigger || '—')} -> <strong>预期结果</strong>: ${this.esc(process.outcome || '—')}</p>` : ''}
-        ${nodes.length ? `<div class="pv-tasks">${nodes.map((node, nodeIndex) => this.renderProcessNode(node, nodeIndex)).join('')}</div>` : '<div class="diag-empty">暂无流程节点</div>'}
-      </section>`;
-    }).join('')}`;
+    return `<h2 id="preview-processes">流程视图</h2>${processes.map((process, index) => this.previewLazySectionHtml(
+      this.anchorId('proc', this.identityOf(process, `process-${index + 1}`)),
+      'process',
+      this.displayName(process, '未命名流程'),
+      index,
+    )).join('')}`;
   }
 
   private renderProcessNode(node: any, index: number): string {
@@ -179,13 +189,78 @@ export class PreviewWorkbench {
 
   private renderEntities(entities: any[]): string {
     if (!entities.length) return '';
-    return `<h2 id="preview-entities">数据建模</h2>${entities.map((entity, index) => `
-      <section id="${this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`))}" class="pv-entity-section">
-        <h3>实体: ${this.esc(this.displayName(entity, '未命名实体'))}</h3>
-        ${entity.note ? `<p class="pv-note">${this.esc(entity.note)}</p>` : ''}
-        ${this.asArray(entity.fields).length ? `<table><thead><tr><th>字段</th><th>类型</th><th>主键</th><th>说明</th></tr></thead><tbody>${this.asArray(entity.fields).map((field) => `
-          <tr><td>${this.esc(field.name || '')}</td><td>${this.esc(field.type || '')}</td><td class="pv-center">${field.is_key || field.isKey ? '✓' : ''}</td><td>${this.esc(field.note || field.desc || '')}</td></tr>`).join('')}</tbody></table>` : ''}
-      </section>`).join('')}`;
+    return `<h2 id="preview-entities">数据建模</h2>${entities.map((entity, index) => this.previewLazySectionHtml(
+      this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)),
+      'entity',
+      `实体: ${this.displayName(entity, '未命名实体')}`,
+      index,
+    )).join('')}`;
+  }
+
+  private previewLazySectionHtml(anchorId: string, kind: string, title: string, index = 0): string {
+    return `<section id="${this.esc(anchorId)}" class="pv-lazy-section" data-preview-lazy="${this.esc(kind)}" data-preview-index="${index}" data-preview-loaded="false">
+      <h3>${this.esc(title)}</h3>
+      <div class="pv-lazy-placeholder"><span>滚动到这里或点击大纲后生成内容</span></div>
+    </section>`;
+  }
+
+  private initPreviewLazyRendering(): void {
+    this.previewLazyObserver?.disconnect();
+    const root = document.getElementById('preview-rendered');
+    const sections = Array.from(document.querySelectorAll<HTMLElement>('[data-preview-lazy]'));
+    if (!root || !sections.length || typeof IntersectionObserver === 'undefined') return;
+    this.previewLazyObserver = new IntersectionObserver((entries) => {
+      entries
+        .filter((entry) => entry.isIntersecting)
+        .forEach((entry) => this.ensurePreviewSection((entry.target as HTMLElement).id));
+    }, { root, rootMargin: '600px 0px', threshold: 0.01 });
+    sections.forEach((section) => this.previewLazyObserver?.observe(section));
+  }
+
+  private ensurePreviewSection(anchorId: string): void {
+    const el = document.getElementById(anchorId) as HTMLElement | null;
+    if (!el || el.dataset['previewLoaded'] === 'true') return;
+    const kind = el.dataset['previewLazy'] || '';
+    const index = Number(el.dataset['previewIndex'] || 0) || 0;
+    const html = kind === 'stage'
+      ? this.renderStageDetail(this.asArray(this.runtime.doc?.stages)[index], index)
+      : kind === 'process'
+        ? this.renderProcessDetail(this.asArray(this.runtime.doc?.processes)[index], index)
+        : kind === 'entity'
+          ? this.renderEntityDetail(this.asArray(this.runtime.doc?.entities)[index], index)
+          : '';
+    if (!html) return;
+    this.previewLazyObserver?.unobserve(el);
+    el.outerHTML = html;
+  }
+
+  private renderStageDetail(stage: any, index: number): string {
+    if (!stage) return '';
+    const processCount = this.asArray(this.runtime.doc?.stageFlowRefs).filter((ref) => ref.stageUid === stage.uid || ref.stageId === stage.uid).length;
+    return `<section id="${this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`))}" class="pv-stage-section" data-preview-loaded="true">
+      <h3>阶段视图: ${this.esc(this.displayName(stage, '未命名业务阶段'))}</h3>
+      <p class="pv-note"><strong>所属业务域</strong>: ${this.esc(stage.subDomain || stage.businessDomain || '—')} | <strong>流程数</strong>: ${processCount}</p>
+    </section>`;
+  }
+
+  private renderProcessDetail(process: any, index: number): string {
+    if (!process) return '';
+    const nodes = this.asArray(process.nodes || process.tasks);
+    return `<section id="${this.anchorId('proc', this.identityOf(process, `process-${index + 1}`))}" class="pv-process-section" data-preview-loaded="true">
+      <h3>${this.esc(this.displayName(process, '未命名流程'))}</h3>
+      ${process.trigger || process.outcome ? `<p class="pv-note"><strong>触发</strong>: ${this.esc(process.trigger || '—')} -> <strong>预期结果</strong>: ${this.esc(process.outcome || '—')}</p>` : ''}
+      ${nodes.length ? `<div class="pv-tasks">${nodes.map((node, nodeIndex) => this.renderProcessNode(node, nodeIndex)).join('')}</div>` : '<div class="diag-empty">暂无流程节点</div>'}
+    </section>`;
+  }
+
+  private renderEntityDetail(entity: any, index: number): string {
+    if (!entity) return '';
+    return `<section id="${this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`))}" class="pv-entity-section" data-preview-loaded="true">
+      <h3>实体: ${this.esc(this.displayName(entity, '未命名实体'))}</h3>
+      ${entity.note ? `<p class="pv-note">${this.esc(entity.note)}</p>` : ''}
+      ${this.asArray(entity.fields).length ? `<table><thead><tr><th>字段</th><th>类型</th><th>主键</th><th>说明</th></tr></thead><tbody>${this.asArray(entity.fields).map((field) => `
+        <tr><td>${this.esc(field.name || '')}</td><td>${this.esc(field.type || '')}</td><td class="pv-center">${field.is_key || field.isKey ? '✓' : ''}</td><td>${this.esc(field.note || field.desc || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+    </section>`;
   }
 
   private renderComponents(doc: any): string {
