@@ -118,6 +118,12 @@ export class ProcessFlowModelService {
     layout.items[key] = { dx: Math.round(dx), dy: Math.round(dy) };
   }
 
+  setFlowLabelOffset(process: LegacyProcess, key: string, dx: number, dy: number): void {
+    const layout = this.swimlaneLayout(process);
+    layout.labels ||= {};
+    layout.labels[key] = { dx: Math.round(dx), dy: Math.round(dy) };
+  }
+
   private normalizeFlow(process: LegacyProcess | null | undefined): NonNullable<LegacyProcess['flow']> {
     if (!process) return { version: 2, orientation: 'horizontal', nodes: [], edges: [] };
     const rawFlow = process.flow && typeof process.flow === 'object' ? process.flow : {};

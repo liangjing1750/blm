@@ -62,6 +62,15 @@ interface FlowDragState {
   task?: LegacyProcessNode;
 }
 
+interface FlowLabelDragState {
+  edgeId: string;
+  startX: number;
+  startY: number;
+  startOffset: { dx: number; dy: number };
+  timer: number | null;
+  dragging: boolean;
+}
+
 interface FlowAlignmentGuide {
   id: string;
   axis: 'x' | 'y';
@@ -120,11 +129,13 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly connectingFromId = signal<string>('');
   protected readonly rolePickerOpen = signal(false);
   protected readonly editingNodeNameId = signal<string>('');
+  protected readonly editingEdgeLabelId = signal<string>('');
   protected readonly cardRolePickerNodeId = signal<string>('');
   protected readonly selectedStageId = signal<string>('');
   protected readonly attachmentDrawerOpen = signal(false);
   protected readonly zoomValue = signal(1);
   protected readonly dragState = signal<FlowDragState | null>(null);
+  protected readonly labelDragState = signal<FlowLabelDragState | null>(null);
   protected readonly dragPreview = signal<FlowDragPreview | null>(null);
   protected readonly previewPoint = signal<{ x: number; y: number } | null>(null);
   protected readonly adapter = createProcessEditorLegacyAdapter();
@@ -294,6 +305,18 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected finishNodeNameEdit(event?: Event): void {
     event?.stopPropagation();
     this.editingNodeNameId.set('');
+  }
+
+  protected editableNodeName(node: any): string {
+    return node.task?.name || node.gateway?.title || node.name || '';
+  }
+
+  protected setEditableNodeName(node: any, value: string): void {
+    if (node.task) {
+      this.setTaskName(node.task, value);
+      return;
+    }
+    if (node.gateway) this.setGateway(node.gateway, 'title', value);
   }
 
   protected handleNodeNameKeydown(event: KeyboardEvent): void {
@@ -474,13 +497,15 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
         const d = sameRow
           ? `M ${startX} ${startY} L ${endX} ${endY}`
           : `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`;
+        const edgeId = this.edgeId(edge) || `edge-${index}`;
+        const labelOffset = this.flowLabelOffset(process, edgeId);
         return {
-          id: `${this.edgeId(edge) || `edge-${index}`}::${from.id}::${to.id}`,
-          baseId: this.edgeId(edge) || `edge-${index}`,
+          id: `${edgeId}::${from.id}::${to.id}`,
+          baseId: edgeId,
           label: fromIndex === 0 && toIndex === 0 ? String(edge.label || edge.condition || '') : '',
           d,
-          labelX: midX + 6,
-          labelY: (startY + endY) / 2 - 8,
+          labelX: midX + 6 + labelOffset.dx,
+          labelY: (startY + endY) / 2 - 8 + labelOffset.dy,
         };
       }));
     });
@@ -513,6 +538,10 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   protected selectedEdge(process: LegacyProcess): LegacyFlowEdge | null {
     return this.edges(process).find((edge) => this.edgeId(edge) === this.selectedElementId()) || null;
+  }
+
+  protected selectedFlowEdge(process: LegacyProcess): FlowCanvasEdge | null {
+    return this.flowEdges(process).find((edge) => edge.baseId === this.selectedElementId()) || null;
   }
 
   protected flowNodeOptions(process: LegacyProcess, side: 'from' | 'to'): Array<{ id: string; label: string }> {
@@ -671,6 +700,77 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  protected openEdgeLabelEditor(edgeId: string, event?: Event): void {
+    event?.stopPropagation();
+    this.selectedElementId.set(edgeId);
+    this.editingEdgeLabelId.set(edgeId);
+    window.setTimeout(() => {
+      const input = document.getElementById(this.edgeLabelInputId(edgeId)) as HTMLInputElement | null;
+      input?.focus();
+      input?.select();
+    });
+  }
+
+  protected edgeLabelInputId(edgeId: string): string {
+    return `process-flow-edge-label-${edgeId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  }
+
+  protected finishEdgeLabelEdit(event?: Event): void {
+    event?.stopPropagation();
+    this.editingEdgeLabelId.set('');
+  }
+
+  protected handleEdgeLabelKeydown(event: KeyboardEvent): void {
+    event.stopPropagation();
+    if (event.key === 'Enter' || event.key === 'Escape') {
+      event.preventDefault();
+      this.finishEdgeLabelEdit(event);
+    }
+  }
+
+  protected startEdgeLabelDrag(edge: FlowCanvasEdge, event: PointerEvent): void {
+    if (!this.editing) return;
+    event.stopPropagation();
+    const process = this.currentProcess();
+    if (!process) return;
+    const startOffset = this.flowLabelOffset(process, edge.baseId);
+    const timer = window.setTimeout(() => {
+      const current = this.labelDragState();
+      if (current?.edgeId === edge.baseId) this.labelDragState.set({ ...current, dragging: true, timer: null });
+    }, 220);
+    this.labelDragState.set({
+      edgeId: edge.baseId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffset,
+      timer,
+      dragging: false,
+    });
+  }
+
+  protected moveEdgeLabelDrag(event: MouseEvent | PointerEvent): void {
+    const drag = this.labelDragState();
+    const process = this.currentProcess();
+    if (!drag || !process) return;
+    const dx = (event.clientX - drag.startX) / this.zoomValue();
+    const dy = (event.clientY - drag.startY) / this.zoomValue();
+    if (!drag.dragging) {
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this.clearEdgeLabelDragTimer(drag);
+      return;
+    }
+    this.flowModel.setFlowLabelOffset(process, drag.edgeId, drag.startOffset.dx + dx, drag.startOffset.dy + dy);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected finishEdgeLabelDrag(event?: Event): void {
+    const drag = this.labelDragState();
+    if (!drag) return;
+    event?.stopPropagation();
+    if (drag) this.clearEdgeLabelDragTimer(drag);
+    this.labelDragState.set(null);
+  }
+
   protected addTask(): void {
     const process = this.currentProcess();
     if (!process) return;
@@ -728,6 +828,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.rolePickerOpen.set(false);
     this.cardRolePickerNodeId.set('');
     this.editingNodeNameId.set('');
+    this.editingEdgeLabelId.set('');
     this.previewPoint.set(null);
   }
 
@@ -774,16 +875,19 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   @HostListener('document:pointerup', ['$event'])
   protected onDocumentPointerUp(event: PointerEvent): void {
+    this.finishEdgeLabelDrag(event);
     this.finishNodeDrag(event);
   }
 
   @HostListener('document:pointermove', ['$event'])
   protected onDocumentPointerMove(event: PointerEvent): void {
+    this.moveEdgeLabelDrag(event);
     this.moveNodeDrag(event);
   }
 
   @HostListener('window:pointerup', ['$event'])
   protected onWindowPointerUp(event: PointerEvent): void {
+    this.finishEdgeLabelDrag(event);
     this.finishNodeDrag(event);
   }
 
@@ -862,7 +966,10 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   private isNodeCardControl(target: EventTarget | null): boolean {
     // 边界细节：卡片内按钮、输入框和角色下拉不应启动拖拽，否则编辑名称/角色会误移动节点。
-    return Boolean((target as HTMLElement | null)?.closest?.('button,input,select,textarea,label,.flow-node-role-picker'));
+    const element = target as HTMLElement | null;
+    if (!element) return false;
+    if (element.closest('.flow-terminal,.flow-gateway')) return false;
+    return Boolean(element.closest('button,input,select,textarea,label,.flow-node-role-picker,.flow-node-edit-icon,.flow-gateway-edit-icon'));
   }
 
   protected onLaneDrop(event: DragEvent, lane: FlowLane): void {
@@ -902,6 +1009,15 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     const preview = this.dragPreview();
     if (preview?.nodeId === key) return { dx: preview.dx, dy: preview.dy };
     return { dx: Number(offset.dx || 0), dy: Number(offset.dy || 0) };
+  }
+
+  private flowLabelOffset(process: LegacyProcess, key: string): Required<ProcessFlowLayoutOffset> {
+    const offset = this.flowModel.swimlaneLayout(process).labels?.[key] || {};
+    return { dx: Number(offset.dx || 0), dy: Number(offset.dy || 0) };
+  }
+
+  private clearEdgeLabelDragTimer(drag: FlowLabelDragState): void {
+    if (drag.timer !== null) window.clearTimeout(drag.timer);
   }
 
   private setFlowOffset(process: LegacyProcess, key: string, dx: number, dy: number, markDirty: boolean): void {

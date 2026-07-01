@@ -95,6 +95,23 @@
 .flow-edge-label {
   fill: #0f172a;
   font-size: 12px;
+  cursor: text;
+  user-select: none;
+}
+
+.flow-edge-label-input {
+  position: absolute;
+  z-index: 130;
+  width: 148px;
+  min-height: 26px;
+  padding: 2px 7px;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+  outline: none;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .12);
 }
 
 .flow-node,
@@ -321,6 +338,34 @@
   line-height: 1.25;
   word-break: break-all;
   font-size: 11px;
+}
+
+.flow-gateway-name-input {
+  width: 62px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid #93c5fd;
+  border-radius: 5px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+}
+
+.flow-gateway-edit-icon {
+  position: absolute;
+  right: 6px;
+  top: 2px;
+  z-index: 2;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.flow-gateway-edit-icon:hover {
+  color: #3b82f6;
 }
 
 .flow-node.active,

@@ -4499,6 +4499,92 @@ describe('App', () => {
     expect(topOf('[data-testid="process-flow-terminal"]', 1)).toBeGreaterThan(endTop);
   });
 
+  it('should edit flow labels inline and keep flow shape controls draggable', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '产品经理' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-inbound',
+          name: '入库流程',
+          nodes: [{ uid: 'node-submit', name: '客户提交', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+          flow: {
+            nodes: [{ id: 'gateway-check', uid: 'gateway-check', kind: 'gateway', title: '是否通过' }],
+            edges: [{ id: 'edge-1', uid: 'edge-1', from: 'node-submit', to: 'gateway-check', label: '初始说明' }],
+          },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-inbound';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const component = fixture.componentInstance as any;
+    const process = runtime.doc.processes[0] as any;
+    const nodes = component.flowNodes(process);
+    const startNode = nodes.find((item: any) => item.kind === 'start');
+    const gatewayNode = nodes.find((item: any) => item.kind === 'gateway');
+    const terminal = compiled.querySelector<HTMLElement>('[data-testid="process-flow-terminal"]')!;
+    const gateway = compiled.querySelector<HTMLElement>('[data-testid="process-flow-gateway"]')!;
+
+    component.startNodeDrag({ clientX: 10, clientY: 10, button: 0, preventDefault: vi.fn(), target: terminal, currentTarget: terminal }, startNode);
+    expect(component.dragState()?.nodeId).toBe('START');
+    component.finishNodeDrag({ clientX: 10, clientY: 10, currentTarget: terminal });
+    component.startNodeDrag({ clientX: 10, clientY: 10, button: 0, preventDefault: vi.fn(), target: gateway, currentTarget: gateway }, gatewayNode);
+    expect(component.dragState()?.nodeId).toBe('gateway-check');
+    component.finishNodeDrag({ clientX: 10, clientY: 10, currentTarget: gateway });
+
+    gateway.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    fixture.detectChanges();
+    const gatewayInput = compiled.querySelector<HTMLInputElement>('.flow-gateway-name-input')!;
+    gatewayInput.value = '是否合规';
+    gatewayInput.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(process.flow.nodes[0].title).toBe('是否合规');
+
+    const taskNode = compiled.querySelector<HTMLElement>('[data-testid="process-flow-node"]')!;
+    taskNode.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    fixture.detectChanges();
+    const nodeInput = compiled.querySelector<HTMLInputElement>('.flow-node-name-input')!;
+    nodeInput.value = '客户提交资料';
+    nodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(process.nodes[0].name).toBe('客户提交资料');
+
+    const edgePath = compiled.querySelector<SVGPathElement>('.flow-edge-hit')!;
+    edgePath.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fixture.detectChanges();
+    const edgeInput = compiled.querySelector<HTMLInputElement>('[data-testid="process-flow-edge-label-input"]')!;
+    edgeInput.value = '通过后进入网关';
+    edgeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(component.currentProcess().flow.edges[0].label).toBe('通过后进入网关');
+
+    const currentProcess = component.currentProcess();
+    const canvasEdge = component.flowEdges(currentProcess).find((item: any) => item.baseId === 'edge-1');
+    vi.useFakeTimers();
+    try {
+      component.startEdgeLabelDrag(canvasEdge, { clientX: 100, clientY: 100, stopPropagation: vi.fn() });
+      vi.advanceTimersByTime(230);
+      component.moveEdgeLabelDrag({ clientX: 126, clientY: 112 });
+      fixture.detectChanges();
+      expect(currentProcess.flow.layout.swimlane.labels['edge-1']).toMatchObject({ dx: 26, dy: 12 });
+      component.finishEdgeLabelDrag({ stopPropagation: vi.fn() });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('should copy a locator link for the current process node', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
