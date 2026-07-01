@@ -4499,6 +4499,51 @@ describe('App', () => {
     expect(topOf('[data-testid="process-flow-terminal"]', 1)).toBeGreaterThan(endTop);
   });
 
+  it('should not create an unassigned swimlane only because a gateway has no role', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '仓库' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-inbound',
+          name: '仓储仓单监管',
+          nodes: [{ uid: 'node-submit', name: '新增移垛申请', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+          flow: {
+            nodes: [{ id: 'gateway-futures', uid: 'gateway-futures', kind: 'gateway', title: '是否为期货仓单开始', role_id: '' }],
+            edges: [
+              { id: 'edge-start', uid: 'edge-start', from: 'START', to: 'node-submit', label: '' },
+              { id: 'edge-gateway', uid: 'edge-gateway', from: 'node-submit', to: 'gateway-futures', label: '' },
+            ],
+          },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-inbound';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const component = fixture.componentInstance as any;
+    const process = component.currentProcess();
+    const lanes = component.lanes(process).map((lane: any) => lane.name);
+    const gateway = component.flowNodes(process).find((node: any) => node.kind === 'gateway');
+    const task = component.flowNodes(process).find((node: any) => node.kind === 'task');
+
+    expect(lanes).toEqual(['仓库']);
+    expect(compiled.textContent).not.toContain('未分配角色');
+    expect(gateway.role).toBe('仓库');
+    expect(Math.abs((gateway.y + gateway.height / 2) - (task.y + task.height / 2))).toBeLessThanOrEqual(2);
+  });
+
   it('should edit flow labels inline and keep flow shape controls draggable', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

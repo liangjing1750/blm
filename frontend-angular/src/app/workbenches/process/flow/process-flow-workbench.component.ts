@@ -140,8 +140,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly previewPoint = signal<{ x: number; y: number } | null>(null);
   protected readonly adapter = createProcessEditorLegacyAdapter();
   private readonly flowModel = inject(ProcessFlowModelService);
-  protected readonly laneHeight = 118;
-  protected readonly laneTitleWidth = 116;
+  protected readonly laneHeight = 96;
+  protected readonly laneTitleWidth = 86;
   protected readonly nodeWidth = 132;
   protected readonly nodeHeight = 54;
   // 对齐旧版 process.js 布局常量：firstNodeX=180, colW=180, startX=130
@@ -360,14 +360,14 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected lanes(process: LegacyProcess): FlowLane[] {
-    // Key flow: lanes come from roles used by this process, then respect the saved swimlane order when present.
+    // Key flow: lanes come from task ownership. A gateway may inherit a lane for placement,
+    // but its old role_id is only a layout hint and must not create an "unassigned" lane.
     const names = new Set<string>();
     for (const task of this.tasks(process)) {
       const roleIds = this.taskRoleIds(task);
       if (!roleIds.length) names.add('\u672a\u5206\u914d\u89d2\u8272');
       for (const roleId of roleIds) names.add(this.roleName(roleId) || '\u672a\u5206\u914d\u89d2\u8272');
     }
-    for (const gateway of this.gateways(process)) names.add(this.roleName(gateway.role_id) || this.inferGatewayLane(process, this.gatewayId(gateway)) || '\u672a\u5206\u914d\u89d2\u8272');
     if (!names.size) names.add('\u672a\u5206\u914d\u89d2\u8272');
     const laneOrder = this.flowModel.swimlaneLayout(process).laneOrder || [];
     const orderedNames = [...names].sort((a, b) => {
@@ -401,6 +401,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     const tasks = new Map(this.tasks(process).map((task) => [this.taskId(task), task]));
     const gateways = new Map(this.gateways(process).map((gateway) => [this.gatewayId(gateway), gateway]));
     const laneMap = new Map(this.lanes(process).map((lane, index) => [lane.name, index]));
+    const primaryNodesById = new Map<string, FlowCanvasNode>();
     return this.flowOrder(process).flatMap((id, index): FlowCanvasNode[] => {
       const task = tasks.get(id);
       const gateway = gateways.get(id);
@@ -415,11 +416,16 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
       const x = kind === 'start' ? this.graphStartX : this.graphNodeStartX + graphIndex * this.columnGap;
       if (kind === 'start' || kind === 'end') {
         const offset = this.flowOffset(process, id);
-        const terminalHeight = 24;
-        const terminalWidth = 44;
-        const laneCenterY = this.laneHeight / 2 - terminalHeight / 2;
-        const clamped = this.clampNodePosition(process, id, x + offset.dx, laneCenterY + offset.dy, terminalWidth, terminalHeight, '');
-        return [{
+        const terminalHeight = 18;
+        const terminalWidth = 18;
+        const connected = this.connectedNodesForBoundary(process, id, primaryNodesById);
+        const connectedCenterY = connected.length
+          ? connected.reduce((sum, node) => sum + node.y + node.height / 2, 0) / connected.length
+          : this.laneHeight / 2;
+        const connectedRight = connected.length ? Math.max(...connected.map((node) => node.x + node.width)) : x;
+        const baseX = kind === 'end' ? Math.max(x, connectedRight + 72) : x;
+        const clamped = this.clampNodePosition(process, id, baseX + offset.dx, connectedCenterY - terminalHeight / 2 + offset.dy, terminalWidth, terminalHeight, '');
+        const boundaryNode = {
           id,
           baseId: id,
           kind,
@@ -430,16 +436,18 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
           y: clamped.y,
           width: terminalWidth,
           height: terminalHeight,
-        }];
+        };
+        primaryNodesById.set(id, boundaryNode);
+        return [boundaryNode];
       }
       return visibleRoleNames.map((roleName, roleIndex) => {
         const laneIndex = laneMap.get(roleName) ?? 0;
         const offset = this.flowOffset(process, id);
-        const baseY = laneIndex * this.laneHeight + (kind === 'gateway' ? 42 : 54);
         const width = kind === 'gateway' ? 86 : this.nodeWidth;
         const height = kind === 'gateway' ? 76 : this.nodeHeight;
+        const baseY = laneIndex * this.laneHeight + Math.round((this.laneHeight - height) / 2);
         const clamped = this.clampNodePosition(process, id, x + offset.dx, baseY + offset.dy, width, height, roleName);
-        return {
+        const canvasNode = {
           id: `${id}::${roleName || roleIndex}`,
           baseId: id,
           kind,
@@ -453,6 +461,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
           task,
           gateway,
         };
+        if (!primaryNodesById.has(id)) primaryNodesById.set(id, canvasNode);
+        return canvasNode;
       });
     });
   }
@@ -1095,8 +1105,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     const minX = nodeId === 'START' ? this.laneTitleWidth + 18 : this.laneTitleWidth + 24;
     const maxX = Math.max(minX, this.canvasWidth(process) - width - 24);
     const laneBottom = this.lanes(process).length * this.laneHeight;
-    let minY = 12;
-    let maxY = Math.max(minY, laneBottom - height - 12);
+    let minY = 0;
+    let maxY = Math.max(minY, laneBottom + 180 - height - 24);
 
     // Boundary detail: dragging only changes private layout offsets. Role/lane ownership is still edited through role controls, so legacy diagrams that already moved nodes outside a lane keep rendering correctly.
 
@@ -1116,6 +1126,15 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     }
     this.attachmentDrawerOpen.set(true);
     this.refresh();
+  }
+
+  private connectedNodesForBoundary(process: LegacyProcess, boundaryId: string, nodesById: Map<string, FlowCanvasNode>): FlowCanvasNode[] {
+    // Boundary detail: old swimlane diagrams placed START/END against their connected nodes.
+    // Keeping that rule avoids shifting historical diagrams when gateway roles are ignored.
+    return this.edges(process)
+      .filter((edge) => boundaryId === 'START' ? String(edge.from || '') === boundaryId : String(edge.to || '') === boundaryId)
+      .map((edge) => nodesById.get(boundaryId === 'START' ? String(edge.to || '') : String(edge.from || '')))
+      .filter((node): node is FlowCanvasNode => Boolean(node));
   }
 
   private inferGatewayLane(process: LegacyProcess, gatewayId: string): string {
