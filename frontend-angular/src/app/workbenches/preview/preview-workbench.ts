@@ -4,10 +4,10 @@ import { ApiService } from '../../core/api/api.service';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 
-interface PreviewItem {
+interface PreviewOutlineItem {
   id: string;
-  name: string;
-  meta: string;
+  label: string;
+  depth: 0 | 1;
 }
 
 @Component({
@@ -18,34 +18,25 @@ interface PreviewItem {
   styleUrl: './preview-workbench.scss',
 })
 export class PreviewWorkbench {
-  // 模块意图：提供 Angular 版文档预览和导出入口，本地导出负责快速检查，后端导出负责完整文档包。
-  // 关键流程：从 runtime 只读获取当前文档；JSON/Markdown 生成本地 Blob；ZIP 文档包复用后端已保存文档导出接口。
-  // 边界细节：本组件不保存、不同步、不自行组装附件；DOCX 异步任务和进度等待态留给后续完整导出切片。
+  // 模块意图：复刻旧版预览页的阅读式框架，同时保持 Angular 运行时和导出链路的单向依赖。
+  // 关键流程：左侧大纲由文档结构生成，右侧正文直接渲染为阅读 HTML，原文 MD 与导出复用同一份 Markdown。
+  // 边界细节：这里只移植旧版相对独立的预览结构与排版，不重新挂回旧版全局脚本和复杂图形懒加载。
   private readonly api = inject(ApiService);
   protected readonly runtime = getAngularRuntimeState();
   protected readonly exportWait = signal<{ title: string; description: string } | null>(null);
+  protected readonly showRaw = signal(false);
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
-  protected readonly summary = computed(() => {
-    const doc = this.runtime.doc || {};
-    return [
-      { label: '角色', value: this.asArray(doc.roles).length },
-      { label: '阶段', value: this.asArray(doc.stages).length },
-      { label: '流程', value: this.asArray(doc.processes).length },
-      { label: '实体', value: this.asArray(doc.entities).length },
-      { label: '构件', value: this.asArray(doc.businessComponents).length },
-      { label: '任务', value: this.asArray(doc.taskDefinitions).length },
-    ];
-  });
-  protected readonly processes = computed<PreviewItem[]>(() => this.asArray(this.runtime.doc?.processes).map((process, index) => ({
-    id: this.identityOf(process, `process-${index + 1}`),
-    name: String(process?.name || `流程 ${index + 1}`),
-    meta: `节点 ${this.asArray(process?.nodes || process?.tasks).length}`,
-  })));
-  protected readonly entities = computed<PreviewItem[]>(() => this.asArray(this.runtime.doc?.entities).map((entity, index) => ({
-    id: this.identityOf(entity, `entity-${index + 1}`),
-    name: String(entity?.name || `实体 ${index + 1}`),
-    meta: `字段 ${this.asArray(entity?.fields).length}`,
-  })));
+  protected readonly markdown = computed(() => this.buildMarkdown());
+  protected readonly renderedHtml = computed(() => this.renderDocumentHtml());
+  protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
+
+  protected toggleRaw(): void {
+    this.showRaw.update((value) => !value);
+  }
+
+  protected jumpTo(anchorId: string): void {
+    document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   protected exportJson(): void {
     const content = JSON.stringify(this.runtime.doc || {}, null, 2);
@@ -53,7 +44,7 @@ export class PreviewWorkbench {
   }
 
   protected exportMarkdown(): void {
-    this.download(this.buildMarkdown(), 'text/markdown;charset=utf-8', `${this.baseFileName()}.md`);
+    this.download(this.markdown(), 'text/markdown;charset=utf-8', `${this.baseFileName()}.md`);
   }
 
   protected async exportBundle(): Promise<void> {
@@ -88,14 +79,146 @@ export class PreviewWorkbench {
     }
   }
 
+  private buildOutlineItems(): PreviewOutlineItem[] {
+    const doc = this.runtime.doc || {};
+    const items: PreviewOutlineItem[] = [{ id: 'preview-top', label: this.title(), depth: 0 }];
+    if (this.asArray(doc.roles).length) items.push({ id: 'preview-roles', label: '角色', depth: 0 });
+    if (this.asArray(doc.terms || doc.language).length) items.push({ id: 'preview-language', label: '统一语言/术语表', depth: 0 });
+    if (this.asArray(doc.stages).length) {
+      items.push({ id: 'preview-stages', label: '全景与阶段视图', depth: 0 });
+      this.asArray(doc.stages).forEach((stage, index) => {
+        items.push({ id: this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`)), label: `阶段视图 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 1 });
+      });
+    }
+    if (this.asArray(doc.processes).length) {
+      items.push({ id: 'preview-processes', label: '流程视图', depth: 0 });
+      this.asArray(doc.processes).forEach((process, index) => {
+        items.push({ id: this.anchorId('proc', this.identityOf(process, `process-${index + 1}`)), label: this.displayName(process, '未命名流程'), depth: 1 });
+      });
+    }
+    if (this.asArray(doc.entities).length) {
+      items.push({ id: 'preview-entities', label: '数据建模', depth: 0 });
+      this.asArray(doc.entities).forEach((entity, index) => {
+        items.push({ id: this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)), label: this.displayName(entity, '未命名实体'), depth: 1 });
+      });
+    }
+    if (this.asArray(doc.businessComponents).length || this.asArray(doc.businessConstructs).length || this.asArray(doc.taskDefinitions).length) {
+      items.push({ id: 'preview-components', label: '组件构件', depth: 0 });
+    }
+    return items;
+  }
+
+  private renderDocumentHtml(): string {
+    const doc = this.runtime.doc || {};
+    return [
+      `<h1 id="preview-top">${this.esc(this.title())}</h1>`,
+      this.renderMeta(doc.meta || {}),
+      this.renderRoles(this.asArray(doc.roles)),
+      this.renderLanguage(this.asArray(doc.terms || doc.language)),
+      this.renderStages(this.asArray(doc.stages)),
+      this.renderProcesses(this.asArray(doc.processes)),
+      this.renderEntities(this.asArray(doc.entities)),
+      this.renderComponents(doc),
+    ].filter(Boolean).join('');
+  }
+
+  private renderMeta(meta: any): string {
+    const parts = [];
+    if (meta.domain) parts.push(`<strong>业务域</strong>: ${this.esc(meta.domain)}`);
+    if (meta.author) parts.push(`<strong>作者</strong>: ${this.esc(meta.author)}`);
+    if (meta.date) parts.push(`<strong>日期</strong>: ${this.esc(meta.date)}`);
+    return parts.length ? `<p class="pv-meta">${parts.join(' | ')}</p>` : '';
+  }
+
+  private renderRoles(roles: any[]): string {
+    if (!roles.length) return '';
+    return `<h2 id="preview-roles">角色</h2><table><thead><tr><th>角色</th><th>分组</th><th>说明</th><th>所属业务组件</th></tr></thead><tbody>${roles.map((role) => `
+      <tr><td>${this.esc(role.name || role.id || '')}</td><td>${this.esc(role.group || '')}</td><td>${this.esc(role.desc || role.description || '')}</td><td>${this.esc(this.asArray(role.subDomains).join('、'))}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  private renderLanguage(items: any[]): string {
+    if (!items.length) return '';
+    return `<h2 id="preview-language">统一语言/术语表</h2><table><thead><tr><th>术语</th><th>定义</th></tr></thead><tbody>${items.map((item) => `
+      <tr><td>${this.esc(item.term || item.name || '')}</td><td>${this.esc(item.definition || item.desc || '')}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  private renderStages(stages: any[]): string {
+    if (!stages.length) return '';
+    return `<h2 id="preview-stages">全景与阶段视图</h2>${stages.map((stage, index) => {
+      const processCount = this.asArray(this.runtime.doc?.stageFlowRefs).filter((ref) => ref.stageUid === stage.uid || ref.stageId === stage.uid).length;
+      return `<section id="${this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`))}" class="pv-stage-section">
+        <h3>阶段视图: ${this.esc(this.displayName(stage, '未命名业务阶段'))}</h3>
+        <p class="pv-note"><strong>所属业务域</strong>: ${this.esc(stage.subDomain || stage.businessDomain || '—')} | <strong>流程数</strong>: ${processCount}</p>
+      </section>`;
+    }).join('')}`;
+  }
+
+  private renderProcesses(processes: any[]): string {
+    if (!processes.length) return '';
+    return `<h2 id="preview-processes">流程视图</h2>${processes.map((process, index) => {
+      const nodes = this.asArray(process.nodes || process.tasks);
+      return `<section id="${this.anchorId('proc', this.identityOf(process, `process-${index + 1}`))}" class="pv-process-section">
+        <h3>${this.esc(this.displayName(process, '未命名流程'))}</h3>
+        ${process.trigger || process.outcome ? `<p class="pv-note"><strong>触发</strong>: ${this.esc(process.trigger || '—')} -> <strong>预期结果</strong>: ${this.esc(process.outcome || '—')}</p>` : ''}
+        ${nodes.length ? `<div class="pv-tasks">${nodes.map((node, nodeIndex) => this.renderProcessNode(node, nodeIndex)).join('')}</div>` : '<div class="diag-empty">暂无流程节点</div>'}
+      </section>`;
+    }).join('')}`;
+  }
+
+  private renderProcessNode(node: any, index: number): string {
+    const userSteps = this.asArray(node.userSteps || node.steps);
+    const tasks = this.asArray(node.orchestrationTasks || node.tasks || node.taskDefinitions);
+    return `<div class="pv-task-detail">
+      <h4>流程节点: ${this.esc(this.displayName(node, `未命名节点 ${index + 1}`))}${node.roleName ? ` <span class="pv-role">(${this.esc(node.roleName)})</span>` : ''}</h4>
+      ${userSteps.length ? `<table><thead><tr><th>#</th><th>用户操作步骤</th><th>类型</th><th>条件/备注</th></tr></thead><tbody>${userSteps.map((step, stepIndex) => `
+        <tr><td>${stepIndex + 1}</td><td>${this.esc(step.name || '')}</td><td>${this.esc(step.type || '')}</td><td>${this.richTextCell(step.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${tasks.length ? `<table><thead><tr><th>#</th><th>节点任务</th><th>业务构件</th><th>类型</th><th>目标</th><th>备注</th></tr></thead><tbody>${tasks.map((task, taskIndex) => `
+        <tr><td>${taskIndex + 1}</td><td>${this.esc(task.name || '')}</td><td>${this.esc(task.constructName || task.constructUid || '')}</td><td>${this.esc(task.type || '')}</td><td>${this.esc(task.target || '')}</td><td>${this.richTextCell(task.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+    </div>`;
+  }
+
+  private renderEntities(entities: any[]): string {
+    if (!entities.length) return '';
+    return `<h2 id="preview-entities">数据建模</h2>${entities.map((entity, index) => `
+      <section id="${this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`))}" class="pv-entity-section">
+        <h3>实体: ${this.esc(this.displayName(entity, '未命名实体'))}</h3>
+        ${entity.note ? `<p class="pv-note">${this.esc(entity.note)}</p>` : ''}
+        ${this.asArray(entity.fields).length ? `<table><thead><tr><th>字段</th><th>类型</th><th>主键</th><th>说明</th></tr></thead><tbody>${this.asArray(entity.fields).map((field) => `
+          <tr><td>${this.esc(field.name || '')}</td><td>${this.esc(field.type || '')}</td><td class="pv-center">${field.is_key || field.isKey ? '✓' : ''}</td><td>${this.esc(field.note || field.desc || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+      </section>`).join('')}`;
+  }
+
+  private renderComponents(doc: any): string {
+    const components = this.asArray(doc.businessComponents);
+    const constructs = this.asArray(doc.businessConstructs);
+    const taskDefinitions = this.asArray(doc.taskDefinitions);
+    if (!components.length && !constructs.length && !taskDefinitions.length) return '';
+    return `<h2 id="preview-components">组件构件</h2>
+      ${components.length ? `<h3>业务组件</h3><table><thead><tr><th>组件</th><th>类型</th><th>说明</th></tr></thead><tbody>${components.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.kind || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${constructs.length ? `<h3>业务构件</h3><table><thead><tr><th>构件</th><th>所属组件</th><th>说明</th></tr></thead><tbody>${constructs.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.businessComponentUid || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${taskDefinitions.length ? `<h3>任务定义</h3><table><thead><tr><th>任务</th><th>构件</th><th>技术承接</th></tr></thead><tbody>${taskDefinitions.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.constructUid || item.businessConstructUid || '')}</td><td>${this.esc(item.technicalHandover?.summary || item.technicalHandover || '')}</td></tr>`).join('')}</tbody></table>` : ''}`;
+  }
+
   private buildMarkdown(): string {
+    const doc = this.runtime.doc || {};
     const lines = [`# ${this.title()}`, '', '## 概览'];
-    this.summary().forEach((item) => lines.push(`- ${item.label}: ${item.value}`));
+    [
+      ['角色', this.asArray(doc.roles).length],
+      ['阶段', this.asArray(doc.stages).length],
+      ['流程', this.asArray(doc.processes).length],
+      ['实体', this.asArray(doc.entities).length],
+      ['构件', this.asArray(doc.businessConstructs).length || this.asArray(doc.businessComponents).length],
+      ['任务', this.asArray(doc.taskDefinitions).length],
+    ].forEach(([label, value]) => lines.push(`- ${label}: ${value}`));
     lines.push('', '## 流程');
-    this.processes().forEach((item) => lines.push(`- ${item.name}: ${item.meta}`));
+    this.asArray(doc.processes).forEach((item) => lines.push(`- ${this.displayName(item, '未命名流程')}: 节点 ${this.asArray(item.nodes || item.tasks).length}`));
     lines.push('', '## 实体');
-    this.entities().forEach((item) => lines.push(`- ${item.name}: ${item.meta}`));
+    this.asArray(doc.entities).forEach((item) => lines.push(`- ${this.displayName(item, '未命名实体')}: 字段 ${this.asArray(item.fields).length}`));
     return `${lines.join('\n')}\n`;
+  }
+
+  private richTextCell(value: string): string {
+    return `<div class="rich-text-rendered pv-rich-text">${this.esc(value).replace(/\r?\n/g, '<br>')}</div>`;
   }
 
   private download(content: string, type: string, filename: string): void {
@@ -141,8 +264,21 @@ export class PreviewWorkbench {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private anchorId(prefix: string, value: string): string {
+    const safe = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'section';
+    return `preview-${prefix}-${safe}`;
+  }
+
   private baseFileName(): string {
     return String(this.runtime.currentFile || this.title() || 'blm-document').replace(/\.json$/i, '') || 'blm-document';
+  }
+
+  private displayName(item: any, fallback: string): string {
+    return String(item?.name || '').trim() || fallback;
   }
 
   private identityOf(item: any, fallback: string): string {
@@ -151,5 +287,14 @@ export class PreviewWorkbench {
 
   private asArray<T = any>(value: T[] | null | undefined): T[] {
     return Array.isArray(value) ? value : [];
+  }
+
+  private esc(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

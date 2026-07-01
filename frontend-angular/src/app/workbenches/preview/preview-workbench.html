@@ -1,55 +1,31 @@
-<section class="preview-workbench" data-testid="preview-workbench">
-  <header class="preview-head">
-    <div>
-      <h2>{{ title() }}</h2>
-      <p>{{ runtime.currentFile || '未保存文档' }}</p>
-    </div>
-    <div class="preview-actions">
-      <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-markdown" (click)="exportMarkdown()">导出 Markdown</button>
-      <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-json" (click)="exportJson()">导出 JSON</button>
-      <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-docx" [disabled]="!runtime.currentFile || !!exportWait()" (click)="exportDocx()">导出 DOCX</button>
-      <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-bundle" [disabled]="!runtime.currentFile" (click)="exportBundle()">导出 ZIP 文档包</button>
-    </div>
-  </header>
-
-  <div class="preview-summary" data-testid="preview-summary">
-    @for (item of summary(); track item.label) {
-      <div class="preview-metric">
-        <strong>{{ item.value }}</strong>
-        <span>{{ item.label }}</span>
-      </div>
-    }
+<section class="preview-workbench preview-wrap" data-testid="preview-workbench">
+  <div class="preview-topbar">
+    <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-bundle" [disabled]="!runtime.currentFile" (click)="exportBundle()">→ 导出</button>
+    <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-markdown" (click)="exportMarkdown()">导出 Markdown</button>
+    <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-json" (click)="exportJson()">导出 JSON</button>
+    <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-docx" [disabled]="!runtime.currentFile || !!exportWait()" (click)="exportDocx()">导出 DOCX</button>
+    <button id="preview-raw-toggle" class="btn btn-ghost-sm" type="button" style="margin-left:auto" (click)="toggleRaw()">
+      {{ showRaw() ? '显示渲染预览' : '显示原文 MD' }}
+    </button>
   </div>
 
-  <div class="preview-grid">
-    <article class="preview-panel">
-      <h3>流程</h3>
-      <div class="preview-list" data-testid="preview-process-list">
-        @for (item of processes(); track item.id) {
-          <div class="preview-row">
-            <span>{{ item.name }}</span>
-            <em>{{ item.meta }}</em>
-          </div>
-        } @empty {
-          <div class="preview-empty">暂无流程。</div>
-        }
-      </div>
-    </article>
-
-    <article class="preview-panel">
-      <h3>实体</h3>
-      <div class="preview-list" data-testid="preview-entity-list">
-        @for (item of entities(); track item.id) {
-          <div class="preview-row">
-            <span>{{ item.name }}</span>
-            <em>{{ item.meta }}</em>
-          </div>
-        } @empty {
-          <div class="preview-empty">暂无实体。</div>
-        }
-      </div>
-    </article>
-  </div>
+  @if (!showRaw()) {
+    <div id="preview-body" class="preview-body">
+      <aside id="preview-outline" class="preview-outline" data-testid="preview-outline">
+        <div class="preview-outline-title">大纲视图</div>
+        <div class="preview-outline-list">
+          @for (item of outlineItems(); track item.id) {
+            <button class="preview-outline-link depth-{{ item.depth }}" type="button" (click)="jumpTo(item.id)">
+              {{ item.label }}
+            </button>
+          }
+        </div>
+      </aside>
+      <div id="preview-rendered" class="preview-rendered pv-content" data-testid="preview-rendered" [innerHTML]="renderedHtml()"></div>
+    </div>
+  } @else {
+    <pre id="preview-raw" class="preview-md" data-testid="preview-raw">{{ markdown() }}</pre>
+  }
 
   <app-wait-dialog
     *ngIf="exportWait() as wait"

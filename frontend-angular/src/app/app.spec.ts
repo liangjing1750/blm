@@ -528,9 +528,14 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     expect(compiled.querySelector('[data-testid="preview-workbench"]')?.textContent).toContain('交割监管平台');
-    expect(compiled.querySelector('[data-testid="preview-summary"]')?.textContent).toContain('流程');
-    expect(compiled.querySelector('[data-testid="preview-summary"]')?.textContent).toContain('1');
-    expect(compiled.querySelector('[data-testid="preview-process-list"]')?.textContent).toContain('入库流程');
+    expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('大纲视图');
+    expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('流程视图');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('流程节点: 提交申请');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('实体: 仓单');
+
+    compiled.querySelector<HTMLButtonElement>('#preview-raw-toggle')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="preview-raw"]')?.textContent).toContain('# 交割监管平台');
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="preview-export-json"]')?.click();
 
