@@ -39,7 +39,7 @@
       <article *ngFor="let row of historyRows" class="recovery-item">
         <div class="recovery-item-main">
           <strong>{{ row.message || row.user || '协作同步' }}</strong>
-          <span>{{ row.timestamp_label || row.timestamp || row.id || '' }}</span>
+          <span>{{ historyTime(row) }}</span>
         </div>
         <div class="recovery-item-actions">
           <button class="btn btn-outline btn-sm" type="button" (click)="openHistory.emit(row)">只读打开</button>
@@ -56,7 +56,7 @@
       <article *ngFor="let row of submitRows" class="recovery-item">
         <div class="recovery-item-main">
           <strong>{{ row.user || '未知用户' }} 提交 · 基于 v{{ row.baseSeq || 0 }} -> v{{ row.seq || 0 }}</strong>
-          <span>{{ row.createdAt || row.submitId || '' }}</span>
+          <span>{{ submitTime(row) }}</span>
         </div>
         <div class="recovery-item-actions">
           <button class="btn btn-outline btn-sm" type="button" (click)="openSubmit.emit(row)">只读打开</button>

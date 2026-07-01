@@ -38,7 +38,7 @@ export class HistoryDialogComponent {
   }
 
   versionTime(row: any): string {
-    return String(
+    return this.formatDateTime(
       row?.timestamp_label ||
         row?.createdAt ||
         row?.created_at ||
@@ -46,6 +46,38 @@ export class HistoryDialogComponent {
         row?.time ||
         row?.date ||
         '',
-    ).trim();
+    );
+  }
+
+  historyTime(row: any): string {
+    return this.formatDateTime(row?.timestamp_label || row?.timestamp || row?.createdAt || row?.created_at || row?.time || row?.date || row?.id || '');
+  }
+
+  submitTime(row: any): string {
+    return this.formatDateTime(row?.createdAt || row?.created_at || row?.timestamp || row?.time || row?.date || row?.submitId || '');
+  }
+
+  private formatDateTime(value: unknown): string {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const cnMatch = raw.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日\s+(\d{1,2})时(\d{1,2})分(\d{1,2})秒$/);
+    if (cnMatch) {
+      const [, year, month, day, hour, minute, second] = cnMatch;
+      return this.renderDateTime(year, month, day, hour, minute, second);
+    }
+
+    const plainMatch = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (plainMatch) {
+      const [, year, month, day, hour = '0', minute = '0', second = '0'] = plainMatch;
+      return this.renderDateTime(year, month, day, hour, minute, second);
+    }
+
+    return raw;
+  }
+
+  private renderDateTime(year: string, month: string, day: string, hour: string, minute: string, second: string): string {
+    const pad = (part: string) => part.padStart(2, '0');
+    return `${year}年${pad(month)}月${pad(day)}日 ${pad(hour)}时${pad(minute)}分${pad(second)}秒`;
   }
 }

@@ -3548,7 +3548,7 @@ describe('App', () => {
         return new Response(JSON.stringify([{ id: 'v1', label: '验收版（2026年06月24日 11时38分19秒）', createdAt: '2026年06月24日 11时38分19秒' }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.includes('/api/collab/submits/list')) {
-        return new Response(JSON.stringify({ submits: [{ submitId: 's1', user: 'agent', baseSeq: 2, seq: 3 }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ submits: [{ submitId: 's1', user: 'agent', baseSeq: 2, seq: 3, createdAt: '2026-06-24T11:38:19Z' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (url.includes('/api/version/load')) {
         expect(JSON.parse(String(init?.body))).toMatchObject({ name: 'agent.json', version_id: 'v1' });
@@ -3576,6 +3576,18 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="history-dialog"] strong')?.textContent).toBe('验收版');
     expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('2026年06月24日 11时38分19秒');
     expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).not.toContain('稳定只读快照');
+
+    Array.from(compiled.querySelectorAll<HTMLButtonElement>('[data-testid="history-dialog"] .history-tab'))
+      .find((button) => button.textContent?.includes('本地提交'))
+      ?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).toContain('2026年06月24日 11时38分19秒');
+    expect(compiled.querySelector('[data-testid="history-dialog"]')?.textContent).not.toContain('2026-06-24T11:38:19Z');
+
+    Array.from(compiled.querySelectorAll<HTMLButtonElement>('[data-testid="history-dialog"] .history-tab'))
+      .find((button) => button.textContent?.includes('远端历史'))
+      ?.click();
+    fixture.detectChanges();
 
     Array.from(compiled.querySelectorAll<HTMLButtonElement>('[data-testid="history-dialog"] button'))
       .find((button) => button.textContent?.includes('复制链接'))
@@ -3618,19 +3630,20 @@ describe('App', () => {
 
     const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
     const component = fixture.componentInstance as unknown as {
-      openHistory: () => Promise<void>;
       waitDialog: () => { title: string; description: string } | null;
     };
 
-    const openHistoryPromise = component.openHistory();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-history-button"]')?.click();
     fixture.detectChanges();
 
     expect(component.waitDialog()?.title).toContain('历史');
-
     resolveHistory(new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    await openHistoryPromise;
     await fixture.whenStable();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
     fixture.detectChanges();
     expect(component.waitDialog()).toBeNull();
   });
