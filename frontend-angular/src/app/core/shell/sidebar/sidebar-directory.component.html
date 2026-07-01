@@ -35,7 +35,7 @@
         </button>
         <div class="sb-process-browse" data-testid="sidebar-stage-browse">
           <ng-container *ngFor="let stream of model().valueStreams">
-            <div class="sb-grp-head sb-value-stream-head sb-value-head" (click)="toggleNode(streamKey(stream))">
+            <div class="sb-grp-head sb-value-stream-head sb-value-head">
               <button
                 type="button"
                 class="sb-caret"
@@ -46,7 +46,7 @@
                 <span class="sb-caret-icon">▶</span>
               </button>
               <span class="sb-grp-badge">价值流</span>
-              <span class="sb-name" [title]="stream.scope || stream.name">{{ stream.name }}</span>
+              <button class="sb-name sb-name-button" type="button" data-testid="sidebar-value-stream-name" [title]="stream.scope || stream.name" (click)="openValueDomain()">{{ stream.name }}</button>
               <span class="sb-count">{{ stream.stageCount }}</span>
             </div>
             <ng-container *ngIf="!isCollapsedNode(streamKey(stream))">
@@ -77,7 +77,7 @@
         </button>
         <div class="sb-process-browse" data-testid="sidebar-domain-browse">
           <ng-container *ngFor="let component of model().components">
-            <div class="sb-grp-head sb-capability-head" (click)="toggleNode(componentKey(component))">
+            <div class="sb-grp-head sb-capability-head">
               <button
                 type="button"
                 class="sb-caret"
@@ -88,7 +88,7 @@
                 <span class="sb-caret-icon">▶</span>
               </button>
               <span class="sb-grp-badge">业务组件</span>
-              <span class="sb-name" [title]="component.name">{{ component.name }}</span>
+              <button class="sb-name sb-name-button" type="button" data-testid="sidebar-component-name" [title]="component.name" (click)="openComponentWorkbench()">{{ component.name }}</button>
               <span class="sb-count">{{ component.constructCount }}</span>
             </div>
             <ng-container *ngIf="!isCollapsedNode(componentKey(component))">
@@ -96,7 +96,6 @@
                 <div
                   class="sb-grp-head sb-construct-head"
                   data-testid="sidebar-construct-item"
-                  (click)="toggleNode(constructKey(component, construct))"
                 >
                   <button
                     type="button"
@@ -108,7 +107,7 @@
                     <span class="sb-caret-icon">▶</span>
                   </button>
                   <span class="sb-grp-badge">业务构件</span>
-                  <span class="sb-name" [title]="construct.name">{{ construct.name }}</span>
+                  <button class="sb-name sb-name-button" type="button" data-testid="sidebar-construct-name" [title]="construct.name" (click)="openComponentWorkbench()">{{ construct.name }}</button>
                   <span class="sb-count">实体 {{ construct.entityCount }}</span>
                   <span class="sb-count">任务 {{ construct.taskCount }}</span>
                 </div>
@@ -171,7 +170,7 @@
 </ng-container>
 
 <ng-template #stageBlock let-stage="stage">
-  <div class="sb-grp-head sb-stage-head" (click)="toggleNode(stageKey(stage))">
+  <div class="sb-grp-head sb-stage-head">
     <button
       type="button"
       class="sb-caret"
@@ -182,12 +181,12 @@
       <span class="sb-caret-icon">▶</span>
     </button>
     <span class="sb-grp-badge">阶段</span>
-    <span class="sb-name" [title]="stage.name">{{ stage.name }}</span>
+    <button class="sb-name sb-name-button" type="button" data-testid="sidebar-stage-name" [title]="stage.name" (click)="openStage(stage)">{{ stage.name }}</button>
     <span class="sb-count">{{ stage.processCount }}</span>
   </div>
   <ng-container *ngIf="!isCollapsedNode(stageKey(stage))">
     <ng-container *ngFor="let group of stage.processGroups">
-      <div class="sb-grp-head sb-flow-group-head" (click)="toggleNode(flowGroupKey(stage, group))">
+      <div class="sb-grp-head sb-flow-group-head">
         <button
           type="button"
           class="sb-caret"
@@ -198,7 +197,7 @@
           <span class="sb-caret-icon">▶</span>
         </button>
         <span class="sb-grp-badge">流程组</span>
-        <span class="sb-name" [title]="group.name">{{ group.name }}</span>
+        <button class="sb-name sb-name-button" type="button" data-testid="sidebar-flow-group-name" [title]="group.name" (click)="openStage(stage)">{{ group.name }}</button>
         <span class="sb-count">{{ group.processCount }}</span>
       </div>
       <ng-container *ngIf="!isCollapsedNode(flowGroupKey(stage, group))">

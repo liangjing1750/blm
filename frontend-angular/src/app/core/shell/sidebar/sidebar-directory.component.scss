@@ -261,6 +261,21 @@
   white-space: nowrap;
 }
 
+.sb-name-button {
+  display: block;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sb-name-button:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
 .sb-proc-kind {
   flex: 0 0 auto;
   min-height: 17px;

@@ -178,6 +178,8 @@ export interface SidebarAdapter {
   isNodeCollapsed(key: string): boolean;
   toggleNode(key: string): void;
   setBusinessDomain(domainId: string): void;
+  openValueDomain(): void;
+  openStage(stageId: string): void;
   openProcess(processId: string): void;
   openComponentWorkbench(): void;
   openEntity(entityId: string): void;
@@ -507,10 +509,27 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     },
     toggleNode(key: string): void {
       ui()['sbCollapse'] ||= {};
-      ui()['sbCollapse'][key] = !ui()['sbCollapse'][key];
+      ui()['sbCollapse'][key] = !this.isNodeCollapsed(key);
     },
     setBusinessDomain(domainId: string): void {
       ui()['businessDomainFilter'] = domainId || 'all';
+    },
+    openValueDomain(): void {
+      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
+      else switchAngularMainTab('processWorkbench');
+      ui()['mainTab'] = 'processWorkbench';
+      ui()['procView'] = 'valueDomain';
+      ui()['taskId'] = null;
+      runtime.render?.();
+    },
+    openStage(stageId: string): void {
+      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
+      else switchAngularMainTab('processWorkbench');
+      ui()['mainTab'] = 'processWorkbench';
+      ui()['procView'] = 'stage';
+      ui()['stageId'] = stageId;
+      ui()['taskId'] = null;
+      runtime.render?.();
     },
     openProcess(processId: string): void {
       if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');

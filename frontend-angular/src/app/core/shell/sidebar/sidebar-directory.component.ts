@@ -71,6 +71,14 @@ export class SidebarDirectoryComponent implements OnInit {
     this.version.update((value) => value + 1);
   }
 
+  protected openValueDomain(): void {
+    this.adapter.openValueDomain();
+  }
+
+  protected openStage(stage: SidebarStageGroup): void {
+    this.adapter.openStage(stage.id);
+  }
+
   protected openProcess(process: SidebarProcessSummary): void {
     this.adapter.openProcess(process.id);
   }

@@ -3381,6 +3381,61 @@ describe('App', () => {
     expect(expanded.querySelector('.sb-related-processes')?.textContent).toContain('支撑流程');
   });
 
+  it('should separate sidebar caret expansion from name navigation', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['sbCollapse'] = {};
+    runtime.ui['sidebarCollapsed'] = false;
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [{ uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 }],
+      processes: [{ uid: 'process-1', name: '入库预约', flowGroup: '入库组', businessConstructUid: 'construct-1', nodes: [] }],
+      entities: [{ uid: 'entity-1', name: '仓单', businessConstructUid: 'construct-1', fields: [] }],
+      businessComponents: [{ uid: 'bc-1', name: '循环', kind: 'core', entityUids: [], taskDefinitionUids: [], stageUids: ['stage-1'] }],
+      businessConstructs: [{ uid: 'construct-1', name: '会话运行构件', businessComponentUid: 'bc-1' }],
+      taskDefinitions: [{ uid: 'task-1', name: '代理运行', businessConstructUid: 'construct-1' }],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/panorama');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('.sb-value-stream-head .sb-caret')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['sbCollapse']['vs-column-1']).toBe(false);
+    expect(compiled.querySelector('[data-testid="sidebar-stage-name"]')?.textContent).toContain('准备');
+    expect(compiled.querySelector('[data-testid="sidebar-process-row"]')).toBeFalsy();
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="sidebar-stage-name"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['procView']).toBe('stage');
+    expect(runtime.ui['stageId']).toBe('stage-1');
+    expect(runtime.ui['sbCollapse']['stage-tree-stage-1']).toBeUndefined();
+
+    compiled.querySelector<HTMLButtonElement>('.sb-capability-head .sb-caret')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['sbCollapse']['cap-bc-1']).toBe(false);
+    compiled.querySelector<HTMLButtonElement>('[data-testid="sidebar-component-name"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('constructWorkbench');
+    expect(runtime.ui['sbCollapse']['cap-bc-1']).toBe(false);
+  });
+
   it('should keep migration status aligned with restored Angular workbench entries', () => {
     const statusById = new Map(WORKBENCH_MIGRATION_STATUS.map((item) => [item.id, item.status]));
 
