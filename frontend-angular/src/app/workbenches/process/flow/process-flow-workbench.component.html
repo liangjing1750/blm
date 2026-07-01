@@ -54,6 +54,9 @@
                 <div class="flow-lane-title">{{ lane.name }}</div>
               </div>
             }
+            @for (guide of alignmentGuides(); track guide.id) {
+              <div class="flow-alignment-guide" [class.is-vertical]="guide.axis === 'x'" [class.is-horizontal]="guide.axis === 'y'" [style.left.px]="guide.axis === 'x' ? guide.position : guide.from" [style.top.px]="guide.axis === 'y' ? guide.position : guide.from" [style.width.px]="guide.axis === 'y' ? guide.to - guide.from : null" [style.height.px]="guide.axis === 'x' ? guide.to - guide.from : null"></div>
+            }
 
             <svg class="flow-edges" [attr.width]="canvasWidth(process)" [attr.height]="canvasHeight(process)">
               <defs>
@@ -75,9 +78,9 @@
 
             @for (node of flowNodes(process); track node.id) {
               @if (node.kind === 'start' || node.kind === 'end') {
-                <button class="flow-terminal" [class.active]="selectedElementId() === node.id" [class.connecting]="connectingFromId() === node.id" [class.is-end]="node.kind === 'end'" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.id) : selectElement(node.id)">{{ node.name }}</button>
+                <button class="flow-terminal" data-testid="process-flow-terminal" [class.active]="selectedElementId() === node.id" [class.connecting]="connectingFromId() === node.id" [class.is-end]="node.kind === 'end'" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.id) : selectElement(node.id)">{{ node.name }}</button>
               } @else if (node.kind === 'gateway') {
-                <button class="flow-gateway" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)"><span>{{ node.name }}</span></button>
+                <button class="flow-gateway" data-testid="process-flow-gateway" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" type="button" [style.left.px]="node.x" [style.top.px]="node.y" (pointerdown)="startNodeDrag($event, node)" (pointerup)="endNodeDrag($event, node)" (click)="$event.stopPropagation(); connectingFromId() ? finishConnect(node.baseId) : selectElement(node.baseId)"><span>{{ node.name }}</span></button>
               } @else {
                 <div class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" [class.is-editing]="editing" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y"
                   (pointerdown)="startNodeDrag($event, node)"

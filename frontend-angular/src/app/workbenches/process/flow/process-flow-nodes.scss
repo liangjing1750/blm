@@ -56,6 +56,22 @@
   overflow: visible;
 }
 
+.flow-alignment-guide {
+  position: absolute;
+  z-index: 16;
+  pointer-events: none;
+  background: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, .14);
+}
+
+.flow-alignment-guide.is-vertical {
+  width: 1px;
+}
+
+.flow-alignment-guide.is-horizontal {
+  height: 1px;
+}
+
 .flow-edge {
   fill: none;
   stroke: #64748b;

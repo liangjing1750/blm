@@ -62,6 +62,29 @@ interface FlowDragState {
   task?: LegacyProcessNode;
 }
 
+interface FlowAlignmentGuide {
+  id: string;
+  axis: 'x' | 'y';
+  position: number;
+  from: number;
+  to: number;
+}
+
+interface FlowDragPreview {
+  nodeId: string;
+  dx: number;
+  dy: number;
+  guides: FlowAlignmentGuide[];
+}
+
+interface FlowAlignmentHit {
+  distance: number;
+  delta: number;
+  position: number;
+  from: number;
+  to: number;
+}
+
 @Component({
   selector: 'app-process-flow-workbench',
   standalone: true,
@@ -102,6 +125,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly attachmentDrawerOpen = signal(false);
   protected readonly zoomValue = signal(1);
   protected readonly dragState = signal<FlowDragState | null>(null);
+  protected readonly dragPreview = signal<FlowDragPreview | null>(null);
   protected readonly previewPoint = signal<{ x: number; y: number } | null>(null);
   protected readonly adapter = createProcessEditorLegacyAdapter();
   private readonly flowModel = inject(ProcessFlowModelService);
@@ -113,6 +137,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly graphStartX = 130;
   protected readonly graphNodeStartX = 180;
   protected readonly columnGap = 180;
+  private readonly snapThreshold = 6;
   private readonly lanePalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#16a34a'];
 
   @Input() editing = true;
@@ -346,7 +371,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected canvasHeight(process: LegacyProcess): number {
     const laneBottom = this.lanes(process).length * this.laneHeight;
     const nodeBottom = this.flowNodes(process).reduce((bottom, node) => Math.max(bottom, node.y + node.height), 0);
-    return Math.max(220, laneBottom + 1, nodeBottom + 36);
+    return Math.max(260, laneBottom + 120, nodeBottom + 180);
   }
 
   protected flowNodes(process: LegacyProcess): FlowCanvasNode[] {
@@ -593,6 +618,10 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.cardRolePickerNodeId.set('');
   }
 
+  protected alignmentGuides(): FlowAlignmentGuide[] {
+    return this.dragPreview()?.guides || [];
+  }
+
   protected setProcessField(field: 'name' | 'trigger' | 'outcome', value: string): void {
     const process = this.currentProcess();
     if (!process) return;
@@ -775,6 +804,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
       startOffset: this.flowOffset(process, node.baseId),
       task: node.task,
     });
+    this.dragPreview.set({ nodeId: node.baseId, dx: this.flowOffset(process, node.baseId).dx, dy: this.flowOffset(process, node.baseId).dy, guides: [] });
     if ('pointerId' in event) {
       try {
         (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
@@ -790,8 +820,16 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     if (!drag || !process) return;
     const dx = (event.clientX - drag.startX) / this.zoomValue();
     const dy = (event.clientY - drag.startY) / this.zoomValue();
-    const snapped = this.snapPosition(process, drag.nodeId, drag.startNodeX + dx, drag.startNodeY + dy);
-    this.setFlowOffset(process, drag.nodeId, drag.startOffset.dx + snapped.x - drag.startNodeX, drag.startOffset.dy + snapped.y - drag.startNodeY, false);
+    const current = this.flowNodes(process).find((node) => node.baseId === drag.nodeId || node.id === drag.nodeId);
+    if (!current) return;
+    const free = this.clampNodePosition(process, drag.nodeId, drag.startNodeX + dx, drag.startNodeY + dy, current.width, current.height, current.role);
+    const alignment = this.alignmentForPosition(process, drag.nodeId, free.x, free.y, current.width, current.height, current.role);
+    this.dragPreview.set({
+      nodeId: drag.nodeId,
+      dx: drag.startOffset.dx + free.x - drag.startNodeX,
+      dy: drag.startOffset.dy + free.y - drag.startNodeY,
+      guides: alignment.guides,
+    });
   }
 
   protected endNodeDrag(event: MouseEvent | PointerEvent, node: FlowCanvasNode): void {
@@ -817,6 +855,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
       }
     }
     this.dragState.set(null);
+    this.dragPreview.set(null);
     this.selectedElementId.set(drag.nodeId);
     this.refresh();
   }
@@ -860,6 +899,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   private flowOffset(process: LegacyProcess, key: string): Required<ProcessFlowLayoutOffset> {
     const offset = this.flowModel.swimlaneLayout(process).items?.[key] || {};
+    const preview = this.dragPreview();
+    if (preview?.nodeId === key) return { dx: preview.dx, dy: preview.dy };
     return { dx: Number(offset.dx || 0), dy: Number(offset.dy || 0) };
   }
 
@@ -871,25 +912,66 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   private snapPosition(process: LegacyProcess, nodeId: string, x: number, y: number): { x: number; y: number } {
     const current = this.flowNodes(process).find((node) => node.baseId === nodeId || node.id === nodeId);
     if (!current) return { x, y };
-    let nextX = x;
-    let nextY = y;
-    const threshold = 10;
-    for (const other of this.flowNodes(process)) {
-      if (other.baseId === nodeId || other.id === nodeId) continue;
-      const candidatesX = [other.x, other.x + other.width / 2 - current.width / 2, other.x + other.width - current.width];
-      for (const candidate of candidatesX) {
-        if (Math.abs(nextX - candidate) <= threshold) nextX = candidate;
-      }
-      const candidatesY = [other.y, other.y + other.height / 2 - current.height / 2, other.y + other.height - current.height];
-      for (const candidate of candidatesY) {
-        if (Math.abs(nextY - candidate) <= threshold) nextY = candidate;
-      }
+    const free = this.clampNodePosition(process, current.baseId, x, y, current.width, current.height, current.role);
+    const alignment = this.alignmentForPosition(process, current.baseId, free.x, free.y, current.width, current.height, current.role);
+    return this.clampNodePosition(process, current.baseId, alignment.x, alignment.y, current.width, current.height, current.role);
+  }
+
+  private alignmentForPosition(process: LegacyProcess, nodeId: string, x: number, y: number, width: number, height: number, roleName: string): { x: number; y: number; guides: FlowAlignmentGuide[] } {
+    // 关键流程：拖动中只计算辅助线；松手时复用同一结果做轻量吸附，避免移动时被吸附点拉住。
+    const nodes = this.flowNodes(process).filter((node) => node.baseId !== nodeId && node.id !== nodeId);
+    const canvasW = this.canvasWidth(process);
+    const canvasH = this.canvasHeight(process);
+    const current = {
+      left: x,
+      centerX: x + width / 2,
+      right: x + width,
+      top: y,
+      centerY: y + height / 2,
+      bottom: y + height,
+    };
+    let bestX: FlowAlignmentHit | null = null;
+    let bestY: FlowAlignmentHit | null = null;
+    const considerX = (target: number, source: number, otherTop: number, otherBottom: number) => {
+      const distance = Math.abs(source - target);
+      if (distance > this.snapThreshold || (bestX && distance >= bestX.distance)) return;
+      bestX = { distance, delta: target - source, position: target, from: Math.min(y, otherTop) - 18, to: Math.max(y + height, otherBottom) + 18 };
+    };
+    const considerY = (target: number, source: number, otherLeft: number, otherRight: number) => {
+      const distance = Math.abs(source - target);
+      if (distance > this.snapThreshold || (bestY && distance >= bestY.distance)) return;
+      bestY = { distance, delta: target - source, position: target, from: Math.min(x, otherLeft) - 18, to: Math.max(x + width, otherRight) + 18 };
+    };
+    for (const other of nodes) {
+      const otherEdges = {
+        left: other.x,
+        centerX: other.x + other.width / 2,
+        right: other.x + other.width,
+        top: other.y,
+        centerY: other.y + other.height / 2,
+        bottom: other.y + other.height,
+      };
+      considerX(otherEdges.left, current.left, other.y, other.y + other.height);
+      considerX(otherEdges.centerX, current.centerX, other.y, other.y + other.height);
+      considerX(otherEdges.right, current.right, other.y, other.y + other.height);
+      considerY(otherEdges.top, current.top, other.x, other.x + other.width);
+      considerY(otherEdges.centerY, current.centerY, other.x, other.x + other.width);
+      considerY(otherEdges.bottom, current.bottom, other.x, other.x + other.width);
     }
     for (const lane of this.lanes(process)) {
-      const laneCenter = lane.top + lane.height / 2 - current.height / 2;
-      if (Math.abs(nextY - laneCenter) <= threshold) nextY = laneCenter;
+      const target = lane.top + lane.height / 2;
+      considerY(target, current.centerY, this.laneTitleWidth, canvasW);
     }
-    return this.clampNodePosition(process, current.baseId, nextX, nextY, current.width, current.height, current.role);
+    const guides: FlowAlignmentGuide[] = [];
+    const xHit = bestX as FlowAlignmentHit | null;
+    const yHit = bestY as FlowAlignmentHit | null;
+    if (xHit) {
+      guides.push({ id: `x-${Math.round(xHit.position)}`, axis: 'x', position: Math.round(xHit.position), from: Math.max(0, Math.round(xHit.from)), to: Math.min(canvasH, Math.round(xHit.to)) });
+    }
+    if (yHit) {
+      guides.push({ id: `y-${Math.round(yHit.position)}`, axis: 'y', position: Math.round(yHit.position), from: Math.max(this.laneTitleWidth, Math.round(yHit.from)), to: Math.min(canvasW, Math.round(yHit.to)) });
+    }
+    return { x: x + (xHit?.delta || 0), y: y + (yHit?.delta || 0), guides };
   }
 
   private clampNodePosition(process: LegacyProcess, nodeId: string, x: number, y: number, width: number, height: number, roleName: string): { x: number; y: number } {
@@ -900,14 +982,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     let minY = 12;
     let maxY = Math.max(minY, laneBottom - height - 12);
 
-    // Boundary detail: task nodes are locked to their own role lane. Moving across lanes would silently rewrite modeling responsibility.
-    if (roleName) {
-      const lane = this.lanes(process).find((item) => item.name === roleName);
-      if (lane) {
-        minY = lane.top + 10;
-        maxY = Math.max(minY, lane.top + lane.height - height - 10);
-      }
-    }
+    // Boundary detail: dragging only changes private layout offsets. Role/lane ownership is still edited through role controls, so legacy diagrams that already moved nodes outside a lane keep rendering correctly.
 
     return {
       x: Math.min(maxX, Math.max(minX, x)),

@@ -4448,6 +4448,57 @@ describe('App', () => {
     expect((runtime.doc.processes[0].nodes[0] as any).roleIds).toContain('role-b');
   });
 
+  it('should move every flow canvas node vertically while dragging', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '产品经理' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-inbound',
+          name: '入库流程',
+          nodes: [{ uid: 'node-submit', name: '客户提交', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+          flow: { nodes: [{ id: 'gateway-check', uid: 'gateway-check', kind: 'gateway', title: '是否通过' }], edges: [] },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-inbound';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const component = fixture.componentInstance as any;
+    const topOf = (selector: string, index = 0) => Number((compiled.querySelectorAll<HTMLElement>(selector)[index] as HTMLElement).style.top.replace('px', ''));
+    const dragVertically = (kind: string, selector: string, deltaY: number, domIndex = 0, nodeIndex = 0) => {
+      const before = topOf(selector, domIndex);
+      const node = component.flowNodes(runtime.doc.processes[0]).filter((item: any) => item.kind === kind)[nodeIndex];
+      const start = { clientX: 320, clientY: 120, button: 0, preventDefault: vi.fn(), stopPropagation: vi.fn(), currentTarget: null, target: null };
+      component.startNodeDrag(start, node);
+      component.moveNodeDrag({ clientX: 320, clientY: 120 + deltaY });
+      fixture.detectChanges();
+      component.finishNodeDrag({ clientX: 320, clientY: 120 + deltaY, currentTarget: null });
+      fixture.detectChanges();
+      return before;
+    };
+
+    const startTop = dragVertically('start', '[data-testid="process-flow-terminal"]', 60, 0);
+    expect(topOf('[data-testid="process-flow-terminal"]', 0)).toBeGreaterThan(startTop);
+    const taskTop = dragVertically('task', '[data-testid="process-flow-node"]', 60);
+    expect(topOf('[data-testid="process-flow-node"]')).toBeGreaterThan(taskTop);
+    const gatewayTop = dragVertically('gateway', '[data-testid="process-flow-gateway"]', -40);
+    expect(topOf('[data-testid="process-flow-gateway"]')).toBeLessThan(gatewayTop);
+    const endTop = dragVertically('end', '[data-testid="process-flow-terminal"]', 60, 1, 0);
+    expect(topOf('[data-testid="process-flow-terminal"]', 1)).toBeGreaterThan(endTop);
+  });
+
   it('should copy a locator link for the current process node', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
