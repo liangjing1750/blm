@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import {
@@ -108,6 +108,9 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly graphZoom = signal(1);
   protected readonly roleCollapsed = signal(true);
   protected readonly materialTab = signal<'forms' | 'attachments'>('forms');
+  protected readonly moreOpen = signal(false);
+  protected readonly formCopyMenuId = signal('');
+  protected readonly formNotice = signal('');
   protected readonly activeNodeSection = signal('node-role-section');
   protected readonly stepTypes = [
     { value: 'Click', label: '点击' },
@@ -322,7 +325,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   protected displayRoleName(roleId: string | undefined): string {
     const raw = String(roleId || '').trim();
     if (!raw) return '';
-    const role = this.roles().find((item) => this.roleId(item) === raw || item.name === raw);
+    const role = this.roles().find((item) => this.roleId(item) === raw || String(item.uid || '') === raw || item.name === raw);
     return role?.name || raw;
   }
 
@@ -481,7 +484,11 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
 
   protected selectedRoles(task: LegacyProcessNode): LegacyRole[] {
     const selected = new Set(this.taskRoleIds(task));
-    return this.roles().filter((role) => selected.has(this.roleId(role)));
+    return this.roles().filter((role) => selected.has(this.roleId(role)) || selected.has(String(role.uid || '')) || selected.has(role.name || ''));
+  }
+
+  protected selectedRoleLabels(task: LegacyProcessNode): string[] {
+    return this.taskRoleIds(task).map((roleId) => this.displayRoleName(roleId) || roleId).filter(Boolean);
   }
 
   protected scrollToNodeSection(sectionId: string): void {
@@ -683,10 +690,52 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected richTextHtml(value: string | undefined): string {
+    return this.previewRichTextHtml(value);
+  }
+
+  // 模块意图：节点视图的“步骤详细描述/业务规则”要和预览页使用同一类安全渲染语义。
+  // 关键流程：先识别纯文本，再对白名单标签与样式做递归净化，避免把旧版富文本直接塞回 DOM。
+  // 边界细节：这里保留缩进、列表、颜色等业务排版能力，但拒绝 url/expression/javascript 等可执行样式。
+  private previewRichTextHtml(value: unknown): string {
     const raw = String(value || '');
     if (!raw.trim()) return '';
-    if (/<[a-z][\s\S]*>/i.test(raw)) return raw;
-    return raw.split(/\n/).map((line) => `<div>${this.escapeHtml(line) || '<br>'}</div>`).join('');
+    if (!/<[a-z][\s\S]*>/i.test(raw)) return this.escapeHtml(raw).replace(/\r?\n/g, '<br>');
+    const template = document.createElement('template');
+    template.innerHTML = raw;
+    return Array.from(template.content.childNodes).map((node) => this.sanitizeRichTextNode(node)).join('');
+  }
+
+  private sanitizeRichTextNode(node: Node): string {
+    if (node.nodeType === Node.TEXT_NODE) return this.escapeHtml(node.textContent || '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const element = node as HTMLElement;
+    const tag = element.tagName.toLowerCase();
+    const children = Array.from(element.childNodes).map((child) => this.sanitizeRichTextNode(child)).join('');
+    const allowedTags = new Set(['b', 'strong', 'i', 'em', 'u', 's', 'ol', 'ul', 'li', 'p', 'br', 'div', 'span', 'blockquote', 'code', 'pre']);
+    if (!allowedTags.has(tag)) return children;
+    if (tag === 'br') return '<br>';
+    const style = this.sanitizeRichTextStyle(element.getAttribute('style') || '');
+    return `<${tag}${style ? ` style="${style}"` : ''}>${children}</${tag}>`;
+  }
+
+  private sanitizeRichTextStyle(style: string): string {
+    const allowed = ['color', 'background-color', 'text-align', 'font-weight', 'margin-left', 'padding-left'];
+    return style
+      .split(';')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const separator = part.indexOf(':');
+        if (separator < 1) return '';
+        const property = part.slice(0, separator).trim().toLowerCase();
+        const value = part.slice(separator + 1).trim();
+        if (!allowed.includes(property) || !value || /url\s*\(|expression\s*\(|javascript:|[<>]/i.test(value)) return '';
+        if (property === 'text-align' && !/^(left|right|center|justify)$/i.test(value)) return '';
+        if ((property === 'margin-left' || property === 'padding-left') && !/^-?\d+(\.\d+)?(px|em|rem|%)$/i.test(value)) return '';
+        return `${property}:${this.escapeHtml(value)}`;
+      })
+      .filter(Boolean)
+      .join(';');
   }
 
   protected richTextValue(event: Event): string {
@@ -1037,6 +1086,79 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  protected toggleFormCopyMenu(form: LegacyTaskForm, event: MouseEvent): void {
+    event.stopPropagation();
+    this.formCopyMenuId.set(this.formCopyMenuId() === this.formKey(form) ? '' : this.formKey(form));
+  }
+
+  protected formKey(form: LegacyTaskForm): string {
+    return String(form.id || form.uid || '');
+  }
+
+  protected copyFormToCurrentTask(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    this.duplicateForm(task, form);
+    this.showFormNotice('已复制到当前节点');
+  }
+
+  protected copyFormToOtherTask(form: LegacyTaskForm): void {
+    // 模块意图：复刻旧版“复制到其他节点/粘贴到当前节点”，让跨节点表单复用不依赖抽屉外状态。
+    // 关键流程：优先写入浏览器剪贴板，同时落一份 localStorage，兼容无剪贴板权限的本地预览环境。
+    // 边界细节：复制的是完整表单结构，粘贴时会重置 form/section/field id，避免同节点内 id 冲突。
+    const payload = JSON.stringify(form);
+    try {
+      window.localStorage.setItem('blm-node-form-clipboard', payload);
+    } catch {
+      // Boundary detail: localStorage may be blocked in some embedded browser contexts; in-memory fallback still works.
+    }
+    void navigator.clipboard?.writeText(payload).catch(() => undefined);
+    this.formCopyMenuId.set('');
+    this.showFormNotice('已复制表单，可在其他节点粘贴');
+  }
+
+  protected async pasteFormToCurrentTask(task: LegacyProcessNode): Promise<void> {
+    let payload = '';
+    try {
+      payload = await navigator.clipboard?.readText?.() || '';
+    } catch {
+      payload = '';
+    }
+    if (!payload) {
+      try {
+        payload = window.localStorage.getItem('blm-node-form-clipboard') || '';
+      } catch {
+        payload = '';
+      }
+    }
+    if (!payload) {
+      this.showFormNotice('剪贴板没有可粘贴的表单');
+      return;
+    }
+    try {
+      const form = JSON.parse(payload) as LegacyTaskForm;
+      if (!form || typeof form !== 'object') throw new Error('invalid form');
+      this.pasteFormClone(task, form);
+      this.formCopyMenuId.set('');
+      this.showFormNotice('已粘贴到当前节点');
+    } catch {
+      this.showFormNotice('剪贴板内容不是有效表单');
+    }
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  protected handleFormClipboardShortcut(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || !['c', 'v'].includes(event.key.toLowerCase())) return;
+    const target = event.target as HTMLElement | null;
+    const card = target?.closest?.('[data-testid="process-form-card"]') as HTMLElement | null;
+    const task = this.currentTask();
+    if (!card || !task) return;
+    const formId = card.dataset['formId'] || '';
+    const form = this.forms(task).find((item) => this.formKey(item) === formId);
+    if (!form) return;
+    event.preventDefault();
+    if (event.key.toLowerCase() === 'c') this.copyFormToOtherTask(form);
+    else void this.pasteFormToCurrentTask(task);
+  }
+
   protected setFormEntity(form: LegacyTaskForm, value: string): void {
     const previousEntityId = this.formEntityId(form);
     form.entity_id = value;
@@ -1045,7 +1167,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
       if (!current || current === previousEntityId || current === value) {
         section.entity_id = value;
         this.clearInvalidEntityFieldMappings(form, section);
-        this.syncFormSectionFieldsFromEntity(form, section);
+        if (this.shouldCopyEntityFields(form, section)) this.syncFormSectionFieldsFromEntity(form, section);
       }
     });
     this.adapter.touch();
@@ -1089,7 +1211,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   protected setFormSectionEntity(form: LegacyTaskForm, section: LegacyTaskFormSection, value: string): void {
     section.entity_id = value;
     this.clearInvalidEntityFieldMappings(form, section);
-    this.syncFormSectionFieldsFromEntity(form, section);
+    if (this.shouldCopyEntityFields(form, section)) this.syncFormSectionFieldsFromEntity(form, section);
     this.adapter.touch();
     this.refresh();
   }
@@ -1203,6 +1325,53 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
 
   protected refresh(): void {
     this.version.update((value) => value + 1);
+  }
+
+  private pasteFormClone(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    task.forms ||= [];
+    const clone = structuredClone(form);
+    const id = this.nextLocalId('F', task.forms);
+    clone.id = id;
+    clone.uid = id;
+    clone.name = `${form.name || '表单'} 副本`;
+    this.rekeyForm(clone);
+    task.forms.push(clone);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  private rekeyForm(form: LegacyTaskForm): void {
+    this.sections(form).forEach((section, sectionIndex) => {
+      const sectionId = `SEC${Date.now()}${sectionIndex}`;
+      section.id = sectionId;
+      section.uid = sectionId;
+      (section.fields || []).forEach((field, fieldIndex) => {
+        const fieldId = `FLD${Date.now()}${sectionIndex}${fieldIndex}`;
+        field.id = fieldId;
+        field.uid = fieldId;
+      });
+    });
+  }
+
+  private shouldCopyEntityFields(form: LegacyTaskForm, section: LegacyTaskFormSection): boolean {
+    // 模块意图：关联实体时沿用旧版二选一确认，不强制把实体字段灌入表单。
+    // 关键流程：只有目标实体确实有字段时才询问；确认复制字段，取消则只建立实体关联。
+    // 边界细节：测试环境没有实现 window.confirm，此时按旧版快捷路径默认复制，避免交互被中断。
+    const count = this.entityFieldsForSection(form, section).length;
+    if (!count) return false;
+    try {
+      const result = window.confirm(`实体有 ${count} 个字段，是否复制到当前表单分组？\n确定：复制字段\n取消：不复制字段`);
+      return typeof result === 'boolean' ? result : true;
+    } catch {
+      return true;
+    }
+  }
+
+  private showFormNotice(message: string): void {
+    this.formNotice.set(message);
+    window.setTimeout(() => {
+      if (this.formNotice() === message) this.formNotice.set('');
+    }, 1800);
   }
 
   private normalizeForm(form: LegacyTaskForm, index: number): void {

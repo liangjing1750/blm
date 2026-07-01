@@ -71,8 +71,8 @@
               <button class="btn btn-ghost-sm node-fold-btn" type="button" (click)="roleCollapsed.set(!roleCollapsed())">{{ roleCollapsed() ? '选择更多角色' : '完成选择' }} <span>›</span></button>
             </div>
             <div class="node-selected-chip-row">
-              @for (role of selectedRoles(task); track roleId(role)) {
-                <span>{{ role.name || roleId(role) }}</span>
+              @for (roleName of selectedRoleLabels(task); track roleName) {
+                <span>{{ roleName }}</span>
               } @empty {
                 <span class="is-empty">尚未选择办理角色</span>
               }
@@ -92,7 +92,7 @@
             }
           </section>
 
-          <section #nodeSection class="node-editor-card node-editor-card--service" id="process-application-service-section" data-testid="process-application-service-section">
+          <section #nodeSection class="node-editor-card node-editor-card--service node-more-hidden" id="process-application-service-section" data-testid="process-application-service-section">
             <div class="node-section-head">
               <div><h4>应用服务</h4><span class="node-count-pill">{{ applicationServicesForTask(task).length }} 个</span></div>
             </div>
@@ -117,7 +117,7 @@
             </div>
           </section>
 
-          <section #nodeSection class="node-editor-card node-editor-card--entity" id="process-entity-operation-section" data-testid="process-entity-operation-section">
+          <section #nodeSection class="node-editor-card node-editor-card--entity node-more-hidden" id="process-entity-operation-section" data-testid="process-entity-operation-section">
             <div class="node-section-head">
               <div><h4>关联实体</h4><span class="node-count-pill">{{ (task.entity_ops || []).length }} 个实体</span></div>
             </div>
@@ -222,7 +222,7 @@
                 </div>
                 <p class="node-section-note node-form-model-note">表单是用户查看、填写和提交的材料载体。这里先站在用户和产品视角描述材料形式，不和技术上的数据实体绑定。</p>
                 @for (form of forms(task); track form.id || form.uid || $index; let formIndex = $index) {
-                  <article class="task-form-card node-task-form-card" data-testid="process-form-card">
+                  <article class="task-form-card node-task-form-card" data-testid="process-form-card" [attr.data-form-id]="formKey(form)">
                     <div class="task-form-card-head">
                       <span class="task-form-index">F{{ formIndex + 1 }}</span>
                       <input type="text" data-testid="task-form-name" [ngModel]="form.name || ''" (ngModelChange)="setFormName(task, form, $event)" placeholder="表单名称，如：仓库管理列表" />
@@ -234,7 +234,14 @@
                       </select>
                       <span class="task-form-entity-summary" data-testid="task-form-entity-summary">{{ formEntitySummary(form) }}</span>
                       <span class="task-form-field-count">{{ formFieldCount(form) }} 字段</span>
-                      <button class="step-action" type="button" data-testid="task-form-duplicate" title="复制完整表单" (click)="duplicateForm(task, form)">⧉</button>
+                      <button class="step-action" type="button" data-testid="task-form-duplicate" title="复制表单" (click)="toggleFormCopyMenu(form, $event)">复制</button>
+                      @if (formCopyMenuId() === formKey(form)) {
+                        <div class="form-copy-menu" data-testid="task-form-copy-menu" (click)="$event.stopPropagation()">
+                          <button type="button" (click)="copyFormToCurrentTask(task, form)">复制到当前节点</button>
+                          <button type="button" (click)="copyFormToOtherTask(form)">复制到其他节点</button>
+                          <button type="button" (click)="pasteFormToCurrentTask(task)">粘贴到当前节点</button>
+                        </div>
+                      }
                       <button class="step-del" type="button" title="删除表单" (click)="removeForm(task, form)">×</button>
                     </div>
                     <textarea class="task-form-purpose" rows="1" data-testid="task-form-purpose" [ngModel]="form.purpose || ''" (input)="autoGrow($any($event.target)); setFormPurpose(form, $any($event.target).value)" placeholder="表单用途，如：筛选、列表、新增、详情、输出说明"></textarea>
@@ -306,6 +313,9 @@
                   </article>
                 } @empty {
                   <p class="node-empty">暂无表单定义。需要采集或展示数据时再添加。</p>
+                }
+                @if (formNotice()) {
+                  <div class="node-form-notice" data-testid="task-form-copy-notice">{{ formNotice() }}</div>
                 }
               </div>
             } @else {
@@ -409,6 +419,64 @@
               }
             </div>
           </section>
+
+          <details class="node-editor-card node-more-card" [open]="moreOpen()" (toggle)="moreOpen.set($any($event.target).open)">
+            <summary>更多 <span>应用服务、关联实体</span></summary>
+            <section class="node-more-section" data-testid="process-application-service-more">
+              <div class="node-section-head">
+                <div><h4>应用服务</h4><span class="node-count-pill">{{ applicationServicesForTask(task).length }} 个</span></div>
+              </div>
+              <div class="node-step-list">
+                @for (service of applicationServicesForTask(task); track serviceId(service)) {
+                  <article class="node-step-row node-step-row--rich" data-testid="process-application-service-card">
+                    <div class="node-step-main-row">
+                      <span class="node-step-index">{{ service.method || 'HTTP' }}</span>
+                      <div class="node-step-name">
+                        <strong>{{ service.name || serviceId(service) || '未命名应用服务' }}</strong>
+                        <small>{{ service.path || '未配置路径' }}</small>
+                      </div>
+                    </div>
+                  </article>
+                } @empty {
+                  <p class="node-empty">暂无关联应用服务。</p>
+                }
+              </div>
+            </section>
+            <section class="node-more-section" data-testid="process-entity-operation-more">
+              <div class="node-section-head">
+                <div><h4>关联实体</h4><span class="node-count-pill">{{ (task.entity_ops || []).length }} 个实体</span></div>
+              </div>
+              <div class="node-entity-op-list" data-testid="process-entity-op-list">
+                @for (entityOp of task.entity_ops || []; track entityOpId(entityOp)) {
+                  <article class="node-entity-op-tag" data-testid="process-entity-op-row">
+                    <strong>{{ entityName(entityOpId(entityOp)) }}</strong>
+                    <div class="node-entity-op-checks">
+                      @for (op of entityOps; track op) {
+                        <label class="op-cb">
+                          <input type="checkbox" [checked]="hasEntityOp(task, entityOpId(entityOp), op)" (change)="toggleEntityOp(task, entityOpId(entityOp), op, $any($event.target).checked)" />
+                          <span [class.op-c]="op === 'C'" [class.op-u]="op === 'U'" [class.op-d]="op === 'D'">{{ op }}</span>
+                        </label>
+                      }
+                    </div>
+                    <button class="step-del" type="button" data-testid="process-entity-op-remove" (click)="removeEntityOp(task, entityOpId(entityOp))">取消关联</button>
+                  </article>
+                } @empty {
+                  <p class="node-empty">尚未关联实体。</p>
+                }
+              </div>
+              @if (availableEntities(task).length) {
+                <div class="node-entity-add-row">
+                  <select data-testid="process-entity-op-select" [(ngModel)]="selectedEntityId">
+                    <option value="">选择实体...</option>
+                    @for (entity of availableEntities(task); track entityId(entity)) {
+                      <option [value]="entityId(entity)">{{ entity.name || entityId(entity) }}</option>
+                    }
+                  </select>
+                  <button class="btn btn-outline btn-sm" type="button" data-testid="process-entity-op-add" [disabled]="!selectedEntityId" (click)="addSelectedEntity(task)">关联</button>
+                </div>
+              }
+            </section>
+          </details>
         </div>
       </section>
     </div>

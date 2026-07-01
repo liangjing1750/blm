@@ -6,6 +6,85 @@
   line-height: 1.6;
 }
 
+.node-more-hidden {
+  display: none;
+}
+
+.node-more-card {
+  padding: 0;
+}
+
+.node-more-card summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.node-more-card summary span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.node-more-section {
+  display: grid;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.node-more-section + .node-more-section {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+}
+
+.form-copy-menu {
+  position: absolute;
+  z-index: 20;
+  right: 42px;
+  top: 34px;
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .16);
+}
+
+.form-copy-menu button {
+  justify-content: flex-start;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1e293b;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.form-copy-menu button:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.node-form-notice {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #047857;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .node-task-form-card .task-form-purpose {
   width: 100%;
   min-height: 38px;
@@ -16,6 +95,10 @@
   padding: 6px 10px;
   font: inherit;
   font-size: 13px;
+}
+
+.node-task-form-card .task-form-card-head {
+  position: relative;
 }
 
 .node-task-form-card .task-form-sections {
