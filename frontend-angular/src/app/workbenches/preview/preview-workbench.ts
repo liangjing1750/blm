@@ -178,12 +178,15 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   private renderProcessNode(node: any, index: number): string {
     const userSteps = this.asArray(node.userSteps || node.steps);
     const tasks = this.asArray(node.orchestrationTasks || node.tasks || node.taskDefinitions);
+    const businessRules = this.normalizedBusinessRules(node);
     return `<div class="pv-task-detail">
       <h4>流程节点: ${this.esc(this.displayName(node, `未命名节点 ${index + 1}`))}${node.roleName ? ` <span class="pv-role">(${this.esc(node.roleName)})</span>` : ''}</h4>
       ${userSteps.length ? `<table><thead><tr><th>#</th><th>用户操作步骤</th><th>类型</th><th>条件/备注</th></tr></thead><tbody>${userSteps.map((step, stepIndex) => `
         <tr><td>${stepIndex + 1}</td><td>${this.esc(step.name || '')}</td><td>${this.esc(step.type || '')}</td><td>${this.richTextCell(step.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
       ${tasks.length ? `<table><thead><tr><th>#</th><th>节点任务</th><th>业务构件</th><th>类型</th><th>目标</th><th>备注</th></tr></thead><tbody>${tasks.map((task, taskIndex) => `
         <tr><td>${taskIndex + 1}</td><td>${this.esc(task.name || '')}</td><td>${this.esc(task.constructName || task.constructUid || '')}</td><td>${this.esc(task.type || '')}</td><td>${this.esc(task.target || '')}</td><td>${this.richTextCell(task.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${businessRules.length ? `<div class="pv-rule-model"><h5>业务规则</h5><table class="pv-rule-table"><thead><tr><th>规则名称</th><th>规则内容</th></tr></thead><tbody>${businessRules.map((rule, ruleIndex) => `
+        <tr><td>${this.esc(rule.name || `规则${ruleIndex + 1}`)}</td><td>${this.richTextCell(rule.content || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
     </div>`;
   }
 
@@ -271,7 +274,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return `<h2 id="preview-components">组件构件</h2>
       ${components.length ? `<h3>业务组件</h3><table><thead><tr><th>组件</th><th>类型</th><th>说明</th></tr></thead><tbody>${components.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.kind || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
       ${constructs.length ? `<h3>业务构件</h3><table><thead><tr><th>构件</th><th>所属组件</th><th>说明</th></tr></thead><tbody>${constructs.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.businessComponentUid || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
-      ${taskDefinitions.length ? `<h3>任务定义</h3><table><thead><tr><th>任务</th><th>构件</th><th>技术承接</th></tr></thead><tbody>${taskDefinitions.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.constructUid || item.businessConstructUid || '')}</td><td>${this.esc(item.technicalHandover?.summary || item.technicalHandover || '')}</td></tr>`).join('')}</tbody></table>` : ''}`;
+      ${taskDefinitions.length ? `<h3>任务定义</h3><table><thead><tr><th>任务</th><th>构件</th><th>技术承接</th></tr></thead><tbody>${taskDefinitions.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.constructUid || item.businessConstructUid || '')}</td><td>${this.renderTechnicalHandover(item.technicalHandover)}</td></tr>`).join('')}</tbody></table>` : ''}`;
   }
 
   private buildMarkdown(): string {
@@ -292,8 +295,48 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return `${lines.join('\n')}\n`;
   }
 
-  private richTextCell(value: string): string {
-    return `<div class="rich-text-rendered pv-rich-text">${this.esc(value).replace(/\r?\n/g, '<br>')}</div>`;
+  private richTextCell(value: unknown): string {
+    return `<div class="rich-text-rendered pv-rich-text">${this.previewRichTextHtml(value)}</div>`;
+  }
+
+  private normalizedBusinessRules(node: any): Array<{ name: string; content: string }> {
+    return this.asArray(node.businessRules)
+      .map((rule, index) => typeof rule === 'string'
+        ? { name: `规则${index + 1}`, content: rule }
+        : { name: String(rule?.name || '').trim(), content: String(rule?.content || rule?.description || rule?.note || '').trim() })
+      .filter((rule) => rule.name || rule.content);
+  }
+
+  private renderTechnicalHandover(handover: any): string {
+    if (!handover) return '';
+    if (typeof handover === 'string') return this.richTextCell(handover);
+    const summary = [handover.summary, handover.runtimeKind, handover.target]
+      .filter(Boolean)
+      .map((item) => this.esc(item))
+      .join(' / ');
+    const detail = handover.designDescription || handover.description || handover.detail || handover.note || '';
+    return `${summary ? `<div class="pv-note">${summary}</div>` : ''}${detail ? `<div class="pv-technical-design">${this.previewRichTextHtml(detail)}</div>` : ''}`;
+  }
+
+  private previewRichTextHtml(value: unknown): string {
+    const raw = String(value ?? '');
+    if (!raw.trim()) return '';
+    if (!/<[a-z][\s\S]*>/i.test(raw)) return this.esc(raw).replace(/\r?\n/g, '<br>');
+    const template = document.createElement('template');
+    template.innerHTML = raw;
+    return Array.from(template.content.childNodes).map((node) => this.sanitizeRichTextNode(node)).join('');
+  }
+
+  private sanitizeRichTextNode(node: Node): string {
+    if (node.nodeType === Node.TEXT_NODE) return this.esc(node.textContent || '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const element = node as HTMLElement;
+    const tag = element.tagName.toLowerCase();
+    const children = Array.from(element.childNodes).map((child) => this.sanitizeRichTextNode(child)).join('');
+    const allowedTags = new Set(['b', 'strong', 'i', 'em', 'u', 's', 'ol', 'ul', 'li', 'p', 'br', 'div', 'span', 'blockquote', 'code', 'pre']);
+    if (!allowedTags.has(tag)) return children;
+    if (tag === 'br') return '<br>';
+    return `<${tag}>${children}</${tag}>`;
   }
 
   private download(content: string, type: string, filename: string): void {

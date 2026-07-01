@@ -513,10 +513,26 @@ describe('App', () => {
       roles: [{ uid: 'role-1', name: '监管员' }],
       stages: [{ uid: 'stage-1', name: '入库' }],
       stageFlowRefs: [],
-      processes: [{ uid: 'proc-1', name: '入库流程', nodes: [{ uid: 'node-1', name: '提交申请' }] }],
+      processes: [{
+        uid: 'proc-1',
+        name: '入库流程',
+        nodes: [{
+          uid: 'node-1',
+          name: '提交申请',
+          userSteps: [{ uid: 'step-1', name: '填写信息', type: 'input', note: '<ol><li><strong>核对仓单</strong></li></ol>' }],
+          businessRules: [{ uid: 'rule-1', name: '校验规则', content: '<ul><li><em>必须有仓单编号</em></li></ul>' }],
+        }],
+      }],
       entities: [{ uid: 'entity-1', name: '仓单', fields: [{ uid: 'field-1', name: '仓单编号', type: 'String' }] }],
       businessComponents: [{ uid: 'bc-1', name: '仓单组件' }],
-      taskDefinitions: [{ uid: 'task-1', name: '保存仓单' }],
+      taskDefinitions: [{
+        uid: 'task-1',
+        name: '保存仓单',
+        technicalHandover: {
+          summary: '领域服务承接',
+          designDescription: '<p><strong>调用聚合根保存仓单</strong></p>',
+        },
+      }],
       terms: [],
       rules: [],
     };
@@ -539,12 +555,17 @@ describe('App', () => {
     const outlineButtons = Array.from(compiled.querySelectorAll<HTMLButtonElement>('.preview-outline-link'));
     outlineButtons.find((button) => button.textContent?.includes('入库流程'))?.click();
     fixture.detectChanges();
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('流程节点: 提交申请');
+    const rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
+    expect(rendered?.textContent).toContain('流程节点: 提交申请');
+    expect(rendered?.querySelector('.pv-rich-text strong')?.textContent).toContain('核对仓单');
+    expect(rendered?.querySelector('.pv-rule-model em')?.textContent).toContain('必须有仓单编号');
+    expect(rendered?.innerHTML).not.toContain('&lt;strong&gt;核对仓单&lt;/strong&gt;');
     expect(scrollSpy).toHaveBeenCalled();
 
     outlineButtons.find((button) => button.textContent?.includes('仓单'))?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('实体: 仓单');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('.pv-technical-design strong')?.textContent).toContain('调用聚合根保存仓单');
 
     compiled.querySelector<HTMLButtonElement>('#preview-raw-toggle')?.click();
     fixture.detectChanges();
