@@ -109,10 +109,6 @@ export function switchAngularMainTab(tabId: string): void {
   if (runtimeState.ui['mainTab'] === nextTab) return;
   recordAngularNavigationSnapshot();
   runtimeState.ui['mainTab'] = nextTab;
-  if (nextTab === 'processWorkbench') {
-    runtimeState.ui['procView'] = 'valueDomain';
-    runtimeState.ui['processWorkbenchView'] = 'valueDomain';
-  }
   emitRuntimeRefresh();
 }
 

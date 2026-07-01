@@ -20,11 +20,12 @@ interface LegacyService { uid?: string; name?: string; method?: string; path?: s
 })
 export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   private readonly onRefresh = () => this.version.update((v) => v + 1);
+  private readonly runtime = getAngularRuntimeState();
   ngOnInit(): void { window.addEventListener('blm-workbench-refresh', this.onRefresh); }
   ngOnDestroy(): void { window.removeEventListener('blm-workbench-refresh', this.onRefresh); }
 
   protected readonly version = signal(0);
-  protected readonly activeTab = signal<ComponentTab>('component');
+  protected readonly activeTab = signal<ComponentTab>(this.restoreActiveTab());
   protected readonly expandedComp = signal('');
   protected readonly editTaskDef = signal<Partial<LegacyTaskDef> | null>(null);
   protected readonly editSvc = signal<Partial<LegacyService> | null>(null);
@@ -257,7 +258,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   // ─── Utils ────────────────────────────────────────
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
   protected constructName(constructId: string): string { const c = this.constructs().find((x) => this.uid(x) === constructId); return c?.name || constructId || '未归类'; }
-  protected switchTab(t: ComponentTab): void { this.activeTab.set(t); }
+  protected switchTab(t: ComponentTab): void {
+    this.runtime.ui['componentWorkbenchTab'] = t;
+    this.activeTab.set(t);
+  }
   protected toggleExp(id: string): void { this.expandedComp.set(this.expandedComp() === id ? '' : id); }
   protected isExp(id: string): boolean { return this.expandedComp() === id; }
   // ─── 抽屉宽度拖拽 ──────────────────────────
@@ -282,4 +286,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected touch(): void { markAngularRuntimeModified(); this.version.update((v) => v + 1); }
+
+  private restoreActiveTab(): ComponentTab {
+    const saved = String(this.runtime.ui['componentWorkbenchTab'] || '').trim();
+    return ['component', 'taskDef', 'entity', 'service', 'orchestration'].includes(saved)
+      ? saved as ComponentTab
+      : 'component';
+  }
 }

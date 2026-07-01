@@ -15,6 +15,10 @@ describe('App', () => {
     runtime.modified = false;
     runtime.readOnly = false;
     runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['procView'] = 'valueDomain';
+    runtime.ui['processWorkbenchView'] = 'valueDomain';
+    runtime.ui['componentWorkbenchTab'] = 'component';
+    runtime.ui['applicationWorkbenchTab'] = 'service';
     runtime.ui['navHistory'] = [];
     runtime.collab.seq = 0;
     runtime.collab.acceptedSeq = 0;
@@ -3174,6 +3178,71 @@ describe('App', () => {
     expect(runtime.ui['mainTab']).toBe('panoramaWorkbench');
     expect(locationSpy).toHaveBeenCalledWith('/panorama');
     expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeTruthy();
+  });
+
+  it('should restore the last secondary tab when returning to a workbench', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备' }],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-1',
+          name: '入库流程',
+          nodes: [{ uid: 'task-1', name: '提交入库预约' }],
+          edges: [],
+        },
+      ],
+      entities: [],
+      businessComponents: [{ uid: 'bc-1', name: '仓单组件', kind: 'core' }],
+      businessConstructs: [],
+      taskDefinitions: [{ uid: 'td-1', name: '提交入库预约' }],
+      services: [{ uid: 'svc-1', name: '入库服务', method: 'POST', path: '/inbound', parameterMappings: [], nodeRefs: [] }],
+      serviceGroups: [],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/process');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="process-switch-card"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="process-switch-card"]')?.classList.contains('active')).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-constructWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="component-taskdef-tab"]')?.classList.contains('active')).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="application-orchestration-tab"]')?.classList.contains('active')).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-processWorkbench"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(compiled.querySelector('[data-testid="process-switch-card"]')?.classList.contains('active')).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-constructWorkbench"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="component-taskdef-tab"]')?.classList.contains('active')).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="application-orchestration-tab"]')?.classList.contains('active')).toBe(true);
   });
 
   it('should persist document properties through the existing save endpoint', async () => {

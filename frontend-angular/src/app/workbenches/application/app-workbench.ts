@@ -24,11 +24,12 @@ interface VariableOption { value: string; label: string; }
 })
 export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   private readonly onRefresh = () => this.version.update((v) => v + 1);
+  private readonly runtime = getAngularRuntimeState();
   ngOnInit(): void { window.addEventListener('blm-workbench-refresh', this.onRefresh); }
   ngOnDestroy(): void { window.removeEventListener('blm-workbench-refresh', this.onRefresh); }
 
   protected readonly version = signal(0);
-  protected readonly activeTab = signal<AppTab>('service');
+  protected readonly activeTab = signal<AppTab>(this.restoreActiveTab());
   protected readonly svcKeyword = signal('');
   protected readonly editingSvcId = signal('');
   protected readonly orchSvcId = signal('');
@@ -36,11 +37,14 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly expandedSvcIds = signal(new Set<string>());
   protected readonly collapsedGroupIds = signal(new Set<string>());
 
-  protected doc(): any { this.version(); return getAngularRuntimeState().doc || {}; }
+  protected doc(): any { this.version(); return this.runtime.doc || {}; }
   protected serviceGroups(): LegacyServiceGroup[] { this.doc().serviceGroups ||= []; return this.doc().serviceGroups; }
   protected services(): LegacyService[] { return this.doc().services || []; }
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
-  protected switchTab(t: AppTab): void { this.activeTab.set(t); }
+  protected switchTab(t: AppTab): void {
+    this.runtime.ui['applicationWorkbenchTab'] = t;
+    this.activeTab.set(t);
+  }
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
 
   // ─── Tab 1: 应用服务 ──────────────────────────
@@ -441,6 +445,10 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected touch(): void { markAngularRuntimeModified(); this.version.update((v) => v + 1); }
+
+  private restoreActiveTab(): AppTab {
+    return this.runtime.ui['applicationWorkbenchTab'] === 'orchestration' ? 'orchestration' : 'service';
+  }
 
   private legacyStepToOrchestrationStep(step: OrchStep, index: number): OrchestrationStep {
     const task = this.taskDefs().find((td) => this.uid(td) === step.taskDefUid);
