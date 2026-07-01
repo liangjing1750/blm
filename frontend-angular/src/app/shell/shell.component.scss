@@ -185,6 +185,19 @@ app-shell-tab-bar {
   padding: 30px;
 }
 
+.compare-modal-card {
+  width: min(1180px, calc(100vw - 40px));
+  max-height: min(860px, calc(100vh - 40px));
+  padding: 20px 24px;
+  overflow: hidden;
+}
+
+.merge-modal-card {
+  width: min(1280px, calc(100vw - 40px));
+  max-height: min(860px, calc(100vh - 40px));
+  overflow: auto;
+}
+
 .open-document-waiting {
   filter: blur(3px);
   pointer-events: none;
@@ -251,7 +264,11 @@ app-shell-tab-bar {
 .compare-dialog {
   display: grid;
   gap: 14px;
-  width: min(980px, calc(100vw - 56px));
+  width: 100%;
+  max-height: calc(100vh - 80px);
+  min-height: 0;
+  overflow: hidden;
+  font-size: 13px;
 }
 
 .compare-select-stack {
@@ -302,9 +319,16 @@ app-shell-tab-bar {
   font-size: 12px;
 }
 
+.compare-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .compare-markdown-doc {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   padding: 20px 24px 28px;
   color: #1e293b;
   line-height: 1.7;
@@ -318,12 +342,12 @@ app-shell-tab-bar {
 }
 
 .compare-markdown-doc h1 {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .compare-markdown-doc h2 {
   margin-bottom: 8px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .compare-markdown-doc h3 {
