@@ -31,9 +31,75 @@
 
 .node-task-form-card .task-form-section-head {
   display: grid;
-  grid-template-columns: minmax(140px, .9fr) minmax(180px, 1fr) auto auto;
+  grid-template-columns: minmax(140px, .9fr) minmax(180px, 1fr) minmax(130px, .7fr) auto auto;
   gap: 6px;
   align-items: center;
+}
+
+.node-editor-card--entity .node-entity-op-list {
+  display: grid;
+  gap: 8px;
+}
+
+.node-entity-op-tag,
+.node-entity-add-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.node-entity-op-tag {
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.node-entity-op-checks {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.node-entity-op-checks .op-cb {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.node-entity-op-checks .op-c {
+  color: #047857;
+}
+
+.node-entity-op-checks .op-u {
+  color: #b45309;
+}
+
+.node-entity-op-checks .op-d {
+  color: #b91c1c;
+}
+
+.node-entity-add-row {
+  margin-top: 10px;
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.task-form-entity-summary {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .node-task-form-card .task-form-field-table-wrap {
@@ -65,7 +131,7 @@
 .node-task-form-card .task-form-field-table th:nth-child(3),
 .node-task-form-card .task-form-field-table td:nth-child(3) { width: 7%; text-align: center; }
 .node-task-form-card .task-form-field-table th:nth-child(4),
-.node-task-form-card .task-form-field-table td:nth-child(4) { width: 22%; }
+.node-task-form-card .task-form-field-table td:nth-child(4) { width: 18%; }
 .node-task-form-card .task-form-field-table th:nth-child(5),
 .node-task-form-card .task-form-field-table td:nth-child(5) { width: 22%; }
 .node-task-form-card .task-form-field-table th:nth-child(6),

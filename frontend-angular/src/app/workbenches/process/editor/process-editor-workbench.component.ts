@@ -129,6 +129,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     { value: 'Readonly', label: '只读展示' },
     { value: 'Note', label: '说明文本' },
   ];
+  protected readonly entityFieldEmptyLabel = '\u4e0d\u6620\u5c04';
   protected readonly openStepDetails = signal<Set<string>>(new Set());
   protected readonly openRuleDetails = signal<Set<string>>(new Set());
   @ViewChildren('nodeSection') private readonly nodeSections?: QueryList<ElementRef<HTMLElement>>;
@@ -612,11 +613,39 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected formEntitySummary(form: LegacyTaskForm): string {
-    // 模块意图：表单头只给维护者一个低成本判断，避免把实体细节挤到产品经理的办理材料视角里。
-    // 关键流程：优先取表单自身绑定，其次取第一个分组绑定；只显示名称，不展开字段设计。
-    // 边界细节：这里不新增实体关系，仍完全复用旧表单/分组上的 entity_id。
-    const entityId = String(form.entity_id || form.entityId || this.sections(form).find((section) => section.entity_id)?.entity_id || '').trim();
-    return entityId ? this.entityName(entityId) : '未关联实体';
+    const ids = this.formEntityIds(form);
+    if (!ids.length) return '\u672a\u5173\u8054\u5b9e\u4f53';
+    const names = ids.map((entityId) => this.entityName(entityId)).filter(Boolean);
+    return names.length ? names.join('\u3001') : '\u672a\u5173\u8054\u5b9e\u4f53';
+  }
+
+  protected formEntityId(form: LegacyTaskForm): string {
+    return String(form.entity_id || form.entityId || '').trim();
+  }
+
+  protected sectionEntityId(form: LegacyTaskForm, section: LegacyTaskFormSection): string {
+    return String(section.entity_id || section.entityId || this.formEntityId(form) || '').trim();
+  }
+
+  protected entityFieldsForSection(form: LegacyTaskForm, section: LegacyTaskFormSection): Array<{ name?: string; type?: string; required?: boolean; is_required?: boolean; not_null?: boolean; note?: string; description?: string }> {
+    const entityId = this.sectionEntityId(form, section);
+    const entity = this.entities().find((item) => this.entityId(item) === entityId || item.name === entityId);
+    return Array.isArray(entity?.fields) ? entity.fields : [];
+  }
+
+  protected canMapEntityField(form: LegacyTaskForm, section: LegacyTaskFormSection): boolean {
+    return Boolean(this.sectionEntityId(form, section) && this.entityFieldsForSection(form, section).length);
+  }
+
+  protected formEntityIds(form: LegacyTaskForm): string[] {
+    const ids: string[] = [];
+    this.sections(form).forEach((section) => {
+      const entityId = String(section.entity_id || section.entityId || '').trim();
+      if (entityId && !ids.includes(entityId)) ids.push(entityId);
+    });
+    const legacyEntityId = this.formEntityId(form);
+    if (!ids.length && legacyEntityId) ids.push(legacyEntityId);
+    return ids;
   }
 
   protected taskFieldCount(task: LegacyProcessNode): number {
@@ -1008,6 +1037,21 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  protected setFormEntity(form: LegacyTaskForm, value: string): void {
+    const previousEntityId = this.formEntityId(form);
+    form.entity_id = value;
+    this.sections(form).forEach((section) => {
+      const current = String(section.entity_id || '').trim();
+      if (!current || current === previousEntityId || current === value) {
+        section.entity_id = value;
+        this.clearInvalidEntityFieldMappings(form, section);
+        this.syncFormSectionFieldsFromEntity(form, section);
+      }
+    });
+    this.adapter.touch();
+    this.refresh();
+  }
+
   protected addFormSection(form: LegacyTaskForm, afterSection?: LegacyTaskFormSection): void {
     const sections = this.sections(form);
     const id = this.nextLocalId('SEC', sections);
@@ -1038,6 +1082,14 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
 
   protected setFormSection(section: LegacyTaskFormSection, key: 'name' | 'note' | 'entity_id', value: string): void {
     section[key] = value;
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected setFormSectionEntity(form: LegacyTaskForm, section: LegacyTaskFormSection, value: string): void {
+    section.entity_id = value;
+    this.clearInvalidEntityFieldMappings(form, section);
+    this.syncFormSectionFieldsFromEntity(form, section);
     this.adapter.touch();
     this.refresh();
   }
@@ -1186,6 +1238,50 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
       });
     });
     form.fields = form.sections.flatMap((section) => section.fields || []);
+  }
+
+  private clearInvalidEntityFieldMappings(form: LegacyTaskForm, section: LegacyTaskFormSection): void {
+    const availableFields = new Set(this.entityFieldsForSection(form, section).map((field) => String(field.name || '').trim()).filter(Boolean));
+    (section.fields || []).forEach((field) => {
+      if (field.entity_field && !availableFields.has(field.entity_field)) field.entity_field = '';
+    });
+  }
+
+  private syncFormSectionFieldsFromEntity(form: LegacyTaskForm, section: LegacyTaskFormSection): void {
+    // 模块意图：复刻旧版“关联实体后补齐字段”的低成本建模入口，避免用户在表单里重复录入实体字段。
+    // 关键流程：以实体字段名和已有表单字段名双重去重，只追加缺失字段，不覆盖用户已经维护的字段。
+    // 边界细节：这里只写当前表单分组，不新增实体、不改变实体字段定义，也不删除用户自定义字段。
+    const entityFields = this.entityFieldsForSection(form, section);
+    if (!entityFields.length) return;
+    section.fields ||= [];
+    const usedEntityFields = new Set(section.fields.map((field) => String(field.entity_field || '').trim()).filter(Boolean));
+    const usedNames = new Set(section.fields.map((field) => String(field.name || '').trim()).filter(Boolean));
+    entityFields.forEach((entityField) => {
+      const fieldName = String(entityField.name || '').trim();
+      if (!fieldName || usedEntityFields.has(fieldName) || usedNames.has(fieldName)) return;
+      const id = this.nextLocalId('FLD', section.fields || []);
+      section.fields!.push({
+        id,
+        uid: id,
+        name: fieldName,
+        type: this.mapEntityFieldTypeToFormFieldType(entityField.type),
+        required: Boolean(entityField.required || entityField.is_required || entityField.not_null),
+        entity_field: fieldName,
+        note: String(entityField.note || entityField.description || ''),
+      });
+      usedEntityFields.add(fieldName);
+      usedNames.add(fieldName);
+    });
+    form.fields = this.sections(form).flatMap((item) => item.fields || []);
+  }
+
+  private mapEntityFieldTypeToFormFieldType(type: unknown): string {
+    const normalized = String(type || '').trim().toLowerCase();
+    if (['number', 'int', 'integer', 'decimal', 'float', 'double', 'long'].includes(normalized)) return 'Number';
+    if (['date', 'datetime', 'time', 'timestamp'].includes(normalized)) return 'Date';
+    if (['file', 'upload', 'attachment', 'image'].includes(normalized)) return 'File';
+    if (['enum', 'select', 'option', 'options', 'dict', 'dictionary'].includes(normalized)) return 'Select';
+    return 'Text';
   }
 
   private nextLocalId(prefix: string, items: Array<{ id?: string; uid?: string }>): string {

@@ -2,6 +2,7 @@ export interface LegacyEntity {
   id?: string;
   uid?: string;
   name?: string;
+  fields?: Array<{ name?: string; type?: string; required?: boolean; is_required?: boolean; not_null?: boolean; note?: string; description?: string }>;
 }
 
 export interface LegacyTaskDefinition {

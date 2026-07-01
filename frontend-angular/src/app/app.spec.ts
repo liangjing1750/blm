@@ -3348,6 +3348,98 @@ describe('App', () => {
     expect(section?.textContent).not.toContain('InboundReservationService.submit');
   });
 
+  it('should restore process node entity operations and form entity bindings', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['processView'] = 'node';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库预约流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '客户提交',
+          userSteps: [],
+          entity_ops: [{ entity_uid: 'entity-reservation', ops: ['R'] }],
+          forms: [{
+            uid: 'form-apply',
+            name: '入库申请表',
+            purpose: '新增',
+            sections: [{ uid: 'sec-basic', name: '基本信息', note: '', entity_id: '', fields: [] }],
+          }],
+          orchestrationTasks: [],
+          businessRules: [],
+        }],
+      }],
+      entities: [
+        {
+          uid: 'entity-reservation',
+          name: '入库预约',
+          fields: [
+            { uid: 'field-code', name: '预约编号', type: 'string', required: true },
+            { uid: 'field-date', name: '预约日期', type: 'date' },
+          ],
+        },
+        { uid: 'entity-warehouse', name: '仓库', fields: [{ uid: 'field-name', name: '仓库名称', type: 'string' }] },
+      ],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      services: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-processWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="process-switch-node"]')?.click();
+    fixture.detectChanges();
+
+    const entitySection = compiled.querySelector('[data-testid="process-entity-operation-section"]');
+    expect(entitySection?.textContent).toContain('入库预约');
+    const opCheckboxes = Array.from(entitySection?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]') || []);
+    expect(opCheckboxes[1]?.checked).toBe(true);
+    opCheckboxes[2].checked = true;
+    opCheckboxes[2].dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.processes[0].nodes[0].entity_ops[0].ops).toContain('U');
+
+    const entitySelect = compiled.querySelector<HTMLSelectElement>('[data-testid="process-entity-op-select"]')!;
+    entitySelect.value = 'entity-warehouse';
+    entitySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="process-entity-op-add"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.doc.processes[0].nodes[0].entity_ops.some((item: any) => item.entity_uid === 'entity-warehouse')).toBe(true);
+
+    const formEntitySelect = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-entity"]')!;
+    formEntitySelect.value = 'entity-reservation';
+    formEntitySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    const form = runtime.doc.processes[0].nodes[0].forms[0];
+    expect(form.entity_id).toBe('entity-reservation');
+    expect(form.sections[0].entity_id).toBe('entity-reservation');
+    expect(form.sections[0].fields.map((field: any) => field.name)).toContain('预约编号');
+    expect(compiled.querySelector('[data-testid="task-form-entity-summary"]')?.textContent).toContain('入库预约');
+    const mappedFieldSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-entity-field"]');
+    expect(mappedFieldSelect?.disabled).toBe(false);
+    expect(Array.from(mappedFieldSelect?.options || []).map((option) => option.value)).toContain('预约编号');
+  });
+
   it('should switch main workbench without router navigation so collaboration stays mounted', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
