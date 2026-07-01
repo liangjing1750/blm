@@ -48,6 +48,19 @@ export interface FeedbackMessage {
   attachments?: Array<Record<string, unknown>>;
 }
 
+export interface AgentHandoffPayload {
+  sourceApp: 'blm';
+  workspacePath?: string;
+  workspaceId?: string;
+  documentId?: string;
+  currentRoute?: string;
+  selectedBusinessObject?: Record<string, unknown>;
+  currentPageTitle?: string;
+  currentUserIntent?: string;
+  pluginId: 'blm-agent-plugin';
+  documentSummary?: Record<string, unknown>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   // 模块意图：集中承接浏览器到后端的 HTTP 调用，替代旧 api.js 的散落全局函数。
@@ -196,6 +209,10 @@ export class ApiService {
 
   async saveFeedback(payload: Record<string, unknown>): Promise<FeedbackDocument> {
     return this.postJson('/api/feedback', payload);
+  }
+
+  async createAgentHandoff(payload: AgentHandoffPayload): Promise<{ handoffId: string }> {
+    return this.postJson('/api/agent/handoff', payload);
   }
 
   private async getJson<T>(url: string, fallback?: T): Promise<T> {

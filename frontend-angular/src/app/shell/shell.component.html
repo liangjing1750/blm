@@ -91,7 +91,7 @@
         <button class="tbar-dd-item" type="button" data-testid="toolbar-compare-button" (click)="openCompareDialog()">比对</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-merge-button" (click)="openMergeDialog()">合并</button>
         <div class="tbar-dd-sep"></div>
-        <button class="tbar-dd-item tbar-dd-primary" type="button" data-testid="toolbar-ai-button" (click)="showPlaceholder('AI 助手')">AI 助手</button>
+        <button class="tbar-dd-item tbar-dd-primary" type="button" data-testid="toolbar-ai-button" (click)="openAiAssistant()">AI 助手</button>
       </div>
     </div>
 
@@ -157,6 +157,8 @@
     [class.open-document-card]="modal() === 'open'"
     [class.history-modal-shell]="modal() === 'history'"
     [class.archive-version-card]="modal() === 'archive'"
+    [class.compare-modal-card]="modal() === 'compare'"
+    [class.merge-modal-card]="modal() === 'merge'"
     [class.open-document-waiting]="waitDialog()"
     (click)="$event.stopPropagation()"
   >
@@ -405,7 +407,7 @@
         <div class="compare-select-stack" data-testid="compare-select-stack">
           <div class="compare-select-row">
             <label class="property-field">
-              <span>新版本文档</span>
+              <span>基线文档</span>
               <select class="modal-search" data-testid="compare-left-select" [(ngModel)]="compareLeftName" (ngModelChange)="onCompareLeftNameChanged()">
                 <option value="">请选择文档</option>
                 @for (file of workspaceFiles(); track file.name) {
@@ -414,7 +416,7 @@
               </select>
             </label>
             <label class="property-field">
-              <span>新版本来源</span>
+              <span>基线来源</span>
               <select class="modal-search" data-testid="compare-left-source-select" [(ngModel)]="compareLeftSource" (ngModelChange)="onCompareLeftSourceChanged()">
                 <option value="current">当前版本</option>
                 <option value="version">归档版本</option>
@@ -423,7 +425,7 @@
               </select>
             </label>
             <label class="property-field">
-              <span>新版本</span>
+              <span>基线版本</span>
               <select class="modal-search" data-testid="compare-left-version-select" [(ngModel)]="compareLeftVersionId" [disabled]="compareLeftSource === 'current'" (ngModelChange)="compareResult.set(null)">
                 <option value="">{{ compareLeftSource === 'current' ? '当前运行中文档' : '请选择' }}</option>
                 @for (version of compareLeftVersions(); track compareEntryId(version)) {
@@ -434,16 +436,16 @@
           </div>
           <div class="compare-select-row">
             <label class="property-field">
-              <span>旧版本文档</span>
+              <span>新版本文档</span>
               <select class="modal-search" data-testid="compare-right-select" [(ngModel)]="compareRightName" (ngModelChange)="onCompareRightNameChanged()">
                 <option value="">请选择文档</option>
                 @for (file of workspaceFiles(); track file.name) {
-                  <option [value]="file.name" [disabled]="file.name === runtime.currentFile">{{ file.title || file.name }}</option>
+                  <option [value]="file.name">{{ file.title || file.name }}</option>
                 }
               </select>
             </label>
             <label class="property-field">
-              <span>旧版本来源</span>
+              <span>新版本来源</span>
               <select class="modal-search" data-testid="compare-right-source-select" [(ngModel)]="compareRightSource" (ngModelChange)="onCompareRightSourceChanged()">
                 <option value="current">当前版本</option>
                 <option value="version">归档版本</option>
@@ -452,7 +454,7 @@
               </select>
             </label>
             <label class="property-field">
-              <span>旧版本</span>
+              <span>新版本</span>
               <select class="modal-search" data-testid="compare-right-version-select" [(ngModel)]="compareRightVersionId" [disabled]="compareRightSource === 'current'" (ngModelChange)="compareResult.set(null)">
                 <option value="">{{ compareRightSource === 'current' ? '当前保存版本' : '请选择' }}</option>
                 @for (version of compareRightVersions(); track compareEntryId(version)) {
@@ -473,9 +475,12 @@
                 <h3>版本差异说明文档</h3>
                 <span>{{ compareReportMode() === 'all' ? '展示全部对象' : '仅展示变更内容' }}</span>
               </div>
-              <button class="btn btn-outline btn-sm" type="button" data-testid="compare-report-mode-toggle" (click)="toggleCompareReportMode()">
-                {{ compareReportMode() === 'all' ? '只看差异' : '全部报告' }}
-              </button>
+              <div class="compare-report-actions">
+                <button class="btn btn-outline btn-sm" type="button" data-testid="compare-report-download" (click)="downloadCompareReport(result)">下载比对报告</button>
+                <button class="btn btn-outline btn-sm" type="button" data-testid="compare-report-mode-toggle" (click)="toggleCompareReportMode()">
+                  {{ compareReportMode() === 'all' ? '只看差异' : '全部报告' }}
+                </button>
+              </div>
             </div>
             <article class="compare-markdown-doc" data-testid="compare-markdown-doc">
               <h1>版本差异说明</h1>
@@ -483,8 +488,8 @@
               <section>
                 <h2>一、比对范围</h2>
                 <ul>
-                  <li><strong>新版本：</strong>{{ compareDocumentLabel('left') }}</li>
-                  <li><strong>旧版本：</strong>{{ compareDocumentLabel('right') }}</li>
+                  <li><strong>基线文档：</strong>{{ compareDocumentLabel('left') }}</li>
+                  <li><strong>新版本文档：</strong>{{ compareDocumentLabel('right') }}</li>
                 </ul>
               </section>
               <section>

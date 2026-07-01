@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from blm_core.admin import _admin_page, _status_payload
 from blm_core.document import canonical_document, create_empty_document, migrate_document
@@ -2594,6 +2595,67 @@ class ExportApiTests(unittest.TestCase):
         self.assertGreater(len(payload), 0)
         self.assertIn('filename="________v2.zip"', disposition)
         self.assertIn("filename*=UTF-8''%E4%BA%A4%E5%89%B2", disposition)
+
+
+class AgentHandoffApiTests(unittest.TestCase):
+    def test_agent_handoff_api_forwards_payload_to_easy_agent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_dir = Path(temp_dir) / "workspace"
+            workspace_dir.mkdir()
+            storage = WorkspaceStorage(workspace_dir)
+            app_dir = Path(__file__).resolve().parent.parent / "app"
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            forwarded: dict[str, object] = {}
+            original_urlopen = urllib.request.urlopen
+
+            class FakeEasyAgentResponse:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_):
+                    return False
+
+                def read(self):
+                    return json.dumps({"handoffId": "blm-test-handoff"}).encode("utf-8")
+
+            def fake_urlopen(request, timeout=0):
+                if getattr(request, "full_url", "") != "http://127.0.0.1:8088/handoffs":
+                    return original_urlopen(request)
+                self.assertEqual(timeout, 2)
+                self.assertEqual(request.full_url, "http://127.0.0.1:8088/handoffs")
+                forwarded.update(json.loads(request.data.decode("utf-8")))
+                return FakeEasyAgentResponse()
+
+            try:
+                payload = {
+                    "sourceApp": "wrong",
+                    "pluginId": "wrong-plugin",
+                    "documentId": "agent.json",
+                    "currentRoute": "/process?doc=agent.json",
+                    "currentPageTitle": "交割监管平台",
+                }
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/agent/handoff",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with patch("blm_core.server.urlrequest.urlopen", fake_urlopen):
+                    with urllib.request.urlopen(request) as response:
+                        result = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(result["handoffId"], "blm-test-handoff")
+        self.assertEqual(forwarded["sourceApp"], "blm")
+        self.assertEqual(forwarded["pluginId"], "blm-agent-plugin")
+        self.assertEqual(forwarded["documentId"], "agent.json")
+        self.assertTrue(str(forwarded["handoffId"]).startswith("blm-"))
 
 
 class DocsApiTests(unittest.TestCase):

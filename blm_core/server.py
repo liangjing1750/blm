@@ -10,6 +10,8 @@ import time
 import uuid
 import webbrowser
 from pathlib import Path
+from urllib import request as urlrequest
+from urllib.error import URLError
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from blm_core.admin import create_admin_handler, log_admin_start
@@ -217,6 +219,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_merge_apply(body)
                 if path == "/api/export-docx/start":
                     return self._handle_export_docx_start(body)
+                if path == "/api/agent/handoff":
+                    return self._handle_agent_handoff(body)
                 if getattr(self.__class__, '_ai_routes_post', None):
                     for prefix, handler in self.__class__._ai_routes_post.items():
                         if path == prefix: return handler(self, body)
@@ -810,6 +814,28 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     "validation_issues": validate_document(document),
                 }
             )
+
+        def _handle_agent_handoff(self, body: bytes):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            payload["sourceApp"] = "blm"
+            payload["pluginId"] = "blm-agent-plugin"
+            payload.setdefault("handoffId", f"blm-{uuid.uuid4()}")
+            payload.setdefault("createdAtMillis", int(time.time() * 1000))
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            try:
+                req = urlrequest.Request(
+                    "http://127.0.0.1:8088/handoffs",
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlrequest.urlopen(req, timeout=2) as resp:
+                    response_body = resp.read()
+                return self._json(json.loads(response_body.decode("utf-8") or "{}"))
+            except (OSError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+                return self._json({"error": f"Easy Agent handoff failed: {exc}"}, 502)
 
         def _handle_merge_analyze(self, body: bytes):
             payload = self._decode_json(body)

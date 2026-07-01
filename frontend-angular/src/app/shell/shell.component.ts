@@ -3,7 +3,7 @@ import { Component, HostListener, OnDestroy, OnInit, computed, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
-import { ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
+import { AgentHandoffPayload, ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
 import { CollaborationService } from '../core/collaboration/collaboration.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
@@ -783,6 +783,63 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.activeDropdown.set('');
   }
 
+  protected async openAiAssistant(): Promise<void> {
+    if (!this.runtime.currentFile) {
+      this.showToast('请先打开文档');
+      return;
+    }
+    this.activeDropdown.set('');
+    await this.runBusy(async () => {
+      const handoff = await this.api.createAgentHandoff(this.buildAgentHandoffPayload());
+      const handoffId = String(handoff?.handoffId || '').trim();
+      if (!handoffId) throw new Error('Easy Agent handoff 创建失败');
+      const url = new URL('http://127.0.0.1:8088/');
+      url.searchParams.set('plugin', 'blm-agent-plugin');
+      url.searchParams.set('source', 'blm');
+      url.searchParams.set('handoffId', handoffId);
+      window.open(url.toString(), '_blank', 'noopener');
+    });
+  }
+
+  private buildAgentHandoffPayload(): AgentHandoffPayload {
+    const doc = this.runtime.doc || {};
+    return {
+      sourceApp: 'blm',
+      workspaceId: String(doc?.meta?.space || '').trim(),
+      documentId: this.runtime.currentFile,
+      currentRoute: this.router.url || window.location.pathname + window.location.search,
+      selectedBusinessObject: this.currentBusinessObjectSelection(),
+      currentPageTitle: this.currentDocumentLabel(),
+      pluginId: 'blm-agent-plugin',
+      documentSummary: this.documentSummary(doc),
+    };
+  }
+
+  private currentBusinessObjectSelection(): Record<string, unknown> {
+    const ui = this.runtime.ui || {};
+    return {
+      mainTab: String(ui['mainTab'] || 'panoramaWorkbench'),
+      processId: String(ui['procId'] || ''),
+      taskId: String(ui['taskId'] || ''),
+      entityId: String(ui['entityId'] || ''),
+      applicationServiceId: String(ui['applicationServiceUid'] || ui['applicationServiceId'] || ''),
+    };
+  }
+
+  private documentSummary(doc: any): Record<string, unknown> {
+    return {
+      title: String(doc?.meta?.title || doc?.meta?.domain || this.runtime.currentFile || ''),
+      roles: this.asArray(doc?.roles).length,
+      stages: this.asArray(doc?.stages).length,
+      processes: this.asArray(doc?.processes).length,
+      entities: this.asArray(doc?.entities).length,
+      businessComponents: this.asArray(doc?.businessComponents).length,
+      taskDefinitions: this.asArray(doc?.taskDefinitions).length,
+      applications: this.asArray(doc?.applications).length,
+      applicationServices: this.asArray(doc?.applicationServices).length,
+    };
+  }
+
   protected async openCompareDialog(): Promise<void> {
     if (!this.runtime.currentFile) {
       this.showToast('请先打开文档');
@@ -790,14 +847,14 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
     this.activeDropdown.set('');
     await this.refreshWorkspaceFiles();
-    this.compareLeftName = this.runtime.currentFile;
+    this.compareLeftName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || this.runtime.currentFile;
     this.compareLeftSource = 'current';
     this.compareLeftVersionId = '';
-    this.compareRightName = this.workspaceFiles().find((file) => file.name !== this.runtime.currentFile)?.name || '';
+    this.compareRightName = this.runtime.currentFile;
     this.compareRightSource = 'current';
     this.compareRightVersionId = '';
-    this.compareLeftVersions.set([]);
-    await this.refreshCompareRightVersions();
+    await this.refreshCompareLeftVersions();
+    this.compareRightVersions.set([]);
     this.compareReportMode.set('diff');
     this.compareResult.set(null);
     this.modal.set('compare');
@@ -846,7 +903,12 @@ export class ShellComponent implements OnInit, OnDestroy {
             this.compareLeftVersionId,
             this.compareLeftName === this.runtime.currentFile ? this.runtime.doc : null,
           ),
-          this.loadCompareDocument(this.compareRightName, this.compareRightSource, this.compareRightVersionId),
+          this.loadCompareDocument(
+            this.compareRightName,
+            this.compareRightSource,
+            this.compareRightVersionId,
+            this.compareRightName === this.runtime.currentFile ? this.runtime.doc : null,
+          ),
         ]);
         this.compareResult.set(this.buildCompareResult(leftLoaded, rightLoaded));
       });
@@ -923,6 +985,52 @@ export class ShellComponent implements OnInit, OnDestroy {
     return this.compareReportMode() === 'all'
       ? result.rows
       : result.rows.filter((row) => row.kind !== '相同');
+  }
+
+  protected downloadCompareReport(result: CompareResult): void {
+    const markdown = this.compareReportMarkdown(result);
+    const filename = `${this.safeDownloadBaseName(this.compareRightName || this.runtime.currentFile || 'compare-report')}-compare-report.md`;
+    this.downloadText(markdown, 'text/markdown;charset=utf-8', filename);
+  }
+
+  private compareReportMarkdown(result: CompareResult): string {
+    const lines: string[] = [
+      '# 版本差异说明',
+      '',
+      '> 新版本相对基线的模型变化。',
+      '',
+      '## 一、比对范围',
+      '',
+      `- 基线文档：${this.compareDocumentLabel('left')}`,
+      `- 新版本文档：${this.compareDocumentLabel('right')}`,
+      '',
+      '## 二、变更概览',
+      '',
+      `- 新增：${result.added}`,
+      `- 修改：${result.changed}`,
+      `- 删除：${result.removed}`,
+      `- 相同：${result.unchanged}`,
+      '',
+      '## 三、变更说明',
+      '',
+    ];
+    const groups = this.compareGroups(result);
+    if (!groups.length) {
+      lines.push('没有发现模型差异。', '');
+      return lines.join('\n');
+    }
+    groups.forEach((group) => {
+      lines.push(`### ${group.section}`, '');
+      this.visibleCompareGroupRows(group).forEach((row, index) => {
+        lines.push(`${index + 1}. **${row.kind}** ${row.name}`);
+        lines.push(`   - ${row.detail}`);
+      });
+      if (this.isCompareGroupTruncated(group)) {
+        lines.push(`   - 本小节仅导出前 ${this.visibleCompareGroupRows(group).length} 条。`);
+      }
+      lines.push('');
+    });
+    return lines.join('\n');
   }
 
   protected compareGroups(result: CompareResult): CompareGroup[] {
@@ -1644,26 +1752,43 @@ export class ShellComponent implements OnInit, OnDestroy {
     left.forEach((leftItem, id) => {
       const rightItem = right.get(id);
       if (!rightItem) {
-        rows.push({ section, kind: '新增', name: this.compareName(leftItem, id), detail: '仅左侧存在' });
+        rows.push({ section, kind: '删除', name: this.compareName(leftItem, id), detail: '新版本已移除，基线中存在' });
         return;
       }
       if (this.compareSignature(leftItem) !== this.compareSignature(rightItem)) {
         rows.push({
           section,
           kind: '修改',
-          name: this.compareName(leftItem, id),
-          detail: `${this.compareName(rightItem, id)} → ${this.compareName(leftItem, id)}`,
+          name: this.compareName(rightItem, id),
+          detail: `${this.compareName(leftItem, id)} → ${this.compareName(rightItem, id)}`,
         });
         return;
       }
-      rows.push({ section, kind: '相同', name: this.compareName(leftItem, id), detail: '左右一致' });
+      rows.push({ section, kind: '相同', name: this.compareName(leftItem, id), detail: '基线与新版本一致' });
     });
     right.forEach((rightItem, id) => {
       if (!left.has(id)) {
-        rows.push({ section, kind: '删除', name: this.compareName(rightItem, id), detail: '仅右侧存在' });
+        rows.push({ section, kind: '新增', name: this.compareName(rightItem, id), detail: '新版本新增，基线中不存在' });
       }
     });
     return rows;
+  }
+
+  private downloadText(content: string, type: string, filename: string): void {
+    const blob = new Blob([content], { type });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  private safeDownloadBaseName(name: string): string {
+    const trimmed = String(name || '').trim().replace(/\.json$/i, '');
+    return (trimmed || 'compare-report').replace(/[\\/:*?"<>|]+/g, '-');
   }
 
   private compareIdentity(item: any, index: number): string {

@@ -50,6 +50,65 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="toolbar-new-button"]')?.textContent).toContain('新建');
   });
 
+  it('should open Easy Agent with a BLM handoff when clicking the AI assistant entry', async () => {
+    const openedUrls: string[] = [];
+    vi.spyOn(window, 'open').mockImplementation((url?: string | URL) => {
+      openedUrls.push(String(url || ''));
+      return null;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/agent/handoff')) {
+        expect(init?.method).toBe('POST');
+        const body = JSON.parse(String(init?.body || '{}'));
+        expect(body).toMatchObject({
+          sourceApp: 'blm',
+          pluginId: 'blm-agent-plugin',
+          documentId: 'agent.json',
+          currentRoute: '/process?doc=agent.json&tab=process&proc=proc-inbound&task=node-submit',
+          currentPageTitle: '交割监管平台',
+        });
+        expect(body.documentSummary).toMatchObject({
+          roles: 1,
+          processes: 1,
+          entities: 1,
+        });
+        return new Response(JSON.stringify({ handoffId: 'handoff-test-1' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/process?doc=agent.json&tab=process&proc=proc-inbound&task=node-submit');
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { title: '交割监管平台', domain: 'Agent' },
+      roles: [{ uid: 'role-1', name: '系统' }],
+      processes: [{ uid: 'proc-inbound', name: '入库流程' }],
+      entities: [{ uid: 'entity-1', name: '仓单' }],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-ai-button"]')?.click();
+    await fixture.whenStable();
+
+    expect(openedUrls).toHaveLength(1);
+    const opened = new URL(openedUrls[0]);
+    expect(opened.origin).toBe('http://127.0.0.1:8088');
+    expect(opened.searchParams.get('plugin')).toBe('blm-agent-plugin');
+    expect(opened.searchParams.get('source')).toBe('blm');
+    expect(opened.searchParams.get('handoffId')).toBe('handoff-test-1');
+  });
+
   it('should open a custom create-document dialog without browser prompt', () => {
     const promptSpy = vi.spyOn(window, 'prompt');
     const fixture = TestBed.createComponent(ShellComponent);
@@ -519,7 +578,7 @@ describe('App', () => {
         nodes: [{
           uid: 'node-1',
           name: '提交申请',
-          userSteps: [{ uid: 'step-1', name: '填写信息', type: 'input', note: '<ol><li><strong>核对仓单</strong></li></ol>' }],
+          userSteps: [{ uid: 'step-1', name: '填写信息', type: 'input', note: '<ol><li><strong style="color:#2563eb">核对仓单</strong><ol><li>查看现货货转记录</li></ol></li></ol>' }],
           businessRules: [{ uid: 'rule-1', name: '校验规则', content: '<ul><li><em>必须有仓单编号</em></li></ul>' }],
         }],
       }],
@@ -558,6 +617,8 @@ describe('App', () => {
     const rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
     expect(rendered?.textContent).toContain('流程节点: 提交申请');
     expect(rendered?.querySelector('.pv-rich-text strong')?.textContent).toContain('核对仓单');
+    expect(rendered?.querySelector('.pv-rich-text strong')?.getAttribute('style') || '').toContain('color');
+    expect(rendered?.querySelector('.pv-rich-text ol ol li')?.textContent).toContain('查看现货货转记录');
     expect(rendered?.querySelector('.pv-rule-model em')?.textContent).toContain('必须有仓单编号');
     expect(rendered?.innerHTML).not.toContain('&lt;strong&gt;核对仓单&lt;/strong&gt;');
     expect(scrollSpy).toHaveBeenCalled();
@@ -707,6 +768,11 @@ describe('App', () => {
   });
 
   it('should compare the current document with another workspace document', async () => {
+    const createObjectUrl = vi.fn().mockReturnValue('blob:compare-report');
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/files/meta')) {
@@ -762,11 +828,12 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('[data-testid="compare-dialog"]')?.textContent).toContain('版本比对');
+    expect(compiled.querySelector('.modal-card.compare-modal-card')).toBeTruthy();
     const compareRows = compiled.querySelectorAll('[data-testid="compare-select-stack"] .compare-select-row');
     expect(compareRows.length).toBe(2);
     expect(compareRows[0].querySelectorAll('.property-field').length).toBe(3);
     expect(compareRows[1].querySelectorAll('.property-field').length).toBe(3);
-    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-select"]')!;
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-select"]')!;
     select.value = 'agent-old.json';
     select.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
@@ -775,10 +842,19 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('[data-testid="compare-markdown-doc"]')?.textContent).toContain('版本差异说明');
+    expect(compiled.querySelector('[data-testid="compare-markdown-doc"]')?.textContent).toContain('基线');
+    expect(compiled.querySelector('[data-testid="compare-markdown-doc"]')?.textContent).toContain('新版本');
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新增');
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('修改');
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('出库流程');
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新入库流程');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="compare-report-download"]')?.click();
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    const blob = createObjectUrl.mock.calls.at(-1)?.[0] as Blob;
+    await expect(blob.text()).resolves.toContain('# 版本差异说明');
+    await expect(blob.text()).resolves.toContain('基线文档');
+    await expect(blob.text()).resolves.toContain('新版本文档');
+    expect(clickSpy).toHaveBeenCalled();
   });
 
   it('should compare the current document with an archived version of another workspace document', async () => {
@@ -839,11 +915,11 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
-    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-source-select"]')!;
+    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-source-select"]')!;
     source.value = 'version';
     source.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
-    const version = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-version-select"]')!;
+    const version = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-version-select"]')!;
     version.value = 'v-archived';
     version.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
@@ -917,12 +993,12 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
-    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-source-select"]')!;
+    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-source-select"]')!;
     source.value = 'history';
     source.dispatchEvent(new Event('change', { bubbles: true }));
     await fixture.whenStable();
     fixture.detectChanges();
-    const history = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-version-select"]')!;
+    const history = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-version-select"]')!;
     history.value = 'h-1';
     history.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
@@ -996,12 +1072,12 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
-    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-source-select"]')!;
+    const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-source-select"]')!;
     source.value = 'submit';
     source.dispatchEvent(new Event('change', { bubbles: true }));
     await fixture.whenStable();
     fixture.detectChanges();
-    const submit = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-version-select"]')!;
+    const submit = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-version-select"]')!;
     submit.value = 's-1';
     submit.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
@@ -1089,6 +1165,14 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-compare-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const leftName = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-select"]')!;
+    leftName.value = 'agent.json';
+    leftName.dispatchEvent(new Event('change', { bubbles: true }));
+    const rightName = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-select"]')!;
+    rightName.value = 'agent-old.json';
+    rightName.dispatchEvent(new Event('change', { bubbles: true }));
     await fixture.whenStable();
     fixture.detectChanges();
     const source = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-left-source-select"]')!;
