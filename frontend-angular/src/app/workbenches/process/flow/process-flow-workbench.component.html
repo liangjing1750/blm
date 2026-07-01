@@ -85,7 +85,11 @@
                   (click)="$event.stopPropagation(); editing ? handleNodeClick(node) : openNodeEditor(node)">
                   @if (node.shared) { <span class="shared-badge">&#x5171;&#x4eab;</span> }
                   <div class="flow-node-name-row">
-                    <strong>{{ node.name }}</strong>
+                    @if (editing && isEditingNodeName(node) && node.task) {
+                      <input class="flow-node-name-input" [id]="nodeNameInputId(node)" type="text" [ngModel]="node.task.name || ''" (ngModelChange)="setTaskName(node.task, $event)" (keydown)="handleNodeNameKeydown($event)" (blur)="finishNodeNameEdit($event)" (click)="$event.stopPropagation()" />
+                    } @else {
+                      <strong>{{ node.name }}</strong>
+                    }
                     @if (editing) { <span class="flow-node-edit-icon" (click)="renameFlowNode(node, $event)" title="\u4fee\u6539\u540d\u79f0">&#x270e;</span> }
                   </div>
                   @if (editing) {
@@ -94,6 +98,20 @@
                         <span class="flow-node-role-tag">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="\u79fb\u9664\u89d2\u8272">&#x00d7;</button></span>
                       }
                       <button class="flow-node-role-add" (click)="openNodeRolePicker(node, $event)" title="\u6dfb\u52a0\u89d2\u8272">+ &#x89d2;&#x8272;</button>
+                      @if (isCardRolePickerOpen(node) && node.task) {
+                        <div class="flow-node-role-picker" data-testid="process-flow-node-role-picker" (click)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()">
+                          <strong>&#x6267;&#x884c;&#x89d2;&#x8272;</strong>
+                          @for (role of roles(); track roleId(role)) {
+                            <label class="flow-role-option">
+                              <input type="checkbox" [checked]="taskRoleIds(node.task).includes(roleId(role))" (change)="toggleTaskRole(node.task, roleId(role), $any($event.target).checked)" />
+                              <span>{{ role.name || roleId(role) }}</span>
+                            </label>
+                          }
+                          <div class="flow-role-menu-footer">
+                            <button type="button" (click)="closeCardRolePicker($event)">&#x5b8c;&#x6210;</button>
+                          </div>
+                        </div>
+                      }
                     </div>
                   } @else {
                     <small>{{ node.role || '\u672a\u5206\u914d\u89d2\u8272' }}</small>
@@ -110,6 +128,7 @@
             }
 
             @if (editing && selectedNode(process); as node) {
+              @if (node.gateway) {
               <div class="flow-inline-panel" data-testid="process-flow-inline-panel" [style.left.px]="inlinePanelLeft(process, node)" [style.top.px]="inlinePanelTop(process, node)" (click)="$event.stopPropagation()">
                 @if (node.task) {
                   <label><span>&#x8282;&#x70b9;&#x540d;&#x79f0;</span><input type="text" [ngModel]="node.task.name || ''" (ngModelChange)="setTaskName(node.task, $event)" /></label>
@@ -151,6 +170,7 @@
                   <div class="inline-panel-actions"></div>
                 }
               </div>
+              }
             }
 
             @if (selectedEdge(process); as edge) {

@@ -7,6 +7,7 @@ import { routes } from './app.routes';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
 import { getAngularRuntimeState } from './core/runtime/angular-runtime';
 import { ShellComponent } from './shell/shell.component';
+import { ProcessFlowWorkbenchComponent } from './workbenches/process/flow/process-flow-workbench.component';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -27,7 +28,7 @@ describe('App', () => {
     runtime.collab.recoveryMode = false;
 
     await TestBed.configureTestingModule({
-      imports: [App, ShellComponent],
+      imports: [App, ShellComponent, ProcessFlowWorkbenchComponent],
       providers: [provideRouter(routes)],
     }).compileComponents();
   });
@@ -4386,6 +4387,65 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(runtime.collab.serverDocumentHash).toBe('mock-hash-def456');
+  });
+
+  it('should edit flow node name and roles inside the node card without opening the inline panel', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [
+        { uid: 'role-a', id: 'role-a', name: '产品经理' },
+        { uid: 'role-b', id: 'role-b', name: '审批员' },
+      ],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-inbound',
+          name: '入库流程',
+          nodes: [{ uid: 'node-submit', name: '客户提交', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+          flow: { edges: [] },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-inbound';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const node = compiled.querySelector<HTMLElement>('[data-testid="process-flow-node"]')!;
+    node.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="process-flow-inline-panel"]')).toBeFalsy();
+
+    compiled.querySelector<HTMLElement>('.flow-node-edit-icon')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fixture.detectChanges();
+    const nameInput = compiled.querySelector<HTMLInputElement>('.flow-node-name-input')!;
+    nameInput.value = '客户提交资料';
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect((runtime.doc.processes[0].nodes[0] as any).name).toBe('客户提交资料');
+
+    compiled.querySelector<HTMLButtonElement>('.flow-node-role-remove')?.click();
+    fixture.detectChanges();
+    expect((runtime.doc.processes[0].nodes[0] as any).roleIds).toEqual([]);
+
+    compiled.querySelector<HTMLButtonElement>('.flow-node-role-add')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="process-flow-node-role-picker"]')).toBeTruthy();
+    const roleOptions = Array.from(compiled.querySelectorAll<HTMLInputElement>('[data-testid="process-flow-node-role-picker"] input[type="checkbox"]'));
+    roleOptions[1].checked = true;
+    roleOptions[1].dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    expect((runtime.doc.processes[0].nodes[0] as any).roleIds).toContain('role-b');
   });
 
   it('should copy a locator link for the current process node', async () => {

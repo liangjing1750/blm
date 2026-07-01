@@ -96,6 +96,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly selectedElementId = signal<string>('');
   protected readonly connectingFromId = signal<string>('');
   protected readonly rolePickerOpen = signal(false);
+  protected readonly editingNodeNameId = signal<string>('');
+  protected readonly cardRolePickerNodeId = signal<string>('');
   protected readonly selectedStageId = signal<string>('');
   protected readonly attachmentDrawerOpen = signal(false);
   protected readonly zoomValue = signal(1);
@@ -239,17 +241,59 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected openNodeRolePicker(node: any, event: MouseEvent): void {
     event.stopPropagation();
     this.selectedElementId.set(node.baseId || node.id);
-    this.rolePickerOpen.set(true);
+    const nodeId = String(node.baseId || node.id || '');
+    this.cardRolePickerNodeId.set(this.cardRolePickerNodeId() === nodeId ? '' : nodeId);
+    this.rolePickerOpen.set(false);
   }
 
   // 重命名节点
   protected renameFlowNode(node: any, event: MouseEvent): void {
     event.stopPropagation();
-    const name = window.prompt('修改节点名称', node.name || '');
-    if (name !== null && name.trim() && node.task) {
-      this.setTaskName(node.task, name.trim());
-      this.refresh();
+    this.startNodeNameEdit(node, event);
+  }
+
+  // 模块意图：流程图卡片只承载轻量属性编辑，避免再弹出遮挡拖拽/连线的节点编辑窗。
+  protected startNodeNameEdit(node: any, event: MouseEvent): void {
+    event.stopPropagation();
+    const nodeId = String(node.baseId || node.id || '');
+    this.selectedElementId.set(nodeId);
+    this.editingNodeNameId.set(nodeId);
+    this.cardRolePickerNodeId.set('');
+    window.setTimeout(() => {
+      const input = document.getElementById(this.nodeNameInputId(node)) as HTMLInputElement | null;
+      input?.focus();
+      input?.select();
+    });
+  }
+
+  protected finishNodeNameEdit(event?: Event): void {
+    event?.stopPropagation();
+    this.editingNodeNameId.set('');
+  }
+
+  protected handleNodeNameKeydown(event: KeyboardEvent): void {
+    event.stopPropagation();
+    if (event.key === 'Enter' || event.key === 'Escape') {
+      event.preventDefault();
+      this.finishNodeNameEdit(event);
     }
+  }
+
+  protected nodeNameInputId(node: any): string {
+    return `process-flow-node-name-${String(node.baseId || node.id || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  }
+
+  protected isEditingNodeName(node: any): boolean {
+    return this.editingNodeNameId() === String(node.baseId || node.id || '');
+  }
+
+  protected isCardRolePickerOpen(node: any): boolean {
+    return this.cardRolePickerNodeId() === String(node.baseId || node.id || '');
+  }
+
+  protected closeCardRolePicker(event?: Event): void {
+    event?.stopPropagation();
+    this.cardRolePickerNodeId.set('');
   }
 
   protected currentStageId(): string {
@@ -546,6 +590,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected selectElement(id: string): void {
     this.selectedElementId.set(id);
     this.rolePickerOpen.set(false);
+    this.cardRolePickerNodeId.set('');
   }
 
   protected setProcessField(field: 'name' | 'trigger' | 'outcome', value: string): void {
@@ -652,6 +697,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.selectedElementId.set('');
     this.connectingFromId.set('');
     this.rolePickerOpen.set(false);
+    this.cardRolePickerNodeId.set('');
+    this.editingNodeNameId.set('');
     this.previewPoint.set(null);
   }
 
@@ -714,6 +761,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected startNodeDrag(event: MouseEvent | PointerEvent, node: FlowCanvasNode): void {
     if (!this.editing) return;
     if (typeof event.button === 'number' && event.button !== 0) return;
+    if (this.isNodeCardControl(event.target)) return;
     event.preventDefault();
     const process = this.currentProcess();
     if (!process) return;
@@ -771,6 +819,11 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.dragState.set(null);
     this.selectedElementId.set(drag.nodeId);
     this.refresh();
+  }
+
+  private isNodeCardControl(target: EventTarget | null): boolean {
+    // 边界细节：卡片内按钮、输入框和角色下拉不应启动拖拽，否则编辑名称/角色会误移动节点。
+    return Boolean((target as HTMLElement | null)?.closest?.('button,input,select,textarea,label,.flow-node-role-picker'));
   }
 
   protected onLaneDrop(event: DragEvent, lane: FlowLane): void {
