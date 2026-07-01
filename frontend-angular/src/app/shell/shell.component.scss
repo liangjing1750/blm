@@ -248,6 +248,151 @@ app-shell-tab-bar {
   padding-top: 2px;
 }
 
+.compare-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(980px, calc(100vw - 56px));
+}
+
+.compare-select-stack {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d7e4f5;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.compare-select-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(160px, .9fr) minmax(220px, 1.2fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.compare-result {
+  min-height: 0;
+  max-height: min(58vh, 620px);
+  overflow: auto;
+  border: 1px solid #d7e4f5;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.compare-report-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.compare-report-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.compare-report-head span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.compare-markdown-doc {
+  display: grid;
+  gap: 18px;
+  padding: 20px 24px 28px;
+  color: #1e293b;
+  line-height: 1.7;
+}
+
+.compare-markdown-doc h1,
+.compare-markdown-doc h2,
+.compare-markdown-doc h3,
+.compare-markdown-doc p {
+  margin: 0;
+}
+
+.compare-markdown-doc h1 {
+  font-size: 24px;
+}
+
+.compare-markdown-doc h2 {
+  margin-bottom: 8px;
+  font-size: 17px;
+}
+
+.compare-markdown-doc h3 {
+  font-size: 15px;
+}
+
+.compare-doc-lead,
+.compare-markdown-doc li,
+.compare-doc-changes p {
+  color: #475569;
+}
+
+.compare-doc-index {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.compare-doc-index li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.compare-model-group {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid #eef2f7;
+}
+
+.compare-doc-changes {
+  display: grid;
+  gap: 10px;
+  padding-left: 24px;
+}
+
+.compare-doc-changes li {
+  padding-left: 4px;
+}
+
+.compare-change-kind {
+  display: inline-flex;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .compare-select-row {
+    grid-template-columns: 1fr;
+  }
+
+  .compare-markdown-doc {
+    padding: 16px;
+  }
+}
+
 .document-list {
   display: grid;
   gap: 8px;
@@ -619,4 +764,3 @@ app-shell-tab-bar {
   color: #1d4ed8;
   border-color: #60a5fa;
 }
-

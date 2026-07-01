@@ -412,64 +412,66 @@
       <section *ngSwitchCase="'compare'" class="compare-dialog" data-testid="compare-dialog">
         <h2>版本比对</h2>
         <p class="placeholder-copy">选择来源，生成差异摘要。</p>
-        <label class="property-field">
-          <span>左侧文档</span>
-          <select class="modal-search" data-testid="compare-left-select" [(ngModel)]="compareLeftName" (ngModelChange)="onCompareLeftNameChanged()">
-            <option value="">请选择文档</option>
-            @for (file of workspaceFiles(); track file.name) {
-              <option [value]="file.name">{{ file.title || file.name }}</option>
-            }
-          </select>
-        </label>
-        <label class="property-field">
-          <span>左侧来源</span>
-          <select class="modal-search" data-testid="compare-left-source-select" [(ngModel)]="compareLeftSource" (ngModelChange)="onCompareLeftSourceChanged()">
-            <option value="current">当前版本</option>
-            <option value="version">归档版本</option>
-            <option value="history">历史快照</option>
-            <option value="submit">本地提交</option>
-          </select>
-        </label>
-        @if (compareLeftSource !== 'current') {
-          <label class="property-field">
-            <span>左侧版本</span>
-            <select class="modal-search" data-testid="compare-left-version-select" [(ngModel)]="compareLeftVersionId" (ngModelChange)="compareResult.set(null)">
-              <option value="">请选择</option>
-              @for (version of compareLeftVersions(); track compareEntryId(version)) {
-                <option [value]="compareEntryId(version)">{{ version.label || version.message || version.reason || version.user || compareEntryId(version) }}</option>
-              }
-            </select>
-          </label>
-        }
-        <label class="property-field">
-          <span>右侧文档</span>
-          <select class="modal-search" data-testid="compare-right-select" [(ngModel)]="compareRightName" (ngModelChange)="onCompareRightNameChanged()">
-            <option value="">请选择文档</option>
-            @for (file of workspaceFiles(); track file.name) {
-              <option [value]="file.name" [disabled]="file.name === runtime.currentFile">{{ file.title || file.name }}</option>
-            }
-          </select>
-        </label>
-        <label class="property-field">
-          <span>右侧来源</span>
-          <select class="modal-search" data-testid="compare-right-source-select" [(ngModel)]="compareRightSource" (ngModelChange)="onCompareRightSourceChanged()">
-            <option value="current">当前版本</option>
-            <option value="version">归档版本</option>
-            <option value="history">历史快照</option>
-            <option value="submit">本地提交</option>
-          </select>
-        </label>
-        @if (compareRightSource !== 'current') {
-          <label class="property-field">
-            <span>右侧版本</span>
-            <select class="modal-search" data-testid="compare-right-version-select" [(ngModel)]="compareRightVersionId" (ngModelChange)="compareResult.set(null)">
-              <option value="">请选择</option>
-              @for (version of compareRightVersions(); track compareEntryId(version)) {
-                <option [value]="compareEntryId(version)">{{ version.label || version.message || version.reason || version.user || compareEntryId(version) }}</option>
-              }
-            </select>
-          </label>
-        }
+        <div class="compare-select-stack" data-testid="compare-select-stack">
+          <div class="compare-select-row">
+            <label class="property-field">
+              <span>新版本文档</span>
+              <select class="modal-search" data-testid="compare-left-select" [(ngModel)]="compareLeftName" (ngModelChange)="onCompareLeftNameChanged()">
+                <option value="">请选择文档</option>
+                @for (file of workspaceFiles(); track file.name) {
+                  <option [value]="file.name">{{ file.title || file.name }}</option>
+                }
+              </select>
+            </label>
+            <label class="property-field">
+              <span>新版本来源</span>
+              <select class="modal-search" data-testid="compare-left-source-select" [(ngModel)]="compareLeftSource" (ngModelChange)="onCompareLeftSourceChanged()">
+                <option value="current">当前版本</option>
+                <option value="version">归档版本</option>
+                <option value="history">历史快照</option>
+                <option value="submit">本地提交</option>
+              </select>
+            </label>
+            <label class="property-field">
+              <span>新版本</span>
+              <select class="modal-search" data-testid="compare-left-version-select" [(ngModel)]="compareLeftVersionId" [disabled]="compareLeftSource === 'current'" (ngModelChange)="compareResult.set(null)">
+                <option value="">{{ compareLeftSource === 'current' ? '当前运行中文档' : '请选择' }}</option>
+                @for (version of compareLeftVersions(); track compareEntryId(version)) {
+                  <option [value]="compareEntryId(version)">{{ version.label || version.message || version.reason || version.user || compareEntryId(version) }}</option>
+                }
+              </select>
+            </label>
+          </div>
+          <div class="compare-select-row">
+            <label class="property-field">
+              <span>旧版本文档</span>
+              <select class="modal-search" data-testid="compare-right-select" [(ngModel)]="compareRightName" (ngModelChange)="onCompareRightNameChanged()">
+                <option value="">请选择文档</option>
+                @for (file of workspaceFiles(); track file.name) {
+                  <option [value]="file.name" [disabled]="file.name === runtime.currentFile">{{ file.title || file.name }}</option>
+                }
+              </select>
+            </label>
+            <label class="property-field">
+              <span>旧版本来源</span>
+              <select class="modal-search" data-testid="compare-right-source-select" [(ngModel)]="compareRightSource" (ngModelChange)="onCompareRightSourceChanged()">
+                <option value="current">当前版本</option>
+                <option value="version">归档版本</option>
+                <option value="history">历史快照</option>
+                <option value="submit">本地提交</option>
+              </select>
+            </label>
+            <label class="property-field">
+              <span>旧版本</span>
+              <select class="modal-search" data-testid="compare-right-version-select" [(ngModel)]="compareRightVersionId" [disabled]="compareRightSource === 'current'" (ngModelChange)="compareResult.set(null)">
+                <option value="">{{ compareRightSource === 'current' ? '当前保存版本' : '请选择' }}</option>
+                @for (version of compareRightVersions(); track compareEntryId(version)) {
+                  <option [value]="compareEntryId(version)">{{ version.label || version.message || version.reason || version.user || compareEntryId(version) }}</option>
+                }
+              </select>
+            </label>
+          </div>
+        </div>
         <div class="modal-actions">
           <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
           <button class="btn btn-primary" type="button" data-testid="compare-run-button" [disabled]="busy() || !compareLeftName || !compareRightName || (compareLeftSource !== 'current' && !compareLeftVersionId) || (compareRightSource !== 'current' && !compareRightVersionId)" (click)="runCompare()">开始比对</button>
@@ -478,54 +480,65 @@
           <section class="compare-result" data-testid="compare-result">
             <div class="compare-report-head">
               <div>
-                <h3>版本比对报告</h3>
-                <span>当前：{{ compareReportMode() === 'all' ? '全部报告' : '只看差异' }}</span>
+                <h3>版本差异说明文档</h3>
+                <span>{{ compareReportMode() === 'all' ? '展示全部对象' : '仅展示变更内容' }}</span>
               </div>
               <button class="btn btn-outline btn-sm" type="button" data-testid="compare-report-mode-toggle" (click)="toggleCompareReportMode()">
                 {{ compareReportMode() === 'all' ? '只看差异' : '全部报告' }}
               </button>
             </div>
-            <div class="preview-summary">
-              <div class="preview-metric"><strong>新增 {{ result.added }}</strong><span>左侧新增</span></div>
-              <div class="preview-metric"><strong>删除 {{ result.removed }}</strong><span>右侧独有</span></div>
-              <div class="preview-metric"><strong>修改 {{ result.changed }}</strong><span>同一对象变化</span></div>
-              <div class="preview-metric"><strong>相同 {{ result.unchanged }}</strong><span>左右一致</span></div>
-            </div>
-            <div class="preview-summary" data-testid="compare-group-summary">
-              @for (group of compareGroups(result); track group.section) {
-                <div class="preview-metric"><strong>{{ group.section }} {{ group.rows.length }}</strong><span>业务分组</span></div>
-              }
-            </div>
-            <div class="preview-list">
-              @for (group of compareGroups(result); track group.section) {
-                <div class="compare-model-group" data-testid="compare-model-group">
-                  <h4>{{ group.section }} <span>{{ group.rows.length }}</span></h4>
-                  <table class="compare-business-table" data-testid="compare-business-table">
-                    <thead>
-                      <tr>
-                        <th>序号</th>
-                        <th>差异类型</th>
-                        <th>差异说明</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (row of visibleCompareGroupRows(group); track row.section + row.kind + row.name; let rowIndex = $index) {
-                        <tr>
-                          <td>{{ rowIndex + 1 }}</td>
-                          <td>{{ row.kind }}</td>
-                          <td>{{ row.name }}：{{ row.detail }}</td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
-                  @if (isCompareGroupTruncated(group)) {
-                    <p class="merge-inline-note">本小节仅显示前 {{ visibleCompareGroupRows(group).length }} 条，请优先确认高重要级别项目。</p>
-                  }
+            <article class="compare-markdown-doc" data-testid="compare-markdown-doc">
+              <h1>版本差异说明</h1>
+              <p class="compare-doc-lead">用于说明新需求版本相对旧版本的模型变化，可作为需求评审或变更沟通材料阅读。</p>
+              <section>
+                <h2>一、比对范围</h2>
+                <ul>
+                  <li><strong>新版本：</strong>{{ compareDocumentLabel('left') }}</li>
+                  <li><strong>旧版本：</strong>{{ compareDocumentLabel('right') }}</li>
+                </ul>
+              </section>
+              <section>
+                <h2>二、变更概览</h2>
+                <div class="preview-summary">
+                  <div class="preview-metric"><strong>{{ result.added }}</strong><span>新增</span></div>
+                  <div class="preview-metric"><strong>{{ result.changed }}</strong><span>修改</span></div>
+                  <div class="preview-metric"><strong>{{ result.removed }}</strong><span>删除</span></div>
+                  <div class="preview-metric"><strong>{{ result.unchanged }}</strong><span>相同</span></div>
                 </div>
-              } @empty {
-                <div class="preview-empty">没有发现模型差异。</div>
-              }
-            </div>
+              </section>
+              <section data-testid="compare-group-summary">
+                <h2>三、影响目录</h2>
+                <ul class="compare-doc-index">
+                  @for (group of compareGroups(result); track group.section) {
+                    <li><span>{{ group.section }}</span><strong>{{ group.rows.length }} 项</strong></li>
+                  } @empty {
+                    <li><span>模型差异</span><strong>0 项</strong></li>
+                  }
+                </ul>
+              </section>
+              <section>
+                <h2>四、变更说明</h2>
+                @for (group of compareGroups(result); track group.section) {
+                  <div class="compare-model-group" data-testid="compare-model-group">
+                    <h3>{{ group.section }}</h3>
+                    <ol class="compare-doc-changes">
+                      @for (row of visibleCompareGroupRows(group); track row.section + row.kind + row.name) {
+                        <li>
+                          <span class="compare-change-kind">{{ row.kind }}</span>
+                          <strong>{{ row.name }}</strong>
+                          <p>{{ row.detail }}</p>
+                        </li>
+                      }
+                    </ol>
+                    @if (isCompareGroupTruncated(group)) {
+                      <p class="merge-inline-note">本小节仅显示前 {{ visibleCompareGroupRows(group).length }} 条，请优先确认高重要级别项目。</p>
+                    }
+                  </div>
+                } @empty {
+                  <div class="preview-empty">没有发现模型差异。</div>
+                }
+              </section>
+            </article>
           </section>
         }
       </section>

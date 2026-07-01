@@ -859,6 +859,19 @@ export class ShellComponent implements OnInit, OnDestroy {
     return String(entry?.id || entry?.version_id || entry?.snapshot_id || entry?.submitId || '');
   }
 
+  protected compareDocumentLabel(side: 'left' | 'right'): string {
+    const name = side === 'left' ? this.compareLeftName : this.compareRightName;
+    const source = side === 'left' ? this.compareLeftSource : this.compareRightSource;
+    const versionId = side === 'left' ? this.compareLeftVersionId : this.compareRightVersionId;
+    const sourceLabel: Record<CompareSource, string> = {
+      current: '当前版本',
+      version: '归档版本',
+      history: '历史快照',
+      submit: '本地提交',
+    };
+    return [name || '未选择文档', sourceLabel[source] || source, versionId || (source === 'current' ? '当前' : '未选择版本')].join(' / ');
+  }
+
   protected toggleCompareReportMode(): void {
     this.compareReportMode.set(this.compareReportMode() === 'all' ? 'diff' : 'all');
   }

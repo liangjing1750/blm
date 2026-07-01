@@ -663,6 +663,10 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('[data-testid="compare-dialog"]')?.textContent).toContain('版本比对');
+    const compareRows = compiled.querySelectorAll('[data-testid="compare-select-stack"] .compare-select-row');
+    expect(compareRows.length).toBe(2);
+    expect(compareRows[0].querySelectorAll('.property-field').length).toBe(3);
+    expect(compareRows[1].querySelectorAll('.property-field').length).toBe(3);
     const select = compiled.querySelector<HTMLSelectElement>('[data-testid="compare-right-select"]')!;
     select.value = 'agent-old.json';
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -671,8 +675,9 @@ describe('App', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新增 1');
-    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('修改 1');
+    expect(compiled.querySelector('[data-testid="compare-markdown-doc"]')?.textContent).toContain('版本差异说明');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新增');
+    expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('修改');
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('出库流程');
     expect(compiled.querySelector('[data-testid="compare-result"]')?.textContent).toContain('新入库流程');
   });
@@ -1164,19 +1169,19 @@ describe('App', () => {
     fixture.detectChanges();
 
     const result = compiled.querySelector('[data-testid="compare-result"]')!;
-    expect(result.textContent).toContain('当前：只看差异');
+    expect(result.textContent).toContain('仅展示变更内容');
     expect(result.textContent).toContain('新版独有流程');
     expect(result.textContent).toContain('旧版独有流程');
     expect(result.textContent).not.toContain('共同稳定流程');
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="compare-report-mode-toggle"]')?.click();
     fixture.detectChanges();
-    expect(result.textContent).toContain('当前：全部报告');
+    expect(result.textContent).toContain('展示全部对象');
     expect(result.textContent).toContain('共同稳定流程');
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="compare-report-mode-toggle"]')?.click();
     fixture.detectChanges();
-    expect(result.textContent).toContain('当前：只看差异');
+    expect(result.textContent).toContain('仅展示变更内容');
     expect(result.textContent).not.toContain('共同稳定流程');
   });
 
@@ -1243,7 +1248,7 @@ describe('App', () => {
     expect(summary?.textContent).toContain('实体');
     expect(summary?.textContent).toContain('任务');
     const groups = Array.from(compiled.querySelectorAll<HTMLElement>('[data-testid="compare-model-group"]'));
-    expect(groups.map((group) => group.querySelector('h4')?.textContent || '')).toEqual([
+    expect(groups.map((group) => group.querySelector('h3')?.textContent || '')).toEqual([
       expect.stringContaining('流程'),
       expect.stringContaining('实体'),
       expect.stringContaining('任务'),
@@ -1253,7 +1258,7 @@ describe('App', () => {
     expect(groups[2].textContent).toContain('归档任务');
   });
 
-  it('should render grouped compare rows as business diff tables', async () => {
+  it('should render grouped compare rows as a document-style diff report', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/files/meta')) {
@@ -1312,15 +1317,11 @@ describe('App', () => {
     fixture.detectChanges();
 
     const group = compiled.querySelector<HTMLElement>('[data-testid="compare-model-group"]')!;
-    const table = group.querySelector<HTMLTableElement>('[data-testid="compare-business-table"]')!;
-    expect(group.querySelector('h4')?.textContent).toContain('流程');
-    expect(table.querySelector('thead')?.textContent).toContain('序号');
-    expect(table.querySelector('thead')?.textContent).toContain('差异类型');
-    expect(table.querySelector('thead')?.textContent).toContain('差异说明');
-    const firstRow = table.querySelector('tbody tr')!;
-    expect(firstRow.children[0]?.textContent).toContain('1');
-    expect(firstRow.children[1]?.textContent).toContain('新增');
-    expect(firstRow.children[2]?.textContent).toContain('入库流程');
+    const firstItem = group.querySelector<HTMLElement>('.compare-doc-changes li')!;
+    expect(compiled.querySelector('[data-testid="compare-markdown-doc"]')?.textContent).toContain('变更说明');
+    expect(group.querySelector('h3')?.textContent).toContain('流程');
+    expect(firstItem.textContent).toContain('新增');
+    expect(firstItem.textContent).toContain('入库流程');
   });
 
   it('should truncate each compare business table group after forty rows', async () => {
@@ -1386,7 +1387,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     const group = compiled.querySelector<HTMLElement>('[data-testid="compare-model-group"]')!;
-    const bodyRows = group.querySelectorAll('[data-testid="compare-business-table"] tbody tr');
+    const bodyRows = group.querySelectorAll('.compare-doc-changes li');
     expect(bodyRows.length).toBe(40);
     expect(group.textContent).toContain('本小节仅显示前 40 条');
     expect(group.textContent).toContain('流程 40');
