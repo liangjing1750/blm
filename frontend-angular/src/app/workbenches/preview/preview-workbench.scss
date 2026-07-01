@@ -1,1 +1,9 @@
-
+:host {
+  // 模块意图：让预览组件宿主接住 Shell 分配的剩余高度，避免内部阅读区按内容高度撑开。
+  // 关键流程：宿主作为 flex 子项收缩到工作台可视高度，内部 `.preview-wrap` 才能把滚动交给左右两列。
+  // 边界细节：这里不改预览内容结构，只修正 Angular 自定义元素默认 display/block 与 min-height:auto 带来的滚动宿主漂移。
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
