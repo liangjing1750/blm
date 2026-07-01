@@ -3,6 +3,7 @@ import { Component, HostListener, computed, inject, signal } from '@angular/core
 import { BlmDocument, BusinessComponent, Stage } from '../../core/document/document.model';
 import { DocumentStore } from '../../core/document/document-store';
 import { getComponentSupportedStages, getStageProcesses } from '../../core/document/document-model';
+import { getAngularRuntimeState, switchAngularMainTab } from '../../core/runtime/angular-runtime';
 import { ValueDomainCell, ValueDomainColumn, ValueDomainLane, getValueDomainColumnUid, getValueDomainLaneUid } from '../../core/document/value-domain-model';
 import { KnowledgeWorkbenchComponent } from '../knowledge/knowledge-workbench';
 import { RoleWorkbenchComponent } from '../role/role-workbench';
@@ -39,6 +40,7 @@ export class PanoramaWorkbench {
   ];
   protected readonly activeTab = signal<PanoramaSubtab>('overview');
   protected readonly editing = signal(false);
+  protected readonly editMenuOpen = signal(false);
   protected readonly manualZoom = signal<number | null>(null);
   protected readonly viewportSize = signal(this.readViewportSize());
   protected readonly selectedStageUid = signal('');
@@ -111,10 +113,35 @@ export class PanoramaWorkbench {
   protected switchTab(tabId: PanoramaSubtab): void {
     this.activeTab.set(tabId);
     this.editing.set(false);
+    this.editMenuOpen.set(false);
   }
 
   protected toggleEditing(): void {
+    if (this.activeTab() === 'overview') {
+      this.editMenuOpen.update((value) => !value);
+      return;
+    }
     this.editing.update((value) => !value);
+  }
+
+  protected openDetailedEditor(target: 'valueDomain' | 'component'): void {
+    const runtime = getAngularRuntimeState();
+    if (target === 'valueDomain') {
+      runtime.ui['procView'] = 'valueDomain';
+      runtime.ui['processWorkbenchView'] = 'valueDomain';
+      runtime.ui['taskId'] = null;
+    } else {
+      runtime.ui['componentWorkbenchTab'] = 'component';
+    }
+    this.editMenuOpen.set(false);
+    switchAngularMainTab(target === 'valueDomain' ? 'processWorkbench' : 'constructWorkbench');
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected closeEditMenuFromDocument(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-testid="panorama-edit-menu-wrap"]')) return;
+    this.editMenuOpen.set(false);
   }
 
   protected zoom(delta: number): void {

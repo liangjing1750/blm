@@ -208,6 +208,66 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="knowledge-term-add"]')).toBeFalsy();
   });
 
+  it('should show panorama edit destinations before navigating to detailed editors', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['procView'] = 'stage';
+    runtime.ui['componentWorkbenchTab'] = 'taskDef';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.click();
+    fixture.detectChanges();
+    const editMenu = compiled.querySelector('[data-testid="panorama-edit-menu"]');
+    expect(editMenu?.textContent).toContain('跳转到价值流视图');
+    expect(editMenu?.textContent).toContain('跳转到组件构件视图');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-edit-value-domain"]')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['procView']).toBe('valueDomain');
+    expect(compiled.querySelector('[data-testid="process-switch-value-domain"]')?.classList.contains('active')).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-panoramaWorkbench"]')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-edit-component"]')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('constructWorkbench');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('component');
+    expect(compiled.querySelector('[data-testid="component-workbench-angular-shell"]')).toBeTruthy();
+  });
+
   it('should keep role creation compact and sync role edits with Ctrl+S', async () => {
     let resolveSnapshot!: (value: Response) => void;
     let snapshotPayload: any = null;

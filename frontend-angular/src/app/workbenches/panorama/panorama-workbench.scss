@@ -25,6 +25,42 @@
   font-variant-numeric: tabular-nums;
 }
 
+.panorama-edit-menu-wrap {
+  position: relative;
+}
+
+.panorama-edit-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid #cbd8e7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, .16);
+}
+
+.panorama-edit-menu button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panorama-edit-menu button:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .panorama-zoom-viewport {
   height: calc(100vh - 170px);
   min-height: 420px;

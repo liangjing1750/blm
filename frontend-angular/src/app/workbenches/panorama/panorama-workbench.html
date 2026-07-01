@@ -22,9 +22,17 @@
             <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-zoom-in" title="放大" (click)="zoom(0.08)">+</button>
           </div>
         }
-        <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-editor-open" [class.active]="editing()" (click)="toggleEditing()">
-          {{ editing() ? '退出编辑' : '打开编辑' }}
-        </button>
+        <div class="panorama-edit-menu-wrap" data-testid="panorama-edit-menu-wrap">
+          <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-editor-open" [class.active]="editing() || editMenuOpen()" (click)="toggleEditing(); $event.stopPropagation()">
+            {{ editing() ? '退出编辑' : '打开编辑' }}
+          </button>
+          @if (activeTab() === 'overview' && editMenuOpen()) {
+            <div class="panorama-edit-menu" data-testid="panorama-edit-menu">
+              <button type="button" data-testid="panorama-edit-value-domain" (click)="openDetailedEditor('valueDomain')">跳转到价值流视图</button>
+              <button type="button" data-testid="panorama-edit-component" (click)="openDetailedEditor('component')">跳转到组件构件视图</button>
+            </div>
+          }
+        </div>
       </div>
     </div>
   </div>
