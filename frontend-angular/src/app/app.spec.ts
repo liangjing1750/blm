@@ -570,11 +570,18 @@ describe('App', () => {
     runtime.doc = {
       meta: { domain: 'Agent', title: '交割监管平台' },
       roles: [{ uid: 'role-1', name: '监管员' }],
-      stages: [{ uid: 'stage-1', name: '入库' }],
-      stageFlowRefs: [],
+      panorama: {
+        columns: [{ uid: 'value-in', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-store', name: '仓储域' }],
+        cells: [{ laneUid: 'lane-store', columnUid: 'value-in', status: '运行中', text: '入库监管' }],
+      },
+      stages: [{ uid: 'stage-1', name: '入库', panoramaLaneUid: 'lane-store', panoramaColumnUid: 'value-in' }],
+      stageFlowRefs: [{ uid: 'ref-1', stageUid: 'stage-1', processUid: 'proc-1' }],
+      stageFlowLinks: [],
       processes: [{
         uid: 'proc-1',
         name: '入库流程',
+        links: [],
         nodes: [{
           uid: 'node-1',
           name: '提交申请',
@@ -582,7 +589,13 @@ describe('App', () => {
           businessRules: [{ uid: 'rule-1', name: '校验规则', content: '<ul><li><em>必须有仓单编号</em></li></ul>' }],
         }],
       }],
-      entities: [{ uid: 'entity-1', name: '仓单', fields: [{ uid: 'field-1', name: '仓单编号', type: 'String' }] }],
+      entities: [{
+        uid: 'entity-1',
+        name: '仓单',
+        fields: [{ uid: 'field-1', name: '仓单编号', type: 'String' }],
+        state_transitions: [{ from: '草稿', to: '已提交', action: '提交' }],
+      }],
+      relations: [{ fromEntityUid: 'entity-1', toEntityUid: 'entity-1' }],
       businessComponents: [{ uid: 'bc-1', name: '仓单组件' }],
       taskDefinitions: [{
         uid: 'task-1',
@@ -607,14 +620,29 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="preview-workbench"]')?.textContent).toContain('交割监管平台');
     expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('大纲视图');
     expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('流程视图');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="stage-panorama"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="process"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="entity-overview"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="entity"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).not.toContain('流程节点: 提交申请');
 
     const outlineButtons = Array.from(compiled.querySelectorAll<HTMLButtonElement>('.preview-outline-link'));
+    outlineButtons.find((button) => button.textContent?.includes('全景视图'))?.click();
+    fixture.detectChanges();
+    let rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
+    expect(rendered?.querySelector('[data-testid="preview-stage-panorama"]')).toBeTruthy();
+    expect(rendered?.textContent).toContain('入库监管');
+
+    outlineButtons.find((button) => button.textContent?.includes('阶段视图') && button.textContent?.includes('入库'))?.click();
+    fixture.detectChanges();
+    rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
+    expect(rendered?.querySelector('[data-testid="preview-stage-graph"]')).toBeTruthy();
+    expect(rendered?.textContent).toContain('入库流程');
+
     outlineButtons.find((button) => button.textContent?.includes('入库流程'))?.click();
     fixture.detectChanges();
-    const rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
+    rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
+    expect(rendered?.querySelector('[data-testid="preview-process-graph"]')).toBeTruthy();
     expect(rendered?.textContent).toContain('流程节点: 提交申请');
     expect(rendered?.querySelector('.pv-rich-text strong')?.textContent).toContain('核对仓单');
     expect(rendered?.querySelector('.pv-rich-text strong')?.getAttribute('style') || '').toContain('color');
@@ -623,9 +651,14 @@ describe('App', () => {
     expect(rendered?.innerHTML).not.toContain('&lt;strong&gt;核对仓单&lt;/strong&gt;');
     expect(scrollSpy).toHaveBeenCalled();
 
+    outlineButtons.find((button) => button.textContent?.includes('实体关系图'))?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-testid="preview-entity-overview"]')).toBeTruthy();
+
     outlineButtons.find((button) => button.textContent?.includes('仓单'))?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('实体: 仓单');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-testid="preview-entity-state-graph"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('.pv-technical-design strong')?.textContent).toContain('调用聚合根保存仓单');
 
     compiled.querySelector<HTMLButtonElement>('#preview-raw-toggle')?.click();

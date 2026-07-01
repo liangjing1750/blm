@@ -99,6 +99,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     if (this.asArray(doc.terms || doc.language).length) items.push({ id: 'preview-language', label: '统一语言/术语表', depth: 0 });
     if (this.asArray(doc.stages).length) {
       items.push({ id: 'preview-stages', label: '全景与阶段视图', depth: 0 });
+      items.push({ id: 'preview-stage-panorama', label: '全景视图', depth: 1 });
       this.asArray(doc.stages).forEach((stage, index) => {
         items.push({ id: this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`)), label: `阶段视图 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 1 });
       });
@@ -111,6 +112,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     }
     if (this.asArray(doc.entities).length) {
       items.push({ id: 'preview-entities', label: '数据建模', depth: 0 });
+      items.push({ id: 'preview-entity-overview', label: '实体关系图', depth: 1 });
       this.asArray(doc.entities).forEach((entity, index) => {
         items.push({ id: this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)), label: this.displayName(entity, '未命名实体'), depth: 1 });
       });
@@ -128,9 +130,9 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       this.renderMeta(doc.meta || {}),
       this.renderRoles(this.asArray(doc.roles)),
       this.renderLanguage(this.asArray(doc.terms || doc.language)),
-      this.renderStages(this.asArray(doc.stages)),
+      this.renderStages(doc),
       this.renderProcesses(this.asArray(doc.processes)),
-      this.renderEntities(this.asArray(doc.entities)),
+      this.renderEntities(doc),
       this.renderComponents(doc),
     ].filter(Boolean).join('');
   }
@@ -155,9 +157,11 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       <tr><td>${this.esc(item.term || item.name || '')}</td><td>${this.esc(item.definition || item.desc || '')}</td></tr>`).join('')}</tbody></table>`;
   }
 
-  private renderStages(stages: any[]): string {
+  private renderStages(doc: any): string {
+    const stages = this.asArray(doc.stages);
     if (!stages.length) return '';
-    return `<h2 id="preview-stages">全景与阶段视图</h2>${stages.map((stage, index) => this.previewLazySectionHtml(
+    const panorama = this.previewLazySectionHtml('preview-stage-panorama', 'stage-panorama', '全景视图');
+    return `<h2 id="preview-stages">全景与阶段视图</h2>${panorama}${stages.map((stage, index) => this.previewLazySectionHtml(
       this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`)),
       'stage',
       `阶段视图: ${this.displayName(stage, '未命名业务阶段')}`,
@@ -190,9 +194,11 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     </div>`;
   }
 
-  private renderEntities(entities: any[]): string {
+  private renderEntities(doc: any): string {
+    const entities = this.asArray(doc.entities);
     if (!entities.length) return '';
-    return `<h2 id="preview-entities">数据建模</h2>${entities.map((entity, index) => this.previewLazySectionHtml(
+    const overview = this.previewLazySectionHtml('preview-entity-overview', 'entity-overview', '实体关系图');
+    return `<h2 id="preview-entities">数据建模</h2>${overview}${entities.map((entity, index) => this.previewLazySectionHtml(
       this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)),
       'entity',
       `实体: ${this.displayName(entity, '未命名实体')}`,
@@ -225,13 +231,17 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     if (!el || el.dataset['previewLoaded'] === 'true') return;
     const kind = el.dataset['previewLazy'] || '';
     const index = Number(el.dataset['previewIndex'] || 0) || 0;
-    const html = kind === 'stage'
-      ? this.renderStageDetail(this.asArray(this.runtime.doc?.stages)[index], index)
-      : kind === 'process'
-        ? this.renderProcessDetail(this.asArray(this.runtime.doc?.processes)[index], index)
-        : kind === 'entity'
-          ? this.renderEntityDetail(this.asArray(this.runtime.doc?.entities)[index], index)
-          : '';
+    const html = kind === 'stage-panorama'
+      ? this.renderStagePanorama(this.runtime.doc || {})
+      : kind === 'stage'
+        ? this.renderStageDetail(this.asArray(this.runtime.doc?.stages)[index], index)
+        : kind === 'process'
+          ? this.renderProcessDetail(this.asArray(this.runtime.doc?.processes)[index], index)
+          : kind === 'entity-overview'
+            ? this.renderEntityOverview(this.runtime.doc || {})
+            : kind === 'entity'
+              ? this.renderEntityDetail(this.asArray(this.runtime.doc?.entities)[index], index)
+              : '';
     if (!html) return;
     this.previewLazyObserver?.unobserve(el);
     el.outerHTML = html;
@@ -239,10 +249,11 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
 
   private renderStageDetail(stage: any, index: number): string {
     if (!stage) return '';
-    const processCount = this.asArray(this.runtime.doc?.stageFlowRefs).filter((ref) => ref.stageUid === stage.uid || ref.stageId === stage.uid).length;
+    const refs = this.stageProcessRefs(stage, this.runtime.doc || {});
     return `<section id="${this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`))}" class="pv-stage-section" data-preview-loaded="true">
       <h3>阶段视图: ${this.esc(this.displayName(stage, '未命名业务阶段'))}</h3>
-      <p class="pv-note"><strong>所属业务域</strong>: ${this.esc(stage.subDomain || stage.businessDomain || '—')} | <strong>流程数</strong>: ${processCount}</p>
+      <p class="pv-note"><strong>所属业务域</strong>: ${this.esc(stage.subDomain || stage.businessDomain || '—')} | <strong>流程数</strong>: ${refs.length}</p>
+      ${this.renderStageFlowGraph(stage, refs, this.runtime.doc || {})}
     </section>`;
   }
 
@@ -251,6 +262,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     const nodes = this.asArray(process.nodes || process.tasks);
     return `<section id="${this.anchorId('proc', this.identityOf(process, `process-${index + 1}`))}" class="pv-process-section" data-preview-loaded="true">
       <h3>${this.esc(this.displayName(process, '未命名流程'))}</h3>
+      ${this.renderProcessGraph(process)}
       ${process.trigger || process.outcome ? `<p class="pv-note"><strong>触发</strong>: ${this.esc(process.trigger || '—')} -> <strong>预期结果</strong>: ${this.esc(process.outcome || '—')}</p>` : ''}
       ${nodes.length ? `<div class="pv-tasks">${nodes.map((node, nodeIndex) => this.renderProcessNode(node, nodeIndex)).join('')}</div>` : '<div class="diag-empty">暂无流程节点</div>'}
     </section>`;
@@ -263,7 +275,126 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       ${entity.note ? `<p class="pv-note">${this.esc(entity.note)}</p>` : ''}
       ${this.asArray(entity.fields).length ? `<table><thead><tr><th>字段</th><th>类型</th><th>主键</th><th>说明</th></tr></thead><tbody>${this.asArray(entity.fields).map((field) => `
         <tr><td>${this.esc(field.name || '')}</td><td>${this.esc(field.type || '')}</td><td class="pv-center">${field.is_key || field.isKey ? '✓' : ''}</td><td>${this.esc(field.note || field.desc || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${this.renderEntityStateGraphs(entity)}
     </section>`;
+  }
+
+  // 模块意图：补齐旧版预览里的图形表达，Angular 侧只负责静态阅读视图，不接管建模运行时。
+  // 关键流程：从文档结构归一化出节点、连线和矩阵格子，再复用统一 SVG 输出，保持懒加载替换边界。
+  // 边界细节：这些图只读取当前 doc，不反向写状态；缺失连线时按节点顺序降级串联，避免空白预览。
+  private renderStagePanorama(doc: any): string {
+    const stages = this.asArray(doc.stages);
+    const columns = this.panoramaAxis(doc, 'columns', 'panoramaColumnUid', '价值流');
+    const lanes = this.panoramaAxis(doc, 'lanes', 'panoramaLaneUid', '业务域');
+    return `<section id="preview-stage-panorama" class="pv-stage-section" data-preview-loaded="true">
+      <h3>全景视图</h3>
+      <div class="stage-graph value-stream-graph preview-value-stream-graph" data-testid="preview-stage-panorama">
+        <div class="value-stream-scroll"><table class="preview-matrix"><thead><tr><th>业务域 / 价值流</th>${columns.map((column) => `<th>${this.esc(column.name)}</th>`).join('')}</tr></thead>
+        <tbody>${lanes.map((lane) => `<tr><th>${this.esc(lane.name)}</th>${columns.map((column) => `<td>${this.renderPanoramaCell(doc, stages, lane.id, column.id)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      </div>
+    </section>`;
+  }
+
+  private renderPanoramaCell(doc: any, stages: any[], laneId: string, columnId: string): string {
+    const cell = this.asArray(doc.panorama?.cells).find((item) => String(item?.laneId || item?.laneUid) === laneId && String(item?.columnId || item?.columnUid) === columnId);
+    const firstLane = this.panoramaAxis(doc, 'lanes', 'panoramaLaneUid', '业务域')[0]?.id;
+    const firstColumn = this.panoramaAxis(doc, 'columns', 'panoramaColumnUid', '价值流')[0]?.id;
+    const matched = stages.filter((stage) => {
+      const stageLane = String(stage.panoramaLaneUid || stage.laneUid || firstLane || '');
+      const stageColumn = String(stage.panoramaColumnUid || stage.columnUid || firstColumn || '');
+      return stageLane === laneId && stageColumn === columnId;
+    });
+    const stageList = matched.length ? `<ul class="preview-matrix-stage-list">${matched.map((stage) => `<li class="preview-matrix-stage"><strong>${this.esc(this.displayName(stage, '未命名阶段'))}</strong><em>${this.stageProcessRefs(stage, doc).length} 个流程</em></li>`).join('')}</ul>` : '';
+    return `${cell?.status ? `<strong>${this.esc(cell.status)}</strong>` : ''}${cell?.text ? `<p>${this.esc(cell.text)}</p>` : ''}${stageList || '<span class="diag-empty">暂无阶段</span>'}`;
+  }
+
+  private renderStageFlowGraph(stage: any, refs: any[], doc: any): string {
+    const nodes = refs.map((ref, index) => {
+      const process = this.findProcessByRef(ref, doc);
+      return { id: this.identityOf(ref, `ref-${index + 1}`), label: this.displayName(process || ref, `流程 ${index + 1}`) };
+    });
+    const links = this.asArray(doc.stageFlowLinks)
+      .filter((link) => this.matchesStage(stage, link))
+      .map((link) => ({ from: String(link.fromRefUid || link.from || ''), to: String(link.toRefUid || link.to || '') }))
+      .filter((link) => link.from && link.to);
+    return this.renderSimpleGraph(nodes, links, 'preview-stage-graph', 'stage-graph preview-stage-graph', '暂无阶段流程');
+  }
+
+  private renderProcessGraph(process: any): string {
+    const nodes = this.asArray(process.nodes || process.tasks).map((node, index) => ({ id: this.identityOf(node, `node-${index + 1}`), label: this.displayName(node, `节点 ${index + 1}`) }));
+    const links = this.asArray(process.links || process.edges)
+      .map((link) => ({ from: String(link.from || link.fromUid || link.source || ''), to: String(link.to || link.toUid || link.target || '') }))
+      .filter((link) => link.from && link.to);
+    return `<div id="pv-proc-${this.anchorId('proc-diag', this.identityOf(process, 'process'))}" class="pv-diag pv-proc-diag" data-testid="preview-process-graph">${this.renderSimpleGraph(nodes, links, 'preview-process-flow', 'process-main-diag live-diagram', '暂无流程图')}</div>`;
+  }
+
+  private renderEntityOverview(doc: any): string {
+    const entities = this.asArray(doc.entities).map((entity, index) => ({ id: this.identityOf(entity, `entity-${index + 1}`), label: this.displayName(entity, `实体 ${index + 1}`) }));
+    const links = this.asArray(doc.relations || doc.entityRelations)
+      .map((relation) => ({ from: String(relation.from || relation.fromEntityUid || relation.source || ''), to: String(relation.to || relation.toEntityUid || relation.target || '') }))
+      .filter((link) => link.from && link.to);
+    return `<section id="preview-entity-overview" class="pv-entity-section" data-preview-loaded="true"><h3>实体关系图</h3><div id="pv-entity-diag" class="pv-diag pv-entity-diag" data-testid="preview-entity-overview">${this.renderSimpleGraph(entities, links, 'preview-entity-graph', 'entity-relation-diagram', '暂无实体关系')}</div></section>`;
+  }
+
+  private renderEntityStateGraphs(entity: any): string {
+    const transitions = this.asArray(entity.state_transitions || entity.stateTransitions);
+    if (!transitions.length) return '';
+    const states = Array.from(new Set(transitions.flatMap((transition) => [transition.from, transition.to]).filter(Boolean).map(String)));
+    const nodes = states.map((state, index) => ({ id: state, label: state || `状态 ${index + 1}` }));
+    const links = transitions.map((transition) => ({ from: String(transition.from || ''), to: String(transition.to || '') })).filter((link) => link.from && link.to);
+    return `<div class="pv-entity-state-graphs"><div class="pv-entity-state-graph" data-testid="preview-entity-state-graph"><h4>状态流转</h4>${this.renderSimpleGraph(nodes, links, 'preview-entity-state-flow', 'entity-state-diagram', '暂无状态流转')}</div></div>`;
+  }
+
+  private renderSimpleGraph(nodes: Array<{ id: string; label: string }>, links: Array<{ from: string; to: string }>, testId: string, className: string, emptyText: string): string {
+    if (!nodes.length) return `<div class="diag-empty">${this.esc(emptyText)}</div>`;
+    const width = Math.max(420, nodes.length * 170 + 70);
+    const height = 150;
+    const placements = new Map(nodes.map((node, index) => [node.id, { x: 35 + index * 170, y: 48, w: 130, h: 52 }]));
+    const fallbackLinks = links.length ? links : nodes.slice(1).map((node, index) => ({ from: nodes[index].id, to: node.id }));
+    const paths = fallbackLinks.map((link) => {
+      const from = placements.get(link.from);
+      const to = placements.get(link.to);
+      if (!from || !to) return '';
+      const startX = from.x + from.w;
+      const startY = from.y + from.h / 2;
+      const endX = to.x;
+      const endY = to.y + to.h / 2;
+      return `<path class="diagram-edge" d="M${startX} ${startY} C${startX + 36} ${startY}, ${endX - 36} ${endY}, ${endX} ${endY}" marker-end="url(#arrow-${testId})"></path>`;
+    }).join('');
+    const boxes = nodes.map((node) => {
+      const position = placements.get(node.id)!;
+      return `<g class="diagram-node"><rect x="${position.x}" y="${position.y}" width="${position.w}" height="${position.h}" rx="10"></rect><text x="${position.x + position.w / 2}" y="${position.y + 31}" text-anchor="middle">${this.esc(this.truncate(node.label, 18))}</text></g>`;
+    }).join('');
+    return `<div class="${this.esc(className)}" data-testid="${this.esc(testId)}"><svg class="diagram-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="preview diagram"><defs><marker id="arrow-${this.esc(testId)}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>${paths}${boxes}</svg></div>`;
+  }
+
+  private panoramaAxis(doc: any, key: 'columns' | 'lanes', stageKey: 'panoramaColumnUid' | 'panoramaLaneUid', fallbackName: string): Array<{ id: string; name: string }> {
+    const fromModel = this.asArray(doc.panorama?.[key]).map((item, index) => ({ id: String(item.uid || item.id || `${key}-${index + 1}`), name: String(item.name || item.title || item.id || `${fallbackName}${index + 1}`) }));
+    if (fromModel.length) return fromModel;
+    const ids = Array.from(new Set(this.asArray(doc.stages).map((stage) => String(stage[stageKey] || '')).filter(Boolean)));
+    if (ids.length) return ids.map((id) => ({ id, name: id }));
+    return [{ id: `default-${key}`, name: fallbackName }];
+  }
+
+  private stageProcessRefs(stage: any, doc: any): any[] {
+    const refs = this.asArray(doc.stageFlowRefs).filter((ref) => this.matchesStage(stage, ref));
+    if (refs.length) return refs;
+    return this.asArray(doc.processes).filter((process) => this.matchesStage(stage, process)).map((process) => ({ uid: this.identityOf(process, ''), processUid: process.uid, processId: process.id }));
+  }
+
+  private matchesStage(stage: any, item: any): boolean {
+    const stageIds = [stage?.uid, stage?.id].filter(Boolean).map(String);
+    const itemStageIds = [item?.stageUid, item?.stageId, item?.businessStageUid, item?.businessStageId].filter(Boolean).map(String);
+    return stageIds.length > 0 && itemStageIds.some((id) => stageIds.includes(id));
+  }
+
+  private findProcessByRef(ref: any, doc: any): any {
+    const ids = [ref?.processUid, ref?.processId, ref?.uid, ref?.id].filter(Boolean).map(String);
+    return this.asArray(doc.processes).find((process) => ids.includes(String(process.uid || '')) || ids.includes(String(process.id || '')));
+  }
+
+  private truncate(value: string, max: number): string {
+    return value.length > max ? `${value.slice(0, max - 1)}…` : value;
   }
 
   private renderComponents(doc: any): string {
@@ -336,7 +467,28 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     const allowedTags = new Set(['b', 'strong', 'i', 'em', 'u', 's', 'ol', 'ul', 'li', 'p', 'br', 'div', 'span', 'blockquote', 'code', 'pre']);
     if (!allowedTags.has(tag)) return children;
     if (tag === 'br') return '<br>';
-    return `<${tag}>${children}</${tag}>`;
+    const style = this.sanitizeRichTextStyle(element.getAttribute('style') || '');
+    return `<${tag}${style ? ` style="${style}"` : ''}>${children}</${tag}>`;
+  }
+
+  private sanitizeRichTextStyle(style: string): string {
+    const allowed = 'color|background-color|text-align|font-weight|margin-left|padding-left'.split('|');
+    return style
+      .split(';')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const separator = part.indexOf(':');
+        if (separator < 1) return '';
+        const property = part.slice(0, separator).trim().toLowerCase();
+        const value = part.slice(separator + 1).trim();
+        if (!allowed.includes(property) || !value || /url\s*\(|expression\s*\(|javascript:|[<>]/i.test(value)) return '';
+        if (property === 'text-align' && !/^(left|right|center|justify)$/i.test(value)) return '';
+        if ((property === 'margin-left' || property === 'padding-left') && !/^-?\d+(\.\d+)?(px|em|rem|%)$/i.test(value)) return '';
+        return `${property}:${this.esc(value)}`;
+      })
+      .filter(Boolean)
+      .join(';');
   }
 
   private download(content: string, type: string, filename: string): void {
