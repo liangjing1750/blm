@@ -4,8 +4,12 @@ export interface EntityDesignField {
   name?: string;
   type?: string;
   note?: string;
+  is_key?: boolean;
+  is_status?: boolean;
+  status_role?: 'primary' | 'secondary' | '';
   state_values?: string;
   states?: string[];
+  state_nodes?: EntityStateNode[];
 }
 
 export interface EntityDesignEntity {
@@ -50,6 +54,7 @@ export interface EntityStateTransition {
   action?: string;
   label?: string;
   note?: string;
+  field_name?: string;
   labelPos?: { x?: number; y?: number };
   waypoints?: Array<{ x?: number; y?: number }>;
   route?: {
