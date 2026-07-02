@@ -2677,7 +2677,7 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
     fixture.detectChanges();
 
-    const group = compiled.querySelector('[data-testid="service-group-group-inbound"]');
+    const group = compiled.querySelector('[data-testid="service-group-card-group-inbound"]');
     expect(group?.textContent).toContain('入库预约服务');
     expect(group?.textContent).toContain('提交入库预约');
     expect(group?.textContent).toContain('/inbound-reservations/submit');
@@ -2728,17 +2728,14 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
     fixture.detectChanges();
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-group-inbound"]')?.click();
+    fixture.detectChanges();
     const groupName = compiled.querySelector<HTMLInputElement>('[data-testid="service-group-name-group-inbound"]')!;
     groupName.value = '入库预约服务';
     groupName.dispatchEvent(new Event('input', { bubbles: true }));
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-drawer-save"]')?.click();
     fixture.detectChanges();
 
-    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-toggle-group-inbound"]')?.click();
-    fixture.detectChanges();
-    expect(compiled.querySelector('[data-testid="interface-card-interface-submit"]')).toBeFalsy();
-
-    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-toggle-group-inbound"]')?.click();
-    fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="interface-card-interface-submit"]')).toBeTruthy();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-add-interface-group-inbound"]')?.click();
@@ -2765,8 +2762,10 @@ describe('App', () => {
 
     expect(runtime.doc.serviceGroups[0].name).toBe('入库预约服务');
     expect(runtime.doc.services.find((service: any) => service.uid === 'interface-submit')?.serviceGroupUid).toBe('group-outbound');
-    expect(compiled.querySelector('[data-testid="service-group-group-outbound"]')?.textContent).toContain('提交入库预约');
+    expect(compiled.querySelector('[data-testid="service-group-card-group-outbound"]')?.textContent).toContain('提交入库预约');
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-group-inbound"]')?.click();
+    fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-delete-group-inbound"]')?.click();
     fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
@@ -2817,6 +2816,8 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
     fixture.detectChanges();
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="interface-edit-interface-submit"]')?.click();
+    fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="interface-delete-interface-submit"]')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('删除接口');
@@ -2828,6 +2829,8 @@ describe('App', () => {
     expect(runtime.doc.services).toHaveLength(0);
     expect(confirmSpy).not.toHaveBeenCalled();
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-group-inbound"]')?.click();
+    fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-delete-group-inbound"]')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('删除服务');

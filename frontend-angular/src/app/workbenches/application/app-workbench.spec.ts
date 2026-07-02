@@ -58,21 +58,51 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector('.app-workbench')?.classList.contains('editing-open')).toBe(true);
   });
 
-  it('polishes service editing and all add buttons mutate the model', () => {
-    Array.from(host.querySelectorAll<HTMLButtonElement>('.comp-toolbar button')).find((button) => button.textContent?.includes('新建服务'))?.click();
-    fixture.detectChanges();
-    expect(getAngularRuntimeState().doc.serviceGroups.length).toBe(2);
+  it('renders application services as service group cards and interface summary cards', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services[0].requestParams = [{ name: 'orderId', type: 'String', required: true, note: '' }];
+    runtime.doc.services[0].responseParams = [{ name: 'result', type: 'Object', required: false, note: '' }];
+    runtime.doc.services[0].nodeRefs = ['node-submit'];
+    runtime.doc.services[0].orchestration = {
+      variables: [],
+      steps: [{ uid: 'step-1', name: '保存订单', stepAlias: 'step1', taskDefinitionUid: 'task-1', inputMapping: [], outputMapping: [] }],
+      returnMapping: [],
+    };
+    runtime.doc.processes = [{ uid: 'process-1', name: '订单流程', nodes: [{ uid: 'node-submit', name: '提交订单' }] }];
 
-    Array.from(host.querySelectorAll<HTMLButtonElement>('.comp-toolbar button')).find((button) => button.textContent?.includes('新建接口'))?.click();
-    fixture.detectChanges();
-    const draft = getAngularRuntimeState().doc.services.find((service: any) => service.uid === 'draft');
-    expect(draft).toBeTruthy();
-    expect(host.querySelector('.svc-edit-body')).toBeTruthy();
-
-    host.querySelectorAll<HTMLButtonElement>('.svc-params-head-actions button:last-child').forEach((button) => button.click());
     fixture.detectChanges();
 
-    expect(draft.requestParams).toHaveLength(1);
-    expect(draft.responseParams).toHaveLength(1);
+    const group = host.querySelector('[data-testid="service-group-card-service-group-1"]');
+    expect(group?.textContent).toContain('订单服务');
+    expect(group?.textContent).toContain('1 个接口');
+
+    const card = host.querySelector('[data-testid="interface-card-svc-1"]');
+    expect(card?.textContent).toContain('POST');
+    expect(card?.textContent).toContain('/orders');
+    expect(card?.textContent).toContain('提交订单');
+    expect(card?.textContent).toContain('请求 1');
+    expect(card?.textContent).toContain('响应 1');
+    expect(card?.textContent).toContain('编排 1');
+    expect(card?.textContent).toContain('节点 1');
+    expect(host.querySelector('.svc-params-table')).toBeFalsy();
+  });
+
+  it('opens an interface drawer in read-only mode when editing is closed', () => {
+    host.querySelector<HTMLElement>('[data-testid="interface-card-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    const drawer = host.querySelector('[data-testid="service-interface-drawer"]');
+    expect(drawer?.textContent).toContain('提交订单');
+    expect(drawer?.textContent).toContain('/orders');
+    expect(drawer?.textContent).toContain('请求参数');
+    expect(drawer?.textContent).toContain('响应参数');
+    expect(drawer?.querySelector('input')).toBeFalsy();
+    expect(drawer?.querySelector('[data-testid^="service-save-"]')).toBeFalsy();
+  });
+
+  it('keeps service toolbar actions visible without inline parameter editing', () => {
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-new"]')).toBeTruthy();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-interface-new"]')).toBeTruthy();
+    expect(host.querySelector('.svc-params-table')).toBeFalsy();
   });
 });

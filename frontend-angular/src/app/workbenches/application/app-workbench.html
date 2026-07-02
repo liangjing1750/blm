@@ -14,155 +14,59 @@
   </div>
 
   @if (activeTab() === 'service') {
-    <div class="comp-tab-body">
-      <div class="comp-toolbar">
+    <div class="comp-tab-body app-service-board">
+      <div class="comp-toolbar app-service-toolbar">
         <input type="search" placeholder="搜索服务 / 接口 / 路径" [ngModel]="svcKeyword()" (ngModelChange)="svcKeyword.set($event)" />
-        <button class="btn btn-outline btn-sm" type="button" (click)="createServiceGroup()">+ 新建服务</button>
-        <button class="btn btn-primary btn-sm" type="button" (click)="createService()">+ 新建接口</button>
+        <button class="btn btn-outline btn-sm" type="button" data-testid="service-group-new" (click)="createServiceGroup()">+ 新建服务</button>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="service-interface-new" (click)="createService()">+ 新建接口</button>
       </div>
 
-      <div class="svc-groups">
+      <div class="svc-groups app-service-groups">
         @for (item of groupedServices(); track item.group ? uid(item.group) : '__ungrouped__') {
-          <section class="svc-group" [attr.data-testid]="item.group ? 'service-group-' + uid(item.group) : 'service-group-ungrouped'">
-            <header class="svc-group-head">
+          <section class="svc-group app-service-group-card" [attr.data-testid]="item.group ? 'service-group-card-' + uid(item.group) : 'service-group-card-ungrouped'">
+            <header class="svc-group-head app-service-group-head">
+              <div>
+                <strong>{{ serviceGroupTitle(item.group) }}</strong>
+                <p>{{ serviceGroupDesc(item.group) }}</p>
+              </div>
+              <span>{{ item.services.length }} 个接口</span>
               @if (item.group; as group) {
-                <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-toggle-' + uid(group)" (click)="toggleGroup(uid(group))">
-                  {{ isGroupExpanded(uid(group)) ? '折叠' : '展开' }}
-                </button>
-                <div class="svc-group-fields">
-                  <strong>{{ group.name }}</strong>
-                  <input [attr.data-testid]="'service-group-name-' + uid(group)" [(ngModel)]="group.name" (ngModelChange)="updateServiceGroup()" placeholder="服务名称" />
-                  <input [attr.data-testid]="'service-group-desc-' + uid(group)" [(ngModel)]="group.desc" (ngModelChange)="updateServiceGroup()" placeholder="服务说明" />
-                </div>
-                <span>{{ item.services.length }} 个接口</span>
+                <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-edit-' + uid(group)" (click)="openServiceGroupDrawer(group)">编辑服务</button>
                 <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-add-interface-' + uid(group)" (click)="createInterface(uid(group))">+ 接口</button>
-                <button class="btn-ghost-sm danger" type="button" [attr.data-testid]="'service-group-delete-' + uid(group)" (click)="deleteServiceGroup(group)">删除</button>
               } @else {
-                <strong>未分组接口</strong>
-                <span>{{ item.services.length }} 个接口</span>
                 <button class="btn-ghost-sm" type="button" data-testid="service-group-add-interface-ungrouped" (click)="createInterface('')">+ 接口</button>
               }
             </header>
 
-            @if (!item.group || isGroupExpanded(uid(item.group))) {
-              <div class="svc-cards">
-                @for (svc of item.services; track uid(svc)) {
-                  <div class="svc-card" [attr.data-testid]="'interface-card-' + uid(svc)" [class.editing]="isEditing(svc)">
-                    @if (isEditing(svc)) {
-                      <div class="svc-edit-body">
-                        <section class="svc-edit-section svc-edit-basics">
-                          <div class="svc-edit-section-head"><strong>接口基础信息</strong></div>
-                        <div class="svc-edit-row">
-                          <input [attr.data-testid]="'interface-name-' + uid(svc)" [(ngModel)]="svc.name" placeholder="接口名称" class="svc-edit-name" />
-                          <select [(ngModel)]="svc.serviceGroupUid" [attr.data-testid]="'service-interface-group-select-' + uid(svc)">
-                            <option value="">未分组</option>
-                            @for (group of serviceGroups(); track uid(group)) {
-                              <option [value]="uid(group)">{{ group.name }}</option>
-                            }
-                          </select>
-                          <select [(ngModel)]="svc.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
-                          <input [attr.data-testid]="'interface-path-' + uid(svc)" [(ngModel)]="svc.path" placeholder="/api/..." />
-                        </div>
-                        <textarea [(ngModel)]="svc.desc" rows="2" placeholder="接口说明" class="svc-edit-note"></textarea>
-                        </section>
-
-                        <div class="svc-params-section">
-                          <div class="svc-params-head">
-                            <span>输入参数（请求体）</span>
-                            <div class="svc-params-head-actions">
-                              <button class="btn-ghost-sm" type="button" (click)="startImportJson('requestParams')">从 JSON 导入</button>
-                              <button class="btn-ghost-sm" type="button" (click)="copyParamsAsJson(svc, 'requestParams')">复制为 JSON</button>
-                              <button class="btn-ghost-sm" type="button" (click)="addSvcParam(serviceRequestParams(svc))">+ 添加</button>
-                            </div>
-                          </div>
-                          <table class="svc-params-table">
-                            <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                            <tbody>
-                              @for (row of paramRows(serviceRequestParams(svc)); track row.testPath) {
-                                <tr>
-                                  <td><input [style.padding-left.px]="8 + row.level * 18" [attr.data-testid]="'service-request-param-name-' + row.testPath" [(ngModel)]="row.param.name" placeholder="参数名" /></td>
-                                  <td><select [(ngModel)]="row.param.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>List</option><option>Map</option><option>Object</option></select></td>
-                                  <td class="td-cb"><input type="checkbox" [(ngModel)]="row.param.required" /></td>
-                                  <td><input [(ngModel)]="row.param.note" placeholder="说明" /></td>
-                                  <td class="svc-param-actions">
-                                    @if (canHaveChildren(row.param)) {
-                                      <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-request-param-add-child-' + row.testPath" (click)="addSvcChildParam(row.param)">+ 子项</button>
-                                    }
-                                    <button class="btn-ghost-sm danger" type="button" (click)="removeParamByPath(serviceRequestParams(svc), row.path)">×</button>
-                                  </td>
-                                </tr>
-                              }
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <div class="svc-params-section">
-                          <div class="svc-params-head">
-                            <span>输出参数（响应体）</span>
-                            <div class="svc-params-head-actions">
-                              <button class="btn-ghost-sm" type="button" (click)="startImportJson('responseParams')">从 JSON 导入</button>
-                              <button class="btn-ghost-sm" type="button" (click)="copyParamsAsJson(svc, 'responseParams')">复制为 JSON</button>
-                              <button class="btn-ghost-sm" type="button" (click)="addSvcParam(serviceResponseParams(svc))">+ 添加</button>
-                            </div>
-                          </div>
-                          <table class="svc-params-table">
-                            <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                            <tbody>
-                              @for (row of paramRows(serviceResponseParams(svc)); track row.testPath) {
-                                <tr>
-                                  <td><input [style.padding-left.px]="8 + row.level * 18" [attr.data-testid]="'service-response-param-name-' + row.testPath" [(ngModel)]="row.param.name" placeholder="参数名" /></td>
-                                  <td><select [(ngModel)]="row.param.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>List</option><option>Map</option><option>Object</option></select></td>
-                                  <td class="td-cb"><input type="checkbox" [(ngModel)]="row.param.required" /></td>
-                                  <td><input [(ngModel)]="row.param.note" placeholder="说明" /></td>
-                                  <td class="svc-param-actions">
-                                    @if (canHaveChildren(row.param)) {
-                                      <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-response-param-add-child-' + row.testPath" (click)="addSvcChildParam(row.param)">+ 子项</button>
-                                    }
-                                    <button class="btn-ghost-sm danger" type="button" (click)="removeParamByPath(serviceResponseParams(svc), row.path)">×</button>
-                                  </td>
-                                </tr>
-                              }
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <div class="svc-edit-actions">
-                          <button class="btn btn-primary btn-sm" [attr.data-testid]="'service-save-' + uid(svc)" type="button" (click)="saveInline(svc)">保存</button>
-                          <button class="btn btn-outline btn-sm" type="button" (click)="cancelEdit()">取消</button>
-                        </div>
-                      </div>
-                    } @else {
-                      <div class="svc-head" (click)="toggleExpand(uid(svc))">
-                        <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
-                        <strong>{{ svc.name || uid(svc) }}</strong>
-                        <code>{{ svc.path || '/' }}</code>
-                        <span class="svc-meta">{{ stepCount(svc) }} 步骤 · {{ (svc.nodeRefs||[]).length }} 节点引用</span>
-                        <span class="svc-arrow" [class.exp]="isExpanded(uid(svc))">▸</span>
-                        <button class="btn-ghost-sm" type="button" [attr.data-testid]="'interface-edit-' + uid(svc)" (click)="startEdit(svc); $event.stopPropagation()">编辑</button>
-                        <button class="btn-ghost-sm danger" type="button" [attr.data-testid]="'interface-delete-' + uid(svc)" (click)="deleteService(svc); $event.stopPropagation()">删除</button>
-                      </div>
-                    }
-                    @if (!isEditing(svc) && isExpanded(uid(svc))) {
-                      <div class="svc-detail">
-                        @if (svc.desc) { <p class="svc-desc">{{ svc.desc }}</p> }
-                        @if (orderedSteps(svc).length) {
-                          <div class="svc-steps">
-                            <span class="svc-section-label">编排步骤</span>
-                            @for (step of orderedSteps(svc); track step.uid; let i = $index) {
-                              <span class="svc-step-tag">{{ i + 1 }}. {{ stepTaskDef(step)?.name || step.taskDefinitionUid }}</span>
-                            }
-                          </div>
-                        }
-                        @if ((svc.nodeRefs||[]).length) {
-                          <div class="svc-refs"><span class="svc-section-label">被引用节点</span>@for(ref of svc.nodeRefs||[]; track ref){<span class="tag tag-node">{{ nodeLabel(ref) }}</span>}</div>
-                        }
-                      </div>
-                    }
+            <div class="svc-cards app-interface-grid">
+              @for (svc of item.services; track uid(svc)) {
+                <article class="svc-card app-interface-card" [attr.data-testid]="'interface-card-' + uid(svc)" (click)="openServiceDrawer(svc)">
+                  <div class="svc-head app-interface-card-head">
+                    <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
+                    <div>
+                      <strong>{{ svc.name || uid(svc) }}</strong>
+                      <code>{{ svc.path || '/' }}</code>
+                    </div>
+                    <button class="btn-ghost-sm" type="button" [attr.data-testid]="'interface-edit-' + uid(svc)" (click)="startEdit(svc); $event.stopPropagation()">查看</button>
                   </div>
-                }
-              </div>
-            }
+                  <div class="app-interface-meta">
+                    <span>请求 {{ requestParamCount(svc) }}</span>
+                    <span>响应 {{ responseParamCount(svc) }}</span>
+                    <span>编排 {{ stepCount(svc) }}</span>
+                    <span>节点 {{ (svc.nodeRefs || []).length }}</span>
+                  </div>
+                </article>
+              } @empty {
+                <div class="app-service-empty-inline">暂无接口</div>
+              }
+            </div>
           </section>
+        } @empty {
+          <div class="app-service-empty-state">
+            <strong>暂无应用服务</strong>
+            <span>先新建服务，再添加接口。</span>
+            <button class="btn btn-primary btn-sm" type="button" (click)="createServiceGroup()">新建服务</button>
+          </div>
         }
       </div>
     </div>
@@ -297,9 +201,155 @@
         <textarea [ngModel]="importJsonText()" (ngModelChange)="importJsonText.set($event)" rows="8" placeholder='粘贴 JSON，如 {"reservation":{"warehouseUid":"WH-A","items":[{"productCode":"CU"}]}}' class="svc-json-import"></textarea>
         <div class="comp-dialog-actions">
           <button class="btn btn-outline btn-sm" type="button" (click)="importJsonVisible.set(false)">取消</button>
-          <button class="btn btn-primary btn-sm" type="button" (click)="doImportJson(services().find(s => isEditing(s))!)">导入</button>
+          <button class="btn btn-primary btn-sm" type="button" (click)="doImportJson(serviceDrawer()!)">导入</button>
         </div>
       </div>
+    </div>
+  }
+
+  @if (serviceDrawer(); as svc) {
+    <div class="drawer-overlay" data-testid="service-interface-drawer" (click)="closeServiceDrawer()">
+      <aside class="drawer app-service-drawer" (click)="$event.stopPropagation()">
+        <header class="drawer-head">
+          <div>
+            <h3>{{ svc.name || uid(svc) || '未命名接口' }}</h3>
+            <span>{{ svc.method || 'POST' }} {{ svc.path || '/' }}</span>
+          </div>
+          <button class="drawer-close" type="button" (click)="closeServiceDrawer()">×</button>
+        </header>
+        <div class="drawer-body">
+          @if (!editorOpen()) {
+            <section class="drawer-section">
+              <div class="drawer-section-head"><strong>基础信息</strong></div>
+              <p class="drawer-read-row"><span>服务</span><strong>{{ serviceGroupTitle(serviceGroupFor(svc)) }}</strong></p>
+              <p class="drawer-read-row"><span>说明</span><strong>{{ svc.desc || '暂无说明' }}</strong></p>
+            </section>
+            <section class="drawer-section">
+              <div class="drawer-section-head"><strong>请求参数</strong></div>
+              @for (row of paramRows(serviceRequestParams(svc)); track row.testPath) {
+                <p class="drawer-read-row" [style.padding-left.px]="row.level * 16"><span>{{ row.param.name || '未命名参数' }}</span><strong>{{ row.param.type || 'String' }}</strong></p>
+              } @empty {
+                <p class="muted">暂无请求参数</p>
+              }
+            </section>
+            <section class="drawer-section">
+              <div class="drawer-section-head"><strong>响应参数</strong></div>
+              @for (row of paramRows(serviceResponseParams(svc)); track row.testPath) {
+                <p class="drawer-read-row" [style.padding-left.px]="row.level * 16"><span>{{ row.param.name || '未命名参数' }}</span><strong>{{ row.param.type || 'String' }}</strong></p>
+              } @empty {
+                <p class="muted">暂无响应参数</p>
+              }
+            </section>
+          } @else {
+            <section class="svc-edit-section svc-edit-basics">
+              <div class="svc-edit-section-head"><strong>接口基础信息</strong></div>
+              <div class="svc-edit-row">
+                <input [attr.data-testid]="'interface-name-' + uid(svc)" [(ngModel)]="svc.name" placeholder="接口名称" class="svc-edit-name" />
+                <select [(ngModel)]="svc.serviceGroupUid" [attr.data-testid]="'service-interface-group-select-' + uid(svc)">
+                  <option value="">未分组</option>
+                  @for (group of serviceGroups(); track uid(group)) {
+                    <option [value]="uid(group)">{{ group.name }}</option>
+                  }
+                </select>
+                <select [(ngModel)]="svc.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+                <input [attr.data-testid]="'interface-path-' + uid(svc)" [(ngModel)]="svc.path" placeholder="/api/..." />
+              </div>
+              <textarea [(ngModel)]="svc.desc" rows="2" placeholder="接口说明" class="svc-edit-note"></textarea>
+            </section>
+
+            <div class="svc-params-section">
+              <div class="svc-params-head">
+                <span>请求参数</span>
+                <div class="svc-params-head-actions">
+                  <button class="btn-ghost-sm" type="button" (click)="startImportJson('requestParams')">从 JSON 导入</button>
+                  <button class="btn-ghost-sm" type="button" (click)="copyParamsAsJson(svc, 'requestParams')">复制为 JSON</button>
+                  <button class="btn-ghost-sm" data-testid="service-drawer-add-request-param" type="button" (click)="addSvcParam(serviceRequestParams(svc))">+ 添加</button>
+                </div>
+              </div>
+              <table class="svc-params-table">
+                <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                <tbody>
+                  @for (row of paramRows(serviceRequestParams(svc)); track row.testPath) {
+                    <tr>
+                      <td><input [style.padding-left.px]="8 + row.level * 18" [attr.data-testid]="'service-request-param-name-' + row.testPath" [(ngModel)]="row.param.name" placeholder="参数名" /></td>
+                      <td><select [(ngModel)]="row.param.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>List</option><option>Map</option><option>Object</option></select></td>
+                      <td class="td-cb"><input type="checkbox" [(ngModel)]="row.param.required" /></td>
+                      <td><input [(ngModel)]="row.param.note" placeholder="说明" /></td>
+                      <td class="svc-param-actions">
+                        @if (canHaveChildren(row.param)) {
+                          <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-request-param-add-child-' + row.testPath" (click)="addSvcChildParam(row.param)">+ 子项</button>
+                        }
+                        <button class="btn-ghost-sm danger" type="button" (click)="removeParamByPath(serviceRequestParams(svc), row.path)">×</button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="svc-params-section">
+              <div class="svc-params-head">
+                <span>响应参数</span>
+                <div class="svc-params-head-actions">
+                  <button class="btn-ghost-sm" type="button" (click)="startImportJson('responseParams')">从 JSON 导入</button>
+                  <button class="btn-ghost-sm" type="button" (click)="copyParamsAsJson(svc, 'responseParams')">复制为 JSON</button>
+                  <button class="btn-ghost-sm" data-testid="service-drawer-add-response-param" type="button" (click)="addSvcParam(serviceResponseParams(svc))">+ 添加</button>
+                </div>
+              </div>
+              <table class="svc-params-table">
+                <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                <tbody>
+                  @for (row of paramRows(serviceResponseParams(svc)); track row.testPath) {
+                    <tr>
+                      <td><input [style.padding-left.px]="8 + row.level * 18" [attr.data-testid]="'service-response-param-name-' + row.testPath" [(ngModel)]="row.param.name" placeholder="参数名" /></td>
+                      <td><select [(ngModel)]="row.param.type"><option>String</option><option>Number</option><option>Boolean</option><option>Array</option><option>List</option><option>Map</option><option>Object</option></select></td>
+                      <td class="td-cb"><input type="checkbox" [(ngModel)]="row.param.required" /></td>
+                      <td><input [(ngModel)]="row.param.note" placeholder="说明" /></td>
+                      <td class="svc-param-actions">
+                        @if (canHaveChildren(row.param)) {
+                          <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-response-param-add-child-' + row.testPath" (click)="addSvcChildParam(row.param)">+ 子项</button>
+                        }
+                        <button class="btn-ghost-sm danger" type="button" (click)="removeParamByPath(serviceResponseParams(svc), row.path)">×</button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+        @if (editorOpen()) {
+          <footer class="drawer-actions">
+            <button class="btn btn-primary btn-sm" [attr.data-testid]="'service-save-' + uid(svc)" type="button" (click)="saveServiceDrawer(svc)">保存</button>
+            <button class="btn btn-outline btn-sm" type="button" (click)="closeServiceDrawer()">取消</button>
+            @if (svc.uid && svc.uid !== 'draft') {
+              <button class="btn btn-outline btn-sm danger" [attr.data-testid]="'interface-delete-' + uid(svc)" type="button" (click)="deleteService(svc)">删除</button>
+            }
+          </footer>
+        }
+      </aside>
+    </div>
+  }
+
+  @if (serviceGroupDrawer(); as group) {
+    <div class="drawer-overlay" data-testid="service-group-drawer" (click)="closeServiceGroupDrawer()">
+      <aside class="drawer app-service-group-drawer" (click)="$event.stopPropagation()">
+        <header class="drawer-head">
+          <h3>{{ group.uid ? '编辑服务' : '新建服务' }}</h3>
+          <button class="drawer-close" type="button" (click)="closeServiceGroupDrawer()">×</button>
+        </header>
+        <div class="drawer-body">
+          <label>服务名称<input [attr.data-testid]="group.uid ? 'service-group-name-' + group.uid : 'service-group-drawer-name'" [(ngModel)]="group.name" placeholder="服务名称" /></label>
+          <label>服务说明<input [attr.data-testid]="group.uid ? 'service-group-desc-' + group.uid : 'service-group-drawer-desc'" [(ngModel)]="group.desc" placeholder="服务说明" /></label>
+        </div>
+        <footer class="drawer-actions">
+          <button class="btn btn-primary btn-sm" data-testid="service-group-drawer-save" type="button" (click)="saveServiceGroupDrawer()">保存</button>
+          <button class="btn btn-outline btn-sm" type="button" (click)="closeServiceGroupDrawer()">取消</button>
+          @if (group.uid) {
+            <button class="btn btn-outline btn-sm danger" [attr.data-testid]="'service-group-delete-' + group.uid" type="button" (click)="deleteServiceGroupFromDrawer()">删除</button>
+          }
+        </footer>
+      </aside>
     </div>
   }
 </section>

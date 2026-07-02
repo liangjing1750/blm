@@ -31,12 +31,11 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly version = signal(0);
   protected readonly activeTab = signal<AppTab>(this.restoreActiveTab());
   protected readonly svcKeyword = signal('');
-  protected readonly editingSvcId = signal('');
   protected readonly orchSvcId = signal('');
   protected readonly selectedStepUid = signal('');
-  protected readonly expandedSvcIds = signal(new Set<string>());
-  protected readonly collapsedGroupIds = signal(new Set<string>());
   protected readonly editorOpen = signal(false);
+  protected readonly serviceDrawerId = signal('');
+  protected readonly serviceGroupDrawer = signal<Partial<LegacyServiceGroup> | null>(null);
 
   protected doc(): any { this.version(); return this.runtime.doc || {}; }
   protected serviceGroups(): LegacyServiceGroup[] { this.doc().serviceGroups ||= []; return this.doc().serviceGroups; }
@@ -74,37 +73,51 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     return result;
   }
 
-  protected isExpanded(id: string): boolean { return this.expandedSvcIds().has(id); }
-  protected toggleExpand(id: string): void { this.expandedSvcIds.update(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }); }
-  protected isGroupExpanded(id: string): boolean { return !this.collapsedGroupIds().has(id); }
-  protected toggleGroup(id: string): void { this.collapsedGroupIds.update(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }); }
-
   protected orderedSteps(svc: LegacyService): OrchestrationStep[] { return this.orchestrationSteps(svc); }
   protected stepTaskDef(step: OrchestrationStep | OrchStep): LegacyTaskDef | undefined { return this.taskDefs().find(t => this.uid(t) === this.stepTaskUid(step)); }
   protected stepCount(svc: LegacyService): number { return this.orchestrationSteps(svc).length; }
-
-  protected allNodes(): Array<{ uid: string; name: string; pname: string }> {
-    const nodes: Array<{ uid: string; name: string; pname: string }> = [];
-    for (const p of this.doc().processes || []) for (const n of p.nodes || p.tasks || []) nodes.push({ uid: n.uid || n.id || '', name: n.name || '未命名', pname: p.name || '未命名流程' });
-    return nodes;
+  // 模块意图：主页面只提供服务与接口的浏览摘要，编辑细节继续由后续抽屉接管。
+  // 关键流程：摘要计数必须纯读取，避免模板渲染时把旧文档 inputs/outputs 归一化写回。
+  // 边界细节：未分组接口仍要有标题和说明，不能因为缺少 serviceGroupUid 从浏览列表消失。
+  protected requestParamCount(svc: LegacyService): number { return (svc.requestParams || svc.inputs || []).length; }
+  protected responseParamCount(svc: LegacyService): number { return (svc.responseParams || svc.outputs || []).length; }
+  protected serviceGroupTitle(group: LegacyServiceGroup | null): string {
+    return group ? group.name || this.uid(group) : '未分组接口';
   }
-  protected nodeLabel(uid: string): string {
-    for (const p of this.doc().processes || []) for (const n of p.nodes || p.tasks || []) if ((n.uid || n.id) === uid) return `${n.name || '节点'}（${p.name || ''}）`;
-    return uid;
+  protected serviceGroupDesc(group: LegacyServiceGroup | null): string {
+    return group ? group.desc || '暂无服务说明' : '旧文档或未归属服务的接口会显示在这里。';
+  }
+  protected serviceGroupFor(svc: LegacyService): LegacyServiceGroup | null {
+    return this.serviceGroups().find((group) => this.uid(group) === String(svc.serviceGroupUid || '')) || null;
   }
 
+  protected serviceDrawer(): LegacyService | null {
+    const id = this.serviceDrawerId();
+    return this.services().find((service) => this.uid(service) === id) || null;
+  }
+  protected openServiceDrawer(svc: LegacyService): void {
+    this.ensureServiceShape(svc);
+    this.serviceDrawerId.set(this.uid(svc));
+  }
+  protected closeServiceDrawer(): void {
+    const svc = this.serviceDrawer();
+    if (svc?.uid === 'draft') {
+      this.doc().services = this.services().filter((service) => service !== svc);
+      this.touch();
+    }
+    this.serviceDrawerId.set('');
+  }
   protected startEdit(svc?: LegacyService): void {
-    if (svc) { this.ensureServiceShape(svc); }
-    this.editingSvcId.set(svc ? this.uid(svc) : '');
+    if (!svc) return this.openNewServiceDrawer();
     this.editorOpen.set(true);
+    this.openServiceDrawer(svc);
   }
-  protected saveInline(svc: LegacyService): void {
+  protected saveServiceDrawer(svc: LegacyService): void {
     if (!svc.uid || svc.uid === 'draft') svc.uid = `interface-${Date.now()}`;
     this.ensureServiceShape(svc);
-    this.editingSvcId.set('');
+    this.serviceDrawerId.set('');
     this.touch();
   }
-  protected cancelEdit(): void { this.editingSvcId.set(''); }
   protected async deleteService(svc: LegacyService): Promise<void> {
     const confirmed = await confirmRuntimeAction(`确认删除接口“${svc.name || this.uid(svc)}”吗？`, {
       title: '删除接口',
@@ -112,27 +125,53 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
     this.doc().services = this.services().filter((s) => s.uid !== svc.uid);
+    if (this.serviceDrawerId() === this.uid(svc)) this.serviceDrawerId.set('');
     this.touch();
   }
-  protected isEditing(svc: LegacyService): boolean { return this.editingSvcId() === this.uid(svc) || (!svc.uid && this.editingSvcId() === ''); }
   protected createService(): void {
-    this.createInterface(this.uid(this.serviceGroups()[0]) || '');
+    this.openNewServiceDrawer(this.uid(this.serviceGroups()[0]) || '');
   }
   protected createInterface(serviceGroupUid = ''): void {
+    this.openNewServiceDrawer(serviceGroupUid);
+  }
+  protected openNewServiceDrawer(serviceGroupUid = this.uid(this.serviceGroups()[0]) || ''): void {
     const svc: LegacyService = { uid: 'draft', name: '', serviceGroupUid, method: 'POST', path: '', desc: '', requestParams: [], responseParams: [], steps: [], parameterMappings: [], nodeRefs: [] };
     this.doc().services ||= [];
     this.doc().services.push(svc);
-    this.editingSvcId.set('draft');
     this.editorOpen.set(true);
+    this.openServiceDrawer(svc);
     this.touch();
   }
   protected createServiceGroup(): void {
+    this.openServiceGroupDrawer();
+  }
+  protected openServiceGroupDrawer(group?: LegacyServiceGroup): void {
+    this.editorOpen.set(true);
+    this.serviceGroupDrawer.set(group ? { ...group } : { uid: '', name: '', desc: '' });
+  }
+  protected closeServiceGroupDrawer(): void {
+    this.serviceGroupDrawer.set(null);
+  }
+  protected saveServiceGroupDrawer(): void {
+    const draft = this.serviceGroupDrawer();
+    if (!draft || !draft.name?.trim()) return;
     this.doc().serviceGroups ||= [];
-    const group: LegacyServiceGroup = { uid: `service-group-${Date.now()}`, name: `新服务${this.serviceGroups().length + 1}`, desc: '' };
-    this.doc().serviceGroups.push(group);
+    if (!draft.uid) {
+      draft.uid = `service-group-${Date.now()}`;
+      this.doc().serviceGroups.push(draft);
+    } else {
+      const existing = this.serviceGroups().find((group) => this.uid(group) === draft.uid);
+      if (existing) Object.assign(existing, draft);
+    }
+    this.serviceGroupDrawer.set(null);
     this.touch();
   }
-  protected updateServiceGroup(): void { this.touch(); }
+  protected async deleteServiceGroupFromDrawer(): Promise<void> {
+    const group = this.serviceGroupDrawer();
+    if (!group?.uid) return;
+    await this.deleteServiceGroup(group as LegacyServiceGroup);
+    this.serviceGroupDrawer.set(null);
+  }
   protected async deleteServiceGroup(group: LegacyServiceGroup): Promise<void> {
     const groupUid = this.uid(group);
     const confirmed = await confirmRuntimeAction(`确认删除服务“${group.name || groupUid}”吗？组内接口会移动到未分组。`, {
@@ -281,7 +320,6 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   // ─── Tab 2: 应用编排 ──────────────────────────
-  protected mappings(svc: LegacyService): ParamMapping[] { return svc.parameterMappings || []; }
   protected selectOrchestrationService(serviceUid: string): void {
     this.orchSvcId.set(serviceUid);
     const service = this.services().find((candidate) => this.uid(candidate) === serviceUid);
@@ -325,12 +363,6 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     [steps[idx], steps[ni]] = [steps[ni], steps[idx]];
     this.touch();
   }
-  protected addMapping(svc: LegacyService): void {
-    svc.parameterMappings ||= [];
-    svc.parameterMappings.push({ fromTaskDefUid: '', fromParamName: '', toTaskDefUid: '', toParamName: '', note: '' });
-    this.touch();
-  }
-  protected removeMapping(svc: LegacyService, idx: number): void { (svc.parameterMappings || []).splice(idx, 1); this.touch(); }
   protected addInputMapping(step: OrchestrationStep): void {
     step.inputMapping ||= [];
     step.inputMapping.push({ source: '', target: '' });
@@ -360,25 +392,6 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.returnMappings(svc).splice(idx, 1);
     this.touch();
   }
-  protected mappingFromOptions(svc: LegacyService, excludeIdx: number): Array<{ tdName: string; paramName: string; key: string }> {
-    const result: Array<{ tdName: string; paramName: string; key: string }> = [];
-    for (const step of this.orchestrationSteps(svc)) {
-      const td = this.stepTaskDef(step);
-      if (!td) continue;
-      for (const p of td.parameters?.outputs || []) result.push({ tdName: td.name || '', paramName: p.name, key: `${this.uid(td)}:${p.name}` });
-    }
-    return result;
-  }
-  protected mappingToOptions(svc: LegacyService): Array<{ tdName: string; paramName: string; key: string }> {
-    const result: Array<{ tdName: string; paramName: string; key: string }> = [];
-    for (const step of this.orchestrationSteps(svc)) {
-      const td = this.stepTaskDef(step);
-      if (!td) continue;
-      for (const p of td.parameters?.inputs || []) result.push({ tdName: td.name || '', paramName: p.name, key: `${this.uid(td)}:${p.name}` });
-    }
-    return result;
-  }
-
   // 模块意图：参数变量池只负责提供可选择路径，不在这里解释运行时表达式。
   // 关键流程：先展开接口请求参数，再按步骤顺序积累每个任务的输入和输出变量。
   // 边界细节：Array/List 用 [] 表示元素路径，Map/Object 共用点路径表达子字段。
