@@ -2,55 +2,123 @@
   <div class="proc-view-toolbar">
     <div class="proc-view-toolbar-main">
       <div class="view-toggle-group">
-        <button class="vtb" [class.active]="activeTab()==='component'" (click)="switchTab('component')">组件构件</button>
+        <button class="vtb" [class.active]="activeTab()==='businessComponent'" (click)="switchTab('businessComponent')">业务组件</button>
+        <button class="vtb" data-testid="component-businessconstruct-tab" [class.active]="activeTab()==='businessConstruct'" (click)="switchTab('businessConstruct')">业务构件</button>
         <button class="vtb" data-testid="component-taskdef-tab" [class.active]="activeTab()==='taskDef'" (click)="switchTab('taskDef')">任务定义</button>
         <button class="vtb" [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
       </div>
     </div>
   </div>
 
-  <!-- Tab 1: 组件构件 — 卡片网格 -->
-  @if (activeTab() === 'component') {
-    <div class="comp-tab-body">
-      <div class="comp-grid">
+  <!-- 业务组件：只看组件与构件分组，实体和任务明细留到构件详情页。 -->
+  @if (activeTab() === 'businessComponent') {
+    <div class="comp-tab-body business-component-view" data-testid="business-component-view">
+      <div class="business-component-toolbar">
+        <button class="btn btn-primary btn-sm" data-testid="business-component-add" (click)="openCompDrawer()">+ 新建业务组件</button>
+      </div>
+      <div class="comp-grid business-component-grid">
         @for (comp of components(); track uid(comp)) {
-          <div class="comp-grid-card" [class.is-generic]="comp.kind === 'generic'">
+          <div class="comp-grid-card business-component-card" data-testid="business-component-card" [class.is-generic]="comp.kind === 'generic'">
             <div class="comp-grid-head">
-              <span class="comp-grid-label">组件</span>
+              <span class="comp-grid-label">业务组件</span>
               <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
+              <span class="business-component-count">{{ constructsFor(comp).length }} 个构件</span>
               <button class="comp-grid-edit" (click)="openCompDrawer(comp)" title="编辑">编辑</button>
             </div>
+            @if (comp.note) {
+              <p class="business-component-note">{{ comp.note }}</p>
+            }
             <div class="comp-grid-constructs">
               @for (construct of constructsFor(comp); track uid(construct)) {
-                <div class="comp-grid-construct" (click)="openConstructDrawer(construct)">
+                <button class="comp-grid-construct business-construct-entry" data-testid="business-construct-entry" [class.is-selected]="isSelectedConstruct(construct)" (click)="openBusinessConstruct(construct)">
                   <div class="comp-grid-construct-head">
-                    <span class="comp-grid-construct-label">构件</span>
+                    <span class="comp-grid-construct-label">业务构件</span>
                     <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
                   </div>
-                  @if (entitiesFor(construct).length || taskDefsFor(construct).length) {
-                    <div class="comp-grid-construct-body">
-                      @if (entitiesFor(construct).length) {
-                        <div class="comp-tag-box tag-box-entity">
-                          <span class="comp-tag-box-label">实体</span>
-                          @for (e of entitiesFor(construct); track uid(e)) { <span class="tag tag-entity">{{ e.name }}</span> }
-                        </div>
-                      }
-                      @if (taskDefsFor(construct).length) {
-                        <div class="comp-tag-box tag-box-task">
-                          <span class="comp-tag-box-label">任务</span>
-                          @for (t of taskDefsFor(construct); track uid(t)) { <span class="tag tag-task">{{ t.name }}</span> }
-                        </div>
-                      }
-                    </div>
-                  }
-                </div>
+                  <div class="business-construct-metrics">
+                    <span>{{ entitiesFor(construct).length }} 个实体</span>
+                    <span>{{ taskDefsFor(construct).length }} 个任务</span>
+                  </div>
+                </button>
+              } @empty {
+                <div class="business-empty-inline">暂无业务构件</div>
               }
-              <button class="comp-grid-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 构件</button>
+              <button class="comp-grid-construct-add" data-testid="business-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 业务构件</button>
             </div>
           </div>
+        } @empty {
+          <div class="business-empty-state">
+            <strong>暂无业务组件</strong>
+            <span>先新建业务组件，再为组件添加业务构件。</span>
+            <button class="btn btn-primary btn-sm" (click)="openCompDrawer()">新建业务组件</button>
+          </div>
         }
-        <button class="comp-grid-card comp-grid-add" (click)="openCompDrawer()">+ 新建组件</button>
       </div>
+    </div>
+  }
+
+  <!-- 业务构件：承接组件总览里的点击，集中展示一个构件的实体和任务资产。 -->
+  @if (activeTab() === 'businessConstruct') {
+    <div class="comp-tab-body business-construct-view" data-testid="business-construct-view">
+      @if (selectedConstruct(); as construct) {
+        <div class="business-construct-head">
+          <button class="btn btn-outline btn-sm" data-testid="business-construct-return" (click)="returnToBusinessComponents()">← 返回业务组件</button>
+          <select [ngModel]="uid(construct)" (ngModelChange)="openBusinessConstructById($event)">
+            @for (item of constructs(); track uid(item)) {
+              <option [value]="uid(item)">{{ item.name || uid(item) }}</option>
+            }
+          </select>
+          <button class="btn btn-outline btn-sm" (click)="openConstructDrawer(construct)">编辑构件</button>
+        </div>
+        <section class="business-construct-summary">
+          <div>
+            <span class="summary-label">业务构件</span>
+            <h3>{{ construct.name || uid(construct) }}</h3>
+            <p>{{ construct.note || '暂无说明' }}</p>
+          </div>
+          <div class="summary-metrics">
+            <span>{{ componentForConstruct(construct)?.name || '未归属组件' }}</span>
+            <span>{{ entitiesFor(construct).length }} 个实体</span>
+            <span>{{ taskDefsFor(construct).length }} 个任务</span>
+          </div>
+        </section>
+        <div class="business-construct-assets">
+          <section class="construct-asset-panel" data-testid="business-construct-entities">
+            <header>
+              <strong>关联实体</strong>
+              <button class="btn-ghost-sm" (click)="openEntitiesForConstruct(construct)">进入实体定义</button>
+            </header>
+            @for (entity of entitiesFor(construct); track uid(entity)) {
+              <div class="construct-asset-row">
+                <strong>{{ entity.name || uid(entity) }}</strong>
+                <span>{{ fieldCount(entity) }} 个字段</span>
+              </div>
+            } @empty {
+              <div class="business-empty-inline">暂无关联实体</div>
+            }
+          </section>
+          <section class="construct-asset-panel" data-testid="business-construct-tasks">
+            <header>
+              <strong>关联任务</strong>
+              <button class="btn-ghost-sm" data-testid="business-construct-open-tasks" (click)="openTaskDefinitionsForConstruct(construct)">进入任务定义</button>
+            </header>
+            @for (task of taskDefsFor(construct); track uid(task)) {
+              <div class="construct-asset-row">
+                <strong>{{ task.name || uid(task) }}</strong>
+                <span>{{ task.type || 'Query' }} · {{ task.target || task.address || '未设置实现' }} · {{ taskNodeCount(task) }} 个节点引用</span>
+              </div>
+            } @empty {
+              <div class="business-empty-inline">暂无关联任务</div>
+            }
+          </section>
+        </div>
+      } @else {
+        <div class="business-empty-state">
+          <strong>暂无业务构件</strong>
+          <span>先回到业务组件视图，为组件添加业务构件。</span>
+          <button class="btn btn-primary btn-sm" (click)="returnToBusinessComponents()">返回业务组件</button>
+        </div>
+      }
     </div>
   }
 
@@ -62,7 +130,7 @@
           <option value="">全部组件</option>
           @for(c of components(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
         </select>
-        <select [ngModel]="taskDefConstructId()" (ngModelChange)="taskDefConstructId.set($event)">
+        <select data-testid="taskdef-construct-filter" [attr.data-selected-construct]="taskDefConstructId()" [ngModel]="taskDefConstructId()" (ngModelChange)="taskDefConstructId.set($event)">
           <option value="">全部构件</option>
           @for(c of filteredConstructsForTaskDef(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
         </select>

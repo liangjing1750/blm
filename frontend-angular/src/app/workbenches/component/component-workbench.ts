@@ -4,15 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 
-type ComponentTab = 'component' | 'taskDef' | 'entity' | 'service' | 'orchestration';
+type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
 
 interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; note?: string; entityUids?: string[]; taskDefinitionUids?: string[]; constructUids?: string[]; }
-interface LegacyConstruct { uid?: string; id?: string; name?: string; businessComponentUid?: string; }
+interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; }
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructUids?: string[]; }
 interface TaskParam { name: string; type: string; required: boolean; note: string; }
 interface TechnicalHandover { runtimeKind?: string; target?: string; note?: string; }
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; technicalHandover?: TechnicalHandover; constructUid?: string; businessComponentUid?: string; }
-interface LegacyService { uid?: string; name?: string; method?: string; path?: string; desc?: string; taskDefinitionUids?: string[]; nodeRefs?: string[]; }
 
 @Component({
   selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent],
@@ -26,25 +25,22 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   protected readonly version = signal(0);
   protected readonly activeTab = signal<ComponentTab>(this.restoreActiveTab());
+  protected readonly selectedConstructId = signal(String(this.runtime.ui['componentWorkbenchConstructId'] || '').trim());
   protected readonly expandedComp = signal('');
   protected readonly editTaskDef = signal<Partial<LegacyTaskDef> | null>(null);
-  protected readonly editSvc = signal<Partial<LegacyService> | null>(null);
-  protected readonly orchSvcId = signal('');
   protected readonly taskDefKeyword = signal('');
   // 抽屉状态
   protected readonly compDrawer = signal<Partial<LegacyComp> | null>(null);
   protected readonly constructDrawer = signal<Partial<LegacyConstruct> | null>(null);
   protected readonly newConstructCompId = signal('');
-  protected readonly svcKeyword = signal('');
 
   protected doc(): any { this.version(); return getAngularRuntimeState().doc || {}; }
   protected components(): LegacyComp[] { return this.doc().businessComponents || []; }
   protected constructs(): LegacyConstruct[] { return this.doc().businessConstructs || []; }
   protected entities(): LegacyEntity[] { return this.doc().entities || []; }
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
-  protected services(): LegacyService[] { return this.doc().services || []; }
 
-  // ─── Tab 1: 组件构件 ──────────────────────────────
+  // 业务组件/业务构件：总览只展示分组关系，详情页再展开实体与任务资产。
   protected constructsFor(comp: LegacyComp): LegacyConstruct[] {
     const cid = this.uid(comp);
     return this.constructs().filter((c) => this.uid({ uid: c.businessComponentUid }) === cid);
@@ -56,6 +52,47 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected taskDefsFor(construct: LegacyConstruct): LegacyTaskDef[] {
     const cid = this.uid(construct);
     return this.taskDefs().filter((t) => t.constructUid === cid);
+  }
+  protected selectedConstruct(): LegacyConstruct | null {
+    const selectedId = this.selectedConstructId();
+    return this.constructs().find((c) => this.uid(c) === selectedId) || this.constructs()[0] || null;
+  }
+  protected componentForConstruct(construct: LegacyConstruct | null): LegacyComp | null {
+    if (!construct) return null;
+    const compId = String(construct.businessComponentUid || '').trim();
+    return this.components().find((c) => this.uid(c) === compId) || null;
+  }
+  protected isSelectedConstruct(construct: LegacyConstruct): boolean {
+    return this.uid(construct) === this.selectedConstructId();
+  }
+  protected openBusinessConstruct(construct: LegacyConstruct): void {
+    this.setSelectedConstruct(construct);
+    this.switchTab('businessConstruct');
+  }
+  protected openBusinessConstructById(constructId: string): void {
+    const construct = this.constructs().find((c) => this.uid(c) === constructId);
+    if (construct) this.openBusinessConstruct(construct);
+  }
+  protected returnToBusinessComponents(): void {
+    this.switchTab('businessComponent');
+  }
+  protected openTaskDefinitionsForConstruct(construct: LegacyConstruct): void {
+    const constructId = this.uid(construct);
+    this.setSelectedConstruct(construct);
+    this.taskDefCompId.set(String(construct.businessComponentUid || '').trim());
+    this.taskDefConstructId.set(constructId);
+    this.taskDefPage.set(1);
+    this.switchTab('taskDef');
+  }
+  protected openEntitiesForConstruct(construct: LegacyConstruct): void {
+    this.setSelectedConstruct(construct);
+    this.switchTab('entity');
+  }
+  protected fieldCount(entity: LegacyEntity): number {
+    return (entity.fields || []).length;
+  }
+  protected taskNodeCount(taskDef: LegacyTaskDef): number {
+    return this.taskNodes(taskDef).length;
   }
   protected unclassifiedEntities(): LegacyEntity[] {
     const used = new Set(this.entities().filter((e) => e.businessConstructUid || (e.businessConstructUids || [])[0]).map((e) => e.uid || e.id));
@@ -98,10 +135,12 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     const doc = this.doc();
     if (!d.uid) { d.uid = 'CSTR' + Date.now(); doc.businessConstructs ||= []; doc.businessConstructs.push(d); }
     else { const ex = (doc.businessConstructs || []).find((c: any) => (c.uid || c.id) === d.uid); if (ex) Object.assign(ex, d); }
+    this.setSelectedConstruct(d as LegacyConstruct);
     this.constructDrawer.set(null); this.touch();
   }
   protected deleteConstruct(construct: LegacyConstruct): void {
     this.doc().businessConstructs = this.constructs().filter((c) => (c.uid || c.id) !== (construct.uid || construct.id));
+    if (this.selectedConstructId() === this.uid(construct)) this.setSelectedConstruct(this.constructs()[0] || null);
     this.constructDrawer.set(null); this.touch();
   }
   protected saveDrawerConstruct(): void { this.saveConstruct(); }
@@ -217,48 +256,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return Boolean(handover?.runtimeKind || handover?.target || handover?.note);
   }
 
-  // ─── Tab 4: 应用服务 ──────────────────────────────
-  protected filteredServices(): LegacyService[] {
-    const kw = this.svcKeyword().toLowerCase();
-    if (!kw) return this.services();
-    return this.services().filter((s) => (s.name || '').toLowerCase().includes(kw) || (s.path || '').toLowerCase().includes(kw));
-  }
-  protected startEditSvc(svc?: LegacyService): void { this.editSvc.set(svc ? { ...svc } : { uid: '', name: '', method: 'POST', path: '', desc: '', taskDefinitionUids: [], nodeRefs: [] }); }
-  protected saveService(): void {
-    const d = this.editSvc(); if (!d || !d.name?.trim()) return;
-    const doc = this.doc(); doc.services ||= [];
-    if (!d.uid) { d.uid = 'SVC' + Date.now(); doc.services.push(d); }
-    else { const ex = doc.services.find((s: any) => s.uid === d.uid); if (ex) Object.assign(ex, d); }
-    this.editSvc.set(null); this.touch();
-  }
-  protected deleteService(svc: LegacyService): void { this.doc().services = this.services().filter((s) => s.uid !== svc.uid); this.touch(); }
-  protected addNodeToSvc(svc: LegacyService, nuid: string): void { svc.nodeRefs ||= []; if (!svc.nodeRefs.includes(nuid)) svc.nodeRefs.push(nuid); this.touch(); }
-  protected removeNodeFromSvc(svc: LegacyService, nuid: string): void { svc.nodeRefs = (svc.nodeRefs || []).filter((r) => r !== nuid); this.touch(); }
-  protected allNodes(): Array<{ uid: string; name: string; pname: string }> {
-    const nodes: Array<{ uid: string; name: string; pname: string }> = [];
-    for (const p of this.doc().processes || []) for (const n of p.nodes || p.tasks || []) nodes.push({ uid: n.uid || n.id || '', name: n.name || '未命名', pname: p.name || '未命名流程' });
-    return nodes;
-  }
-  protected nodeLabel(uid: string): string {
-    for (const p of this.doc().processes || []) for (const n of p.nodes || p.tasks || []) if ((n.uid || n.id) === uid) return `${n.name || '节点'}（${p.name || ''}）`;
-    return uid;
-  }
-
-  // ─── Tab 5: 应用编排 ──────────────────────────────
-  protected orderedTaskDefs(svc: LegacyService): LegacyTaskDef[] {
-    return (svc.taskDefinitionUids || []).map((id) => this.taskDefs().find((t) => (t.uid || t.id) === id)).filter(Boolean) as LegacyTaskDef[];
-  }
-  protected addTaskDefToSvc(svc: LegacyService, tid: string): void { svc.taskDefinitionUids ||= []; if (!svc.taskDefinitionUids.includes(tid)) svc.taskDefinitionUids.push(tid); this.touch(); }
-  protected removeTaskDefFromSvc(svc: LegacyService, tid: string): void { svc.taskDefinitionUids = (svc.taskDefinitionUids || []).filter((id) => id !== tid); this.touch(); }
-  protected moveTaskDefInSvc(svc: LegacyService, idx: number, dir: number): void {
-    const ids = svc.taskDefinitionUids || []; const ni = idx + dir; if (ni < 0 || ni >= ids.length) return;
-    [ids[idx], ids[ni]] = [ids[ni], ids[idx]]; this.touch();
-  }
-
   // ─── Utils ────────────────────────────────────────
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
   protected constructName(constructId: string): string { const c = this.constructs().find((x) => this.uid(x) === constructId); return c?.name || constructId || '未归类'; }
   protected switchTab(t: ComponentTab): void {
+    if (t === 'businessConstruct' && !this.selectedConstructId()) this.setSelectedConstruct(this.constructs()[0] || null);
     this.runtime.ui['componentWorkbenchTab'] = t;
     this.activeTab.set(t);
   }
@@ -287,10 +289,17 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   protected touch(): void { markAngularRuntimeModified(); this.version.update((v) => v + 1); }
 
+  private setSelectedConstruct(construct: LegacyConstruct | null): void {
+    const id = construct ? this.uid(construct) : '';
+    this.selectedConstructId.set(id);
+    this.runtime.ui['componentWorkbenchConstructId'] = id;
+  }
+
   private restoreActiveTab(): ComponentTab {
     const saved = String(this.runtime.ui['componentWorkbenchTab'] || '').trim();
-    return ['component', 'taskDef', 'entity', 'service', 'orchestration'].includes(saved)
+    if (saved === 'component' || saved === 'service' || saved === 'orchestration') return 'businessComponent';
+    return ['businessComponent', 'businessConstruct', 'taskDef', 'entity'].includes(saved)
       ? saved as ComponentTab
-      : 'component';
+      : 'businessComponent';
   }
 }

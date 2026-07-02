@@ -12,7 +12,8 @@ describe('ComponentWorkbenchComponent', () => {
     const runtime = getAngularRuntimeState();
     runtime.modified = false;
     runtime.currentFile = 'workbench-test.json';
-    runtime.ui['componentWorkbenchTab'] = 'component';
+    runtime.ui['componentWorkbenchTab'] = 'businessComponent';
+    runtime.ui['componentWorkbenchConstructId'] = '';
     runtime.doc = {
       meta: { domain: 'Workbench Test' },
       businessComponents: [{ uid: 'comp-1', name: '订单组件', kind: 'core' }],
@@ -36,17 +37,61 @@ describe('ComponentWorkbenchComponent', () => {
     host = fixture.nativeElement as HTMLElement;
   });
 
-  it('opens a resizable drawer when adding a component or construct', () => {
-    expect(host.querySelector('.proc-view-toolbar .view-toggle-group .vtb.active')?.textContent).toContain('组件构件');
+  it('splits the component workspace into business component and construct views', () => {
+    const tabs = Array.from(host.querySelectorAll('.proc-view-toolbar .view-toggle-group .vtb')).map((tab) => tab.textContent?.trim());
+    expect(tabs).toEqual(['业务组件', '业务构件', '任务定义', '实体定义']);
+    expect(host.textContent).not.toContain('组件构件');
+    expect(host.querySelector('[data-testid="business-component-view"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="business-component-card"]')?.textContent).toContain('订单组件');
+    expect(host.querySelector('[data-testid="business-construct-entry"]')?.textContent).toContain('订单构件');
+    expect(host.querySelector('[data-testid="business-construct-entry"]')?.textContent).toContain('1 个实体');
+    expect(host.querySelector('[data-testid="business-construct-entry"]')?.textContent).toContain('1 个任务');
+    expect(host.querySelector('[data-testid="business-component-view"]')?.textContent).not.toContain('查询订单');
+  });
 
-    host.querySelector<HTMLButtonElement>('.comp-grid-add')?.click();
+  it('opens construct detail from component overview and can return with context', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-entry"]')?.click();
+    fixture.detectChanges();
+
+    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessConstruct');
+    expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
+    expect(host.querySelector('[data-testid="business-construct-view"]')?.textContent).toContain('订单构件');
+    expect(host.querySelector('[data-testid="business-construct-entities"]')?.textContent).toContain('订单');
+    expect(host.querySelector('[data-testid="business-construct-tasks"]')?.textContent).toContain('查询订单');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-return"]')?.click();
+    fixture.detectChanges();
+
+    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessComponent');
+    expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
+    expect(host.querySelector('[data-testid="business-construct-entry"]')?.classList.contains('is-selected')).toBe(true);
+  });
+
+  it('opens task definitions from construct detail with the construct filter applied', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-tab"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="business-construct-view"]')?.textContent).toContain('订单构件');
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-open-tasks"]')?.click();
+    fixture.detectChanges();
+
+    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('taskDef');
+    const constructSelect = host.querySelector<HTMLSelectElement>('[data-testid="taskdef-construct-filter"]')!;
+    expect(constructSelect.getAttribute('data-selected-construct')).toBe('construct-1');
+    expect(host.querySelector('.taskdef-cards')?.textContent).toContain('查询订单');
+  });
+
+  it('opens a resizable drawer when adding a component or construct', () => {
+    expect(host.querySelector('.proc-view-toolbar .view-toggle-group .vtb.active')?.textContent).toContain('业务组件');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')?.click();
     fixture.detectChanges();
     expect(host.querySelector('[data-testid="component-drawer"]')?.textContent).toContain('组件');
     expect(host.querySelector('.drawer-resize-handle')).toBeTruthy();
 
     host.querySelector<HTMLButtonElement>('.drawer-close')?.click();
     fixture.detectChanges();
-    host.querySelector<HTMLButtonElement>('.comp-grid-construct-add')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-add"]')?.click();
     fixture.detectChanges();
 
     expect(host.querySelector('[data-testid="construct-drawer"]')?.textContent).toContain('构件');
