@@ -9,9 +9,9 @@
     </span>
     <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-entity" (click)="addEntity()">＋ 新建实体</button>
     <button class="btn btn-ghost-sm" type="button" data-testid="entity-design-reset-layout" (click)="resetLayout()">重置布局</button>
-    @if (editorOpen()) {
+    @if (showEditorToggle && editorOpen()) {
       <button class="btn btn-ghost-sm" type="button" data-testid="entity-design-editor-hide" (click)="editorOpen.set(false)">关闭编辑</button>
-    } @else {
+    } @else if (showEditorToggle) {
       <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-editor-open" (click)="editorOpen.set(true)">打开编辑</button>
     }
   </div>

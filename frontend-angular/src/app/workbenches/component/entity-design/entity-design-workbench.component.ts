@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, computed, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, HostListener, Input, computed, signal, OnInit, OnDestroy } from '@angular/core';
 import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import {
   EntityDesignAdapter,
@@ -130,6 +130,10 @@ interface SelectionBox {
   styleUrl: './entity-design-workbench.component.scss',
 })
 export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
+  @Input() showEditorToggle = true;
+  @Input() set editing(value: boolean) {
+    this.editorOpen.set(Boolean(value));
+  }
 
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {

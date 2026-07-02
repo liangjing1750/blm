@@ -25,6 +25,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   protected readonly version = signal(0);
   protected readonly activeTab = signal<ComponentTab>(this.restoreActiveTab());
+  protected readonly editorOpen = signal(false);
   protected readonly selectedConstructId = signal(String(this.runtime.ui['componentWorkbenchConstructId'] || '').trim());
   protected readonly expandedComp = signal('');
   protected readonly editTaskDef = signal<Partial<LegacyTaskDef> | null>(null);
@@ -39,6 +40,23 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected constructs(): LegacyConstruct[] { return this.doc().businessConstructs || []; }
   protected entities(): LegacyEntity[] { return this.doc().entities || []; }
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
+
+  protected canEdit(): boolean { return this.editorOpen() && !this.runtime.readOnly; }
+  protected toggleEditor(): void {
+    if (this.runtime.readOnly) {
+      this.editorOpen.set(false);
+      return;
+    }
+    this.editorOpen.update((open) => {
+      const next = !open;
+      if (!next) {
+        this.compDrawer.set(null);
+        this.constructDrawer.set(null);
+        this.editingTaskId.set('');
+      }
+      return next;
+    });
+  }
 
   // 业务组件/业务构件：总览只展示分组关系，详情页再展开实体与任务资产。
   protected constructsFor(comp: LegacyComp): LegacyConstruct[] {
@@ -102,16 +120,18 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     const used = new Set(this.taskDefs().filter((t) => t.constructUid).map((t) => t.uid || t.id));
     return this.taskDefs().filter((t) => !used.has(t.uid || t.id));
   }
-  protected addEntityTo(entity: LegacyEntity, construct: LegacyConstruct): void { entity.businessConstructUid = this.uid(construct); entity.businessConstructUids = [this.uid(construct)]; this.touch(); }
-  protected removeEntity(entity: LegacyEntity): void { entity.businessConstructUid = ''; entity.businessConstructUids = []; this.touch(); }
-  protected addTaskDefTo(td: LegacyTaskDef, construct: LegacyConstruct): void { td.constructUid = this.uid(construct); this.touch(); }
-  protected removeTaskDef(td: LegacyTaskDef): void { td.constructUid = ''; this.touch(); }
+  protected addEntityTo(entity: LegacyEntity, construct: LegacyConstruct): void { if (!this.canEdit()) return; entity.businessConstructUid = this.uid(construct); entity.businessConstructUids = [this.uid(construct)]; this.touch(); }
+  protected removeEntity(entity: LegacyEntity): void { if (!this.canEdit()) return; entity.businessConstructUid = ''; entity.businessConstructUids = []; this.touch(); }
+  protected addTaskDefTo(td: LegacyTaskDef, construct: LegacyConstruct): void { if (!this.canEdit()) return; td.constructUid = this.uid(construct); this.touch(); }
+  protected removeTaskDef(td: LegacyTaskDef): void { if (!this.canEdit()) return; td.constructUid = ''; this.touch(); }
 
   // ─── 组件编辑抽屉 ──────────────────────────────
   protected openCompDrawer(comp?: LegacyComp): void {
+    if (!this.canEdit()) return;
     this.compDrawer.set(comp ? { ...comp } : { uid: '', name: '', kind: 'core', note: '' });
   }
   protected saveComp(): void {
+    if (!this.canEdit()) return;
     const d = this.compDrawer(); if (!d || !d.name?.trim()) return;
     const doc = this.doc();
     if (!d.uid) { d.uid = 'COMP' + Date.now(); doc.businessComponents ||= []; doc.businessComponents.push(d); }
@@ -119,6 +139,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.compDrawer.set(null); this.touch();
   }
   protected deleteComp(comp: LegacyComp): void {
+    if (!this.canEdit()) return;
     this.doc().businessComponents = this.components().filter((c) => (c.uid || c.id) !== (comp.uid || comp.id));
     this.compDrawer.set(null); this.touch();
   }
@@ -128,9 +149,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   // ─── 构件编辑抽屉 ──────────────────────────────
   protected openConstructDrawer(construct?: LegacyConstruct, compId?: string): void {
+    if (!this.canEdit()) return;
     this.constructDrawer.set(construct ? { ...construct } : { uid: '', name: '', businessComponentUid: compId || '' });
   }
   protected saveConstruct(): void {
+    if (!this.canEdit()) return;
     const d = this.constructDrawer(); if (!d || !d.name?.trim()) return;
     const doc = this.doc();
     if (!d.uid) { d.uid = 'CSTR' + Date.now(); doc.businessConstructs ||= []; doc.businessConstructs.push(d); }
@@ -139,6 +162,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.constructDrawer.set(null); this.touch();
   }
   protected deleteConstruct(construct: LegacyConstruct): void {
+    if (!this.canEdit()) return;
     this.doc().businessConstructs = this.constructs().filter((c) => (c.uid || c.id) !== (construct.uid || construct.id));
     if (this.selectedConstructId() === this.uid(construct)) this.setSelectedConstruct(this.constructs()[0] || null);
     this.constructDrawer.set(null); this.touch();
@@ -148,11 +172,13 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected drawerConstruct(): LegacyConstruct { return this.constructDrawer() as LegacyConstruct; }
   // 抽屉内关联操作
   protected addEntityToDrawerConstruct(entityId: string): void {
+    if (!this.canEdit()) return;
     const e = this.unclassifiedEntities().find((x) => this.uid(x) === entityId);
     const c = this.constructDrawer();
     if (e && c) { e.businessConstructUid = this.uid(c as any); e.businessConstructUids = [this.uid(c as any)]; this.touch(); }
   }
   protected addTaskDefToDrawerConstruct(taskDefId: string): void {
+    if (!this.canEdit()) return;
     const t = this.unclassifiedTaskDefs().find((x) => this.uid(x) === taskDefId);
     const c = this.constructDrawer();
     if (t && c) { t.constructUid = this.uid(c as any); this.touch(); }
@@ -218,6 +244,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected isTaskExpanded(id: string): boolean { return this.expandedTaskIds().has(id); }
   protected startEditInline(td?: LegacyTaskDef): void {
+    if (!this.canEdit()) return;
     if (td) { this.ensureTaskHandover(td); this.editingTaskId.set(this.uid(td)); return; }
     // 新建
     const base: LegacyTaskDef = { uid: '', name: '', type: 'Query', target: '', address: '', note: '', constructUid: '', parameters: { inputs: [], outputs: [] }, technicalHandover: { runtimeKind: '', target: '', note: '' } };
@@ -227,12 +254,14 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected saveInlineEdit(td: LegacyTaskDef): void {
+    if (!this.canEdit()) return;
     td.parameters ||= { inputs: [], outputs: [] };
     this.ensureTaskHandover(td);
     this.editingTaskId.set('');
     this.touch();
   }
   protected cancelInlineEdit(td: LegacyTaskDef): void {
+    if (!this.canEdit()) return;
     if (!td.uid) {
       this.doc().taskDefinitions = this.taskDefs().filter((t) => t !== td);
     }
@@ -240,12 +269,13 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected async deleteTaskDef(td: LegacyTaskDef): Promise<void> {
+    if (!this.canEdit()) return;
     if (!window.confirm(`确认删除"${td.name || this.uid(td)}"吗？`)) return;
     this.doc().taskDefinitions = this.taskDefs().filter((t) => (t.uid || t.id) !== (td.uid || td.id));
     this.touch();
   }
-  protected addParam(arr: TaskParam[]): void { arr.push({ name: '', type: 'String', required: false, note: '' }); }
-  protected removeParam(arr: TaskParam[], idx: number): void { arr.splice(idx, 1); }
+  protected addParam(arr: TaskParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); }
+  protected removeParam(arr: TaskParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); }
   protected isEditingTask(td: LegacyTaskDef): boolean { return this.editingTaskId() === this.uid(td) || (!td.uid && this.editingTaskId() === ''); }
   protected ensureTaskHandover(td: LegacyTaskDef): TechnicalHandover {
     td.technicalHandover ||= { runtimeKind: '', target: '', note: '' };

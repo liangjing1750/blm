@@ -7,6 +7,11 @@
         <button class="vtb" data-testid="component-taskdef-tab" [class.active]="activeTab()==='taskDef'" (click)="switchTab('taskDef')">任务定义</button>
         <button class="vtb" [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
       </div>
+      <div class="proc-view-actions">
+        <button class="btn btn-outline btn-sm editor-toggle" type="button" data-testid="component-editor-toggle" [class.active]="editorOpen()" (click)="toggleEditor()">
+          {{ editorOpen() ? '关闭编辑' : '打开编辑' }}
+        </button>
+      </div>
     </div>
   </div>
 
@@ -14,7 +19,9 @@
   @if (activeTab() === 'businessComponent') {
     <div class="comp-tab-body business-component-view" data-testid="business-component-view">
       <div class="business-component-toolbar">
-        <button class="btn btn-primary btn-sm" data-testid="business-component-add" (click)="openCompDrawer()">+ 新建业务组件</button>
+        @if (canEdit()) {
+          <button class="btn btn-primary btn-sm" data-testid="business-component-add" (click)="openCompDrawer()">+ 新建业务组件</button>
+        }
       </div>
       <div class="comp-grid business-component-grid">
         @for (comp of components(); track uid(comp)) {
@@ -23,7 +30,9 @@
               <span class="comp-grid-label">业务组件</span>
               <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
               <span class="business-component-count">{{ constructsFor(comp).length }} 个构件</span>
-              <button class="comp-grid-edit" (click)="openCompDrawer(comp)" title="编辑">编辑</button>
+              @if (canEdit()) {
+                <button class="comp-grid-edit" (click)="openCompDrawer(comp)" title="编辑">编辑</button>
+              }
             </div>
             @if (comp.note) {
               <p class="business-component-note">{{ comp.note }}</p>
@@ -43,14 +52,18 @@
               } @empty {
                 <div class="business-empty-inline">暂无业务构件</div>
               }
-              <button class="comp-grid-construct-add" data-testid="business-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 业务构件</button>
+              @if (canEdit()) {
+                <button class="comp-grid-construct-add" data-testid="business-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 业务构件</button>
+              }
             </div>
           </div>
         } @empty {
           <div class="business-empty-state">
             <strong>暂无业务组件</strong>
             <span>先新建业务组件，再为组件添加业务构件。</span>
-            <button class="btn btn-primary btn-sm" (click)="openCompDrawer()">新建业务组件</button>
+            @if (canEdit()) {
+              <button class="btn btn-primary btn-sm" (click)="openCompDrawer()">新建业务组件</button>
+            }
           </div>
         }
       </div>
@@ -68,7 +81,9 @@
               <option [value]="uid(item)">{{ item.name || uid(item) }}</option>
             }
           </select>
-          <button class="btn btn-outline btn-sm" (click)="openConstructDrawer(construct)">编辑构件</button>
+          @if (canEdit()) {
+            <button class="btn btn-outline btn-sm" (click)="openConstructDrawer(construct)">编辑构件</button>
+          }
         </div>
         <section class="business-construct-summary">
           <div>
@@ -135,7 +150,9 @@
           @for(c of filteredConstructsForTaskDef(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
         </select>
         <input type="search" placeholder="搜索..." [ngModel]="taskDefKeyword()" (ngModelChange)="taskDefKeyword.set($event)" />
-        <button class="btn btn-primary btn-sm" (click)="startEditInline()">+ 新建任务</button>
+        @if (canEdit()) {
+          <button class="btn btn-primary btn-sm" (click)="startEditInline()">+ 新建任务</button>
+        }
       </div>
       <div class="taskdef-cards">
         @for (td of pagedTaskDefs(); track uid(td)) {
@@ -205,8 +222,10 @@
                   @if (td.address) { <span class="taskdef-addr">{{ td.address }}</span> }
                   <span class="taskdef-meta">{{ constructName(tdConstructId(td)) }} · {{ taskNodes(td).length }} 节点引用</span>
                   <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
-                  <button class="btn-ghost-sm" [attr.data-testid]="'taskdef-edit-' + uid(td)" (click)="startEditInline(td); $event.stopPropagation()">编辑</button>
-                  <button class="btn-ghost-sm danger" (click)="deleteTaskDef(td); $event.stopPropagation()">删除</button>
+                  @if (canEdit()) {
+                    <button class="btn-ghost-sm" [attr.data-testid]="'taskdef-edit-' + uid(td)" (click)="startEditInline(td); $event.stopPropagation()">编辑</button>
+                    <button class="btn-ghost-sm danger" (click)="deleteTaskDef(td); $event.stopPropagation()">删除</button>
+                  }
                 </div>
                 @if (isTaskExpanded(uid(td)) && ((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note || hasTaskHandover(td))) {
                 <div class="taskdef-detail">
@@ -241,7 +260,7 @@
 
   <!-- Tab 3: 实体定义 -->
   @if (activeTab() === 'entity') {
-    <app-entity-design-workbench />
+    <app-entity-design-workbench [editing]="canEdit()" [showEditorToggle]="false" />
   }
 
   @if (compDrawer()) {

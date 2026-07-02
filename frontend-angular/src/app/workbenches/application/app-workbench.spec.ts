@@ -100,9 +100,28 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(drawer?.querySelector('[data-testid^="service-save-"]')).toBeFalsy();
   });
 
-  it('keeps service toolbar actions visible without inline parameter editing', () => {
+  it('keeps application service mutations read-only until the editor is opened', () => {
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.textContent).toContain('打开编辑');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-new"]')).toBeFalsy();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-interface-new"]')).toBeFalsy();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-service-group-1"]')).toBeFalsy();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-add-interface-service-group-1"]')).toBeFalsy();
+    expect(host.querySelector('.svc-params-table')).toBeFalsy();
+
+    const beforeServices = getAngularRuntimeState().doc.services.length;
+    (fixture.componentInstance as any).createService();
+    (fixture.componentInstance as any).openServiceGroupDrawer(getAngularRuntimeState().doc.serviceGroups[0]);
+    fixture.detectChanges();
+
+    expect(getAngularRuntimeState().doc.services).toHaveLength(beforeServices);
+    expect(host.querySelector('[data-testid="service-group-drawer"]')).toBeFalsy();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.textContent).toContain('关闭编辑');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-new"]')).toBeTruthy();
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-interface-new"]')).toBeTruthy();
-    expect(host.querySelector('.svc-params-table')).toBeFalsy();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-service-group-1"]')).toBeTruthy();
   });
 });

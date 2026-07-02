@@ -83,6 +83,8 @@ describe('ComponentWorkbenchComponent', () => {
 
   it('opens a resizable drawer when adding a component or construct', () => {
     expect(host.querySelector('.proc-view-toolbar .view-toggle-group .vtb.active')?.textContent).toContain('业务组件');
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
 
     host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')?.click();
     fixture.detectChanges();
@@ -99,6 +101,8 @@ describe('ComponentWorkbenchComponent', () => {
   });
 
   it('keeps task definition editing readable and all add buttons mutate the model', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
     fixture.detectChanges();
 
@@ -135,11 +139,33 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
     expect(getAngularRuntimeState().doc.entities[0].pos).toBeUndefined();
 
-    host.querySelector<HTMLButtonElement>('[data-testid="entity-design-editor-open"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();
     expect(host.querySelector('.entity-board')?.classList.contains('is-editing')).toBe(true);
     expect(host.querySelector('[data-testid="entity-design-drawer"]')).toBeTruthy();
     expect(host.querySelector('.entity-design-drawer-resize')).toBeTruthy();
+  });
+
+  it('keeps component workspace read-only until the editor is opened', () => {
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('打开编辑');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')).toBeFalsy();
+    expect(host.querySelector<HTMLButtonElement>('.comp-grid-edit')).toBeFalsy();
+
+    const beforeComponents = getAngularRuntimeState().doc.businessComponents.length;
+    (fixture.componentInstance as any).openCompDrawer();
+    (fixture.componentInstance as any).startEditInline();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="component-drawer"]')).toBeFalsy();
+    expect(getAngularRuntimeState().doc.businessComponents.length).toBe(beforeComponents);
+    expect(getAngularRuntimeState().doc.taskDefinitions).toHaveLength(1);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('关闭编辑');
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')).toBeTruthy();
+    expect(host.querySelector<HTMLButtonElement>('.comp-grid-edit')).toBeTruthy();
   });
 
   it('keeps the entity relation diagram shell scrollable in both directions', () => {

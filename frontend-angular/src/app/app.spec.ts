@@ -2561,6 +2561,8 @@ describe('App', () => {
     expect(taskTab).toBeTruthy();
     taskTab!.click();
     fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
     const taskHead = compiled.querySelector<HTMLElement>('[data-testid="taskdef-head-task-save"]');
     expect(taskHead).toBeTruthy();
     taskHead!.click();
@@ -2635,6 +2637,8 @@ describe('App', () => {
     const appTab = compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]');
     expect(appTab).toBeTruthy();
     appTab!.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
 
     expect(compiled.querySelector('[data-testid="interface-card-service-submit"]')?.textContent).toContain('提交入库预约');
@@ -2754,6 +2758,8 @@ describe('App', () => {
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
     fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-group-inbound"]')?.click();
     fixture.detectChanges();
@@ -2842,6 +2848,8 @@ describe('App', () => {
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
     fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="interface-edit-interface-submit"]')?.click();
     fixture.detectChanges();
@@ -2908,6 +2916,8 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="interface-edit-interface-submit"]')?.click();
     fixture.detectChanges();
@@ -2981,6 +2991,8 @@ describe('App', () => {
     const appTab = compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]');
     expect(appTab).toBeTruthy();
     appTab!.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
@@ -3136,6 +3148,8 @@ describe('App', () => {
     const appTab = compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')!;
     appTab.click();
     fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
     fixture.detectChanges();
     const serviceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-select"]')!;
@@ -3267,6 +3281,8 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="tab-applicationWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
     fixture.detectChanges();

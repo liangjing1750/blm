@@ -45,8 +45,20 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.runtime.ui['applicationWorkbenchTab'] = t;
     this.activeTab.set(t);
   }
+  protected canEdit(): boolean { return this.editorOpen() && !this.runtime.readOnly; }
   protected toggleEditor(): void {
-    this.editorOpen.update((open) => !open);
+    if (this.runtime.readOnly) {
+      this.editorOpen.set(false);
+      return;
+    }
+    this.editorOpen.update((open) => {
+      const next = !open;
+      if (!next) {
+        this.serviceGroupDrawer.set(null);
+        this.importJsonVisible.set(false);
+      }
+      return next;
+    });
   }
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
 
@@ -108,17 +120,19 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.serviceDrawerId.set('');
   }
   protected startEdit(svc?: LegacyService): void {
+    if (!this.canEdit()) return;
     if (!svc) return this.openNewServiceDrawer();
-    this.editorOpen.set(true);
     this.openServiceDrawer(svc);
   }
   protected saveServiceDrawer(svc: LegacyService): void {
+    if (!this.canEdit()) return;
     if (!svc.uid || svc.uid === 'draft') svc.uid = `interface-${Date.now()}`;
     this.ensureServiceShape(svc);
     this.serviceDrawerId.set('');
     this.touch();
   }
   protected async deleteService(svc: LegacyService): Promise<void> {
+    if (!this.canEdit()) return;
     const confirmed = await confirmRuntimeAction(`确认删除接口“${svc.name || this.uid(svc)}”吗？`, {
       title: '删除接口',
       confirmLabel: '删除',
@@ -129,30 +143,34 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected createService(): void {
+    if (!this.canEdit()) return;
     this.openNewServiceDrawer(this.uid(this.serviceGroups()[0]) || '');
   }
   protected createInterface(serviceGroupUid = ''): void {
+    if (!this.canEdit()) return;
     this.openNewServiceDrawer(serviceGroupUid);
   }
   protected openNewServiceDrawer(serviceGroupUid = this.uid(this.serviceGroups()[0]) || ''): void {
+    if (!this.canEdit()) return;
     const svc: LegacyService = { uid: 'draft', name: '', serviceGroupUid, method: 'POST', path: '', desc: '', requestParams: [], responseParams: [], steps: [], parameterMappings: [], nodeRefs: [] };
     this.doc().services ||= [];
     this.doc().services.push(svc);
-    this.editorOpen.set(true);
     this.openServiceDrawer(svc);
     this.touch();
   }
   protected createServiceGroup(): void {
+    if (!this.canEdit()) return;
     this.openServiceGroupDrawer();
   }
   protected openServiceGroupDrawer(group?: LegacyServiceGroup): void {
-    this.editorOpen.set(true);
+    if (!this.canEdit()) return;
     this.serviceGroupDrawer.set(group ? { ...group } : { uid: '', name: '', desc: '' });
   }
   protected closeServiceGroupDrawer(): void {
     this.serviceGroupDrawer.set(null);
   }
   protected saveServiceGroupDrawer(): void {
+    if (!this.canEdit()) return;
     const draft = this.serviceGroupDrawer();
     if (!draft || !draft.name?.trim()) return;
     this.doc().serviceGroups ||= [];
@@ -167,12 +185,14 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected async deleteServiceGroupFromDrawer(): Promise<void> {
+    if (!this.canEdit()) return;
     const group = this.serviceGroupDrawer();
     if (!group?.uid) return;
     await this.deleteServiceGroup(group as LegacyServiceGroup);
     this.serviceGroupDrawer.set(null);
   }
   protected async deleteServiceGroup(group: LegacyServiceGroup): Promise<void> {
+    if (!this.canEdit()) return;
     const groupUid = this.uid(group);
     const confirmed = await confirmRuntimeAction(`确认删除服务“${group.name || groupUid}”吗？组内接口会移动到未分组。`, {
       title: '删除服务',
@@ -185,8 +205,8 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     }
     this.touch();
   }
-  protected addSvcParam(arr: ServiceParam[]): void { arr.push({ name: '', type: 'String', required: false, note: '' }); }
-  protected removeSvcParam(arr: ServiceParam[], idx: number): void { arr.splice(idx, 1); }
+  protected addSvcParam(arr: ServiceParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); }
+  protected removeSvcParam(arr: ServiceParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); }
   // 模块意图：参数树是接口契约的轻量表达，不在工作台内引入完整 OpenAPI Schema。
   // 关键流程：模板用 path 定位嵌套行，表单直接绑定 row.param 写回原参数对象。
   // 边界细节：空 children 不落盘，保持生成 JSON 简洁并兼容旧文档。
@@ -203,11 +223,13 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     return ['Object', 'Array', 'List', 'Map'].includes(param.type);
   }
   protected addSvcChildParam(param: ServiceParam): void {
+    if (!this.canEdit()) return;
     param.children ||= [];
     param.children.push({ name: '', type: 'String', required: false, note: '' });
     this.touch();
   }
   protected removeParamByPath(params: ServiceParam[], path: number[]): void {
+    if (!this.canEdit()) return;
     if (path.length === 1) {
       params.splice(path[0], 1);
       this.touch();
@@ -273,8 +295,9 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected importJsonText = signal('');
   protected importJsonTarget = signal<'requestParams'|'responseParams'>('requestParams');
 
-  protected startImportJson(target: 'requestParams'|'responseParams'): void { this.importJsonTarget.set(target); this.importJsonText.set(''); this.importJsonVisible.set(true); }
+  protected startImportJson(target: 'requestParams'|'responseParams'): void { if (!this.canEdit()) return; this.importJsonTarget.set(target); this.importJsonText.set(''); this.importJsonVisible.set(true); }
   protected doImportJson(svc: LegacyService): void {
+    if (!this.canEdit()) return;
     try {
       const obj = JSON.parse(this.importJsonText());
       const arr = this.importJsonTarget() === 'requestParams' ? this.serviceRequestParams(svc) : this.serviceResponseParams(svc);
@@ -331,6 +354,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected selectStep(step: OrchestrationStep): void { this.selectedStepUid.set(step.uid); }
   protected addStep(svc: LegacyService, tid: string): void {
+    if (!this.canEdit()) return;
     const steps = this.orchestrationSteps(svc);
     if (steps.some(s => s.taskDefinitionUid === tid)) return;
     const task = this.taskDefs().find((td) => this.uid(td) === tid);
@@ -348,6 +372,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected removeStep(svc: LegacyService, idx: number): void {
+    if (!this.canEdit()) return;
     const steps = this.orchestrationSteps(svc);
     const removedUid = steps[idx]?.taskDefinitionUid;
     steps.splice(idx, 1);
@@ -357,6 +382,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected moveStep(svc: LegacyService, idx: number, dir: number): void {
+    if (!this.canEdit()) return;
     const steps = this.orchestrationSteps(svc);
     const ni = idx + dir;
     if (ni < 0 || ni >= steps.length) return;
@@ -364,20 +390,24 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.touch();
   }
   protected addInputMapping(step: OrchestrationStep): void {
+    if (!this.canEdit()) return;
     step.inputMapping ||= [];
     step.inputMapping.push({ source: '', target: '' });
     this.touch();
   }
   protected removeInputMapping(step: OrchestrationStep, idx: number): void {
+    if (!this.canEdit()) return;
     (step.inputMapping || []).splice(idx, 1);
     this.touch();
   }
   protected addOutputMapping(step: OrchestrationStep): void {
+    if (!this.canEdit()) return;
     step.outputMapping ||= [];
     step.outputMapping.push({ source: '', target: '' });
     this.touch();
   }
   protected removeOutputMapping(step: OrchestrationStep, idx: number): void {
+    if (!this.canEdit()) return;
     (step.outputMapping || []).splice(idx, 1);
     this.touch();
   }
@@ -385,10 +415,12 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     return this.ensureOrchestration(svc).returnMapping;
   }
   protected addReturnMapping(svc: LegacyService): void {
+    if (!this.canEdit()) return;
     this.returnMappings(svc).push({ source: '', target: '' });
     this.touch();
   }
   protected removeReturnMapping(svc: LegacyService, idx: number): void {
+    if (!this.canEdit()) return;
     this.returnMappings(svc).splice(idx, 1);
     this.touch();
   }
