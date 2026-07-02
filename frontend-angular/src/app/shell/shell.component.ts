@@ -5,6 +5,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { AgentHandoffPayload, ApiService, TrashEntry, WorkspaceSummary } from '../core/api/api.service';
 import { CollaborationService } from '../core/collaboration/collaboration.service';
+import { LocalCollabDraftService } from '../core/collaboration/local-collab-draft.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
 import { RuntimeConfirmEventDetail, getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
@@ -195,6 +196,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   constructor(
     private readonly api: ApiService,
     protected readonly collaboration: CollaborationService,
+    private readonly localDrafts: LocalCollabDraftService,
     private readonly documentStore: DocumentStore,
     private readonly syncService: SyncService,
     private readonly router: Router,
@@ -261,6 +263,11 @@ export class ShellComponent implements OnInit, OnDestroy {
   @HostListener('window:blm-angular-runtime-refresh')
   protected handleRuntimeRefresh(): void {
     this.refreshShellView();
+  }
+
+  @HostListener('window:blm-runtime-local-change')
+  protected handleRuntimeLocalChange(): void {
+    void this.localDrafts.saveCurrentDraft();
   }
 
   @HostListener('window:blm-runtime-confirm', ['$event'])
@@ -1530,6 +1537,42 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.refreshShellView();
     void this.router.navigateByUrl('/panorama');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    if (!this.runtime.readOnly) void this.maybePromptLocalDraftRecovery(name, document);
+  }
+
+  private async maybePromptLocalDraftRecovery(name: string, serverDocument: any): Promise<void> {
+    const draft = await this.localDrafts.findRecoverableDraft(name, serverDocument);
+    if (!draft || this.runtime.currentFile !== name || this.runtime.readOnly) return;
+    const confirmed = await this.confirmLocalDraftRecovery(draft);
+    if (!confirmed) {
+      await this.localDrafts.clearDraft(name);
+      return;
+    }
+    if (this.runtime.currentFile !== name || this.runtime.readOnly) return;
+    this.localDrafts.applyRecoveredDraft(name, draft);
+    this.collaboration.start(name);
+    this.runtime.ui['mainTab'] = 'panoramaWorkbench';
+    this.refreshShellView();
+    void this.router.navigateByUrl('/panorama');
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    this.showToast('已恢复本地未提交草稿，请点击“立即同步”提交。', 'success');
+  }
+
+  private confirmLocalDraftRecovery(draft: { updatedAt: string; baseSeq: number }): Promise<boolean> {
+    return new Promise((resolve) => {
+      const draftSeq = Number(draft.baseSeq || 0);
+      const serverSeq = Number(this.runtime.collab.seq || 0);
+      const behindInfo = draftSeq < serverSeq
+        ? `\n\n注意：草稿基线版本 seq=${draftSeq} 落后于服务端当前版本 seq=${serverSeq}，恢复后会按协作快照流程合并。`
+        : '';
+      this.confirmDialog.set({
+        title: '发现本地草稿',
+        message: `检测到当前浏览器存在未同步草稿（${this.localDrafts.formatUpdatedAt(draft.updatedAt)}）。是否恢复草稿？${behindInfo}`,
+        confirmLabel: '恢复草稿',
+        cancelLabel: '丢弃草稿',
+        resolve,
+      });
+    });
   }
 
   private mergeResultName(analysis: MergeAnalysis): string {

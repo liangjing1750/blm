@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../api/api.service';
 import { CollaborationService } from '../collaboration/collaboration.service';
+import { LocalCollabDraftService } from '../collaboration/local-collab-draft.service';
 import { DocumentStore } from '../document/document-store';
 import { getAngularRuntimeState, replaceRuntimeDocument } from '../runtime/angular-runtime';
 
@@ -8,6 +9,7 @@ import { getAngularRuntimeState, replaceRuntimeDocument } from '../runtime/angul
 export class SyncService {
   private readonly api = inject(ApiService);
   private readonly collaboration = inject(CollaborationService);
+  private readonly localDrafts = inject(LocalCollabDraftService);
   private readonly documentStore = inject(DocumentStore);
 
   // 模块意图：把“立即同步”从旧 collab.js 中抽到 Angular 服务，保留服务端协作合并入口。
@@ -25,6 +27,7 @@ export class SyncService {
         replaceRuntimeDocument(remoteDocument, runtime.currentFile);
         this.documentStore.load(remoteDocument, runtime.currentFile);
         this.collaboration.finishSync(Number(runtime.collab.seq || runtime.collab.acceptedSeq || 0));
+        await this.localDrafts.clearDraft(runtime.currentFile);
         return;
       }
       const frozenDocument = this.cloneDocument(runtime.doc);
@@ -57,6 +60,9 @@ export class SyncService {
       if (editedDuringSync) {
         runtime.modified = true;
         runtime.collab.pendingSnapshot = true;
+        await this.localDrafts.saveCurrentDraft(this.hashDocument(runtime.doc));
+      } else {
+        await this.localDrafts.clearDraft(runtime.currentFile);
       }
       this.collaboration.announceDocumentSaved(runtime.currentFile);
     } catch (error) {

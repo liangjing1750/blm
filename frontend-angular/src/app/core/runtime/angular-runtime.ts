@@ -100,6 +100,7 @@ export function markAngularRuntimeModified(): void {
   runtimeState.modified = true;
   if (runtimeState.currentFile && !runtimeState.readOnly) {
     runtimeState.collab.pendingSnapshot = true;
+    window.dispatchEvent(new CustomEvent('blm-runtime-local-change'));
   }
   emitRuntimeRefresh();
 }

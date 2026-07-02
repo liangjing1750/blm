@@ -53,6 +53,33 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="toolbar-new-button"]')?.textContent).toContain('新建');
   });
 
+  it('should persist a local collab draft when the runtime document changes', async () => {
+    vi.stubGlobal('indexedDB', undefined);
+    localStorage.clear();
+    sessionStorage.setItem('blm.collab.sessionId', 'session-test');
+    localStorage.setItem('blm.user.profile', JSON.stringify({ id: 'user-test', name: '测试用户' }));
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.readOnly = false;
+    runtime.runtime.supportsCollab = true;
+    runtime.doc = { meta: { title: '本地草稿' }, processes: [] };
+    runtime.collab.acceptedSeq = 4;
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    window.dispatchEvent(new CustomEvent('blm-runtime-local-change'));
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const draft = JSON.parse(localStorage.getItem(`blm.collab.draft.${encodeURIComponent('agent.json::user-test')}`) || 'null');
+    expect(draft).toMatchObject({
+      docName: 'agent.json',
+      userId: 'user-test',
+      baseSeq: 4,
+      document: { meta: { title: '本地草稿' } },
+    });
+  });
+
   it('should open Easy Agent with a BLM handoff when clicking the AI assistant entry', async () => {
     const openedUrls: string[] = [];
     vi.spyOn(window, 'open').mockImplementation((url?: string | URL) => {
