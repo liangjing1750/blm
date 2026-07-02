@@ -131,6 +131,9 @@ interface SelectionBox {
 })
 export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   @Input() showEditorToggle = true;
+  @Input() exportGraphId = '';
+  @Input() initialView: EntityDesignView = 'relation';
+  @Input() initialEntityId = '';
   @Input() set editing(value: boolean) {
     this.editorOpen.set(Boolean(value));
   }
@@ -141,7 +144,8 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   };
 
   ngOnInit(): void {
-    const startupEntityId = String(getAngularRuntimeState().ui['entityId'] || '').trim();
+    this.view.set(this.initialView);
+    const startupEntityId = String(this.initialEntityId || getAngularRuntimeState().ui['entityId'] || '').trim();
     if (startupEntityId) {
       this.selectedEntityId.set(startupEntityId);
       this.selectedEntityIds.set(new Set([startupEntityId]));

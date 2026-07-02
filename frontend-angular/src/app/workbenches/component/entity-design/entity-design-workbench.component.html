@@ -20,7 +20,7 @@
     <div class="entity-design-canvas-shell" data-testid="entity-design-canvas-shell">
       @if (view() === 'relation') {
         <div class="entity-relation-canvas" data-testid="entity-design-relation-view">
-          <div class="entity-board" [class.is-editing]="editorOpen()" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
+          <div class="entity-board" [class.is-editing]="editorOpen()" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
             @for (frame of componentFrames(); track frame.key) {
               <div class="entity-component-frame" [ngStyle]="frameStyle(frame)"></div>
               <div class="entity-component-title" [style.left.px]="frame.left + 18" [style.top.px]="frame.top + 10">{{ frame.label }}</div>
@@ -64,7 +64,7 @@
               <strong>{{ entity.name || '未命名实体' }}</strong>
               <span>状态字段值 {{ stateValues().length }}</span>
             </div>
-            <div class="entity-state-board" [ngStyle]="stateBoardStyle()">
+            <div class="entity-state-board" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [ngStyle]="stateBoardStyle()">
               <svg class="entity-state-svg" [attr.width]="stateBoard().width" [attr.height]="stateBoard().height" aria-hidden="true">
                 <defs>
                   <marker id="entity-state-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">

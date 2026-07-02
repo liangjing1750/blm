@@ -47,7 +47,7 @@
               @if (flowNodes().length) {
                 <div class="stage-graph-zoom-shell stage-flow-zoom-shell" [ngStyle]="flowBoardStyle()">
                   <div class="stage-graph-zoom-target" [ngStyle]="flowBoardStyle()">
-                    <div class="stage-graph-board stage-flow-board" [ngStyle]="flowBoardStyle()">
+                    <div class="stage-graph-board stage-flow-board" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [ngStyle]="flowBoardStyle()">
                       @if (editing()) {
                         <button class="stage-flow-board-add" type="button" data-testid="stage-flow-node-add-button" (click)="addProcess()">+ 流程</button>
                       }
@@ -134,7 +134,7 @@
           <div class="stage-graph value-stream-graph" data-testid="stage-panorama-graph">
             <div class="value-stream-scroll-wrap" data-testid="value-stream-scroll-wrap">
               <div class="value-stream-scroll workbench-scroll-body" data-testid="value-stream-scroll">
-                <div class="value-stream-matrix" [class.is-editing]="editing()" data-testid="value-stream-matrix" [attr.data-editing]="editing() ? 'true' : 'false'">
+                <div class="value-stream-matrix" [class.is-editing]="editing()" data-testid="value-stream-matrix" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [attr.data-editing]="editing() ? 'true' : 'false'">
                   <div class="value-stream-header-row" [style.grid-template-columns]="gridTemplateColumns()">
                     <div class="value-stream-axis">业务域 / 价值流</div>
                     @for (column of columns(); track columnUid(column)) {

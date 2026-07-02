@@ -3,6 +3,10 @@ import { ShellComponent } from './shell/shell.component';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'panorama' },
+  {
+    path: 'export/render/:jobId',
+    loadComponent: () => import('./export/export-render-page.component').then((module) => module.ExportRenderPageComponent),
+  },
   { path: 'panorama', component: ShellComponent },
   { path: 'process', component: ShellComponent },
   { path: 'component', component: ShellComponent },

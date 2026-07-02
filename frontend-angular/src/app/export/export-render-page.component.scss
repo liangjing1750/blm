@@ -1,0 +1,65 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+}
+
+.export-render-page {
+  min-width: max-content;
+  min-height: 100vh;
+  padding: 24px;
+  background: #ffffff;
+}
+
+.export-render-canvas {
+  display: inline-block;
+  min-width: max-content;
+  background: #ffffff;
+}
+
+.export-render-state {
+  padding: 24px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.export-render-error {
+  color: #b91c1c;
+}
+
+:host ::ng-deep .process-flow-topbar,
+:host ::ng-deep .process-flow-side-tools,
+:host ::ng-deep .entity-design-toolbar,
+:host ::ng-deep .stage-flow-canvas-tools,
+:host ::ng-deep .stage-flow-board-add,
+:host ::ng-deep .stage-flow-link-remove,
+:host ::ng-deep .flow-connect-box,
+:host ::ng-deep .flow-node-edit-icon,
+:host ::ng-deep .flow-gateway-edit-icon,
+:host ::ng-deep .process-attachment-drawer {
+  display: none !important;
+}
+
+:host ::ng-deep .process-flow-frame,
+:host ::ng-deep .stage-card,
+:host ::ng-deep .entity-design {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: #ffffff !important;
+}
+
+:host ::ng-deep .process-flow-body,
+:host ::ng-deep .process-flow-canvas-shell,
+:host ::ng-deep .stage-main-shell,
+:host ::ng-deep .stage-flow-guide,
+:host ::ng-deep .value-stream-scroll,
+:host ::ng-deep .entity-design-canvas-shell {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+:host ::ng-deep [data-export-graph-id] {
+  background-color: #ffffff;
+}

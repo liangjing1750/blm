@@ -4,6 +4,7 @@ import { Location } from '@angular/common';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 import { routes } from './app.routes';
+import { listExportGraphs } from './core/export/graph-export-registry';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
 import { getAngularRuntimeState } from './core/runtime/angular-runtime';
 import { ShellComponent } from './shell/shell.component';
@@ -37,6 +38,23 @@ describe('App', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('should enumerate exportable graph surfaces with stable selectors', () => {
+    const graphs = listExportGraphs({
+      stages: [{ uid: 'stage-1', name: '入库' }],
+      processes: [{ uid: 'proc-1', name: '线下查库' }],
+      entities: [{ uid: 'entity-1', name: '仓单' }],
+    });
+
+    expect(graphs.map((graph) => graph.id)).toEqual([
+      'stage-panorama',
+      'stage-flow:stage-1',
+      'process-flow:proc-1',
+      'entity-relation',
+      'entity-state:entity-1',
+    ]);
+    expect(graphs.every((graph) => graph.selector === `[data-export-graph-id="${graph.id}"]`)).toBe(true);
   });
 
   it('should create the app', () => {
@@ -611,13 +629,16 @@ describe('App', () => {
       processes: [{
         uid: 'proc-1',
         name: '入库流程',
-        links: [],
+        links: [{ from: 'node-1', to: 'node-2' }],
         nodes: [{
           uid: 'node-1',
           name: '提交申请',
           description: '<p><strong>任务说明</strong></p>',
           userSteps: [{ uid: 'step-1', name: '填写信息', type: 'input', note: '<ol><li><strong style="color:#2563eb">核对仓单</strong><ol><li>查看现货货转记录</li></ol></li></ol>' }],
           businessRules: [{ uid: 'rule-1', name: '校验规则', content: '<ul><li><em>必须有仓单编号</em></li></ul>' }],
+        }, {
+          uid: 'node-2',
+          name: '审核申请',
         }],
       }],
       entities: [{
@@ -668,12 +689,20 @@ describe('App', () => {
     fixture.detectChanges();
     rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
     expect(rendered?.querySelector('[data-testid="preview-stage-graph"]')).toBeTruthy();
+    const stagePreviewRect = rendered?.querySelector<SVGRectElement>('[data-testid="preview-stage-graph"] .diagram-node rect');
+    expect(stagePreviewRect?.getAttribute('fill')).toMatch(/^#/);
+    expect(stagePreviewRect?.getAttribute('stroke')).toMatch(/^#/);
     expect(rendered?.textContent).toContain('入库流程');
 
     outlineButtons.find((button) => button.textContent?.includes('入库流程'))?.click();
     fixture.detectChanges();
     rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
     expect(rendered?.querySelector('[data-testid="preview-process-graph"]')).toBeTruthy();
+    const processPreviewRect = rendered?.querySelector<SVGRectElement>('[data-testid="preview-process-graph"] .diagram-node rect');
+    const processPreviewEdge = rendered?.querySelector<SVGPathElement>('[data-testid="preview-process-graph"] .diagram-edge');
+    expect(processPreviewRect?.getAttribute('fill')).toMatch(/^#/);
+    expect(processPreviewEdge?.getAttribute('fill')).toBe('none');
+    expect(processPreviewEdge?.getAttribute('stroke')).toMatch(/^#/);
     expect(rendered?.textContent).toContain('流程节点: 提交申请');
     expect(rendered?.querySelector('.pv-task-description strong')?.textContent).toContain('任务说明');
     const stepRichText = rendered?.querySelectorAll('.pv-rich-text')[1];
@@ -686,12 +715,17 @@ describe('App', () => {
 
     outlineButtons.find((button) => button.textContent?.includes('实体关系图'))?.click();
     fixture.detectChanges();
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-testid="preview-entity-overview"]')).toBeTruthy();
+    const entityOverview = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector<HTMLElement>('[data-testid="preview-entity-overview"]');
+    expect(entityOverview).toBeTruthy();
+    const entityOverviewRect = entityOverview?.querySelector<SVGRectElement>('.diagram-node rect');
+    expect(entityOverviewRect?.getAttribute('fill')).toMatch(/^#/);
 
     outlineButtons.find((button) => button.textContent?.includes('仓单'))?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('实体: 仓单');
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-testid="preview-entity-state-graph"]')).toBeTruthy();
+    const entityStateRect = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector<SVGRectElement>('[data-testid="preview-entity-state-graph"] .diagram-node rect');
+    expect(entityStateRect?.getAttribute('fill')).toMatch(/^#/);
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('.pv-technical-design strong')?.textContent).toContain('调用聚合根保存仓单');
 
     compiled.querySelector<HTMLButtonElement>('#preview-raw-toggle')?.click();

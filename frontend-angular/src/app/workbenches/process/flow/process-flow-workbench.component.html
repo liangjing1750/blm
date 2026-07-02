@@ -48,7 +48,7 @@
         }
 
         <section class="process-flow-canvas-shell" data-testid="process-flow-canvas-shell" (wheel)="onCanvasWheel($event)">
-          <div class="process-flow-canvas" data-testid="process-flow-canvas" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
+          <div class="process-flow-canvas" data-testid="process-flow-canvas" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
             @for (lane of lanes(process); track lane.id) {
               <div class="flow-lane" [style.--lane-color]="laneColor(lane.name)" [style.top.px]="lane.top" [style.height.px]="lane.height" (dragover)="$event.preventDefault()" (drop)="onLaneDrop($event, lane)">
                 <div class="flow-lane-title">{{ lane.name }}</div>

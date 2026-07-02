@@ -1,0 +1,25 @@
+<main class="export-render-page">
+  @if (loading()) {
+    <div class="export-render-state">正在准备导出图形...</div>
+  } @else if (error()) {
+    <div class="export-render-state export-render-error">{{ error() }}</div>
+  } @else if (activeGraph(); as graph) {
+    <section class="export-render-canvas" [attr.data-export-active-graph]="graph.id">
+      @if (graph.kind === 'stage-panorama' || graph.kind === 'stage-flow') {
+        <app-process-stage-workbench [exportGraphId]="stageGraphId()"></app-process-stage-workbench>
+      } @else if (graph.kind === 'process-flow') {
+        <app-process-flow-workbench [editing]="false" [exportGraphId]="processGraphId()"></app-process-flow-workbench>
+      } @else if (graph.kind === 'entity-relation' || graph.kind === 'entity-state') {
+        <app-entity-design-workbench
+          [editing]="false"
+          [showEditorToggle]="false"
+          [initialView]="entityInitialView()"
+          [initialEntityId]="entityInitialId()"
+          [exportGraphId]="entityGraphId()"
+        ></app-entity-design-workbench>
+      }
+    </section>
+  } @else {
+    <div class="export-render-state">当前文档没有可导出的图形。</div>
+  }
+</main>

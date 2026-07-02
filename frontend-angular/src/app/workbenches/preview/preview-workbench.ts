@@ -351,6 +351,13 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     if (!nodes.length) return `<div class="diag-empty">${this.esc(emptyText)}</div>`;
     const width = Math.max(420, nodes.length * 170 + 70);
     const height = 150;
+    // 模块意图：预览页直接输出静态 SVG，不能依赖工作台运行态 CSS，否则导出和懒加载后的图形会退回 SVG 默认黑色填充。
+    // 关键流程：节点、连线、箭头、文字都写入显式绘制属性，保证阶段图、流程图、实体图和状态图共用同一套可读底色。
+    // 边界细节：这里先修复预览可读性；旧版复杂布局算法仍由后续迁移切片处理，避免把视觉配色修复和布局重写混在一起。
+    const nodeFill = '#eff6ff';
+    const nodeStroke = '#60a5fa';
+    const textFill = '#1e3a8a';
+    const edgeStroke = '#64748b';
     const placements = new Map(nodes.map((node, index) => [node.id, { x: 35 + index * 170, y: 48, w: 130, h: 52 }]));
     const fallbackLinks = links.length ? links : nodes.slice(1).map((node, index) => ({ from: nodes[index].id, to: node.id }));
     const paths = fallbackLinks.map((link) => {
@@ -361,13 +368,13 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       const startY = from.y + from.h / 2;
       const endX = to.x;
       const endY = to.y + to.h / 2;
-      return `<path class="diagram-edge" d="M${startX} ${startY} C${startX + 36} ${startY}, ${endX - 36} ${endY}, ${endX} ${endY}" marker-end="url(#arrow-${testId})"></path>`;
+      return `<path class="diagram-edge" d="M${startX} ${startY} C${startX + 36} ${startY}, ${endX - 36} ${endY}, ${endX} ${endY}" fill="none" stroke="${edgeStroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-${this.esc(testId)})"></path>`;
     }).join('');
     const boxes = nodes.map((node) => {
       const position = placements.get(node.id)!;
-      return `<g class="diagram-node"><rect x="${position.x}" y="${position.y}" width="${position.w}" height="${position.h}" rx="10"></rect><text x="${position.x + position.w / 2}" y="${position.y + 31}" text-anchor="middle">${this.esc(this.truncate(node.label, 18))}</text></g>`;
+      return `<g class="diagram-node"><rect x="${position.x}" y="${position.y}" width="${position.w}" height="${position.h}" rx="10" fill="${nodeFill}" stroke="${nodeStroke}" stroke-width="1.2"></rect><text x="${position.x + position.w / 2}" y="${position.y + 31}" text-anchor="middle" fill="${textFill}" font-size="12" font-weight="700">${this.esc(this.truncate(node.label, 18))}</text></g>`;
     }).join('');
-    return `<div class="${this.esc(className)}" data-testid="${this.esc(testId)}"><svg class="diagram-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="preview diagram"><defs><marker id="arrow-${this.esc(testId)}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>${paths}${boxes}</svg></div>`;
+    return `<div class="${this.esc(className)}" data-testid="${this.esc(testId)}"><svg class="diagram-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="preview diagram"><defs><marker id="arrow-${this.esc(testId)}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="${edgeStroke}"></path></marker></defs>${paths}${boxes}</svg></div>`;
   }
 
   private panoramaAxis(doc: any, key: 'columns' | 'lanes', stageKey: 'panoramaColumnUid' | 'panoramaLaneUid', fallbackName: string): Array<{ id: string; name: string }> {

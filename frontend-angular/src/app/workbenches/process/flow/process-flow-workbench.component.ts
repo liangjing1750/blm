@@ -155,6 +155,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   private readonly lanePalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#16a34a'];
 
   @Input() editing = true;
+  @Input() exportGraphId = '';
   @Output() readonly taskEditorRequested = new EventEmitter<string>();
 
   protected processes(): LegacyProcess[] {

@@ -18,7 +18,9 @@ from blm_core.admin import create_admin_handler, log_admin_start
 from blm_core.diagnostics import configure_diagnostics, log_error, log_event, runtime_fields
 from blm_core.document import canonical_document, migrate_document
 from blm_core.collab import CollaborationManager
+from blm_core.export_graphs import list_export_graphs
 from blm_core.feedback import FeedbackStore
+from blm_core.graph_screenshot import capture_graph_images
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.storage import (
     InvalidDocumentNameError,
@@ -152,6 +154,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 if path.startswith("/api/ai/export/"):
                     if hasattr(self.__class__, '_ai_export_status'):
                         return self.__class__._ai_export_status(self, path)
+                if path.startswith("/api/export-jobs/") and path.endswith("/render-document"):
+                    return self._handle_export_job_render_document(path)
                 if path.startswith("/api/export-jobs/") and path.endswith("/download"):
                     return self._handle_export_job_download(path)
                 if path.startswith("/api/export-jobs/"):
@@ -420,7 +424,10 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
         def _handle_export_bundle(self, path: str):
             name = unquote(path[len("/api/export-bundle/"):])
             try:
-                filename, payload = storage.build_export_bundle(name)
+                safe_name = storage._validate_name(name)
+                frozen_document = storage.load(safe_name)
+                graph_images = self._capture_export_graph_images(f"bundle-{uuid.uuid4().hex}", safe_name, frozen_document)
+                filename, payload = storage.build_export_bundle_from_document(safe_name, frozen_document, graph_images=graph_images)
                 return self._binary(payload, "application/zip", filename=filename)
             except InvalidDocumentNameError as exc:
                 return self._json({"error": str(exc)}, 400)
@@ -464,6 +471,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 "message": "已冻结当前文档版本，等待生成 DOCX。",
                 "filename": "",
                 "document": frozen_document,
+                "graphImages": [],
                 "payload": None,
                 "error": "",
                 "createdAt": time.time(),
@@ -491,7 +499,9 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             try:
                 time.sleep(0.05)
                 update(progress=32, message="正在把流程图、全景图和数据图转为静态图片。")
-                filename, payload = storage.build_export_docx_from_document(str(job["name"]), job.get("document") or {})
+                graph_images = self._capture_export_graph_images(str(job_id), str(job["name"]), job.get("document") or {})
+                update(progress=72, message="静态图形已生成，正在写入 DOCX。", graphImages=graph_images)
+                filename, payload = storage.build_export_docx_from_document(str(job["name"]), job.get("document") or {}, graph_images=graph_images)
                 update(
                     status="done",
                     progress=100,
@@ -523,6 +533,20 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._json({"error": "not found"}, 404)
                 return self._json(self._public_export_job(job))
 
+        def _handle_export_job_render_document(self, path: str):
+            job_id = unquote(path[len("/api/export-jobs/"): -len("/render-document")].strip("/"))
+            with export_jobs_lock:
+                job = export_jobs.get(job_id)
+                if not job:
+                    return self._json({"error": "not found"}, 404)
+                document = job.get("document") or {}
+                return self._json({
+                    "id": job.get("id", ""),
+                    "name": job.get("name", ""),
+                    "document": document,
+                    "graphs": [graph.__dict__ for graph in list_export_graphs(document if isinstance(document, dict) else {})],
+                })
+
         def _handle_export_job_download(self, path: str):
             job_id = unquote(path[len("/api/export-jobs/"): -len("/download")].strip("/"))
             with export_jobs_lock:
@@ -538,6 +562,42 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 filename=filename,
             )
+
+        def _capture_export_graph_images(self, job_id: str, name: str, document: dict):
+            # 模块意图：把导出截图作为后台 job 的临时资源，不写回 workspace 文档，也不改变用户编辑态。
+            # 关键流程：创建可被 /export/render/<jobId> 读取的冻结文档，再由 Playwright 按 data-export-graph-id 截图。
+            # 边界细节：Playwright 不可用或截图失败时记录诊断并返回空图集，避免导出主流程直接崩溃。
+            graphs = list_export_graphs(document if isinstance(document, dict) else {})
+            if not graphs:
+                return []
+            temp_job = False
+            with export_jobs_lock:
+                if job_id not in export_jobs:
+                    temp_job = True
+                    export_jobs[job_id] = {
+                        "id": job_id,
+                        "name": name,
+                        "status": "rendering",
+                        "progress": 0,
+                        "message": "正在渲染静态图形。",
+                        "filename": "",
+                        "document": document,
+                        "payload": None,
+                        "error": "",
+                        "createdAt": time.time(),
+                        "updatedAt": time.time(),
+                    }
+            try:
+                host, port = self.server.server_address[:2]
+                base_host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else str(host)
+                return capture_graph_images(f"http://{base_host}:{port}", job_id, graphs)
+            except Exception as exc:
+                log_error("export.graph_screenshot.failed", exc, document=name)
+                return []
+            finally:
+                if temp_job:
+                    with export_jobs_lock:
+                        export_jobs.pop(job_id, None)
 
         def _handle_history(self, path: str):
             name = unquote(path[len("/api/history/"):])

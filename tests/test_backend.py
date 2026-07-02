@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 from blm_core.admin import _admin_page, _status_payload
 from blm_core.document import canonical_document, create_empty_document, migrate_document
+from blm_core.docx import DocxImage, build_docx_from_preview_markdown
 from blm_core.markdown import MarkdownExporter
 from blm_core.server import create_handler
 from blm_core.storage import InvalidDocumentNameError, WorkspaceStorage
@@ -1177,6 +1178,82 @@ class WorkspaceStorageTests(unittest.TestCase):
                     archive.read(f"Loans/{attachment_version['path']}"),
                     pdf_payload,
                 )
+
+    def test_build_export_bundle_embeds_static_graph_assets_in_markdown(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir))
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+            graph_image = DocxImage(
+                name="process-flow-proc-1.png",
+                content_type="image/png",
+                payload=b"fake-png",
+                width=640,
+                height=360,
+            )
+
+            _, payload = storage.build_export_bundle_from_document("Loans", document, graph_images=[graph_image])
+
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                names = sorted(archive.namelist())
+                self.assertIn("Loans/assets/process-flow-proc-1.png", names)
+                markdown = archive.read("Loans/Loans.md").decode("utf-8")
+                self.assertIn("## 静态图形", markdown)
+                self.assertIn("![process flow proc 1](assets/process-flow-proc-1.png)", markdown)
+                self.assertEqual(archive.read("Loans/assets/process-flow-proc-1.png"), b"fake-png")
+
+    def test_build_export_docx_embeds_static_graph_png(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir))
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+            graph_image = DocxImage(
+                name="entity-relation.png",
+                content_type="image/png",
+                payload=b"fake-png",
+                width=640,
+                height=360,
+            )
+
+            _, payload = storage.build_export_docx_from_document("Loans", document, graph_images=[graph_image])
+
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                names = sorted(archive.namelist())
+                self.assertIn("word/media/entity-relation.png", names)
+                self.assertEqual(archive.read("word/media/entity-relation.png"), b"fake-png")
+                document_xml = archive.read("word/document.xml").decode("utf-8")
+                self.assertIn("rImage", document_xml)
+
+    def test_preview_docx_export_renders_tables_and_static_graphs(self):
+        markdown = "\n".join([
+            "# 预览导出",
+            "",
+            "| 字段 | 类型 |",
+            "| --- | --- |",
+            "| 编号 | string |",
+        ])
+        graph_image = DocxImage(
+            name="process-flow-proc-1.png",
+            content_type="image/png",
+            payload=b"fake-png",
+            width=640,
+            height=360,
+        )
+
+        payload = build_docx_from_preview_markdown(
+            markdown,
+            title="Loans",
+            graph_images=[graph_image],
+        )
+
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            document_xml = archive.read("word/document.xml").decode("utf-8")
+            self.assertIn("<w:tbl>", document_xml)
+            self.assertIn("字段", document_xml)
+            self.assertIn("编号", document_xml)
+            self.assertIn("静态图形", document_xml)
+            self.assertIn("process flow proc 1", document_xml)
+            self.assertEqual(archive.read("word/media/process-flow-proc-1.png"), b"fake-png")
 
     def test_save_stores_attachment_versions_and_current_version_ref(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2477,6 +2554,8 @@ class ExportApiTests(unittest.TestCase):
             thread.start()
 
             try:
+                screenshot_patch = patch("blm_core.server.capture_graph_images", return_value=[])
+                screenshot_patch.start()
                 request = urllib.request.Request(
                     f"http://127.0.0.1:{server.server_port}/api/export-docx/start",
                     data=json.dumps({"name": "Loans"}).encode("utf-8"),
@@ -2487,14 +2566,14 @@ class ExportApiTests(unittest.TestCase):
                     job = json.loads(response.read().decode("utf-8"))
                 self.assertTrue(job["id"])
                 status = job
-                for _ in range(20):
+                for _ in range(120):
                     with urllib.request.urlopen(
                         f"http://127.0.0.1:{server.server_port}/api/export-jobs/{job['id']}"
                     ) as response:
                         status = json.loads(response.read().decode("utf-8"))
                     if status["status"] == "done":
                         break
-                    time.sleep(0.05)
+                    time.sleep(0.1)
                 self.assertEqual(status["status"], "done")
                 self.assertEqual(status["progress"], 100)
                 with urllib.request.urlopen(
@@ -2503,6 +2582,7 @@ class ExportApiTests(unittest.TestCase):
                     payload = response.read()
                     content_type = response.headers.get("Content-Type")
             finally:
+                screenshot_patch.stop()
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=2)

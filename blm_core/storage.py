@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from blm_core.document import canonical_document, create_empty_document, migrate_document
-from blm_core.docx import DocxAttachment, build_docx_from_markdown
+from blm_core.docx import DocxAttachment, DocxImage, build_docx_from_preview_markdown
 from blm_core.markdown import MarkdownExporter
 from blm_core.merge import apply_merge
 
@@ -775,9 +775,14 @@ class WorkspaceStorage(DocumentFileStore):
     def export_markdown(self, name: str) -> str:
         return self.exporter.export(self.load(name))
 
-    def build_export_bundle(self, name: str) -> tuple[str, bytes]:
+    def build_export_bundle(self, name: str, graph_images: list[DocxImage] | None = None) -> tuple[str, bytes]:
         safe_name = self._validate_name(name)
         document = canonical_document(self.load(safe_name))
+        return self.build_export_bundle_from_document(safe_name, document, graph_images=graph_images)
+
+    def build_export_bundle_from_document(self, name: str, document: dict, graph_images: list[DocxImage] | None = None) -> tuple[str, bytes]:
+        safe_name = self._validate_name(name)
+        document = canonical_document(document)
         package_dir = self._package_dir(safe_name)
         package_document_uid = ""
         package_attachments_by_uid: dict[str, dict] = {}
@@ -892,9 +897,11 @@ class WorkspaceStorage(DocumentFileStore):
         packaged_files.append(
             (
                 Path(f"{safe_name}.md"),
-                self.exporter.export(document).encode("utf-8"),
+                self._markdown_with_graph_images(self.exporter.export(document), graph_images or []).encode("utf-8"),
             )
         )
+        for image in graph_images or []:
+            packaged_files.append((Path("assets") / image.name, image.payload))
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for relative_path, payload in packaged_files:
@@ -905,7 +912,7 @@ class WorkspaceStorage(DocumentFileStore):
         safe_name = self._validate_name(name)
         return self.build_export_docx_from_document(safe_name, self.load(safe_name))
 
-    def build_export_docx_from_document(self, name: str, document: dict) -> tuple[str, bytes]:
+    def build_export_docx_from_document(self, name: str, document: dict, graph_images: list[DocxImage] | None = None) -> tuple[str, bytes]:
         safe_name = self._validate_name(name)
         frozen_document = canonical_document(document)
         markdown = self.exporter.export(frozen_document)
@@ -926,7 +933,25 @@ class WorkspaceStorage(DocumentFileStore):
                 except FileNotFoundError:
                     continue
                 attachments.append(DocxAttachment(name=filename, content_type=content_type, payload=payload))
-        return f"{safe_name}.docx", build_docx_from_markdown(markdown, title=safe_name, attachments=attachments)
+        return (
+            f"{safe_name}.docx",
+            build_docx_from_preview_markdown(
+                markdown,
+                title=safe_name,
+                graph_images=graph_images or [],
+                attachments=attachments,
+            ),
+        )
+
+    def _markdown_with_graph_images(self, markdown: str, graph_images: list[DocxImage]) -> str:
+        if not graph_images:
+            return markdown
+        lines = [str(markdown or "").rstrip(), "", "## 静态图形", ""]
+        for image in graph_images:
+            title = Path(image.name).stem.replace("-", " ")
+            lines.append(f"![{title}](assets/{image.name})")
+            lines.append("")
+        return "\n".join(lines).rstrip() + "\n"
 
     def migrate_workspace_layout(self) -> dict[str, int]:
         result = {"documents": 0, "history": 0, "trash": 0}

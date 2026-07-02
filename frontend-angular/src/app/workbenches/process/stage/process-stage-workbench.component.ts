@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Output, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, EventEmitter, Input, Output, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyProcess,
@@ -83,6 +83,7 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly dragState = signal<FlowDragState | null>(null);
 
   protected readonly adapter: ProcessStageLegacyAdapter = createProcessStageLegacyAdapter();
+  @Input() exportGraphId = '';
   @Output() readonly processEditorRequested = new EventEmitter<string>();
   private readonly stageSlotWidth = 184;
   private readonly stageSlotHeight = 38;

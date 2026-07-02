@@ -84,7 +84,7 @@ def build_docx_with_screenshots(
         archive.writestr("word/_rels/document.xml.rels", _document_rels_xml(attachment_parts, image_parts))
         archive.writestr(
             "word/document.xml",
-            _document_xml_with_screenshots(
+            _document_xml_for_preview_export(
                 blocks, clean_title, attachment_parts, image_parts,
                 len(screenshot_images), len(markdown_images),
             ),
@@ -94,6 +94,80 @@ def build_docx_with_screenshots(
         for part_name, image in image_parts:
             archive.writestr(f"word/{part_name}", image.payload)
     return buffer.getvalue()
+
+
+def build_docx_from_preview_markdown(
+    markdown: str,
+    *,
+    title: str,
+    graph_images: list[DocxImage] | None = None,
+    attachments: list[DocxAttachment] | None = None,
+) -> bytes:
+    """Build the shareable DOCX from the same reading structure as preview export.
+
+    Module intent: keep every shareable DOCX export on one stable backend
+    boundary. Callers provide frozen markdown plus already captured graph
+    images, and this builder owns the Word layout without redrawing diagrams.
+    """
+    return build_docx_with_screenshots(
+        markdown,
+        title=title,
+        screenshots=graph_images or [],
+        attachments=attachments or [],
+    )
+
+
+def _document_xml_for_preview_export(
+    blocks: list[dict],
+    title: str,
+    attachment_parts: list[tuple[str, DocxAttachment]],
+    image_parts: list[tuple[str, DocxImage]],
+    screenshot_count: int,
+    markdown_image_count: int,
+) -> str:
+    """Render preview-aligned blocks into WordprocessingML.
+
+    Key flow: markdown headings/paragraphs keep the preview reading order,
+    markdown tables become real Word tables, and captured graph images are
+    appended as static figures so the document can be read without BLM.
+    """
+    body_parts = [_paragraph(title, style="Title")]
+    static_graph_header_added = False
+
+    for block in blocks:
+        block_type = block.get("type")
+        if block_type == "image":
+            image_index = int(block.get("index") or 0)
+            if 0 <= image_index < len(image_parts):
+                if not static_graph_header_added and image_index >= markdown_image_count and screenshot_count > 0:
+                    static_graph_header_added = True
+                    body_parts.append(_paragraph("静态图形", style="Heading1"))
+                _, image = image_parts[image_index]
+                if image_index >= markdown_image_count:
+                    body_parts.append(_paragraph(_image_caption(image.name), style="Heading3"))
+                body_parts.append(_image_paragraph(f"rImage{image_index + 1}", image))
+            continue
+        if block_type == "table":
+            body_parts.append(_table_xml(block.get("headers") or [], block.get("rows") or []))
+            continue
+        body_parts.append(_paragraph(str(block.get("text", "")), style=str(block.get("style", ""))))
+
+    if attachment_parts:
+        body_parts.append(_paragraph("附件", style="Heading1"))
+        body_parts.append(_paragraph("以下附件已嵌入到当前 DOCX 文件中。"))
+        for _, attachment in attachment_parts:
+            size_label = _format_size(len(attachment.payload))
+            body_parts.append(
+                _paragraph(
+                    f"- {attachment.name}（{attachment.content_type or 'application/octet-stream'}，{size_label}）",
+                    style="ListParagraph",
+                )
+            )
+
+    body_parts.append(
+        '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1200" w:bottom="1440" w:left="1200" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>'
+    )
+    return _document_xml_shell(body_parts)
 
 
 def _document_xml_with_screenshots(
@@ -169,6 +243,15 @@ def _parse_markdown_blocks(markdown: str) -> tuple[list[dict], list[DocxImage]]:
             )
             images.append(image)
             blocks.append({"type": "image", "index": len(images) - 1})
+        elif _is_markdown_table_start(lines, index):
+            headers = _split_markdown_table_row(lines[index])
+            rows: list[list[str]] = []
+            index += 2
+            while index < len(lines) and lines[index].strip().startswith("|"):
+                rows.append(_split_markdown_table_row(lines[index]))
+                index += 1
+            blocks.append({"type": "table", "headers": headers, "rows": rows})
+            continue
         elif stripped and stripped != "---":
             blocks.append(_markdown_line_to_block(stripped))
         index += 1
@@ -185,6 +268,31 @@ def _markdown_line_to_block(line: str) -> dict:
     if line.startswith("- "):
         return {"type": "paragraph", "text": f"• {line[2:]}", "style": "ListParagraph"}
     return {"type": "paragraph", "text": line, "style": ""}
+
+
+def _is_markdown_table_start(lines: list[str], index: int) -> bool:
+    if index + 1 >= len(lines):
+        return False
+    current = lines[index].strip()
+    separator = lines[index + 1].strip()
+    if not current.startswith("|") or not current.endswith("|"):
+        return False
+    if not separator.startswith("|") or not separator.endswith("|"):
+        return False
+    cells = [cell.strip() for cell in separator.strip("|").split("|")]
+    return bool(cells) and all(re.fullmatch(r":?-{2,}:?", cell or "") for cell in cells)
+
+
+def _split_markdown_table_row(line: str) -> list[str]:
+    return [_strip_inline_markdown(cell.strip()) for cell in str(line or "").strip().strip("|").split("|")]
+
+
+def _strip_inline_markdown(value: str) -> str:
+    text = str(value or "")
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"\*([^*]+)\*", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return text
 
 
 def _render_mermaid_static_svg(code: str, diagram_index: int) -> tuple[str, int, int]:
@@ -350,6 +458,9 @@ def _document_xml(blocks: list[dict], title: str, attachment_parts: list[tuple[s
                 _, image = image_parts[image_index]
                 body_parts.append(_image_paragraph(f"rImage{image_index + 1}", image))
             continue
+        if block.get("type") == "table":
+            body_parts.append(_table_xml(block.get("headers") or [], block.get("rows") or []))
+            continue
         body_parts.append(_paragraph(str(block.get("text", "")), style=str(block.get("style", ""))))
     if attachment_parts:
         body_parts.append(_paragraph("附件", style="Heading1"))
@@ -371,9 +482,82 @@ def _document_xml(blocks: list[dict], title: str, attachment_parts: list[tuple[s
     )
 
 
+def _document_xml_shell(body_parts: list[str]) -> str:
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        f"<w:body>{''.join(body_parts)}</w:body></w:document>"
+    )
+
+
 def _paragraph(text: str, *, style: str = "") -> str:
     style_xml = f'<w:pPr><w:pStyle w:val="{escape(style)}"/></w:pPr>' if style else ""
     return f"<w:p>{style_xml}<w:r><w:t xml:space=\"preserve\">{escape(_text(text))}</w:t></w:r></w:p>"
+
+
+def _table_xml(headers: list[str], rows: list[list[str]]) -> str:
+    """Build a compact Word table for preview markdown tables.
+
+    Boundary detail: cells are plain text on purpose. Rich inline markdown is
+    stripped earlier, keeping the export deterministic and avoiding partial
+    HTML/Markdown interpretation inside DOCX XML.
+    """
+    normalized_rows = [_normalize_table_row(headers)]
+    normalized_rows.extend(_normalize_table_row(row) for row in rows)
+    normalized_rows = [row for row in normalized_rows if any(cell for cell in row)]
+    if not normalized_rows:
+        return ""
+    column_count = max(len(row) for row in normalized_rows)
+    safe_rows = [row + [""] * (column_count - len(row)) for row in normalized_rows]
+    grid_cols = "".join('<w:gridCol w:w="2400"/>' for _ in range(column_count))
+    rows_xml = [
+        _table_row_xml(row, is_header=(index == 0))
+        for index, row in enumerate(safe_rows)
+    ]
+    return (
+        "<w:tbl>"
+        "<w:tblPr>"
+        '<w:tblW w:w="0" w:type="auto"/>'
+        '<w:tblBorders><w:top w:val="single" w:sz="4" w:color="D7E3F4"/>'
+        '<w:left w:val="single" w:sz="4" w:color="D7E3F4"/>'
+        '<w:bottom w:val="single" w:sz="4" w:color="D7E3F4"/>'
+        '<w:right w:val="single" w:sz="4" w:color="D7E3F4"/>'
+        '<w:insideH w:val="single" w:sz="4" w:color="D7E3F4"/>'
+        '<w:insideV w:val="single" w:sz="4" w:color="D7E3F4"/></w:tblBorders>'
+        "</w:tblPr>"
+        f"<w:tblGrid>{grid_cols}</w:tblGrid>"
+        f"{''.join(rows_xml)}"
+        "</w:tbl>"
+    )
+
+
+def _normalize_table_row(row: list[str] | tuple[str, ...]) -> list[str]:
+    return [_text(str(cell or "")) for cell in row]
+
+
+def _table_row_xml(cells: list[str], *, is_header: bool) -> str:
+    return f"<w:tr>{''.join(_table_cell_xml(cell, is_header=is_header) for cell in cells)}</w:tr>"
+
+
+def _table_cell_xml(text: str, *, is_header: bool) -> str:
+    header_xml = '<w:shd w:fill="EFF6FF"/>' if is_header else ""
+    bold_open = "<w:b/>" if is_header else ""
+    return (
+        "<w:tc>"
+        f"<w:tcPr><w:tcW w:w=\"2400\" w:type=\"dxa\"/>{header_xml}</w:tcPr>"
+        f"<w:p><w:r><w:rPr>{bold_open}</w:rPr><w:t xml:space=\"preserve\">{escape(text)}</w:t></w:r></w:p>"
+        "</w:tc>"
+    )
+
+
+def _image_caption(name: str) -> str:
+    stem = Path(str(name or "graph")).stem.replace("_", "-")
+    words = [word for word in stem.split("-") if word]
+    return " ".join(words) if words else "图形"
 
 
 def _image_paragraph(rel_id: str, image: DocxImage) -> str:

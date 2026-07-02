@@ -191,6 +191,10 @@ export class ApiService {
     return this.getJson(`/api/export-jobs/${encodeURIComponent(jobId)}`);
   }
 
+  async exportRenderDocument(jobId: string): Promise<any> {
+    return this.getJson(`/api/export-jobs/${encodeURIComponent(jobId)}/render-document`);
+  }
+
   async downloadExportJob(jobId: string): Promise<Response> {
     return fetch(`/api/export-jobs/${encodeURIComponent(jobId)}/download`);
   }
