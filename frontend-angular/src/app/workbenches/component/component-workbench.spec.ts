@@ -145,4 +145,101 @@ describe('ComponentWorkbenchComponent', () => {
 
     expect(fallbackPath?.getAttribute('d') || '').toMatch(/ L -?\d+ \d+ L -?\d+ \d+ L /);
   });
+
+  it('selects both relation endpoints when a relation line is clicked', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'relation';
+    runtime.doc.entities = [
+      { uid: 'entity-1', name: '订单', fields: [], businessConstructUid: 'construct-1', pos: { x: 80, y: 80 } },
+      { uid: 'entity-2', name: '订单明细', fields: [], businessConstructUid: 'construct-1', pos: { x: 280, y: 80 } },
+    ];
+    runtime.doc.relations = [{ from: 'entity-1', to: 'entity-2', label: '包含' }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    entityHost.querySelector<SVGPathElement>('.entity-rel-line')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    entityFixture.detectChanges();
+
+    const selected = Array.from(entityHost.querySelectorAll('.entity-node.is-selected')).map((node) => node.textContent || '');
+    expect(selected.join(' ')).toContain('订单');
+    expect(selected.join(' ')).toContain('订单明细');
+    expect(entityHost.querySelector('[data-testid="entity-design-drawer"]')).toBeTruthy();
+  });
+
+  it('reuses legacy state marker and label positions', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: '订单',
+      fields: [{ uid: 'field-1', name: '状态', state_values: '草稿,审核中' }],
+      state_nodes: [
+        { name: '草稿', kind: 'initial', markerPos: { x: 180, y: 32 } },
+        { name: '审核中', kind: 'terminal' },
+      ],
+      state_transitions: [
+        { from: '草稿', to: '审核中', action: '提交', labelPos: { x: 260, y: 120 } },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-switch-state"]')?.click();
+    entityFixture.detectChanges();
+    const marker = entityHost.querySelector<HTMLElement>('[data-testid="entity-state-start-dot"]')!;
+    const label = entityHost.querySelector<SVGTextElement>('.entity-state-link-label')!;
+
+    expect(marker.style.left).toBe('172px');
+    expect(marker.style.top).toBe('24px');
+    expect(label.getAttribute('x')).toBe('260');
+    expect(label.getAttribute('y')).toBe('120');
+  });
+
+  it('persists legacy state marker and label drags', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: '订单',
+      fields: [{ uid: 'field-1', name: '状态', state_values: '草稿,审核中' }],
+      state_nodes: [
+        { name: '草稿', kind: 'initial' },
+        { name: '审核中', kind: 'terminal' },
+      ],
+      state_transitions: [
+        { from: '草稿', to: '审核中', action: '提交' },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-switch-state"]')?.click();
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-editor-open"]')?.click();
+    entityFixture.detectChanges();
+
+    entityHost.querySelector<HTMLElement>('[data-testid="entity-state-start-dot"]')?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 130, clientY: 125 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    entityFixture.detectChanges();
+
+    const initialNode = runtime.doc.entities[0].state_nodes.find((node: any) => node.name === '草稿');
+    expect(initialNode.markerPos.x).toBeGreaterThan(0);
+    expect(initialNode.markerPos.y).toBeGreaterThan(0);
+
+    entityHost.querySelector<SVGTextElement>('.entity-state-link-label')?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 200, clientY: 120 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 240, clientY: 150 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    entityFixture.detectChanges();
+
+    expect(runtime.doc.entities[0].state_transitions[0].labelPos.x).toBeGreaterThan(0);
+    expect(runtime.doc.entities[0].state_transitions[0].labelPos.y).toBeGreaterThan(0);
+  });
 });

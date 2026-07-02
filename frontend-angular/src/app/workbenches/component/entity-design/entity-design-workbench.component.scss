@@ -144,6 +144,7 @@
 .entity-rel-line {
   fill: none;
   stroke-linecap: round;
+  cursor: pointer;
   pointer-events: stroke;
 }
 
@@ -283,10 +284,11 @@
 
 .entity-state-link-label {
   fill: #475569;
+  cursor: move;
   font-size: 11px;
   font-weight: 700;
   paint-order: stroke;
-  pointer-events: none;
+  pointer-events: auto;
   stroke: #fff;
   stroke-linejoin: round;
   stroke-width: 4px;
@@ -333,7 +335,8 @@
   z-index: 3;
   box-sizing: border-box;
   border-radius: 50%;
-  pointer-events: none;
+  cursor: move;
+  pointer-events: auto;
 }
 
 .entity-state-start-dot {

@@ -28,6 +28,7 @@ export interface EntityStateNode {
   name?: string;
   kind?: 'initial' | 'intermediate' | 'terminal';
   pos?: { x?: number; y?: number };
+  markerPos?: { x?: number; y?: number };
 }
 
 export interface EntityDesignRelation {
@@ -48,6 +49,15 @@ export interface EntityStateTransition {
   to?: string;
   action?: string;
   label?: string;
+  note?: string;
+  labelPos?: { x?: number; y?: number };
+  waypoints?: Array<{ x?: number; y?: number }>;
+  route?: {
+    mode?: string;
+    fromAnchor?: 'auto' | 'top' | 'right' | 'bottom' | 'left';
+    toAnchor?: 'auto' | 'top' | 'right' | 'bottom' | 'left';
+    waypoints?: Array<{ x?: number; y?: number }>;
+  };
 }
 
 export interface EntityDesignConstruct {

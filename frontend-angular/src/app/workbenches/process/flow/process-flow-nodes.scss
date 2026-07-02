@@ -319,11 +319,16 @@
 .flow-gateway::after {
   content: "+";
   position: absolute;
-  left: 7px;
-  top: 1px;
+  left: 2px;
+  top: 2px;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
   color: color-mix(in srgb, var(--lane-color, #2563eb) 70%, #0f172a);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
+  line-height: 1;
   opacity: .25;
 }
 

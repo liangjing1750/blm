@@ -69,6 +69,7 @@ interface StateNodeLayout {
 }
 
 interface StateTransitionLine {
+  index: number;
   transition: EntityStateTransition;
   from: StateNodeLayout;
   to: StateNodeLayout;
@@ -96,10 +97,21 @@ interface EntityDragState {
 interface StateNodeDragState {
   entityId: string;
   stateName: string;
+  dragKind: 'node' | 'marker';
   startClientX: number;
   startClientY: number;
   startLeft: number;
   startTop: number;
+  moved: boolean;
+}
+
+interface StateLabelDragState {
+  entityId: string;
+  transitionIndex: number;
+  startClientX: number;
+  startClientY: number;
+  startX: number;
+  startY: number;
   moved: boolean;
 }
 
@@ -172,6 +184,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   private readonly relationStrokeColors = ['#3b82f6', '#22c55e', '#eab308', '#ec4899', '#8b5cf6', '#f97316'];
   private dragState: EntityDragState | null = null;
   private stateNodeDragState: StateNodeDragState | null = null;
+  private stateLabelDragState: StateLabelDragState | null = null;
 
   protected readonly entities = computed(() => {
     this.version();
@@ -495,8 +508,8 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   protected stateMarkerStyle(marker: StateNodeLayout['marker']): Record<string, string> {
     if (!marker) return {};
     return {
-      left: `${marker.x}px`,
-      top: `${marker.y}px`,
+      left: `${Math.round(marker.x - marker.size / 2)}px`,
+      top: `${Math.round(marker.y - marker.size / 2)}px`,
       width: `${marker.size}px`,
       height: `${marker.size}px`,
     };
@@ -512,6 +525,17 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     this.selectedTransitionIndex.set(this.selectedTransitionIndex() === index ? null : index);
   }
 
+  protected selectRelationLine(line: EntityRelationLine, event: Event): void {
+    // Module intent: relation lines are first-class selectable objects, matching the legacy ER graph interaction.
+    // Key flow: select both endpoints and keep the drawer open on the source entity for immediate editing.
+    event.stopPropagation();
+    const selected = new Set([line.from.id, line.to.id].filter(Boolean));
+    this.selectedEntityIds.set(selected);
+    this.selectedEntityId.set(line.from.id || line.to.id || '');
+    this.syncRuntimeEntityId(this.selectedEntityId());
+    this.editorOpen.set(true);
+  }
+
   protected startStateNodeDrag(node: StateNodeLayout, event: MouseEvent): void {
     if (!this.editorOpen()) return;
     if (event.button !== 0) return;
@@ -522,10 +546,49 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     this.stateNodeDragState = {
       entityId: this.entityId(entity),
       stateName: node.name,
+      dragKind: 'node',
       startClientX: event.clientX,
       startClientY: event.clientY,
       startLeft: node.x,
       startTop: node.y,
+      moved: false,
+    };
+  }
+
+  protected startStateMarkerDrag(node: StateNodeLayout, event: MouseEvent): void {
+    if (!this.editorOpen()) return;
+    if (event.button !== 0 || !node.marker) return;
+    const entity = this.selectedEntity();
+    if (!entity) return;
+    // Boundary detail: legacy marker positions are stored as center points, not CSS top-left.
+    event.preventDefault();
+    event.stopPropagation();
+    this.stateNodeDragState = {
+      entityId: this.entityId(entity),
+      stateName: node.name,
+      dragKind: 'marker',
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startLeft: node.marker.x,
+      startTop: node.marker.y,
+      moved: false,
+    };
+  }
+
+  protected startStateLabelDrag(line: StateTransitionLine, event: MouseEvent): void {
+    if (!this.editorOpen()) return;
+    if (event.button !== 0) return;
+    const entity = this.selectedEntity();
+    if (!entity) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.stateLabelDragState = {
+      entityId: this.entityId(entity),
+      transitionIndex: line.index,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: line.labelX,
+      startY: line.labelY,
       moved: false,
     };
   }
@@ -568,9 +631,26 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       if (!drag.moved) return;
       const entity = this.entities().find((item) => this.entityId(item) === drag.entityId);
       if (!entity) return;
-      this.setStateNodePosition(entity, drag.stateName, {
+      const nextPoint = {
         x: Math.max(4, Math.round(drag.startLeft + dx)),
         y: Math.max(4, Math.round(drag.startTop + dy)),
+      };
+      if (drag.dragKind === 'marker') this.setStateMarkerPosition(entity, drag.stateName, nextPoint, false);
+      else this.setStateNodePosition(entity, drag.stateName, nextPoint, false);
+      this.version.update((value) => value + 1);
+      return;
+    }
+    if (this.stateLabelDragState) {
+      const drag = this.stateLabelDragState;
+      const dx = event.clientX - drag.startClientX;
+      const dy = event.clientY - drag.startClientY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) drag.moved = true;
+      if (!drag.moved) return;
+      const entity = this.entities().find((item) => this.entityId(item) === drag.entityId);
+      if (!entity) return;
+      this.setStateLabelPosition(entity, drag.transitionIndex, {
+        x: Math.max(4, Math.round(drag.startX + dx)),
+        y: Math.max(4, Math.round(drag.startY + dy)),
       }, false);
       this.version.update((value) => value + 1);
       return;
@@ -603,6 +683,12 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     if (this.stateNodeDragState) {
       const drag = this.stateNodeDragState;
       this.stateNodeDragState = null;
+      if (drag.moved) this.adapter.markChanged();
+      return;
+    }
+    if (this.stateLabelDragState) {
+      const drag = this.stateLabelDragState;
+      this.stateLabelDragState = null;
       if (drag.moved) this.adapter.markChanged();
       return;
     }
@@ -999,10 +1085,10 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         ? 'initial'
         : (outgoing === 0 && incoming > 0 ? 'terminal' : 'intermediate');
       if (saved && saved.kind !== kind) saved.kind = kind;
-      return { name, kind, originalIndex: index, savedPos: saved?.pos };
+      return { name, kind, originalIndex: index, savedPos: saved?.pos, savedMarkerPos: saved?.markerPos };
     });
     if (!nodes.length && transitionValues.size) {
-      Array.from(transitionValues).forEach((name, index) => nodes.push({ name, kind: 'intermediate', originalIndex: index, savedPos: undefined }));
+      Array.from(transitionValues).forEach((name, index) => nodes.push({ name, kind: 'intermediate', originalIndex: index, savedPos: undefined, savedMarkerPos: undefined }));
     }
     const initial = nodes.filter((node) => node.kind === 'initial');
     const terminal = nodes.filter((node) => node.kind === 'terminal');
@@ -1028,9 +1114,10 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         const x = Number.isFinite(Number(node.savedPos?.x)) ? Math.max(4, Math.round(Number(node.savedPos?.x))) : autoX;
         const y = Number.isFinite(Number(node.savedPos?.y)) ? Math.max(4, Math.round(Number(node.savedPos?.y))) : autoY;
         const width = rowWidths[colIndex];
+        const savedMarker = this.normalizePoint(node.savedMarkerPos);
         const marker = node.kind === 'initial'
-          ? { kind: 'initial' as const, x: x - 30, y: y + 10, size: 16 }
-          : (node.kind === 'terminal' ? { kind: 'terminal' as const, x: x + width + 18, y: y + 8, size: 20 } : undefined);
+          ? { kind: 'initial' as const, x: savedMarker?.x ?? x - 22, y: savedMarker?.y ?? y + 18, size: 16 }
+          : (node.kind === 'terminal' ? { kind: 'terminal' as const, x: savedMarker?.x ?? x + width + 28, y: savedMarker?.y ?? y + 18, size: 20 } : undefined);
         layouts.push({ name: node.name, kind: node.kind, row: rowIndex, x, y, width, height: nodeH, marker });
       });
     });
@@ -1040,14 +1127,16 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       const to = nodeMap.get(String(transition.to || ''));
       if (!from || !to) return null;
       const route = this.routeStateTransition(from, to, index);
+      const labelPos = this.normalizePoint(transition.labelPos);
       return {
+        index,
         transition,
         from,
         to,
         path: route.path,
         label: transition.action || transition.label || '流转',
-        labelX: route.labelX,
-        labelY: route.labelY,
+        labelX: labelPos?.x ?? route.labelX,
+        labelY: labelPos?.y ?? route.labelY,
         selected: this.selectedTransitionIndex() === index,
       };
     }).filter(Boolean) as StateTransitionLine[];
@@ -1087,6 +1176,29 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     if (!node) return;
     node.pos = { x: pos.x, y: pos.y };
     if (markChanged) this.changed();
+  }
+
+  private setStateMarkerPosition(entity: EntityDesignEntity, stateName: string, pos: { x: number; y: number }, markChanged = true): void {
+    const values = this.collectStateValues(entity);
+    const nodes = this.syncEntityStateNodes(entity, values);
+    const node = nodes.find((item) => String(item.name || '') === stateName);
+    if (!node) return;
+    node.markerPos = { x: pos.x, y: pos.y };
+    if (markChanged) this.changed();
+  }
+
+  private setStateLabelPosition(entity: EntityDesignEntity, transitionIndex: number, pos: { x: number; y: number }, markChanged = true): void {
+    const transition = entity.state_transitions?.[transitionIndex];
+    if (!transition) return;
+    transition.labelPos = { x: pos.x, y: pos.y };
+    if (markChanged) this.changed();
+  }
+
+  private normalizePoint(point: { x?: number; y?: number } | null | undefined): { x: number; y: number } | null {
+    const x = Number(point?.x);
+    const y = Number(point?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x: Math.max(4, Math.round(x)), y: Math.max(4, Math.round(y)) };
   }
 
   private routeStateTransition(from: StateNodeLayout, to: StateNodeLayout, index: number): { path: string; labelX: number; labelY: number } {
