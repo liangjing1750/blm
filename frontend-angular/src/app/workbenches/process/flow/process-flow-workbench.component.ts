@@ -144,6 +144,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly laneTitleWidth = 86;
   protected readonly nodeWidth = 132;
   protected readonly nodeHeight = 54;
+  protected readonly terminalWidth = 50;
+  protected readonly terminalHeight = 18;
   // 对齐旧版 process.js 布局常量：firstNodeX=180, colW=180, startX=130
   protected readonly graphStartX = 130;
   protected readonly graphNodeStartX = 180;
@@ -416,15 +418,13 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
       const x = kind === 'start' ? this.graphStartX : this.graphNodeStartX + graphIndex * this.columnGap;
       if (kind === 'start' || kind === 'end') {
         const offset = this.flowOffset(process, id);
-        const terminalHeight = 18;
-        const terminalWidth = 18;
         const connected = this.connectedNodesForBoundary(process, id, primaryNodesById);
         const connectedCenterY = connected.length
           ? connected.reduce((sum, node) => sum + node.y + node.height / 2, 0) / connected.length
           : this.laneHeight / 2;
         const connectedRight = connected.length ? Math.max(...connected.map((node) => node.x + node.width)) : x;
         const baseX = kind === 'end' ? Math.max(x, connectedRight + 72) : x;
-        const clamped = this.clampNodePosition(process, id, baseX + offset.dx, connectedCenterY - terminalHeight / 2 + offset.dy, terminalWidth, terminalHeight, '');
+        const clamped = this.clampNodePosition(process, id, baseX + offset.dx, connectedCenterY - this.terminalHeight / 2 + offset.dy, this.terminalWidth, this.terminalHeight, '');
         const boundaryNode = {
           id,
           baseId: id,
@@ -434,8 +434,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
           shared: false,
           x: clamped.x,
           y: clamped.y,
-          width: terminalWidth,
-          height: terminalHeight,
+          width: this.terminalWidth,
+          height: this.terminalHeight,
         };
         primaryNodesById.set(id, boundaryNode);
         return [boundaryNode];
@@ -1011,7 +1011,9 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     for (const id of allIds) {
       if (!visited.has(id)) ordered.push(id);
     }
-    return ordered;
+    // Boundary detail: legacy branch diagrams may encounter END before a later branch task.
+    // END is a visual boundary, so keep it as the rightmost column after all real nodes.
+    return [...ordered.filter((id) => id !== 'END'), 'END'];
   }
 
   private flowOffset(process: LegacyProcess, key: string): Required<ProcessFlowLayoutOffset> {

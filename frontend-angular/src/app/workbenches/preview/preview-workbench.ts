@@ -4,6 +4,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../core/api/api.service';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
+import { sanitizeRichTextHtml } from '../../shared/rich-text/rich-text-utils';
 
 interface PreviewOutlineItem {
   id: string;
@@ -185,6 +186,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     const businessRules = this.normalizedBusinessRules(node);
     return `<div class="pv-task-detail">
       <h4>流程节点: ${this.esc(this.displayName(node, `未命名节点 ${index + 1}`))}${node.roleName ? ` <span class="pv-role">(${this.esc(node.roleName)})</span>` : ''}</h4>
+      ${node.description ? `<div class="pv-task-description">${this.richTextCell(node.description)}</div>` : ''}
       ${userSteps.length ? `<table><thead><tr><th>#</th><th>用户操作步骤</th><th>类型</th><th>条件/备注</th></tr></thead><tbody>${userSteps.map((step, stepIndex) => `
         <tr><td>${stepIndex + 1}</td><td>${this.esc(step.name || '')}</td><td>${this.esc(step.type || '')}</td><td>${this.richTextCell(step.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
       ${tasks.length ? `<table><thead><tr><th>#</th><th>节点任务</th><th>业务构件</th><th>类型</th><th>目标</th><th>备注</th></tr></thead><tbody>${tasks.map((task, taskIndex) => `
@@ -450,12 +452,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   }
 
   private previewRichTextHtml(value: unknown): string {
-    const raw = String(value ?? '');
-    if (!raw.trim()) return '';
-    if (!/<[a-z][\s\S]*>/i.test(raw)) return this.esc(raw).replace(/\r?\n/g, '<br>');
-    const template = document.createElement('template');
-    template.innerHTML = raw;
-    return Array.from(template.content.childNodes).map((node) => this.sanitizeRichTextNode(node)).join('');
+    return sanitizeRichTextHtml(value);
   }
 
   private sanitizeRichTextNode(node: Node): string {

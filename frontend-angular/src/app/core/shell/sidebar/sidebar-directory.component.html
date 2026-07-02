@@ -185,7 +185,7 @@
     <span class="sb-count">{{ stage.processCount }}</span>
   </div>
   <ng-container *ngIf="!isCollapsedNode(stageKey(stage))">
-    <ng-container *ngFor="let group of stage.processGroups">
+    <ng-container *ngFor="let group of stage.processGroups; let groupIndex = index">
       <div class="sb-grp-head sb-flow-group-head">
         <button
           type="button"
@@ -199,19 +199,60 @@
         <span class="sb-grp-badge">流程组</span>
         <button class="sb-name sb-name-button" type="button" data-testid="sidebar-flow-group-name" [title]="group.name" (click)="openStage(stage)">{{ group.name }}</button>
         <span class="sb-count">{{ group.processCount }}</span>
+        <span class="sb-move-btns sb-group-move-btns">
+          <button
+            class="sb-move-btn sb-move-up"
+            type="button"
+            title="上移流程组"
+            aria-label="上移流程组"
+            data-testid="sidebar-flow-group-move-up"
+            [disabled]="groupIndex === 0"
+            (click)="moveFlowGroupInStage(stage, group, -1, $event)"
+          ></button>
+          <button
+            class="sb-move-btn sb-move-down"
+            type="button"
+            title="下移流程组"
+            aria-label="下移流程组"
+            data-testid="sidebar-flow-group-move-down"
+            [disabled]="groupIndex === stage.processGroups.length - 1"
+            (click)="moveFlowGroupInStage(stage, group, 1, $event)"
+          ></button>
+        </span>
       </div>
       <ng-container *ngIf="!isCollapsedNode(flowGroupKey(stage, group))">
-        <button
-          *ngFor="let process of group.processes"
-          type="button"
+        <div
+          *ngFor="let process of group.processes; let index = index"
           class="sb-proc-row in-flow-group"
           data-testid="sidebar-process-row"
           (click)="openProcess(process)"
         >
           <span class="sb-proc-kind">流程</span>
-          <span class="sb-proc-name">{{ process.name }}</span>
+          <button class="sb-proc-main-button" type="button" (click)="openProcess(process); $event.stopPropagation()">
+            <span class="sb-proc-name">{{ process.name }}</span>
+          </button>
           <span class="sb-count">{{ process.nodeCount }}</span>
-        </button>
+          <span class="sb-move-btns">
+            <button
+              class="sb-move-btn sb-move-up"
+              type="button"
+              title="上移"
+              aria-label="上移"
+              data-testid="sidebar-process-move-up"
+              [disabled]="index === 0"
+              (click)="moveProcessInStage(stage, process, -1, $event)"
+            ></button>
+            <button
+              class="sb-move-btn sb-move-down"
+              type="button"
+              title="下移"
+              aria-label="下移"
+              data-testid="sidebar-process-move-down"
+              [disabled]="index === group.processes.length - 1"
+              (click)="moveProcessInStage(stage, process, 1, $event)"
+            ></button>
+          </span>
+        </div>
         <div *ngIf="!group.processes.length" class="sb-empty sb-stage-empty">暂无流程</div>
       </ng-container>
     </ng-container>

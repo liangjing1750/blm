@@ -1,8 +1,17 @@
-<section class="app-workbench">
-  <nav class="comp-tabs">
-    <button [class.active]="activeTab()==='service'" (click)="switchTab('service')">应用服务</button>
-    <button data-testid="application-orchestration-tab" [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
-  </nav>
+<section class="app-workbench" [class.editing-open]="editorOpen()">
+  <div class="proc-view-toolbar">
+    <div class="proc-view-toolbar-main">
+      <div class="view-toggle-group">
+        <button class="vtb" [class.active]="activeTab()==='service'" (click)="switchTab('service')">应用服务</button>
+        <button class="vtb" data-testid="application-orchestration-tab" [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
+      </div>
+      <div class="proc-view-actions">
+        <button class="btn btn-outline btn-sm editor-toggle" type="button" (click)="toggleEditor()">
+          {{ editorOpen() ? '关闭编辑' : '打开编辑' }}
+        </button>
+      </div>
+    </div>
+  </div>
 
   @if (activeTab() === 'service') {
     <div class="comp-tab-body">
@@ -41,6 +50,8 @@
                   <div class="svc-card" [attr.data-testid]="'interface-card-' + uid(svc)" [class.editing]="isEditing(svc)">
                     @if (isEditing(svc)) {
                       <div class="svc-edit-body">
+                        <section class="svc-edit-section svc-edit-basics">
+                          <div class="svc-edit-section-head"><strong>接口基础信息</strong></div>
                         <div class="svc-edit-row">
                           <input [attr.data-testid]="'interface-name-' + uid(svc)" [(ngModel)]="svc.name" placeholder="接口名称" class="svc-edit-name" />
                           <select [(ngModel)]="svc.serviceGroupUid" [attr.data-testid]="'service-interface-group-select-' + uid(svc)">
@@ -53,6 +64,7 @@
                           <input [attr.data-testid]="'interface-path-' + uid(svc)" [(ngModel)]="svc.path" placeholder="/api/..." />
                         </div>
                         <textarea [(ngModel)]="svc.desc" rows="2" placeholder="接口说明" class="svc-edit-note"></textarea>
+                        </section>
 
                         <div class="svc-params-section">
                           <div class="svc-params-head">

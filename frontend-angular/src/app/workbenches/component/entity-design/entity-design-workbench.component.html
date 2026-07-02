@@ -16,11 +16,11 @@
     }
   </div>
 
-  <div class="entity-design-body" [class.has-drawer]="editorOpen() && selectedEntity()">
+  <div class="entity-design-body" [class.has-drawer]="editorOpen() && selectedEntity()" [style.grid-template-columns]="drawerGridColumns()">
     <div class="entity-design-canvas-shell" data-testid="entity-design-canvas-shell">
       @if (view() === 'relation') {
         <div class="entity-relation-canvas" data-testid="entity-design-relation-view">
-          <div class="entity-board" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
+          <div class="entity-board" [class.is-editing]="editorOpen()" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
             @for (frame of componentFrames(); track frame.key) {
               <div class="entity-component-frame" [ngStyle]="frameStyle(frame)"></div>
               <div class="entity-component-title" [style.left.px]="frame.left + 18" [style.top.px]="frame.top + 10">{{ frame.label }}</div>
@@ -101,6 +101,7 @@
 
     @if (editorOpen() && selectedEntity(); as entity) {
       <aside class="entity-design-drawer" data-testid="entity-design-drawer">
+        <div class="entity-design-drawer-resize" (mousedown)="startDrawerResize($event)"></div>
         <div class="entity-design-drawer-head">
           <h3>{{ entity.name || '未命名实体' }}</h3>
           <button class="drawer-close" type="button" data-testid="entity-design-drawer-close" (click)="editorOpen.set(false)">×</button>

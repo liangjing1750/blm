@@ -72,9 +72,10 @@
 
 .sb-proc-row {
   justify-content: space-between;
-  padding: 5px 12px 5px 72px;
+  padding: 5px 42px 5px 72px;
   font-size: 11px;
   font-weight: 600;
+  position: relative;
 }
 
 .sb-proc-row:hover,
@@ -93,7 +94,8 @@
 }
 
 .sb-flow-group-head {
-  padding: 5px 12px 5px 52px;
+  position: relative;
+  padding: 5px 42px 5px 52px;
   background: #fbfdff;
 }
 
@@ -101,6 +103,14 @@
   padding-left: 86px;
   background: #fff;
 }
+
+.sb-proc-main-button { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.sb-move-btns { display: flex; gap: 2px; position: absolute; right: 6px; top: 50%; opacity: 0; pointer-events: none; transform: translateY(-50%); }
+.sb-proc-row:hover .sb-move-btns, .sb-proc-row:focus-within .sb-move-btns, .sb-flow-group-head:hover .sb-move-btns, .sb-flow-group-head:focus-within .sb-move-btns { opacity: 1; pointer-events: auto; }
+.sb-move-btn { width: 16px; height: 16px; padding: 0; border: 1px solid #cbd5e1; border-radius: 3px; background: #fff; line-height: 1; }
+.sb-move-btn:disabled { opacity: .4; }
+.sb-move-up::before { content: '\2191'; }
+.sb-move-down::before { content: '\2193'; }
 
 .sb-capability-head .sb-grp-badge {
   background: #d8faeb;

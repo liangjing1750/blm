@@ -1,0 +1,27 @@
+<div class="node-rich-editor node-rich-editor--content rich-text-field">
+  <span class="node-rich-label">{{ label }}</span>
+  <div class="node-rich-toolbar-row">
+    <div class="node-rich-toolbar">
+      <button type="button" (click)="apply('bold')"><b>B</b></button>
+      <button type="button" (click)="apply('unordered')">&bull;</button>
+      <button type="button" (click)="apply('ordered')">1.</button>
+      <button type="button" (click)="apply('outdent')">&larr;</button>
+      <button type="button" (click)="apply('indent')">&rarr;</button>
+    </div>
+    <span class="node-rich-shortcuts">Ctrl+B / Ctrl+0 / Ctrl+1 / Ctrl+2 / Tab / Shift+Tab</span>
+  </div>
+  <div
+    #editor
+    class="node-rich-content rich-text-editor"
+    contenteditable="true"
+    role="textbox"
+    aria-multiline="true"
+    [attr.data-testid]="testIdPrefix + '-editor'"
+    [attr.data-placeholder]="placeholder"
+    (focus)="focusAtEnd(editor)"
+    (input)="emitValue()"
+    (paste)="handlePaste($event)"
+    (keydown)="handleKeydown($event)"
+  ></div>
+  <textarea class="rich-text-storage" aria-hidden="true" tabindex="-1">{{ html() }}</textarea>
+</div>

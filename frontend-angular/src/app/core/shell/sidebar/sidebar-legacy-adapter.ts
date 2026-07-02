@@ -181,6 +181,8 @@ export interface SidebarAdapter {
   openValueDomain(): void;
   openStage(stageId: string): void;
   openProcess(processId: string): void;
+  moveProcessInStage(stageId: string, processId: string, dir: -1 | 1): void;
+  moveFlowGroupInStage(stageId: string, groupName: string, dir: -1 | 1): void;
   openComponentWorkbench(): void;
   openEntity(entityId: string): void;
 }
@@ -302,21 +304,69 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
 
   const processesForStage = (stage: SidebarStage, domainId: string): SidebarProcess[] => {
     const stageIds = new Set([stage.uid, stage.id, stage.name].filter(Boolean).map(String));
-    const explicitRefs = new Set([...(stage.processUids || []), ...(stage.processIds || [])].filter(Boolean).map(String));
+    const orderByProcess = new Map<string, number>();
     (doc().stageFlowRefs || []).forEach((ref) => {
       if (refMatches(ref['stageUid'] || ref['stageId'], stageIds, stageIds)) {
-        const processRef = String(ref['processUid'] || ref['processId'] || '').trim();
-        if (processRef) explicitRefs.add(processRef);
+        orderByProcess.set(String(ref['processUid'] || ref['processId'] || '').trim(), Number(ref['order'] || 0));
       }
     });
+    const explicitRefs = new Set([...(stage.processUids || []), ...(stage.processIds || []), ...orderByProcess.keys()].filter(Boolean).map(String));
     return (doc().processes || []).filter((process) => {
       const processIds = new Set([process.uid, process.id, process.name].filter(Boolean).map(String));
       const belongsToStage = explicitRefs.size
         ? [...processIds].some((value) => explicitRefs.has(value))
         : refMatches(process.stageUid || process.stageId, stageIds, stageIds);
-      const stageDomainMatch = matchesDomain(stage, domainId);
-      return belongsToStage && (stageDomainMatch || matchesDomain(process, domainId));
+      return belongsToStage && (matchesDomain(stage, domainId) || matchesDomain(process, domainId));
+    }).sort((left, right) => Number(orderByProcess.get(idOf(left)) || 9999) - Number(orderByProcess.get(idOf(right)) || 9999));
+  };
+
+  const moveProcessInStage = (stageId: string, processId: string, dir: -1 | 1): void => {
+    const stage = (doc().stages || []).find((item) => idOf(item) === stageId || item.id === stageId || item.uid === stageId);
+    const process = (doc().processes || []).find((item) => idOf(item) === processId || item.id === processId || item.uid === processId);
+    const stageIds = new Set([stageId, stage?.uid, stage?.id, stage?.name].filter(Boolean).map(String));
+    const processIds = new Set([processId, process?.uid, process?.id, process?.name].filter(Boolean).map(String));
+    const refs = (doc().stageFlowRefs || [])
+      .filter((ref) => refMatches(ref['stageUid'] || ref['stageId'], stageIds, stageIds))
+      .sort((left, right) => Number(left['order'] || 0) - Number(right['order'] || 0));
+    const index = refs.findIndex((ref) => processIds.has(String(ref['processUid'] || ref['processId'] || '').trim()));
+    const targetIndex = index + dir;
+    if (index < 0 || targetIndex < 0 || targetIndex >= refs.length) return;
+    [refs[index], refs[targetIndex]] = [refs[targetIndex], refs[index]];
+    refs.forEach((ref, orderIndex) => {
+      ref['order'] = orderIndex + 1;
     });
+    if (runtime.markModified) runtime.markModified();
+    else markAngularRuntimeModified();
+    runtime.render?.();
+  };
+
+  const moveFlowGroupInStage = (stageId: string, groupName: string, dir: -1 | 1): void => {
+    const stage = (doc().stages || []).find((item) => idOf(item) === stageId || item.id === stageId || item.uid === stageId);
+    const stageIds = new Set([stageId, stage?.uid, stage?.id, stage?.name].filter(Boolean).map(String));
+    const processById = new Map<string, SidebarProcess>();
+    (doc().processes || []).forEach((process) => {
+      [process.uid, process.id, process.name].filter(Boolean).forEach((id) => processById.set(String(id), process));
+    });
+    const refs = (doc().stageFlowRefs || [])
+      .filter((ref) => refMatches(ref['stageUid'] || ref['stageId'], stageIds, stageIds))
+      .sort((left, right) => Number(left['order'] || 0) - Number(right['order'] || 0));
+    const blocks: Array<{ name: string; refs: Array<Record<string, any>> }> = [];
+    refs.forEach((ref) => {
+      const process = processById.get(String(ref['processUid'] || ref['processId'] || '').trim());
+      const name = String((process as Record<string, any> | undefined)?.['flowGroup'] || '').trim() || '未分组';
+      if (blocks[blocks.length - 1]?.name !== name) blocks.push({ name, refs: [] });
+      blocks[blocks.length - 1].refs.push(ref);
+    });
+    const index = blocks.findIndex((block) => block.name === groupName);
+    const targetIndex = index + dir;
+    if (index < 0 || targetIndex < 0 || targetIndex >= blocks.length) return;
+    [blocks[index], blocks[targetIndex]] = [blocks[targetIndex], blocks[index]];
+    blocks.flatMap((block) => block.refs).forEach((ref, orderIndex) => {
+      ref['order'] = orderIndex + 1;
+    });
+    if (runtime.markModified) runtime.markModified();
+    else markAngularRuntimeModified();
+    runtime.render?.();
   };
 
   const componentItems = (): SidebarComponentItem[] => {
@@ -536,9 +586,15 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       else switchAngularMainTab('processWorkbench');
       if (runtime.navigate) runtime.navigate('process', { procId: processId });
       else navigateAngularWorkbench('process', { procId: processId });
-      if (runtime.S?.ui) runtime.S.ui['mainTab'] = 'processWorkbench';
+      ui()['mainTab'] = 'processWorkbench';
+      ui()['processWorkbenchView'] = 'flow';
+      ui()['procView'] = 'flow';
+      ui()['procId'] = processId;
+      ui()['taskId'] = null;
       runtime.render?.();
     },
+    moveProcessInStage,
+    moveFlowGroupInStage,
     openComponentWorkbench(): void {
       if (runtime.switchMainTab) runtime.switchMainTab('constructWorkbench');
       else switchAngularMainTab('constructWorkbench');
@@ -549,4 +605,4 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     },
   };
 }
-import { getAngularRuntimeState, navigateAngularWorkbench, switchAngularMainTab } from '../../runtime/angular-runtime';
+import { getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench, switchAngularMainTab } from '../../runtime/angular-runtime';

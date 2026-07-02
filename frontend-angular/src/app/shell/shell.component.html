@@ -637,12 +637,13 @@
     </ng-container>
   </section>
 
-  <app-wait-dialog
-    *ngIf="waitDialog() as wait"
-    [title]="wait.title"
-    [description]="wait.description"
-  ></app-wait-dialog>
 </div>
+
+<app-wait-dialog
+  *ngIf="waitDialog() as wait"
+  [title]="wait.title"
+  [description]="wait.description"
+></app-wait-dialog>
 
 @if (locatorMenu(); as menu) {
   <div class="locator-menu" data-testid="locator-menu" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">

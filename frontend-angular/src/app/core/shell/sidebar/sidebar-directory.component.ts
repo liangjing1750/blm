@@ -83,6 +83,20 @@ export class SidebarDirectoryComponent implements OnInit {
     this.adapter.openProcess(process.id);
   }
 
+  protected moveProcessInStage(stage: SidebarStageGroup, process: SidebarProcessSummary, dir: -1 | 1, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.adapter.moveProcessInStage(stage.id, process.id, dir);
+    this.refreshFromRuntime();
+  }
+
+  protected moveFlowGroupInStage(stage: SidebarStageGroup, group: SidebarProcessGroup, dir: -1 | 1, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.adapter.moveFlowGroupInStage(stage.id, group.name, dir);
+    this.refreshFromRuntime();
+  }
+
   protected openComponentWorkbench(): void {
     this.adapter.openComponentWorkbench();
   }

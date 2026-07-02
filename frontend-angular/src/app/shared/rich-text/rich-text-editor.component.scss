@@ -1,0 +1,144 @@
+:host {
+  display: block;
+}
+
+.node-rich-editor--content {
+  position: relative;
+  padding: 0;
+}
+
+.node-rich-label {
+  display: inline-flex;
+  width: max-content;
+  margin-bottom: 6px;
+  color: var(--node-section-title, #1e40af);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.node-rich-toolbar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-bottom: 7px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-2px);
+  transition: max-height .16s ease, opacity .16s ease, transform .16s ease;
+}
+
+.node-rich-editor--content:focus-within .node-rich-toolbar-row {
+  max-height: 42px;
+  opacity: 1;
+  overflow: visible;
+  transform: translateY(0);
+}
+
+.node-rich-toolbar {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .05);
+}
+
+.node-rich-toolbar button {
+  display: inline-grid;
+  min-width: 28px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #3b82f6;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.node-rich-toolbar button:hover {
+  background: #eff6ff;
+}
+
+.node-rich-shortcuts {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.node-rich-content {
+  min-height: 132px;
+  padding: 14px 16px;
+  border: 1px solid #dbe7f5;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.78;
+  outline: 0;
+}
+
+.node-rich-content b,
+.node-rich-content strong {
+  font-weight: 900;
+}
+
+.node-rich-content ul,
+.node-rich-content ol {
+  margin: 7px 0 7px 28px;
+  padding-left: 22px;
+}
+
+.node-rich-content ul {
+  list-style-type: disc;
+}
+
+.node-rich-content ol {
+  list-style-type: decimal;
+}
+
+.node-rich-content ol ol {
+  list-style-type: lower-alpha;
+}
+
+.node-rich-content ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.node-rich-content ul ul {
+  list-style-type: circle;
+}
+
+.node-rich-content ul ul ul {
+  list-style-type: square;
+}
+
+.node-rich-content li {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+
+.node-rich-content li::marker {
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.node-rich-content ol > li::marker {
+  font-size: .96em;
+}
+
+.node-rich-content:empty::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+}
+
+.rich-text-storage {
+  display: none;
+}

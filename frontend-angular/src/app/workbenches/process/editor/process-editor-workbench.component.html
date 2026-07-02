@@ -151,6 +151,13 @@
                 <button class="btn btn-outline btn-sm" type="button" data-testid="process-entity-op-add" [disabled]="!selectedEntityId" (click)="addSelectedEntity(task)">关联</button>
               </div>
             }
+            <app-rich-text-editor
+              label="任务详细说明"
+              placeholder="任务详细说明"
+              testIdPrefix="process-task-description"
+              [value]="task.description || ''"
+              (valueChange)="setTaskField(task, 'description', $event)"
+            ></app-rich-text-editor>
           </section>
 
           <section #nodeSection class="node-editor-card node-editor-card--step" id="process-user-step-section" data-testid="process-user-step-section">
@@ -182,20 +189,13 @@
                     </div>
                   </div>
                   @if (isStepDetailOpen(step, index)) {
-                    <div class="node-rich-editor node-rich-editor--content">
-                      <span class="node-rich-label">步骤详细描述</span>
-                      <div class="node-rich-toolbar-row">
-                        <div class="node-rich-toolbar">
-                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'bold')"><b>B</b></button>
-                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'insertUnorderedList')">•</button>
-                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'insertOrderedList')">1.</button>
-                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'outdent')">←</button>
-                          <button type="button" (click)="applyRichTextCommand(stepNoteEditor, 'indent')">→</button>
-                        </div>
-                        <span class="node-rich-shortcuts">Ctrl+B 加粗 · Ctrl+0 无序 · Ctrl+1 有序 · Ctrl+2 有序多级 · Tab 右移 · Shift+Tab 左移</span>
-                      </div>
-                      <div #stepNoteEditor class="node-rich-content" contenteditable="true" data-placeholder="步骤详细描述" [innerHTML]="richTextHtml(step.note)" (input)="setUserStepNote(step, richTextValue($event))" (keydown)="handleRichTextKeydown($event, stepNoteEditor)"></div>
-                    </div>
+                    <app-rich-text-editor
+                      label="步骤详细描述"
+                      placeholder="步骤详细描述"
+                      testIdPrefix="process-step-note"
+                      [value]="step.note || ''"
+                      (valueChange)="setUserStepNote(step, $event)"
+                    ></app-rich-text-editor>
                   } @else {
                     <button class="btn btn-ghost-sm node-rich-add node-rich-add--step" type="button" (click)="openStepDetail(step, index)">+ 步骤详细描述</button>
                   }
@@ -396,20 +396,13 @@
                     </div>
                   </div>
                   @if (isRuleDetailOpen(rule, index)) {
-                    <div class="node-rich-editor node-rich-editor--content">
-                      <span class="node-rich-label">规则详细描述</span>
-                      <div class="node-rich-toolbar-row">
-                        <div class="node-rich-toolbar">
-                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'bold')"><b>B</b></button>
-                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'insertUnorderedList')">•</button>
-                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'insertOrderedList')">1.</button>
-                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'outdent')">←</button>
-                          <button type="button" (click)="applyRichTextCommand(ruleEditor, 'indent')">→</button>
-                        </div>
-                        <span class="node-rich-shortcuts">Ctrl+B 加粗 · Ctrl+0 无序 · Ctrl+1 有序 · Ctrl+2 有序多级 · Tab 右移 · Shift+Tab 左移</span>
-                      </div>
-                      <div #ruleEditor class="node-rich-content" contenteditable="true" [attr.data-placeholder]="businessRuleContentPlaceholder(rule, index)" [innerHTML]="richTextHtml(businessRuleValue(rule))" (input)="setBusinessRule(task, index, richTextValue($event))" (keydown)="handleRichTextKeydown($event, ruleEditor)"></div>
-                    </div>
+                    <app-rich-text-editor
+                      label="规则详细描述"
+                      [placeholder]="businessRuleContentPlaceholder(rule, index)"
+                      testIdPrefix="process-rule-content"
+                      [value]="businessRuleValue(rule)"
+                      (valueChange)="setBusinessRule(task, index, $event)"
+                    ></app-rich-text-editor>
                   } @else {
                     <button class="btn btn-ghost-sm node-rich-add" type="button" (click)="openRuleDetail(rule, index)">+ 规则详细描述</button>
                   }

@@ -156,6 +156,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly selectedEntityIds = signal<Set<string>>(new Set());
   protected readonly selectedTransitionIndex = signal<number | null>(null);
   protected readonly editorOpen = signal(false);
+  protected readonly drawerWidth = signal(460);
   protected readonly selectionBox = signal<SelectionBox | null>(null);
   private readonly adapter: EntityDesignAdapter = createEntityDesignLegacyAdapter();
   private readonly palette = [
@@ -195,6 +196,32 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     this.view.set(view);
   }
 
+  protected drawerGridColumns(): string {
+    return this.editorOpen() && this.selectedEntity()
+      ? `minmax(560px, 1fr) ${this.drawerWidth()}px`
+      : 'minmax(0, 1fr)';
+  }
+
+  // 模块意图：实体编辑抽屉承载字段、关系和状态流转，宽度必须能被建模人员按内容复杂度调整。
+  // 关键流程：记录起点宽度后监听 document mousemove，按横向拖拽距离实时更新右侧抽屉宽度。
+  // 边界细节：宽度限制在 360-860px，避免挤压画布到不可用，也避免抽屉越过屏幕主体。
+  protected startDrawerResize(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = this.drawerWidth();
+    const onMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      this.drawerWidth.set(Math.max(360, Math.min(860, startWidth + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
   protected entityId(entity: EntityDesignEntity | null | undefined): string {
     return String(entity?.uid || entity?.id || '').trim();
   }
@@ -215,7 +242,6 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     }
     this.selectedEntityId.set(id);
     this.syncRuntimeEntityId(id);
-    this.editorOpen.set(true);
   }
 
   protected isSelected(entity: EntityDesignEntity): boolean {
@@ -223,6 +249,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected startEntityDrag(entity: EntityDesignEntity, event: MouseEvent): void {
+    if (!this.editorOpen()) return;
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -240,6 +267,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected startSelectionBox(event: MouseEvent): void {
+    if (!this.editorOpen()) return;
     if (!event.shiftKey || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -484,6 +512,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected startStateNodeDrag(node: StateNodeLayout, event: MouseEvent): void {
+    if (!this.editorOpen()) return;
     if (event.button !== 0) return;
     const entity = this.selectedEntity();
     if (!entity) return;
@@ -660,7 +689,6 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       .map((node) => node.id);
     this.selectedEntityIds.set(new Set(selected));
     this.selectedEntityId.set(selected[0] || '');
-    if (selected.length) this.editorOpen.set(true);
   }
 
   private entityNodeSize(entity: EntityDesignEntity): { width: number; height: number } {

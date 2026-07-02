@@ -7,7 +7,9 @@ import { routes } from './app.routes';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
 import { getAngularRuntimeState } from './core/runtime/angular-runtime';
 import { ShellComponent } from './shell/shell.component';
+import { ProcessEditorWorkbenchComponent } from './workbenches/process/editor/process-editor-workbench.component';
 import { ProcessFlowWorkbenchComponent } from './workbenches/process/flow/process-flow-workbench.component';
+import { ProcessStageWorkbenchComponent } from './workbenches/process/stage/process-stage-workbench.component';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -28,7 +30,7 @@ describe('App', () => {
     runtime.collab.recoveryMode = false;
 
     await TestBed.configureTestingModule({
-      imports: [App, ShellComponent, ProcessFlowWorkbenchComponent],
+      imports: [App, ShellComponent, ProcessEditorWorkbenchComponent, ProcessFlowWorkbenchComponent, ProcessStageWorkbenchComponent],
       providers: [provideRouter(routes)],
     }).compileComponents();
   });
@@ -586,6 +588,7 @@ describe('App', () => {
         nodes: [{
           uid: 'node-1',
           name: '提交申请',
+          description: '<p><strong>任务说明</strong></p>',
           userSteps: [{ uid: 'step-1', name: '填写信息', type: 'input', note: '<ol><li><strong style="color:#2563eb">核对仓单</strong><ol><li>查看现货货转记录</li></ol></li></ol>' }],
           businessRules: [{ uid: 'rule-1', name: '校验规则', content: '<ul><li><em>必须有仓单编号</em></li></ul>' }],
         }],
@@ -645,8 +648,10 @@ describe('App', () => {
     rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
     expect(rendered?.querySelector('[data-testid="preview-process-graph"]')).toBeTruthy();
     expect(rendered?.textContent).toContain('流程节点: 提交申请');
-    expect(rendered?.querySelector('.pv-rich-text strong')?.textContent).toContain('核对仓单');
-    expect(rendered?.querySelector('.pv-rich-text strong')?.getAttribute('style') || '').toContain('color');
+    expect(rendered?.querySelector('.pv-task-description strong')?.textContent).toContain('任务说明');
+    const stepRichText = rendered?.querySelectorAll('.pv-rich-text')[1];
+    expect(stepRichText?.querySelector('strong')?.textContent).toContain('核对仓单');
+    expect(stepRichText?.querySelector('strong')?.getAttribute('style') || '').toContain('color');
     expect(rendered?.querySelector('.pv-rich-text ol ol li')?.textContent).toContain('查看现货货转记录');
     expect(rendered?.querySelector('.pv-rule-model em')?.textContent).toContain('必须有仓单编号');
     expect(rendered?.innerHTML).not.toContain('&lt;strong&gt;核对仓单&lt;/strong&gt;');
@@ -3263,6 +3268,67 @@ describe('App', () => {
     ]);
   });
 
+  it('should reuse the rich text editor for task, step and rule details in the process editor', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['processView'] = 'node';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-customer', name: '客户' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库预约流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '客户提交入库预约',
+          description: '<p>旧说明</p>',
+          roleIds: ['role-customer'],
+          userSteps: [{ uid: 'step-fill', name: '填写信息', type: 'Fill', note: '<p>旧步骤</p>' }],
+          forms: [],
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [{ uid: 'rule-check', name: '校验规则', content: '<p>旧规则</p>' }],
+        }],
+      }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const task = runtime.doc.processes[0].nodes[0];
+
+    const taskEditor = compiled.querySelector<HTMLElement>('[data-testid="process-task-description-editor"]')!;
+    const stepEditor = compiled.querySelector<HTMLElement>('[data-testid="process-step-note-editor"]')!;
+    const ruleEditor = compiled.querySelector<HTMLElement>('[data-testid="process-rule-content-editor"]')!;
+    expect(taskEditor).toBeTruthy();
+    expect(stepEditor).toBeTruthy();
+    expect(ruleEditor).toBeTruthy();
+
+    taskEditor.innerHTML = '<ol><li><strong>任务说明</strong></li></ol>';
+    taskEditor.dispatchEvent(new Event('input', { bubbles: true }));
+    stepEditor.innerHTML = '<ul><li><em>步骤描述</em></li></ul>';
+    stepEditor.dispatchEvent(new Event('input', { bubbles: true }));
+    ruleEditor.innerHTML = '<p><strong style="color:#2563eb">规则描述</strong></p>';
+    ruleEditor.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(task.description).toContain('<strong>任务说明</strong>');
+    expect(task.userSteps[0].note).toContain('<em>步骤描述</em>');
+    expect(task.businessRules[0].content).toContain('规则描述');
+  });
+
   it('should show application services associated with a process node without exposing orchestration internals', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
@@ -3745,6 +3811,215 @@ describe('App', () => {
     expect(runtime.ui['sbCollapse']['cap-bc-1']).toBe(false);
   });
 
+  it('should navigate sidebar flow groups to stage view and processes to process view', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['sidebarCollapsed'] = false;
+    runtime.ui['sbCollapse'] = {
+      'vs-column-1': false,
+      'stage-tree-stage-1': false,
+      'flow-group-stage-1-group-1': false,
+    };
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [{ uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 }],
+      processes: [{ uid: 'process-1', name: '入库预约', flowGroup: '入库组', nodes: [] }],
+      businessComponents: [],
+      businessConstructs: [],
+      entities: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/panorama');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="sidebar-flow-group-name"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['procView']).toBe('stage');
+    expect(runtime.ui['stageId']).toBe('stage-1');
+
+    compiled.querySelector<HTMLButtonElement>('.sb-proc-main-button')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['procView']).toBe('flow');
+    expect(runtime.ui['procId']).toBe('process-1');
+  });
+
+  it('should reveal sidebar process move controls and reorder stage flow refs', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['sidebarCollapsed'] = false;
+    runtime.ui['sbCollapse'] = {
+      'vs-column-1': false,
+      'stage-tree-stage-1': false,
+      'flow-group-stage-1-group-1': false,
+    };
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [
+        { uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 },
+        { uid: 'ref-2', stageUid: 'stage-1', processUid: 'process-2', order: 2 },
+      ],
+      processes: [
+        { uid: 'process-1', name: '入库预约', flowGroup: '入库组', nodes: [] },
+        { uid: 'process-2', name: '仓单审核', flowGroup: '入库组', nodes: [] },
+      ],
+      businessComponents: [],
+      businessConstructs: [],
+      entities: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/panorama');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const firstRow = compiled.querySelector<HTMLElement>('[data-testid="sidebar-process-row"]');
+
+    expect(firstRow?.textContent).toContain('入库预约');
+    expect(firstRow?.querySelector('[data-testid="sidebar-process-move-up"]')).toBeTruthy();
+    firstRow?.querySelector<HTMLButtonElement>('[data-testid="sidebar-process-move-down"]')?.click();
+    fixture.detectChanges();
+
+    const orderedRefs = [...(runtime.doc.stageFlowRefs || [])].sort((left: any, right: any) => Number(left.order) - Number(right.order));
+    expect(orderedRefs.map((ref: any) => ref.processUid || ref.processId)).toEqual(['process-2', 'process-1']);
+    expect(compiled.querySelector('[data-testid="sidebar-process-row"]')?.textContent).toContain('仓单审核');
+  });
+
+  it('should move a whole sidebar flow group without changing process order inside the group', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['sidebarCollapsed'] = false;
+    runtime.ui['sbCollapse'] = {
+      'vs-column-1': false,
+      'stage-tree-stage-1': false,
+      'flow-group-stage-1-group-1': false,
+      'flow-group-stage-1-group-2': false,
+    };
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [
+        { uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 },
+        { uid: 'ref-2', stageUid: 'stage-1', processUid: 'process-2', order: 2 },
+        { uid: 'ref-3', stageUid: 'stage-1', processUid: 'process-3', order: 3 },
+      ],
+      processes: [
+        { uid: 'process-1', name: '新增线上查库', flowGroup: '线上查库管理', nodes: [] },
+        { uid: 'process-2', name: '查看线上查库', flowGroup: '线上查库管理', nodes: [] },
+        { uid: 'process-3', name: '查库模板管理', flowGroup: '查库模板管理', nodes: [] },
+      ],
+      businessComponents: [],
+      businessConstructs: [],
+      entities: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/panorama');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const firstGroup = compiled.querySelector<HTMLElement>('.sb-flow-group-head');
+
+    expect(firstGroup?.textContent).toContain('线上查库管理');
+    expect(firstGroup?.querySelector('[data-testid="sidebar-flow-group-move-down"]')).toBeTruthy();
+    firstGroup?.querySelector<HTMLButtonElement>('[data-testid="sidebar-flow-group-move-down"]')?.click();
+    fixture.detectChanges();
+
+    const orderedRefs = [...(runtime.doc.stageFlowRefs || [])].sort((left: any, right: any) => Number(left.order) - Number(right.order));
+    expect(orderedRefs.map((ref: any) => ref.processUid || ref.processId)).toEqual(['process-3', 'process-1', 'process-2']);
+    const groups = [...compiled.querySelectorAll('.sb-flow-group-head')].map((item) => item.textContent || '');
+    expect(groups[0]).toContain('查库模板管理');
+    expect(groups[1]).toContain('线上查库管理');
+  });
+
+  it('should stack isolated stage flow groups vertically like the legacy stage view', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procView'] = 'stage';
+    runtime.ui['stageViewMode'] = 'detail';
+    runtime.ui['stageId'] = 'stage-1';
+    runtime.ui['stageEditorCollapsed'] = true;
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '准备', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [
+        { uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 },
+        { uid: 'ref-2', stageUid: 'stage-1', processUid: 'process-2', order: 2 },
+        { uid: 'ref-3', stageUid: 'stage-1', processUid: 'process-3', order: 3 },
+      ],
+      stageFlowLinks: [],
+      processes: [
+        { uid: 'process-1', name: '入库预约', flowGroup: '入库组', nodes: [] },
+        { uid: 'process-2', name: '仓单收货', flowGroup: '入库组', nodes: [] },
+        { uid: 'process-3', name: '仓单审核', flowGroup: '审核组', nodes: [] },
+      ],
+      businessComponents: [],
+      businessConstructs: [],
+      entities: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+
+    const fixture = TestBed.createComponent(ProcessStageWorkbenchComponent);
+    fixture.detectChanges();
+    const nodes = (fixture.componentInstance as any).flowNodes();
+
+    expect(nodes.map((node: any) => node.processId)).toEqual(['process-1', 'process-2', 'process-3']);
+    expect(nodes[1].x).toBeGreaterThan(nodes[0].x);
+    expect(nodes[1].y).toBe(nodes[0].y);
+    expect(nodes[2].x).toBe(nodes[0].x);
+    expect(nodes[2].y).toBeGreaterThan(nodes[0].y);
+  });
+
   it('should keep migration status aligned with restored Angular workbench entries', () => {
     const statusById = new Map(WORKBENCH_MIGRATION_STATUS.map((item) => [item.id, item.status]));
 
@@ -4073,6 +4348,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(component.waitDialog()?.title).toContain('历史');
+    expect(compiled.querySelector('[data-testid="wait-dialog"]')?.textContent).toContain('正在加载历史版本');
     resolveHistory(new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     await fixture.whenStable();
     await Promise.resolve();
@@ -4448,6 +4724,35 @@ describe('App', () => {
     expect((runtime.doc.processes[0].nodes[0] as any).roleIds).toContain('role-b');
   });
 
+  it('should center all process flow side tool icons in the icon column', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'proc-inbound';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-inbound', name: '入库流程', nodes: [], flow: { nodes: [], edges: [] } }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const gatewayIcon = compiled.querySelector<HTMLElement>('[data-testid="process-flow-add-gateway"] b')!;
+    const attachmentIcon = compiled.querySelector<HTMLElement>('[data-testid="process-flow-open-attachments"] b')!;
+
+    expect(getComputedStyle(gatewayIcon).justifySelf).toBe('center');
+    expect(getComputedStyle(attachmentIcon).justifySelf).toBe('center');
+  });
+
   it('should move every flow canvas node vertically while dragging', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
@@ -4542,6 +4847,67 @@ describe('App', () => {
     expect(compiled.textContent).not.toContain('未分配角色');
     expect(gateway.role).toBe('仓库');
     expect(Math.abs((gateway.y + gateway.height / 2) - (task.y + task.height / 2))).toBeLessThanOrEqual(2);
+  });
+
+  it('should keep legacy swimlane boundary terminals outside node shapes', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [
+        { uid: 'role-warehouse', id: 'role-warehouse', name: '仓库' },
+        { uid: 'role-auditor', id: 'role-auditor', name: '品种负责人' },
+      ],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-inbound',
+          name: '新增移垛申请',
+          nodes: [
+            { uid: 'node-submit', name: '新增移垛申请', roleIds: ['role-warehouse'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+            { uid: 'node-review', name: '审核移垛申请', roleIds: ['role-auditor'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+          ],
+          flow: {
+            nodes: [
+              { id: 'gateway-start', uid: 'gateway-start', kind: 'gateway', title: '是否为期货仓单开始', role_id: '' },
+              { id: 'gateway-end', uid: 'gateway-end', kind: 'gateway', title: '是否为期货仓单结束', role_id: '' },
+            ],
+            edges: [
+              { id: 'edge-start', uid: 'edge-start', from: 'START', to: 'node-submit', label: '' },
+              { id: 'edge-submit-start', uid: 'edge-submit-start', from: 'node-submit', to: 'gateway-start', label: '' },
+              { id: 'edge-start-end', uid: 'edge-start-end', from: 'gateway-start', to: 'gateway-end', label: '现货' },
+              { id: 'edge-gateway-end', uid: 'edge-gateway-end', from: 'gateway-end', to: 'END', label: '' },
+              { id: 'edge-review', uid: 'edge-review', from: 'gateway-end', to: 'node-review', label: '期货' },
+              { id: 'edge-review-end', uid: 'edge-review-end', from: 'node-review', to: 'END', label: '' },
+            ],
+          },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-inbound';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance as any;
+    const process = component.currentProcess();
+    const nodes = component.flowNodes(process);
+    const start = nodes.find((node: any) => node.kind === 'start');
+    const end = nodes.find((node: any) => node.kind === 'end');
+    const firstTask = nodes.find((node: any) => node.baseId === 'node-submit');
+    const reviewTask = nodes.find((node: any) => node.baseId === 'node-review');
+    const startEdge = component.flowEdges(process).find((edge: any) => edge.baseId === 'edge-start');
+
+    expect(start.width).toBeGreaterThan(18);
+    expect(start.x + start.width).toBeGreaterThanOrEqual(firstTask.x - 2);
+    expect(start.x + start.width).toBeLessThanOrEqual(firstTask.x + 2);
+    expect(startEdge.d).toContain(`M ${Math.round(start.x + start.width)}`);
+    expect(end.x).toBeGreaterThan(reviewTask.x + reviewTask.width);
   });
 
   it('should edit flow labels inline and keep flow shape controls draggable', async () => {

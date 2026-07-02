@@ -1,8 +1,5 @@
 .app-workbench { display: flex; flex-direction: column; height: calc(100vh - 92px); }
-.comp-tabs { display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; padding: 0 12px; background: #fff; flex-shrink: 0; }
-.comp-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: #64748b; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; padding: 10px 16px; }
-.comp-tabs button:hover { color: #334155; }
-.comp-tabs button.active { border-bottom-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
+.editor-toggle { white-space: nowrap; }
 .comp-tab-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 10px 14px 14px; min-height: 0; }
 .comp-tab-body::-webkit-scrollbar { width: 10px; }
 .comp-tab-body::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
@@ -42,7 +39,10 @@
 .tag { display: inline-flex; align-items: center; gap: 3px; border-radius: 5px; font-size: 11px; font-weight: 600; padding: 2px 7px; }
 .tag-node { background: #dcfce7; color: #166534; }
 
-.svc-edit-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.svc-edit-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; background: #f8fafc; }
+.svc-edit-section, .svc-params-section { border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; padding: 10px; }
+.svc-edit-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.svc-edit-section-head strong { color: #1e293b; font-size: 13px; }
 .svc-edit-row { display: flex; gap: 8px; }
 .svc-edit-row input, .svc-edit-row select { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 13px; }
 .svc-edit-row input { flex: 1; min-width: 120px; }
@@ -98,7 +98,7 @@
 .btn-ghost-sm.danger:hover { background: #fef2f2; }
 
 /* ─── 参数表 + JSON ─────────────────────── */
-.svc-params-section { border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px 12px; }
+.svc-params-section { border-color: #dbe5f0; }
 .svc-params-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .svc-params-head span { font-size: 12px; font-weight: 700; color: #475569; }
 .svc-params-head-actions { display: flex; gap: 4px; }

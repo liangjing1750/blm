@@ -43,6 +43,7 @@ interface FlowGroupBox {
   h: number;
 }
 
+
 interface FlowDragState {
   nodeId: string;
   startX: number;
@@ -201,16 +202,32 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
     if (!stage) return [];
     const drag = this.dragState();
     const refs = this.adapter.stageProcesses(this.stageId(stage));
-    return refs.map(({ ref, process }, index) => ({
-      ref,
-      process,
-      id: this.adapter.refId(ref),
-      processId: this.adapter.processId(process),
-      label: process?.name || '失效流程引用',
-      group: process?.flowGroup || '',
-      x: this.flowPadX + index * (this.flowNodeWidth + this.flowGapX) + Math.round(Number(ref.pos?.x || 0)) + (drag?.nodeId === this.adapter.refId(ref) ? drag.dx : 0),
-      y: this.flowPadY + Math.round(Number(ref.pos?.y || 0)) + (drag?.nodeId === this.adapter.refId(ref) ? drag.dy : 0),
-    }));
+    const rowKeys = new Map<string, number>();
+    const rowCols = new Map<string, number>();
+    const groupCounts = new Map<string, number>();
+    refs.forEach(({ ref, process }) => {
+      const id = this.adapter.refId(ref);
+      const key = String(process?.flowGroup || '').trim() || id;
+      rowKeys.set(key, rowKeys.get(key) ?? rowKeys.size);
+      rowCols.set(id, groupCounts.get(key) || 0);
+      groupCounts.set(key, (groupCounts.get(key) || 0) + 1);
+    });
+    return refs.map(({ ref, process }) => {
+      const id = this.adapter.refId(ref);
+      const key = String(process?.flowGroup || '').trim() || id;
+      const row = rowKeys.get(key) || 0;
+      const col = rowCols.get(id) || 0;
+      return {
+        ref,
+        process,
+        id,
+        processId: this.adapter.processId(process),
+        label: process?.name || 'Invalid process ref',
+        group: process?.flowGroup || '',
+        x: this.flowPadX + col * (this.flowNodeWidth + this.flowGapX) + Math.round(Number(ref.pos?.x || 0)) + (drag?.nodeId === id ? drag.dx : 0),
+        y: this.flowPadY + row * (this.flowNodeHeight + this.flowRowGap) + Math.round(Number(ref.pos?.y || 0)) + (drag?.nodeId === id ? drag.dy : 0),
+      };
+    });
   }
 
   protected availableProcesses(): LegacyProcess[] {
@@ -424,8 +441,8 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
   private findDragTargetGroup(nodeId: string, dx: number, dy: number): string {
     const dragNode = this.flowNodes().find((node) => node.id === nodeId);
     if (!dragNode) return '';
-    const centerX = dragNode.x + this.flowNodeWidth / 2;
-    const centerY = dragNode.y + this.flowNodeHeight / 2;
+    const centerX = dragNode.x + dx + this.flowNodeWidth / 2;
+    const centerY = dragNode.y + dy + this.flowNodeHeight / 2;
     return this.flowGroups().find((group) => {
       if (!group.label || group.label === dragNode.group) return false;
       return centerX >= group.x && centerX <= group.x + group.w && centerY >= group.y && centerY <= group.y + group.h;

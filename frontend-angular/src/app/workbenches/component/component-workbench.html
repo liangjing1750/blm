@@ -1,9 +1,13 @@
 <section class="component-workbench">
-  <nav class="comp-tabs">
-    <button [class.active]="activeTab()==='component'" (click)="switchTab('component')">组件构件</button>
-    <button data-testid="component-taskdef-tab" [class.active]="activeTab()==='taskDef'" (click)="switchTab('taskDef')">任务定义</button>
-    <button [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
-  </nav>
+  <div class="proc-view-toolbar">
+    <div class="proc-view-toolbar-main">
+      <div class="view-toggle-group">
+        <button class="vtb" [class.active]="activeTab()==='component'" (click)="switchTab('component')">组件构件</button>
+        <button class="vtb" data-testid="component-taskdef-tab" [class.active]="activeTab()==='taskDef'" (click)="switchTab('taskDef')">任务定义</button>
+        <button class="vtb" [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Tab 1: 组件构件 — 卡片网格 -->
   @if (activeTab() === 'component') {
@@ -70,7 +74,9 @@
           <div class="taskdef-card" [class.editing]="isEditingTask(td)">
             @if (isEditingTask(td)) {
               <!-- 编辑模式 -->
-              <div class="taskdef-edit-body">
+              <div class="taskdef-edit-body taskdef-edit-layout">
+                <section class="taskdef-edit-section taskdef-edit-basics">
+                  <div class="taskdef-edit-section-head"><strong>基础信息</strong></div>
                 <div class="taskdef-edit-row">
                   <input [(ngModel)]="td.name" placeholder="任务名称" class="taskdef-edit-name" />
                   <select [(ngModel)]="td.type">
@@ -89,25 +95,36 @@
                   <input [(ngModel)]="td.address" placeholder="地址 /api/..." />
                   <select [(ngModel)]="td.constructUid"><option value="">未归属构件</option>@for(c of constructs(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}</select>
                 </div>
+                </section>
                 @if (td.parameters; as p) {
-                <div class="taskdef-edit-params">
-                  <span class="taskdef-params-label">输入参数 <button class="btn-ghost-sm" (click)="addParam(p.inputs || [])">+</button></span>
+                <section class="taskdef-edit-section taskdef-edit-params">
+                  <div class="taskdef-edit-section-head">
+                    <strong>输入参数</strong>
+                    <button class="btn-ghost-sm" (click)="addParam(p.inputs || [])">+ 参数</button>
+                  </div>
                   @if ((p.inputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
                   <tbody>@for(param of p.inputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(p.inputs||[], $index)">×</button></td></tr>}</tbody></table> }
-                  <span class="taskdef-params-label">输出参数 <button class="btn-ghost-sm" (click)="addParam(p.outputs || [])">+</button></span>
+                </section>
+                <section class="taskdef-edit-section taskdef-edit-params">
+                  <div class="taskdef-edit-section-head">
+                    <strong>输出参数</strong>
+                    <button class="btn-ghost-sm" (click)="addParam(p.outputs || [])">+ 参数</button>
+                  </div>
                   @if ((p.outputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
                   <tbody>@for(param of p.outputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(p.outputs||[], $index)">×</button></td></tr>}</tbody></table> }
-                </div>
+                </section>
                 }
-                <div class="taskdef-edit-params taskdef-handover-edit">
-                  <span class="taskdef-params-label">技术承接</span>
+                <section class="taskdef-edit-section taskdef-edit-params taskdef-handover-edit">
+                  <div class="taskdef-edit-section-head"><strong>技术承接</strong></div>
                   <div class="taskdef-edit-row">
                     <input data-testid="taskdef-handover-runtime-kind" [(ngModel)]="ensureTaskHandover(td).runtimeKind" placeholder="运行承接类型，如 DomainServiceJar / QueryHttp" />
                     <input data-testid="taskdef-handover-target" [(ngModel)]="ensureTaskHandover(td).target" placeholder="目标标识，如 InboundReservationService.submit" />
                   </div>
                   <textarea data-testid="taskdef-handover-note" [(ngModel)]="ensureTaskHandover(td).note" rows="2" placeholder="说明这个构件任务未来如何被运行时、领域服务、查询服务或 Agent 承接"></textarea>
-                </div>
-                <textarea [(ngModel)]="td.note" rows="2" placeholder="描述" class="taskdef-edit-note"></textarea>
+                </section>
+                <section class="taskdef-edit-section taskdef-edit-note-section">
+                  <textarea [(ngModel)]="td.note" rows="2" placeholder="描述" class="taskdef-edit-note"></textarea>
+                </section>
                 <div class="taskdef-actions"><button class="btn btn-primary btn-sm" [attr.data-testid]="'taskdef-save-' + uid(td)" (click)="saveInlineEdit(td)">保存</button><button class="btn btn-outline btn-sm" (click)="cancelInlineEdit(td)">取消</button></div>
               </div>
             } @else {
@@ -159,5 +176,62 @@
     <app-entity-design-workbench />
   }
 
-  
-      </section>
+  @if (compDrawer()) {
+    <div class="drawer-overlay" data-testid="component-drawer" (click)="compDrawer.set(null)">
+      <aside class="drawer" [style.width.px]="drawerWidth()" (click)="$event.stopPropagation()">
+        <div class="drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
+        <header class="drawer-head">
+          <h3>组件</h3>
+          <button class="drawer-close" type="button" (click)="compDrawer.set(null)">×</button>
+        </header>
+        <div class="drawer-body">
+          <label>组件名称<input [(ngModel)]="compDrawer()!.name" placeholder="组件名称" /></label>
+          <label>组件类型
+            <select [(ngModel)]="compDrawer()!.kind">
+              <option value="core">核心组件</option>
+              <option value="generic">通用组件</option>
+            </select>
+          </label>
+          <label>说明<textarea rows="3" [(ngModel)]="compDrawer()!.note" placeholder="组件职责和边界"></textarea></label>
+        </div>
+        <footer class="drawer-actions">
+          <button class="btn btn-primary btn-sm" type="button" (click)="saveDrawerComp()">保存</button>
+          <button class="btn btn-outline btn-sm" type="button" (click)="compDrawer.set(null)">取消</button>
+          @if (compDrawer()!.uid) {
+            <button class="btn btn-outline btn-sm danger" type="button" (click)="deleteDrawerComp()">删除</button>
+          }
+        </footer>
+      </aside>
+    </div>
+  }
+
+  @if (constructDrawer()) {
+    <div class="drawer-overlay" data-testid="construct-drawer" (click)="constructDrawer.set(null)">
+      <aside class="drawer" [style.width.px]="drawerWidth()" (click)="$event.stopPropagation()">
+        <div class="drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
+        <header class="drawer-head">
+          <h3>构件</h3>
+          <button class="drawer-close" type="button" (click)="constructDrawer.set(null)">×</button>
+        </header>
+        <div class="drawer-body">
+          <label>构件名称<input [(ngModel)]="constructDrawer()!.name" placeholder="构件名称" /></label>
+          <label>所属组件
+            <select [(ngModel)]="constructDrawer()!.businessComponentUid">
+              <option value="">未归属组件</option>
+              @for (comp of components(); track uid(comp)) {
+                <option [value]="uid(comp)">{{ comp.name || uid(comp) }}</option>
+              }
+            </select>
+          </label>
+        </div>
+        <footer class="drawer-actions">
+          <button class="btn btn-primary btn-sm" type="button" (click)="saveDrawerConstruct()">保存</button>
+          <button class="btn btn-outline btn-sm" type="button" (click)="constructDrawer.set(null)">取消</button>
+          @if (constructDrawer()!.uid) {
+            <button class="btn btn-outline btn-sm danger" type="button" (click)="deleteDrawerConstruct()">删除</button>
+          }
+        </footer>
+      </aside>
+    </div>
+  }
+</section>

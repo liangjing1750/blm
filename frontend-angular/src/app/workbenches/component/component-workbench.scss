@@ -1,9 +1,5 @@
 .component-workbench { display: flex; flex-direction: column; height: calc(100vh - 92px); }
 
-.comp-tabs { display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; padding: 0 12px; background: #fff; flex-shrink: 0; }
-.comp-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: #64748b; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; padding: 10px 16px; }
-.comp-tabs button:hover { color: #334155; }
-.comp-tabs button.active { border-bottom-color: #3b82f6; color: #1d4ed8; font-weight: 600; }
 
 .comp-tab-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 8px 12px 12px; min-height: 0; }
 .comp-tab-body::-webkit-scrollbar { width: 8px; }
@@ -79,7 +75,10 @@
 .taskdef-note { font-size: 12px; color: #475569; line-height: 1.6; margin: 6px 0; padding: 6px 10px; background: #f8fafc; border-radius: 6px; }
 
 /* 内联编辑模式 */
-.taskdef-edit-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.taskdef-edit-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; background: #f8fafc; }
+.taskdef-edit-section { border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; padding: 10px; }
+.taskdef-edit-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.taskdef-edit-section-head strong { color: #1e293b; font-size: 13px; }
 .taskdef-edit-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .taskdef-edit-row input, .taskdef-edit-row select, .taskdef-edit-body textarea { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 13px; }
 .taskdef-edit-row input { flex: 1; min-width: 120px; }
@@ -87,7 +86,7 @@
 .taskdef-edit-name { font-weight: 700; }
 .taskdef-edit-target { max-width: 200px; }
 .taskdef-edit-note { width: 100%; resize: vertical; }
-.taskdef-edit-params table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.taskdef-edit-params table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
 .taskdef-edit-params th { font-size: 10px; color: #94a3b8; font-weight: 600; padding: 3px 4px; text-align: left; }
 .taskdef-edit-params td { padding: 2px 3px; }
 .taskdef-edit-params input { width: 100%; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
@@ -111,41 +110,12 @@
 .tag-select { border: 1px dashed #cbd5e1; border-radius: 5px; font-size: 12px; padding: 3px 6px; color: #94a3b8; background: none; cursor: pointer; }
 
 /* ─── Tab2/4: 表格 ────────────────────────── */
-.comp-table-wrap { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
-.comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.comp-table th { background: #f8fafc; color: #64748b; font-weight: 700; padding: 8px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-.comp-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
-.comp-table tr:hover td { background: #f8fafc; }
-.link { background: none; border: 0; color: #1d4ed8; cursor: pointer; font: inherit; font-weight: 600; }
-.link:hover { text-decoration: underline; }
 
 /* ─── Tab3: 实体 ──────────────────────────── */
-.comp-note { color: #64748b; font-size: 13px; margin-bottom: 12px; }
-.comp-entity-list { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ─── Tab4: 服务卡片 ──────────────────────── */
-.comp-cards { display: flex; flex-direction: column; gap: 8px; }
-.svc-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; background: #fff; }
-.svc-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.svc-card-head strong { color: #1e293b; font-size: 14px; }
-.svc-method { background: #dbeafe; color: #1d4ed8; border-radius: 5px; font-size: 11px; font-weight: 700; padding: 2px 7px; }
-.svc-card code { color: #64748b; font-size: 12px; }
-.svc-desc { color: #64748b; font-size: 13px; margin: 0 0 8px; }
-.svc-refs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.svc-ref-label { color: #94a3b8; font-size: 12px; font-weight: 600; }
-.svc-actions { margin-left: auto; display: flex; gap: 4px; }
 
 /* ─── Tab5: 编排 ──────────────────────────── */
-.orch-panel { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; background: #fff; }
-.orch-panel h3 { margin: 0 0 12px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-.orch-tasks { display: flex; flex-direction: column; gap: 4px; }
-.orch-task-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #f1f5f9; border-radius: 8px; background: #f8fafc; }
-.orch-task-idx { color: #94a3b8; font-size: 12px; font-weight: 700; min-width: 20px; }
-.orch-task-name { flex: 1; font-size: 13px; font-weight: 600; color: #334155; }
-.orch-task-actions { display: flex; gap: 4px; }
-.orch-task-actions button { background: #fff; border: 1px solid #e2e8f0; border-radius: 5px; cursor: pointer; font-size: 12px; padding: 2px 6px; }
-.orch-task-actions button:disabled { opacity: .3; cursor: default; }
-.orch-task-actions button.danger { color: #ef4444; border-color: #fecaca; }
 
 /* ─── 抽屉（不遮挡顶栏）───────────────────── */
 .component-workbench { position: relative; }

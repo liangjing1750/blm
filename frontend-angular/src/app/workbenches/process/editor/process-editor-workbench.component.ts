@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, ElementRef, HostListener, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
+import { RichTextEditorComponent } from '../../../shared/rich-text/rich-text-editor.component';
+import { sanitizeRichTextHtml } from '../../../shared/rich-text/rich-text-utils';
 import {
   LegacyEntity,
   LegacyProcess,
@@ -66,7 +68,7 @@ interface ProcessApplicationService {
 @Component({
   selector: 'app-process-editor-workbench',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RichTextEditorComponent],
   templateUrl: './process-editor-workbench.component.html',
   styleUrls: [
     './process-editor-workbench.component.scss',
@@ -690,7 +692,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected richTextHtml(value: string | undefined): string {
-    return this.previewRichTextHtml(value);
+    return sanitizeRichTextHtml(value);
   }
 
   // 模块意图：节点视图的“步骤详细描述/业务规则”要和预览页使用同一类安全渲染语义。
