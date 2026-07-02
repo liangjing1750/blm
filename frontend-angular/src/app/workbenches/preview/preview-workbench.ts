@@ -311,40 +311,181 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   }
 
   private renderStageFlowGraph(stage: any, refs: any[], doc: any): string {
-    const nodes = refs.map((ref, index) => {
+    if (!refs.length) return '<div class="diag-empty">暂无阶段流程</div>';
+    const nodeWidth = 62;
+    const nodeHeight = 128;
+    const gapX = 46;
+    const rowGap = 34;
+    const padX = 24;
+    const padY = 38;
+    const rowGroups = new Map<string, any[]>();
+    refs.forEach((ref, index) => {
       const process = this.findProcessByRef(ref, doc);
-      return { id: this.identityOf(ref, `ref-${index + 1}`), label: this.displayName(process || ref, `流程 ${index + 1}`) };
+      const group = String(process?.flowGroup || ref?.flowGroup || '').trim() || `__row_${index}`;
+      rowGroups.set(group, [...(rowGroups.get(group) || []), { ref, process, index }]);
     });
+    const flowNodes: Array<{ id: string; label: string; group: string; x: number; y: number }> = [];
+    const groupBoxes: Array<{ group: string; label: string; x: number; y: number; width: number; height: number }> = [];
+    Array.from(rowGroups.entries()).forEach(([group, items], rowIndex) => {
+      const y = padY + rowIndex * (nodeHeight + rowGap);
+      const namedGroup = !group.startsWith('__row_');
+      if (namedGroup) {
+        groupBoxes.push({ group, label: group, x: padX - 10, y: y - 18, width: Math.max(150, items.length * (nodeWidth + gapX) + 8), height: nodeHeight + 36 });
+      }
+      items.forEach((item, colIndex) => {
+        const pos = item.ref?.pos || {};
+        flowNodes.push({
+          id: this.identityOf(item.ref, `ref-${item.index + 1}`),
+          label: this.displayName(item.process || item.ref, `流程 ${item.index + 1}`),
+          group,
+          x: padX + colIndex * (nodeWidth + gapX) + Number(pos.x || 0),
+          y: y + Number(pos.y || 0),
+        });
+      });
+    });
+    const byId = new Map(flowNodes.map((node) => [node.id, node]));
     const links = this.asArray(doc.stageFlowLinks)
       .filter((link) => this.matchesStage(stage, link))
       .map((link) => ({ from: String(link.fromRefUid || link.from || ''), to: String(link.toRefUid || link.to || '') }))
       .filter((link) => link.from && link.to);
-    return this.renderSimpleGraph(nodes, links, 'preview-stage-graph', 'stage-graph preview-stage-graph', '暂无阶段流程');
+    const fallbackLinks = links.length ? links : flowNodes.slice(1).map((node, index) => ({ from: flowNodes[index].id, to: node.id }));
+    const width = Math.max(460, Math.max(...flowNodes.map((node) => node.x), 0) + nodeWidth + padX);
+    const height = Math.max(220, Math.max(...flowNodes.map((node) => node.y), 0) + nodeHeight + padY);
+    const paths = fallbackLinks.map((link) => {
+      const from = byId.get(link.from);
+      const to = byId.get(link.to);
+      if (!from || !to) return '';
+      const sx = from.x + nodeWidth;
+      const sy = from.y + nodeHeight / 2;
+      const tx = to.x;
+      const ty = to.y + nodeHeight / 2;
+      return `<path class="stage-graph-link stage-flow-link" d="M${sx} ${sy} C${sx + 34} ${sy}, ${tx - 34} ${ty}, ${tx} ${ty}" fill="none" marker-end="url(#preview-stage-arrow)"></path>`;
+    }).join('');
+    return `<div id="preview-stage-detail-${this.esc(this.identityOf(stage, 'stage'))}" class="stage-graph stage-flow-guide preview-stage-detail" data-testid="preview-stage-detail-${this.esc(this.identityOf(stage, 'stage'))}">
+      <div class="stage-graph-zoom-shell stage-flow-zoom-shell">
+        <div class="stage-graph-board stage-flow-board" style="width:${width}px;height:${height}px">
+          <svg class="stage-graph-svg stage-flow-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+            <defs><marker id="preview-stage-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>
+            ${paths}
+          </svg>
+          ${groupBoxes.map((box) => `<div class="stage-flow-group-box" data-testid="stage-flow-group" style="left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px"><span class="stage-flow-group-title">${this.esc(box.label)}</span></div>`).join('')}
+          ${flowNodes.map((node) => `<div class="stage-graph-node process-kind stage-flow-node" data-testid="stage-graph-node" data-process-id="${this.esc(node.id)}" style="left:${node.x}px;top:${node.y}px;width:${nodeWidth}px;height:${nodeHeight}px"><span class="stage-flow-node-title">${this.esc(node.label)}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>`;
   }
 
   private renderProcessGraph(process: any): string {
-    const nodes = this.asArray(process.nodes || process.tasks).map((node, index) => ({ id: this.identityOf(node, `node-${index + 1}`), label: this.displayName(node, `节点 ${index + 1}`) }));
-    const links = this.asArray(process.links || process.edges)
-      .map((link) => ({ from: String(link.from || link.fromUid || link.source || ''), to: String(link.to || link.toUid || link.target || '') }))
+    const taskNodes = this.asArray(process.nodes || process.tasks);
+    const flowNodes = this.asArray(process.flow?.nodes);
+    const edges = this.asArray(process.flow?.edges || process.links || process.edges)
+      .map((link) => ({ from: String(link.from || link.fromUid || link.source || ''), to: String(link.to || link.toUid || link.target || ''), label: String(link.label || link.condition || '') }))
       .filter((link) => link.from && link.to);
-    return `<div id="pv-proc-${this.anchorId('proc-diag', this.identityOf(process, 'process'))}" class="pv-diag pv-proc-diag" data-testid="preview-process-graph">${this.renderSimpleGraph(nodes, links, 'preview-process-flow', 'process-main-diag live-diagram', '暂无流程图')}</div>`;
+    const nodes = [
+      { id: 'START', label: '开始', kind: 'terminal', role: '' },
+      ...taskNodes.map((node, index) => ({ id: this.identityOf(node, `node-${index + 1}`), label: this.displayName(node, `节点 ${index + 1}`), kind: 'task', role: this.nodeRoleName(node) })),
+      ...flowNodes.map((node, index) => ({ id: this.identityOf(node, `gateway-${index + 1}`), label: String(node.title || node.name || '+'), kind: 'gateway', role: this.nodeRoleName(node) })),
+      { id: 'END', label: '结束', kind: 'terminal', role: '' },
+    ];
+    if (nodes.length <= 2) return '<div class="diag-empty">暂无流程图</div>';
+    const nodeOrder = this.flowNodeOrder(nodes.map((node) => node.id), edges);
+    const ordered = nodeOrder.map((id) => nodes.find((node) => node.id === id)).filter(Boolean) as typeof nodes;
+    const lanes = Array.from(new Set(ordered.map((node) => node.role || '业务流程'))).map((name, index) => ({ name, y: index * 96 }));
+    const laneByName = new Map(lanes.map((lane) => [lane.name, lane]));
+    const placements = new Map<string, { x: number; y: number; w: number; h: number; kind: string }>();
+    ordered.forEach((node, index) => {
+      const lane = laneByName.get(node.role || '业务流程') || lanes[0];
+      const kind = node.kind;
+      const w = kind === 'gateway' ? 34 : kind === 'terminal' ? 50 : 132;
+      const h = kind === 'gateway' ? 34 : kind === 'terminal' ? 20 : 54;
+      placements.set(node.id, { x: 130 + index * 180, y: lane.y + 28, w, h, kind });
+    });
+    const width = Math.max(760, 220 + ordered.length * 180);
+    const height = Math.max(140, lanes.length * 96);
+    const edgeHtml = (edges.length ? edges : ordered.slice(1).map((node, index) => ({ from: ordered[index].id, to: node.id, label: '' }))).map((edge) => {
+      const from = placements.get(edge.from);
+      const to = placements.get(edge.to);
+      if (!from || !to) return '';
+      const sx = from.x + from.w;
+      const sy = from.y + from.h / 2;
+      const tx = to.x;
+      const ty = to.y + to.h / 2;
+      const mx = (sx + tx) / 2;
+      const my = (sy + ty) / 2 - 8;
+      return `<path class="flow-edge" d="M${sx} ${sy} L${tx} ${ty}" marker-end="url(#preview-flow-arrow)"></path>${edge.label ? `<text class="flow-edge-label" x="${mx}" y="${my}">${this.esc(edge.label)}</text>` : ''}`;
+    }).join('');
+    return `<div id="pv-proc-${this.anchorId('proc-diag', this.identityOf(process, 'process'))}" class="pv-diag pv-proc-diag process-flow-view flow-readonly" data-testid="preview-process-graph">
+      <div class="process-flow-canvas preview-process-flow" data-testid="preview-process-flow" style="width:${width}px;height:${height}px">
+        ${lanes.map((lane) => `<div class="flow-lane" style="top:${lane.y}px;height:96px"><div class="flow-lane-title">${this.esc(lane.name)}</div></div>`).join('')}
+        <svg class="flow-edges" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><marker id="preview-flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>${edgeHtml}</svg>
+        ${ordered.map((node) => {
+          const p = placements.get(node.id)!;
+          if (p.kind === 'gateway') return `<div class="flow-gateway" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px"><span>${this.esc(node.label)}</span></div>`;
+          if (p.kind === 'terminal') return `<div class="flow-terminal" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${this.esc(node.label)}</div>`;
+          return `<div class="flow-node" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px"><strong>${this.esc(node.label)}</strong>${node.role ? `<small>${this.esc(node.role)}</small>` : ''}</div>`;
+        }).join('')}
+      </div>
+    </div>`;
   }
 
   private renderEntityOverview(doc: any): string {
-    const entities = this.asArray(doc.entities).map((entity, index) => ({ id: this.identityOf(entity, `entity-${index + 1}`), label: this.displayName(entity, `实体 ${index + 1}`) }));
+    const entities = this.asArray(doc.entities).map((entity, index) => ({ id: this.identityOf(entity, `entity-${index + 1}`), label: this.displayName(entity, `实体 ${index + 1}`), group: String(entity.group || entity.businessConstructUid || '未分组') }));
+    if (!entities.length) return `<section id="preview-entity-overview" class="pv-entity-section" data-preview-loaded="true"><h3>实体关系图</h3><div class="diag-empty">暂无实体关系</div></section>`;
     const links = this.asArray(doc.relations || doc.entityRelations)
-      .map((relation) => ({ from: String(relation.from || relation.fromEntityUid || relation.source || ''), to: String(relation.to || relation.toEntityUid || relation.target || '') }))
+      .map((relation) => ({ from: String(relation.from || relation.fromEntityUid || relation.source || ''), to: String(relation.to || relation.toEntityUid || relation.target || ''), label: String(relation.label || relation.type || '') }))
       .filter((link) => link.from && link.to);
-    return `<section id="preview-entity-overview" class="pv-entity-section" data-preview-loaded="true"><h3>实体关系图</h3><div id="pv-entity-diag" class="pv-diag pv-entity-diag" data-testid="preview-entity-overview">${this.renderSimpleGraph(entities, links, 'preview-entity-graph', 'entity-relation-diagram', '暂无实体关系')}</div></section>`;
+    const placements = new Map(entities.map((entity, index) => [entity.id, { x: 36 + (index % 4) * 190, y: 44 + Math.floor(index / 4) * 112, w: 138, h: 54 }]));
+    const width = Math.max(760, Math.min(4, entities.length) * 190 + 80);
+    const height = Math.max(180, Math.ceil(entities.length / 4) * 112 + 80);
+    const paths = links.map((link) => {
+      const from = placements.get(link.from);
+      const to = placements.get(link.to);
+      if (!from || !to) return '';
+      const sx = from.x + from.w;
+      const sy = from.y + from.h / 2;
+      const tx = to.x;
+      const ty = to.y + to.h / 2;
+      return `<path class="entity-rel-line ef-rel" d="M${sx} ${sy} C${sx + 42} ${sy}, ${tx - 42} ${ty}, ${tx} ${ty}" marker-end="url(#preview-entity-arrow)"></path>`;
+    }).join('');
+    return `<section id="preview-entity-overview" class="pv-entity-section" data-preview-loaded="true"><h3>实体关系图</h3>
+      <div id="pv-entity-diag" class="pv-diag pv-entity-diag entity-relation-canvas" data-testid="preview-entity-overview">
+        <div class="entity-board ef-canvas" style="width:${width}px;height:${height}px">
+          <svg class="entity-rel-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><marker id="preview-entity-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>${paths}</svg>
+          ${entities.map((entity) => {
+            const p = placements.get(entity.id)!;
+            return `<div class="entity-node ef-node" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px"><strong>${this.esc(entity.label)}</strong><span>${this.esc(entity.group)}</span></div>`;
+          }).join('')}
+        </div>
+      </div>
+    </section>`;
   }
 
   private renderEntityStateGraphs(entity: any): string {
     const transitions = this.asArray(entity.state_transitions || entity.stateTransitions);
     if (!transitions.length) return '';
     const states = Array.from(new Set(transitions.flatMap((transition) => [transition.from, transition.to]).filter(Boolean).map(String)));
-    const nodes = states.map((state, index) => ({ id: state, label: state || `状态 ${index + 1}` }));
-    const links = transitions.map((transition) => ({ from: String(transition.from || ''), to: String(transition.to || '') })).filter((link) => link.from && link.to);
-    return `<div class="pv-entity-state-graphs"><div class="pv-entity-state-graph" data-testid="preview-entity-state-graph"><h4>状态流转</h4>${this.renderSimpleGraph(nodes, links, 'preview-entity-state-flow', 'entity-state-diagram', '暂无状态流转')}</div></div>`;
+    const placements = new Map(states.map((state, index) => [state, { x: 50 + index * 160, y: 58, w: 112, h: 40 }]));
+    const links = transitions.map((transition) => ({ from: String(transition.from || ''), to: String(transition.to || ''), label: String(transition.action || transition.label || '') })).filter((link) => link.from && link.to);
+    const width = Math.max(520, states.length * 160 + 80);
+    const paths = links.map((link) => {
+      const from = placements.get(link.from);
+      const to = placements.get(link.to);
+      if (!from || !to) return '';
+      const sx = from.x + from.w;
+      const sy = from.y + from.h / 2;
+      const tx = to.x;
+      const ty = to.y + to.h / 2;
+      return `<path class="entity-state-link" d="M${sx} ${sy} C${sx + 34} ${sy}, ${tx - 34} ${ty}, ${tx} ${ty}" marker-end="url(#preview-state-arrow)"></path>`;
+    }).join('');
+    return `<div class="pv-entity-state-graphs"><div class="pv-entity-state-graph" data-testid="preview-entity-state-graph"><h4>状态流转</h4>
+      <div class="entity-state-board" style="width:${width}px;height:150px">
+        <svg class="entity-state-svg" width="${width}" height="150" viewBox="0 0 ${width} 150"><defs><marker id="preview-state-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>${paths}</svg>
+        ${states.map((state, index) => {
+          const p = placements.get(state)!;
+          return `<div class="entity-state-node ${index === 0 ? 'is-start' : ''}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${this.esc(state)}</div>`;
+        }).join('')}
+      </div>
+    </div></div>`;
   }
 
   private renderSimpleGraph(nodes: Array<{ id: string; label: string }>, links: Array<{ from: string; to: string }>, testId: string, className: string, emptyText: string): string {
@@ -404,6 +545,28 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
 
   private truncate(value: string, max: number): string {
     return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+  }
+
+  private nodeRoleName(node: any): string {
+    const roleNames = this.asArray(node?.roles).filter(Boolean).map(String);
+    return String(node?.role || node?.roleName || roleNames[0] || '').trim();
+  }
+
+  private flowNodeOrder(ids: string[], edges: Array<{ from: string; to: string }>): string[] {
+    const uniqueIds = Array.from(new Set(ids));
+    const outgoing = new Map<string, string[]>();
+    edges.forEach((edge) => outgoing.set(edge.from, [...(outgoing.get(edge.from) || []), edge.to]));
+    const result: string[] = [];
+    const seen = new Set<string>();
+    const visit = (id: string): void => {
+      if (!uniqueIds.includes(id) || seen.has(id)) return;
+      seen.add(id);
+      result.push(id);
+      (outgoing.get(id) || []).forEach(visit);
+    };
+    visit('START');
+    uniqueIds.forEach(visit);
+    return result;
   }
 
   private renderComponents(doc: any): string {

@@ -34,6 +34,8 @@ DOCUMENT_LISTS: dict[str, str] = {
     "businessComponents": "business_component",
     "businessConstructs": "business_construct",
     "taskDefinitions": "task_definition",
+    "serviceGroups": "service_group",
+    "services": "service",
 }
 
 
@@ -140,6 +142,8 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
         "set_lists": ["entityUids"],
         "lists": {},
     },
+    "service_group": {"scalars": ["name", "note"], "lists": {}},
+    "service": {"scalars": ["name", "serviceGroupUid", "method", "path", "desc"], "lists": {}},
 }
 
 
@@ -170,6 +174,8 @@ COLLECTION_LABELS: dict[str, str] = {
     "business_component": "业务组件",
     "business_construct": "业务构件",
     "task_definition": "任务定义",
+    "service_group": "应用服务组",
+    "service": "应用服务",
 }
 
 
@@ -228,6 +234,8 @@ SEMANTIC_KEY_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "business_component": [("name",), ("uid",)],
     "business_construct": [("name",), ("uid",)],
     "task_definition": [("name",), ("target",), ("uid",)],
+    "service_group": [("name",), ("uid",)],
+    "service": [("serviceGroupUid", "method", "path"), ("name",), ("uid",)],
     "entity": [("name",), ("uid",)],
     "field": [("name",)],
     "state_node": [("name",)],

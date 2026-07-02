@@ -451,16 +451,18 @@ class CollaborationManager:
                 self._write_sync_log(session, submit_id, base_seq, stats)
                 return record
 
+            # 模块意图：协作提交最终落盘的是 merged，而不是客户端提交原文。
+            # 关键流程：并发 rebase 后，客户端 document hash 只能代表本地草稿，不能代表三方合并结果。
+            # 边界细节：用 merged_hash 判定是否递增 seq，避免旧 base 的增删改被误判为未变化。
             prev_hash = session._doc_hash_cache or _doc_hash(session.document)
-            if not new_hash:
-                new_hash = _doc_hash(merged)
-            document_changed = prev_hash != new_hash
+            merged_hash = _doc_hash(merged)
+            document_changed = prev_hash != merged_hash
 
             if document_changed:
                 session.document = deepcopy(merged)
                 session.seq += 1
                 self._remember_snapshot(session)
-                session._doc_hash_cache = new_hash
+                session._doc_hash_cache = merged_hash
 
             stats["user"] = client.user_name
             stats["userId"] = client.user_id
@@ -506,7 +508,7 @@ class CollaborationManager:
         list_fields = [
             "roles", "language", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
             "processes", "entities", "relations", "rules",
-            "businessComponents", "businessConstructs", "taskDefinitions", "forms",
+            "businessComponents", "businessConstructs", "taskDefinitions", "serviceGroups", "services", "forms",
         ]
 
         def collect_uids(document: dict) -> set[str]:
@@ -795,6 +797,11 @@ class CollaborationManager:
     def _is_non_blocking_collab_conflict(conflict: dict, *, recovery_mode: bool = False) -> bool:
         path = str((conflict or {}).get("path", ""))
         field = str((conflict or {}).get("field", ""))
+        if str((conflict or {}).get("kind", "")) == "delete_modify":
+            left_value = (conflict or {}).get("left_value", (conflict or {}).get("user"))
+            right_value = (conflict or {}).get("right_value", (conflict or {}).get("server"))
+            if CollaborationManager._same_after_empty_default_normalization(left_value, right_value):
+                return True
         if recovery_mode and str((conflict or {}).get("kind", "")) == "delete_modify":
             return True
         if recovery_mode:
@@ -810,6 +817,26 @@ class CollaborationManager:
                 return True
         layout_fields = {"pos", "stagePos", "panoramaPos", "layout", "labelPos", "markerPos"}
         return field in layout_fields or any(path.endswith(f".{name}") for name in layout_fields)
+
+    @staticmethod
+    def _same_after_empty_default_normalization(left: Any, right: Any) -> bool:
+        """Treat canonical empty defaults as non-edits for collaboration delete checks."""
+
+        def normalize(value: Any) -> Any:
+            if isinstance(value, dict):
+                result = {}
+                for key, child in value.items():
+                    normalized = normalize(child)
+                    if normalized in (None, "", [], {}):
+                        continue
+                    result[key] = normalized
+                return result
+            if isinstance(value, list):
+                normalized_items = [normalize(item) for item in value]
+                return [item for item in normalized_items if item not in (None, "", [], {})]
+            return value
+
+        return normalize(left) == normalize(right)
 
     @staticmethod
     def _apply_recovery_conflict_defaults(merged: dict, conflicts: list[dict]) -> None:
@@ -1085,7 +1112,7 @@ class CollaborationManager:
         list_fields = [
             "roles", "language", "stages", "stageLinks", "stageFlowRefs", "stageFlowLinks",
             "processes", "entities", "relations", "rules",
-            "businessComponents", "businessConstructs", "taskDefinitions",
+            "businessComponents", "businessConstructs", "taskDefinitions", "serviceGroups", "services",
         ]
         count = 0
         for field in list_fields:
@@ -1098,6 +1125,7 @@ class CollaborationManager:
 
             base_by_uid = {str(item.get("uid", "")).strip(): item for item in base_list if isinstance(item, dict)}
             user_by_uid = {str(item.get("uid", "")).strip(): item for item in user_list if isinstance(item, dict)}
+            server_by_uid = {str(item.get("uid", "")).strip(): item for item in server_list if isinstance(item, dict)}
             server_uids = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
 
             keep = []
@@ -1120,6 +1148,12 @@ class CollaborationManager:
                         continue
                     # user修改了 → 删改冲突，保留user的修改但记录
                     count += 1
+                if base_item is not None and user_item is None:
+                    server_item = server_by_uid.get(uid)
+                    if server_item is not None and CollaborationManager._same_after_empty_default_normalization(server_item, base_item):
+                        # user删除、server未修改 → 保留user删除
+                        count += 1
+                        continue
                 keep.append(item)
             merged[field] = keep
 
@@ -1217,10 +1251,12 @@ class CollaborationManager:
                 if axis == "cells":
                     base_by_key = {(str(c.get("laneUid","")), str(c.get("columnUid",""))): c for c in base_list if isinstance(c, dict)}
                     user_by_key = {(str(c.get("laneUid","")), str(c.get("columnUid",""))): c for c in user_list if isinstance(c, dict)}
+                    server_by_key = {(str(c.get("laneUid","")), str(c.get("columnUid",""))): c for c in server_list if isinstance(c, dict)}
                     server_keys = {(str(c.get("laneUid","")), str(c.get("columnUid",""))) for c in server_list if isinstance(c, dict)}
                 else:
                     base_by_key = {str(item.get("uid", "")).strip(): item for item in base_list if isinstance(item, dict)}
                     user_by_key = {str(item.get("uid", "")).strip(): item for item in user_list if isinstance(item, dict)}
+                    server_by_key = {str(item.get("uid", "")).strip(): item for item in server_list if isinstance(item, dict)}
                     server_keys = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
                 keep = []
                 for item in merged_list:
@@ -1235,6 +1271,11 @@ class CollaborationManager:
                     user_item = user_by_key.get(key)
                     if base_item is not None and key not in server_keys:
                         if user_item is not None and json.dumps(user_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) == json.dumps(base_item, ensure_ascii=False, sort_keys=True, separators=(",", ":")):
+                            count += 1
+                            continue
+                    if base_item is not None and user_item is None:
+                        server_item = server_by_key.get(key)
+                        if server_item is not None and CollaborationManager._same_after_empty_default_normalization(server_item, base_item):
                             count += 1
                             continue
                     keep.append(item)
@@ -1254,6 +1295,7 @@ class CollaborationManager:
 
         base_by_uid = {str(item.get("uid", "")).strip(): item for item in base_list if isinstance(item, dict)}
         user_by_uid = {str(item.get("uid", "")).strip(): item for item in user_list if isinstance(item, dict)}
+        server_by_uid = {str(item.get("uid", "")).strip(): item for item in server_list if isinstance(item, dict)}
         server_uids = {str(item.get("uid", "")).strip() for item in server_list if isinstance(item, dict)}
 
         count = 0
@@ -1272,6 +1314,11 @@ class CollaborationManager:
                     count += 1
                     continue
                 count += 1  # 删改冲突，保留user修改，记录
+            if base_item is not None and user_item is None:
+                server_item = server_by_uid.get(uid)
+                if server_item is not None and CollaborationManager._same_after_empty_default_normalization(server_item, base_item):
+                    count += 1
+                    continue
             keep.append(item)
         parent_merged[field] = keep
         return count
