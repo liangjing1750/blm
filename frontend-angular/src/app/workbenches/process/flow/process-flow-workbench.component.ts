@@ -144,6 +144,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly laneTitleWidth = 86;
   protected readonly nodeWidth = 132;
   protected readonly nodeHeight = 54;
+  protected readonly gatewaySize = 22;
   protected readonly terminalWidth = 50;
   protected readonly terminalHeight = 18;
   // 对齐旧版 process.js 布局常量：firstNodeX=180, colW=180, startX=130
@@ -443,8 +444,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
       return visibleRoleNames.map((roleName, roleIndex) => {
         const laneIndex = laneMap.get(roleName) ?? 0;
         const offset = this.flowOffset(process, id);
-        const width = kind === 'gateway' ? 86 : this.nodeWidth;
-        const height = kind === 'gateway' ? 76 : this.nodeHeight;
+        const width = kind === 'gateway' ? this.gatewaySize : this.nodeWidth;
+        const height = kind === 'gateway' ? this.gatewaySize : this.nodeHeight;
         const baseY = laneIndex * this.laneHeight + Math.round((this.laneHeight - height) / 2);
         const clamped = this.clampNodePosition(process, id, x + offset.dx, baseY + offset.dy, width, height, roleName);
         const canvasNode = {
@@ -993,27 +994,53 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   private flowOrder(process: LegacyProcess): string[] {
+    // Module intent: match legacy swimlane ordering so migrated documents keep the same structure.
+    // Key flow: first detect back/return edges, then topologically order the remaining main graph.
     // Boundary detail: when no edge exists, keep stable list order instead of inventing hidden semantics.
     const taskIds = this.tasks(process).map((task) => this.taskId(task)).filter(Boolean);
     const gatewayIds = this.gateways(process).map((gateway) => this.gatewayId(gateway)).filter(Boolean);
     const allIds = ['START', ...taskIds, ...gatewayIds, 'END'];
-    const ordered = ['START'];
-    const visited = new Set(ordered);
-    let current = 'START';
-    for (let guard = 0; guard < allIds.length + this.edges(process).length; guard += 1) {
-      const next = this.edges(process).find((edge) => String(edge.from || '') === current && !visited.has(String(edge.to || '')))?.to;
-      if (!next) break;
-      ordered.push(String(next));
-      visited.add(String(next));
-      current = String(next);
-      if (current === 'END') break;
-    }
+    const rawEdges = this.edges(process)
+      .map((edge) => ({ from: String(edge.from || ''), to: String(edge.to || '') }))
+      .filter((edge) => allIds.includes(edge.from) && allIds.includes(edge.to));
+    const rankProbeIds = this.orderFlowNodeIds(allIds, rawEdges);
+    const rankProbe = new Map(rankProbeIds.map((id, index) => [id, index]));
+    const mainEdges = rawEdges.filter((edge) => edge.to === 'END' || (rankProbe.get(edge.to) || 0) > (rankProbe.get(edge.from) || 0));
+    const ordered = this.orderFlowNodeIds(allIds, mainEdges);
     for (const id of allIds) {
-      if (!visited.has(id)) ordered.push(id);
+      if (!ordered.includes(id)) ordered.push(id);
     }
     // Boundary detail: legacy branch diagrams may encounter END before a later branch task.
     // END is a visual boundary, so keep it as the rightmost column after all real nodes.
     return [...ordered.filter((id) => id !== 'END'), 'END'];
+  }
+
+  private orderFlowNodeIds(ids: string[], edges: Array<{ from: string; to: string }>): string[] {
+    const idSet = new Set(ids);
+    const inDegree = new Map(ids.map((id) => [id, 0]));
+    const outgoing = new Map(ids.map((id) => [id, [] as string[]]));
+    for (const edge of edges) {
+      if (!idSet.has(edge.from) || !idSet.has(edge.to)) continue;
+      outgoing.get(edge.from)?.push(edge.to);
+      inDegree.set(edge.to, (inDegree.get(edge.to) || 0) + 1);
+    }
+    const queue = ids.filter((id) => (inDegree.get(id) || 0) === 0);
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+      for (const to of outgoing.get(id) || []) {
+        inDegree.set(to, Math.max(0, (inDegree.get(to) || 0) - 1));
+        if ((inDegree.get(to) || 0) === 0) queue.push(to);
+      }
+    }
+    for (const id of ids) {
+      if (!seen.has(id)) ordered.push(id);
+    }
+    return ordered;
   }
 
   private flowOffset(process: LegacyProcess, key: string): Required<ProcessFlowLayoutOffset> {

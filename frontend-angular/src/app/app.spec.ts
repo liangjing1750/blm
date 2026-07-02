@@ -4753,6 +4753,102 @@ describe('App', () => {
     expect(getComputedStyle(attachmentIcon).justifySelf).toBe('center');
   });
 
+  it('should keep process flow side tools outside the horizontal scroll container', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'proc-inbound';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-inbound', name: '入库流程', nodes: [], flow: { nodes: [], edges: [] } }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const shell = compiled.querySelector<HTMLElement>('[data-testid="process-flow-canvas-shell"]')!;
+    const tools = compiled.querySelector<HTMLElement>('.process-flow-side-tools')!;
+
+    expect(shell.contains(tools)).toBe(false);
+    expect(tools.parentElement?.classList.contains('process-flow-body')).toBe(true);
+  });
+
+  it('should use legacy swimlane geometry for gateway size and branch ordering', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [
+        { uid: 'role-a', id: 'role-a', name: '品种负责人' },
+        { uid: 'role-b', id: 'role-b', name: '第三方客库单位' },
+        { uid: 'role-c', id: 'role-c', name: '仓库' },
+      ],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-stock',
+          name: '线下查库',
+          nodes: [
+            { uid: 'task-create', name: '新增线下查库', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+            { uid: 'task-publish', name: '发布线下查库', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+            { uid: 'task-query', name: '查询库存结果', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+            { uid: 'task-accept', name: '承接查库任务', roleIds: ['role-b'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+            { uid: 'task-report', name: '上报查库结果', roleIds: ['role-b'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+            { uid: 'task-confirm', name: '确认查库结果', roleIds: ['role-c'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+          ],
+          flow: {
+            nodes: [
+              { id: 'gw-target', uid: 'gw-target', kind: 'gateway', title: '查库对象' },
+              { id: 'gw-result', uid: 'gw-result', kind: 'gateway', title: '查库结果' },
+            ],
+            edges: [
+              { id: 'e-start', uid: 'e-start', from: 'START', to: 'task-create' },
+              { id: 'e-create', uid: 'e-create', from: 'task-create', to: 'task-publish' },
+              { id: 'e-publish', uid: 'e-publish', from: 'task-publish', to: 'gw-target' },
+              { id: 'e-query', uid: 'e-query', from: 'gw-target', to: 'task-query' },
+              { id: 'e-accept', uid: 'e-accept', from: 'gw-target', to: 'task-accept' },
+              { id: 'e-report', uid: 'e-report', from: 'task-accept', to: 'task-report' },
+              { id: 'e-result', uid: 'e-result', from: 'task-report', to: 'gw-result' },
+              { id: 'e-confirm', uid: 'e-confirm', from: 'gw-result', to: 'task-confirm' },
+              { id: 'e-return', uid: 'e-return', from: 'gw-result', to: 'task-accept' },
+              { id: 'e-end', uid: 'e-end', from: 'task-query', to: 'END' },
+            ],
+          },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-stock';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance as any;
+    const process = component.currentProcess();
+    const nodes = component.flowNodes(process);
+    const byId = (id: string) => nodes.find((node: any) => node.baseId === id || node.id === id);
+
+    expect(byId('gw-target').width).toBe(22);
+    expect(byId('gw-target').height).toBe(22);
+    expect(byId('task-query').x).toBeGreaterThan(byId('gw-target').x);
+    expect(byId('task-accept').x).toBeGreaterThan(byId('gw-target').x);
+    expect(byId('task-report').x).toBeGreaterThan(byId('task-accept').x);
+    expect(byId('END').x).toBeGreaterThan(byId('task-query').x);
+  });
+
   it('should move every flow canvas node vertically while dragging', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
