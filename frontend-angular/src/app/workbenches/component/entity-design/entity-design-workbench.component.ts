@@ -62,6 +62,7 @@ interface StateNodeLayout {
   kind: 'initial' | 'intermediate' | 'terminal';
   x: number;
   y: number;
+  row: number;
   width: number;
   height: number;
   marker?: { kind: 'initial' | 'terminal'; x: number; y: number; size: number };
@@ -1030,7 +1031,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         const marker = node.kind === 'initial'
           ? { kind: 'initial' as const, x: x - 30, y: y + 10, size: 16 }
           : (node.kind === 'terminal' ? { kind: 'terminal' as const, x: x + width + 18, y: y + 8, size: 20 } : undefined);
-        layouts.push({ name: node.name, kind: node.kind, x, y, width, height: nodeH, marker });
+        layouts.push({ name: node.name, kind: node.kind, row: rowIndex, x, y, width, height: nodeH, marker });
       });
     });
     const nodeMap = new Map(layouts.map((node) => [node.name, node]));
@@ -1089,11 +1090,29 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   private routeStateTransition(from: StateNodeLayout, to: StateNodeLayout, index: number): { path: string; labelX: number; labelY: number } {
+    const isSelfLoop = from.name === to.name;
+    const isBackward = !isSelfLoop && to.row < from.row;
+    const isForwardDetour = !isSelfLoop && to.row - from.row > 1;
+    if (isBackward || isForwardDetour) {
+      const side = isBackward ? 'left' : 'right';
+      const channelX = side === 'left'
+        ? Math.min(from.x, to.x) - 42 - index * 10
+        : Math.max(from.x + from.width, to.x + to.width) + 42 + index * 10;
+      const fromX = side === 'left' ? from.x : from.x + from.width;
+      const toX = side === 'left' ? to.x : to.x + to.width;
+      const fromY = from.y + from.height / 2;
+      const toY = to.y + to.height / 2;
+      return {
+        path: `M ${fromX} ${fromY} L ${channelX} ${fromY} L ${channelX} ${toY} L ${toX} ${toY}`,
+        labelX: channelX + (side === 'left' ? -36 : 10),
+        labelY: (fromY + toY) / 2 - 6,
+      };
+    }
     const fromX = from.x + from.width / 2;
     const fromY = from.y + from.height;
     const toX = to.x + to.width / 2;
     const toY = to.y;
-    if (from.name === to.name) {
+    if (isSelfLoop) {
       const loopW = 34 + index * 8;
       const midY = from.y + from.height / 2;
       return {

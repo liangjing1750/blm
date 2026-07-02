@@ -72,7 +72,7 @@
                   </marker>
                 </defs>
                 @for (transition of stateBoard().transitions; track transition.label + '-' + $index) {
-                  <path class="entity-state-link" [class.selected]="transition.selected" [attr.d]="transition.path" marker-end="url(#entity-state-arrow)" (click)="selectTransition($index, $event)"></path>
+                  <path class="entity-state-link" [class.selected]="transition.selected" [attr.d]="transition.path" [attr.data-state-action]="transition.label" marker-end="url(#entity-state-arrow)" (click)="selectTransition($index, $event)"></path>
                   <text class="entity-state-link-label" [attr.x]="transition.labelX" [attr.y]="transition.labelY">{{ transition.label }}</text>
                 }
               </svg>

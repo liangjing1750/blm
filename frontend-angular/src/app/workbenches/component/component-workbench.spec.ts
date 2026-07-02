@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { ComponentWorkbenchComponent } from './component-workbench';
+import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
 
 describe('ComponentWorkbenchComponent', () => {
   let fixture: ComponentFixture<ComponentWorkbenchComponent>;
@@ -27,7 +28,7 @@ describe('ComponentWorkbenchComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [ComponentWorkbenchComponent],
+      imports: [ComponentWorkbenchComponent, EntityDesignWorkbenchComponent],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ComponentWorkbenchComponent);
@@ -94,5 +95,54 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('.entity-board')?.classList.contains('is-editing')).toBe(true);
     expect(host.querySelector('[data-testid="entity-design-drawer"]')).toBeTruthy();
     expect(host.querySelector('.entity-design-drawer-resize')).toBeTruthy();
+  });
+
+  it('keeps the entity relation diagram shell scrollable in both directions', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'relation';
+    runtime.doc.entities = [
+      { uid: 'entity-1', name: '实体一', fields: [], businessConstructUid: 'construct-1', pos: { x: 24, y: 24 } },
+      { uid: 'entity-2', name: '实体二', fields: [], businessConstructUid: 'construct-1', pos: { x: 1460, y: 860 } },
+    ];
+    runtime.doc.relations = [{ from: 'entity-1', to: 'entity-2', label: '关联' }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const shell = entityHost.querySelector<HTMLElement>('[data-testid="entity-design-canvas-shell"]')!;
+    const board = entityHost.querySelector<HTMLElement>('.entity-board')!;
+
+    expect(getComputedStyle(shell).overflowX).toBe('auto');
+    expect(getComputedStyle(shell).overflowY).toBe('auto');
+    expect(Number.parseInt(board.style.width, 10)).toBeGreaterThan(1500);
+    expect(Number.parseInt(board.style.height, 10)).toBeGreaterThan(900);
+  });
+
+  it('renders entity state fallback transitions through a legacy side channel', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: '订单',
+      fields: [{ uid: 'field-1', name: '状态', state_values: '草稿、审核中、已完成' }],
+      state_transitions: [
+        { from: '草稿', to: '审核中', action: '提交' },
+        { from: '审核中', to: '已完成', action: '通过' },
+        { from: '已完成', to: '审核中', action: '退回' },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-switch-state"]')?.click();
+    entityFixture.detectChanges();
+    const fallbackPath = Array.from(entityHost.querySelectorAll<SVGPathElement>('.entity-state-link'))
+      .find((path) => path.getAttribute('data-state-action') === '退回');
+
+    expect(fallbackPath?.getAttribute('d') || '').toMatch(/ L -?\d+ \d+ L -?\d+ \d+ L /);
   });
 });

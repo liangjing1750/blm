@@ -35,7 +35,8 @@
 
 .entity-design-canvas-shell {
   min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid #d7e2ef;
   border-radius: 10px;
   background: #fff;
