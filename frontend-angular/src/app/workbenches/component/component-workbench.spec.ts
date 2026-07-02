@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { ComponentWorkbenchComponent } from './component-workbench';
 import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
@@ -17,9 +17,18 @@ describe('ComponentWorkbenchComponent', () => {
     runtime.doc = {
       meta: { domain: 'Workbench Test' },
       businessComponents: [{ uid: 'comp-1', name: '订单组件', kind: 'core' }],
-      businessConstructs: [{ uid: 'construct-1', name: '订单构件', businessComponentUid: 'comp-1' }],
-      entities: [{ uid: 'entity-1', name: '订单', fields: [], businessConstructUid: 'construct-1' }],
-      taskDefinitions: [{ uid: 'task-1', name: '查询订单', type: 'Query', constructUid: 'construct-1', parameters: { inputs: [], outputs: [] } }],
+      businessConstructs: [
+        { uid: 'construct-1', name: '订单构件', businessComponentUid: 'comp-1' },
+        { uid: 'construct-2', name: '未分组构件' },
+      ],
+      entities: [
+        { uid: 'entity-1', name: '订单', fields: [], businessConstructUid: 'construct-1' },
+        { uid: 'entity-2', name: '未分组实体', fields: [] },
+      ],
+      taskDefinitions: [
+        { uid: 'task-1', name: '查询订单', type: 'Query', constructUid: 'construct-1', parameters: { inputs: [], outputs: [] } },
+        { uid: 'task-2', name: '未分组任务', type: 'Command', parameters: { inputs: [], outputs: [] } },
+      ],
       services: [],
       processes: [],
       roles: [],
@@ -49,7 +58,7 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('[data-testid="business-component-view"]')?.textContent).not.toContain('查询订单');
   });
 
-  it('opens construct detail from component overview and can return with context', () => {
+  it('opens construct detail from component overview and keeps context without a return button', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="business-construct-entry"]')?.click();
     fixture.detectChanges();
 
@@ -58,13 +67,67 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('[data-testid="business-construct-view"]')?.textContent).toContain('订单构件');
     expect(host.querySelector('[data-testid="business-construct-entities"]')?.textContent).toContain('订单');
     expect(host.querySelector('[data-testid="business-construct-tasks"]')?.textContent).toContain('查询订单');
+    expect(host.querySelector('[data-testid="business-construct-return"]')).toBeFalsy();
+    expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
+  });
 
-    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-return"]')?.click();
+  it('edits a construct inline and cascades component and construct selectors', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-tab"]')?.click();
     fixture.detectChanges();
 
-    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessComponent');
-    expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
-    expect(host.querySelector('[data-testid="business-construct-entry"]')?.classList.contains('is-selected')).toBe(true);
+    const nameInput = host.querySelector<HTMLInputElement>('[data-testid="business-construct-name-input"]')!;
+    nameInput.value = '订单履约构件';
+    nameInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(getAngularRuntimeState().doc.businessConstructs[0].name).toBe('订单履约构件');
+
+    const noteInput = host.querySelector<HTMLInputElement>('[data-testid="business-construct-note-input"]')!;
+    noteInput.value = '负责订单履约';
+    noteInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(getAngularRuntimeState().doc.businessConstructs[0].note).toBe('负责订单履约');
+
+    const componentSelect = host.querySelector<HTMLSelectElement>('[data-testid="business-construct-component-select"]')!;
+    expect(componentSelect.getAttribute('data-selected-component')).toBe('comp-1');
+    const constructSelect = host.querySelector<HTMLSelectElement>('[data-testid="business-construct-select"]')!;
+    expect(Array.from(constructSelect.options).map((option) => option.value)).toContain('construct-1');
+  });
+
+  it('creates, imports, and removes construct entities and tasks from the construct view', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-tab"]')?.click();
+    fixture.detectChanges();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-new-entity"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-new-task"]')?.click();
+    fixture.detectChanges();
+
+    const runtime = getAngularRuntimeState();
+    expect(runtime.doc.entities.some((entity: any) => entity.name === '新实体' && entity.businessConstructUid === 'construct-1')).toBe(true);
+    expect(runtime.doc.taskDefinitions.some((task: any) => task.name === '新任务' && task.constructUid === 'construct-1')).toBe(true);
+
+    expect(host.querySelector('[data-testid="business-construct-entity-imports"]')?.textContent).toContain('未分组实体');
+    expect(host.querySelector('[data-testid="business-construct-task-imports"]')?.textContent).toContain('未分组任务');
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-entity-attach"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-task-attach"]')?.click();
+    fixture.detectChanges();
+
+    const movedEntity = runtime.doc.entities.find((entity: any) => entity.uid === 'entity-2');
+    const movedTask = runtime.doc.taskDefinitions.find((task: any) => task.uid === 'task-2');
+    expect(movedEntity.businessConstructUid).toBe('construct-1');
+    expect(movedTask.constructUid).toBe('construct-1');
+
+    const entityDetach = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="business-construct-entity-detach"]'))
+      .find((button) => button.closest('.construct-asset-row')?.textContent?.includes('未分组实体'));
+    const taskDetach = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="business-construct-task-detach"]'))
+      .find((button) => button.closest('.construct-asset-row')?.textContent?.includes('未分组任务'));
+    entityDetach?.click();
+    taskDetach?.click();
+    fixture.detectChanges();
+
+    expect(movedEntity.businessConstructUid).toBe('');
+    expect(movedTask.constructUid).toBe('');
   });
 
   it('opens task definitions from construct detail with the construct filter applied', () => {
@@ -81,23 +144,69 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('.taskdef-cards')?.textContent).toContain('查询订单');
   });
 
-  it('opens a resizable drawer when adding a component or construct', () => {
+  it('edits component properties in the card and creates constructs by opening the construct view', () => {
     expect(host.querySelector('.proc-view-toolbar .view-toggle-group .vtb.active')?.textContent).toContain('业务组件');
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();
 
     host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')?.click();
     fixture.detectChanges();
-    expect(host.querySelector('[data-testid="component-drawer"]')?.textContent).toContain('组件');
-    expect(host.querySelector('.drawer-resize-handle')).toBeTruthy();
+    expect(host.querySelector('[data-testid="component-drawer"]')).toBeFalsy();
+    expect(getAngularRuntimeState().doc.businessComponents).toHaveLength(2);
 
-    host.querySelector<HTMLButtonElement>('.drawer-close')?.click();
+    const nameInput = host.querySelector<HTMLInputElement>('[data-testid="business-component-name-input"]')!;
+    nameInput.value = '订单履约组件';
+    nameInput.dispatchEvent(new Event('input'));
     fixture.detectChanges();
+    expect(getAngularRuntimeState().doc.businessComponents[0].name).toBe('订单履约组件');
+
+    const kindButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="business-component-kind-toggle"] button'));
+    kindButtons.find((button) => button.textContent?.includes('通用组件'))?.click();
+    fixture.detectChanges();
+    expect(getAngularRuntimeState().doc.businessComponents[0].kind).toBe('generic');
+
     host.querySelector<HTMLButtonElement>('[data-testid="business-construct-add"]')?.click();
     fixture.detectChanges();
 
-    expect(host.querySelector('[data-testid="construct-drawer"]')?.textContent).toContain('构件');
-    expect(host.querySelector('.drawer-resize-handle')).toBeTruthy();
+    expect(host.querySelector('[data-testid="construct-drawer"]')).toBeFalsy();
+    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessConstruct');
+    expect(getAngularRuntimeState().doc.businessConstructs.some((construct: any) => construct.name === '新构件')).toBe(true);
+  });
+
+  it('confirms before deleting a business component', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    host.querySelector<HTMLButtonElement>('.comp-grid-edit.danger')?.click();
+    fixture.detectChanges();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(getAngularRuntimeState().doc.businessComponents).toHaveLength(1);
+    confirmSpy.mockRestore();
+  });
+
+  it('moves ungrouped constructs into and out of a component from the component card', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="business-component-imports"]')?.textContent).toContain('未分组构件');
+    host.querySelector<HTMLButtonElement>('[data-testid="construct-attach-button"]')?.click();
+    fixture.detectChanges();
+
+    const runtime = getAngularRuntimeState();
+    const moved = runtime.doc.businessConstructs.find((item: any) => item.uid === 'construct-2');
+    expect(moved.businessComponentUid).toBe('comp-1');
+    expect(runtime.doc.businessComponents[0].constructUids).toContain('construct-2');
+    expect(host.querySelector('[data-testid="business-component-imports"]')).toBeFalsy();
+
+    const detachButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="construct-detach-button"]'));
+    detachButtons.find((button) => button.closest('.comp-grid-construct-wrap')?.textContent?.includes('未分组构件'))?.click();
+    fixture.detectChanges();
+
+    expect(moved.businessComponentUid).toBe('');
+    expect(runtime.doc.businessComponents[0].constructUids || []).not.toContain('construct-2');
+    expect(host.querySelector('[data-testid="business-component-imports"]')?.textContent).toContain('未分组构件');
   });
 
   it('keeps task definition editing readable and all add buttons mutate the model', () => {
@@ -158,7 +267,7 @@ describe('ComponentWorkbenchComponent', () => {
 
     expect(host.querySelector('[data-testid="component-drawer"]')).toBeFalsy();
     expect(getAngularRuntimeState().doc.businessComponents.length).toBe(beforeComponents);
-    expect(getAngularRuntimeState().doc.taskDefinitions).toHaveLength(1);
+    expect(getAngularRuntimeState().doc.taskDefinitions).toHaveLength(2);
 
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();

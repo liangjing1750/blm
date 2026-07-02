@@ -7,8 +7,8 @@ import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/r
 type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
 
 interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; note?: string; entityUids?: string[]; taskDefinitionUids?: string[]; constructUids?: string[]; }
-interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; }
-interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructUids?: string[]; }
+interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; businessComponentId?: string; businessComponent?: string; }
+interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructId?: string; businessConstructUids?: string[]; constructUid?: string; constructId?: string; }
 interface TaskParam { name: string; type: string; required: boolean; note: string; }
 interface TechnicalHandover { runtimeKind?: string; target?: string; note?: string; }
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; technicalHandover?: TechnicalHandover; constructUid?: string; businessComponentUid?: string; }
@@ -61,7 +61,15 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   // 业务组件/业务构件：总览只展示分组关系，详情页再展开实体与任务资产。
   protected constructsFor(comp: LegacyComp): LegacyConstruct[] {
     const cid = this.uid(comp);
-    return this.constructs().filter((c) => this.uid({ uid: c.businessComponentUid }) === cid);
+    const explicitIds = new Set(comp.constructUids || []);
+    return this.constructs().filter((c) => this.constructComponentId(c) === cid || explicitIds.has(this.uid(c)));
+  }
+  protected ungroupedConstructs(): LegacyConstruct[] {
+    const groupedIds = new Set<string>();
+    for (const comp of this.components()) {
+      for (const construct of this.constructsFor(comp)) groupedIds.add(this.uid(construct));
+    }
+    return this.constructs().filter((construct) => !groupedIds.has(this.uid(construct)) && !this.constructComponentId(construct));
   }
   protected entitiesFor(construct: LegacyConstruct): LegacyEntity[] {
     const cid = this.uid(construct);
@@ -77,8 +85,23 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected componentForConstruct(construct: LegacyConstruct | null): LegacyComp | null {
     if (!construct) return null;
-    const compId = String(construct.businessComponentUid || '').trim();
+    const compId = this.constructComponentId(construct);
     return this.components().find((c) => this.uid(c) === compId) || null;
+  }
+  protected selectedConstructComponentId(): string {
+    const construct = this.selectedConstruct();
+    return this.constructComponentId(construct || {});
+  }
+  protected constructsForSelectedConstructComponent(): LegacyConstruct[] {
+    const compId = this.selectedConstructComponentId();
+    if (!compId) return this.constructs();
+    return this.constructs().filter((construct) => this.constructComponentId(construct) === compId);
+  }
+  protected selectConstructComponent(compId: string): void {
+    const constructs = compId
+      ? this.constructs().filter((construct) => this.constructComponentId(construct) === compId)
+      : this.constructs();
+    this.setSelectedConstruct(constructs[0] || null);
   }
   protected isSelectedConstruct(construct: LegacyConstruct): boolean {
     return this.uid(construct) === this.selectedConstructId();
@@ -106,6 +129,64 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.setSelectedConstruct(construct);
     this.switchTab('entity');
   }
+  protected updateConstructInline(construct: LegacyConstruct, key: 'name' | 'note' | 'businessComponentUid', value: string): void {
+    if (!this.canEdit()) return;
+    if (key === 'businessComponentUid') {
+      const comp = this.components().find((item) => this.uid(item) === value) || null;
+      if (comp) this.attachConstructToComponent(construct, comp);
+      else this.detachConstructFromComponent(construct);
+      return;
+    }
+    construct[key] = value;
+    this.touch();
+  }
+  protected addComponentInline(kind: 'core' | 'generic' = 'core'): void {
+    if (!this.canEdit()) return;
+    const doc = this.doc();
+    doc.businessComponents ||= [];
+    const component: LegacyComp = {
+      uid: 'COMP' + Date.now(),
+      name: this.uniqueComponentName('新业务组件'),
+      kind,
+      note: '',
+      constructUids: [],
+    };
+    doc.businessComponents.push(component);
+    this.expandedComp.set(this.uid(component));
+    this.touch();
+  }
+  protected updateComponentInline(comp: LegacyComp, key: 'name' | 'kind' | 'note', value: string): void {
+    if (!this.canEdit()) return;
+    if (key === 'kind') comp.kind = value === 'generic' ? 'generic' : 'core';
+    else comp[key] = value;
+    if (key === 'name') {
+      for (const construct of this.constructsFor(comp)) construct.businessComponent = value;
+      for (const taskDef of this.taskDefs()) {
+        if (taskDef.businessComponentUid === this.uid(comp)) taskDef.businessComponentUid = this.uid(comp);
+      }
+    }
+    this.touch();
+  }
+  protected attachConstructToComponent(construct: LegacyConstruct, comp: LegacyComp): void {
+    if (!this.canEdit()) return;
+    this.detachConstructFromComponents(construct);
+    const constructId = this.uid(construct);
+    construct.businessComponentUid = this.uid(comp);
+    construct.businessComponentId = this.uid(comp);
+    construct.businessComponent = comp.name || '';
+    comp.constructUids = [...new Set([...(comp.constructUids || []), constructId])];
+    this.setSelectedConstruct(construct);
+    this.expandedComp.set(this.uid(comp));
+    this.touch();
+  }
+  protected detachConstructFromComponent(construct: LegacyConstruct): void {
+    if (!this.canEdit()) return;
+    this.detachConstructFromComponents(construct);
+    construct.businessComponentUid = '';
+    construct.businessComponentId = '';
+    construct.businessComponent = '';
+    this.touch();
+  }
   protected fieldCount(entity: LegacyEntity): number {
     return (entity.fields || []).length;
   }
@@ -121,9 +202,65 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return this.taskDefs().filter((t) => !used.has(t.uid || t.id));
   }
   protected addEntityTo(entity: LegacyEntity, construct: LegacyConstruct): void { if (!this.canEdit()) return; entity.businessConstructUid = this.uid(construct); entity.businessConstructUids = [this.uid(construct)]; this.touch(); }
-  protected removeEntity(entity: LegacyEntity): void { if (!this.canEdit()) return; entity.businessConstructUid = ''; entity.businessConstructUids = []; this.touch(); }
+  protected removeEntity(entity: LegacyEntity): void { if (!this.canEdit()) return; entity.businessConstructUid = ''; entity.businessConstructId = ''; entity.businessConstructUids = []; entity.constructUid = ''; entity.constructId = ''; this.touch(); }
   protected addTaskDefTo(td: LegacyTaskDef, construct: LegacyConstruct): void { if (!this.canEdit()) return; td.constructUid = this.uid(construct); this.touch(); }
   protected removeTaskDef(td: LegacyTaskDef): void { if (!this.canEdit()) return; td.constructUid = ''; this.touch(); }
+  protected createEntityForConstruct(construct: LegacyConstruct): void {
+    if (!this.canEdit()) return;
+    const doc = this.doc();
+    doc.entities ||= [];
+    const id = 'ENT' + Date.now();
+    doc.entities.push({
+      uid: id,
+      id,
+      name: this.uniqueEntityName('新实体'),
+      fields: [],
+      businessConstructUid: this.uid(construct),
+      businessConstructUids: [this.uid(construct)],
+    });
+    this.touch();
+  }
+  protected createTaskForConstruct(construct: LegacyConstruct): void {
+    if (!this.canEdit()) return;
+    const doc = this.doc();
+    doc.taskDefinitions ||= [];
+    const id = 'TASK' + Date.now();
+    doc.taskDefinitions.push({
+      uid: id,
+      id,
+      name: this.uniqueTaskName('新任务'),
+      type: 'Query',
+      constructUid: this.uid(construct),
+      businessComponentUid: this.constructComponentId(construct),
+      parameters: { inputs: [], outputs: [] },
+      technicalHandover: { runtimeKind: '', target: '', note: '' },
+    });
+    this.touch();
+  }
+  protected createConstructForComponent(comp: LegacyComp | null): void {
+    if (!this.canEdit()) return;
+    const doc = this.doc();
+    doc.businessConstructs ||= [];
+    const id = 'CSTR' + Date.now();
+    const construct: LegacyConstruct = {
+      uid: id,
+      id,
+      name: this.uniqueConstructName('新构件'),
+      note: '',
+      businessComponentUid: comp ? this.uid(comp) : '',
+      businessComponentId: comp ? this.uid(comp) : '',
+      businessComponent: comp?.name || '',
+    };
+    doc.businessConstructs.push(construct);
+    if (comp) comp.constructUids = [...new Set([...(comp.constructUids || []), id])];
+    this.setSelectedConstruct(construct);
+    this.switchTab('businessConstruct');
+    this.touch();
+  }
+  protected createConstructForSelectedComponent(): void {
+    const comp = this.components().find((item) => this.uid(item) === this.selectedConstructComponentId()) || null;
+    this.createConstructForComponent(comp);
+  }
 
   // ─── 组件编辑抽屉 ──────────────────────────────
   protected openCompDrawer(comp?: LegacyComp): void {
@@ -140,6 +277,12 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected deleteComp(comp: LegacyComp): void {
     if (!this.canEdit()) return;
+    if (!window.confirm(`确认删除业务组件“${comp.name || this.uid(comp)}”吗？组件下的构件会移入未分组。`)) return;
+    for (const construct of this.constructsFor(comp)) {
+      construct.businessComponentUid = '';
+      construct.businessComponentId = '';
+      construct.businessComponent = '';
+    }
     this.doc().businessComponents = this.components().filter((c) => (c.uid || c.id) !== (comp.uid || comp.id));
     this.compDrawer.set(null); this.touch();
   }
@@ -158,6 +301,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     const doc = this.doc();
     if (!d.uid) { d.uid = 'CSTR' + Date.now(); doc.businessConstructs ||= []; doc.businessConstructs.push(d); }
     else { const ex = (doc.businessConstructs || []).find((c: any) => (c.uid || c.id) === d.uid); if (ex) Object.assign(ex, d); }
+    if (d.businessComponentUid) {
+      const comp = this.components().find((item) => this.uid(item) === d.businessComponentUid);
+      if (comp) this.attachConstructToComponent(d as LegacyConstruct, comp);
+    }
     this.setSelectedConstruct(d as LegacyConstruct);
     this.constructDrawer.set(null); this.touch();
   }
@@ -194,7 +341,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected filteredConstructsForTaskDef(): LegacyConstruct[] {
     const cid = this.taskDefCompId();
     if (!cid) return this.constructs();
-    return this.constructs().filter((c) => this.uid({ uid: c.businessComponentUid }) === cid);
+    return this.constructs().filter((c) => this.constructComponentId(c) === cid);
   }
 
   protected selectTaskDefComp(compId: string): void {
@@ -289,6 +436,46 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   // ─── Utils ────────────────────────────────────────
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
   protected constructName(constructId: string): string { const c = this.constructs().find((x) => this.uid(x) === constructId); return c?.name || constructId || '未归类'; }
+  protected componentKind(comp: LegacyComp): 'core' | 'generic' {
+    return comp.kind === 'generic' || comp.kind === 'common' ? 'generic' : 'core';
+  }
+  private constructComponentId(construct: LegacyConstruct): string {
+    return String(construct.businessComponentUid || construct.businessComponentId || '').trim();
+  }
+  private detachConstructFromComponents(construct: LegacyConstruct): void {
+    const constructId = this.uid(construct);
+    for (const comp of this.components()) {
+      comp.constructUids = (comp.constructUids || []).filter((id) => id !== constructId);
+    }
+  }
+  private uniqueComponentName(baseName: string): string {
+    const names = new Set(this.components().map((comp) => String(comp.name || '').trim()).filter(Boolean));
+    if (!names.has(baseName)) return baseName;
+    let index = 2;
+    while (names.has(`${baseName}${index}`)) index += 1;
+    return `${baseName}${index}`;
+  }
+  private uniqueConstructName(baseName: string): string {
+    const names = new Set(this.constructs().map((construct) => String(construct.name || '').trim()).filter(Boolean));
+    if (!names.has(baseName)) return baseName;
+    let index = 2;
+    while (names.has(`${baseName}${index}`)) index += 1;
+    return `${baseName}${index}`;
+  }
+  private uniqueEntityName(baseName: string): string {
+    const names = new Set(this.entities().map((entity) => String(entity.name || '').trim()).filter(Boolean));
+    if (!names.has(baseName)) return baseName;
+    let index = 2;
+    while (names.has(`${baseName}${index}`)) index += 1;
+    return `${baseName}${index}`;
+  }
+  private uniqueTaskName(baseName: string): string {
+    const names = new Set(this.taskDefs().map((task) => String(task.name || '').trim()).filter(Boolean));
+    if (!names.has(baseName)) return baseName;
+    let index = 2;
+    while (names.has(`${baseName}${index}`)) index += 1;
+    return `${baseName}${index}`;
+  }
   protected switchTab(t: ComponentTab): void {
     if (t === 'businessConstruct' && !this.selectedConstructId()) this.setSelectedConstruct(this.constructs()[0] || null);
     this.runtime.ui['componentWorkbenchTab'] = t;

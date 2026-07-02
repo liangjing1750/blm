@@ -6,7 +6,8 @@ const COLLAB_DRAFT_DB_NAME = 'blm-collab-drafts';
 const COLLAB_DRAFT_STORE_NAME = 'drafts';
 const COLLAB_DRAFT_STORAGE_PREFIX = 'blm.collab.draft.';
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
-const COLLAB_USER_SESSION_KEY = 'blm.collab.sessionId';
+const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
+const COLLAB_LEGACY_SESSION_KEY = 'blm.collab.sessionId';
 
 export interface LocalCollabDraftRecord {
   key: string;
@@ -117,13 +118,14 @@ export class LocalCollabDraftService {
     }
     const id = String(profile?.id || '').trim() || 'anonymous';
     const name = String(profile?.name || '').trim();
-    let sessionId = sessionStorage.getItem(COLLAB_USER_SESSION_KEY) || '';
+    let sessionId = sessionStorage.getItem(COLLAB_USER_SESSION_KEY) || sessionStorage.getItem(COLLAB_LEGACY_SESSION_KEY) || '';
     if (!sessionId) {
       sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
         ? `session-${crypto.randomUUID()}`
         : `session-${Date.now().toString(36)}`;
-      sessionStorage.setItem(COLLAB_USER_SESSION_KEY, sessionId);
     }
+    sessionStorage.setItem(COLLAB_USER_SESSION_KEY, sessionId);
+    sessionStorage.setItem(COLLAB_LEGACY_SESSION_KEY, sessionId);
     return { id, name, sessionId };
   }
 

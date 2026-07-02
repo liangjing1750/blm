@@ -263,6 +263,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   @HostListener('window:blm-angular-runtime-refresh')
   protected handleRuntimeRefresh(): void {
     this.refreshShellView();
+    this.persistLocalDraftIfNeeded();
   }
 
   @HostListener('window:blm-runtime-local-change')
@@ -1556,6 +1557,12 @@ export class ShellComponent implements OnInit, OnDestroy {
     void this.router.navigateByUrl('/panorama');
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
     this.showToast('已恢复本地未提交草稿，请点击“立即同步”提交。', 'success');
+  }
+
+  private persistLocalDraftIfNeeded(): void {
+    if (!this.runtime.currentFile || this.runtime.readOnly) return;
+    if (!this.runtime.modified && !this.runtime.collab.pendingSnapshot) return;
+    void this.localDrafts.saveCurrentDraft();
   }
 
   private confirmLocalDraftRecovery(draft: { updatedAt: string; baseSeq: number }): Promise<boolean> {

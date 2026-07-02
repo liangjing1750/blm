@@ -20,40 +20,69 @@
     <div class="comp-tab-body business-component-view" data-testid="business-component-view">
       <div class="business-component-toolbar">
         @if (canEdit()) {
-          <button class="btn btn-primary btn-sm" data-testid="business-component-add" (click)="openCompDrawer()">+ 新建业务组件</button>
+          <button class="btn btn-primary btn-sm" data-testid="business-component-add" (click)="addComponentInline()">+ 新建业务组件</button>
         }
       </div>
       <div class="comp-grid business-component-grid">
         @for (comp of components(); track uid(comp)) {
-          <div class="comp-grid-card business-component-card" data-testid="business-component-card" [class.is-generic]="comp.kind === 'generic'">
+          <div class="comp-grid-card business-component-card" data-testid="business-component-card" [class.is-generic]="componentKind(comp) === 'generic'">
             <div class="comp-grid-head">
-              <span class="comp-grid-label">业务组件</span>
-              <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
+              <span class="comp-grid-label">{{ componentKind(comp) === 'generic' ? '通用组件' : '核心组件' }}</span>
+              @if (canEdit()) {
+                <input class="business-component-name-input" data-testid="business-component-name-input" [ngModel]="comp.name || ''" (ngModelChange)="updateComponentInline(comp, 'name', $event)" placeholder="业务组件名称" />
+              } @else {
+                <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
+              }
               <span class="business-component-count">{{ constructsFor(comp).length }} 个构件</span>
               @if (canEdit()) {
-                <button class="comp-grid-edit" (click)="openCompDrawer(comp)" title="编辑">编辑</button>
+                <button class="comp-grid-edit danger" (click)="deleteComp(comp)" title="删除组件">删除</button>
               }
             </div>
-            @if (comp.note) {
-              <p class="business-component-note">{{ comp.note }}</p>
+            <div class="business-component-inline-editor" [class.is-readonly]="!canEdit()">
+              @if (canEdit()) {
+                <div class="business-component-kind-toggle" data-testid="business-component-kind-toggle">
+                  <button type="button" [class.active]="componentKind(comp) === 'core'" (click)="updateComponentInline(comp, 'kind', 'core')">核心组件</button>
+                  <button type="button" [class.active]="componentKind(comp) === 'generic'" (click)="updateComponentInline(comp, 'kind', 'generic')">通用组件</button>
+                </div>
+                <input class="business-component-note-input" data-testid="business-component-note-input" [ngModel]="comp.note || ''" (ngModelChange)="updateComponentInline(comp, 'note', $event)" placeholder="说明组件职责和边界" />
+              } @else if (comp.note) {
+                <p class="business-component-note">{{ comp.note }}</p>
+              } @else {
+                <p class="business-component-note muted">暂无说明</p>
+              }
+            </div>
+            @if (canEdit() && ungroupedConstructs().length) {
+              <div class="business-component-imports" data-testid="business-component-imports">
+                <span>可移入构件</span>
+                <div>
+                  @for (construct of ungroupedConstructs(); track uid(construct)) {
+                    <button type="button" class="business-component-import-btn" data-testid="construct-attach-button" (click)="attachConstructToComponent(construct, comp)">移入 {{ construct.name || uid(construct) }}</button>
+                  }
+                </div>
+              </div>
             }
             <div class="comp-grid-constructs">
               @for (construct of constructsFor(comp); track uid(construct)) {
-                <button class="comp-grid-construct business-construct-entry" data-testid="business-construct-entry" [class.is-selected]="isSelectedConstruct(construct)" (click)="openBusinessConstruct(construct)">
-                  <div class="comp-grid-construct-head">
-                    <span class="comp-grid-construct-label">业务构件</span>
-                    <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
-                  </div>
-                  <div class="business-construct-metrics">
-                    <span>{{ entitiesFor(construct).length }} 个实体</span>
-                    <span>{{ taskDefsFor(construct).length }} 个任务</span>
-                  </div>
-                </button>
+                <div class="comp-grid-construct-wrap">
+                  <button class="comp-grid-construct business-construct-entry" data-testid="business-construct-entry" [class.is-selected]="isSelectedConstruct(construct)" (click)="openBusinessConstruct(construct)">
+                    <div class="comp-grid-construct-head">
+                      <span class="comp-grid-construct-label">业务构件</span>
+                      <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
+                    </div>
+                    <div class="business-construct-metrics">
+                      <span>{{ entitiesFor(construct).length }} 个实体</span>
+                      <span>{{ taskDefsFor(construct).length }} 个任务</span>
+                    </div>
+                  </button>
+                  @if (canEdit()) {
+                    <button class="construct-move-btn" data-testid="construct-detach-button" type="button" (click)="detachConstructFromComponent(construct); $event.stopPropagation()">移出</button>
+                  }
+                </div>
               } @empty {
                 <div class="business-empty-inline">暂无业务构件</div>
               }
               @if (canEdit()) {
-                <button class="comp-grid-construct-add" data-testid="business-construct-add" (click)="openConstructDrawer(undefined, uid(comp))">+ 业务构件</button>
+                <button class="comp-grid-construct-add" data-testid="business-construct-add" (click)="createConstructForComponent(comp)">+ 新建构件</button>
               }
             </div>
           </div>
@@ -62,11 +91,11 @@
             <strong>暂无业务组件</strong>
             <span>先新建业务组件，再为组件添加业务构件。</span>
             @if (canEdit()) {
-              <button class="btn btn-primary btn-sm" (click)="openCompDrawer()">新建业务组件</button>
+              <button class="btn btn-primary btn-sm" (click)="addComponentInline()">新建业务组件</button>
             }
           </div>
         }
-      </div>
+    </div>
     </div>
   }
 
@@ -74,56 +103,121 @@
   @if (activeTab() === 'businessConstruct') {
     <div class="comp-tab-body business-construct-view" data-testid="business-construct-view">
       @if (selectedConstruct(); as construct) {
-        <div class="business-construct-head">
-          <button class="btn btn-outline btn-sm" data-testid="business-construct-return" (click)="returnToBusinessComponents()">← 返回业务组件</button>
-          <select [ngModel]="uid(construct)" (ngModelChange)="openBusinessConstructById($event)">
-            @for (item of constructs(); track uid(item)) {
-              <option [value]="uid(item)">{{ item.name || uid(item) }}</option>
-            }
-          </select>
+        <div class="business-construct-head business-construct-selector-row">
+          <label>
+            <span>所属组件</span>
+            <select data-testid="business-construct-component-select" [attr.data-selected-component]="selectedConstructComponentId()" [ngModel]="selectedConstructComponentId()" (ngModelChange)="selectConstructComponent($event)">
+              <option value="">未归属组件</option>
+              @for (component of components(); track uid(component)) {
+                <option [value]="uid(component)">{{ component.name || uid(component) }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>业务构件</span>
+            <select data-testid="business-construct-select" [ngModel]="uid(construct)" (ngModelChange)="openBusinessConstructById($event)">
+              @for (item of constructsForSelectedConstructComponent(); track uid(item)) {
+                <option [value]="uid(item)">{{ item.name || uid(item) }}</option>
+              }
+            </select>
+          </label>
           @if (canEdit()) {
-            <button class="btn btn-outline btn-sm" (click)="openConstructDrawer(construct)">编辑构件</button>
+            <button class="btn btn-outline btn-sm" data-testid="business-construct-add" (click)="createConstructForSelectedComponent()">+ 新建构件</button>
           }
         </div>
-        <section class="business-construct-summary">
-          <div>
-            <span class="summary-label">业务构件</span>
-            <h3>{{ construct.name || uid(construct) }}</h3>
-            <p>{{ construct.note || '暂无说明' }}</p>
+        <section class="business-construct-summary business-construct-edit-card">
+          <div class="construct-summary-ribbon">业务构件</div>
+          <div class="business-construct-fields">
+            <label>
+              <span>构件名称</span>
+              @if (canEdit()) {
+                <input data-testid="business-construct-name-input" [ngModel]="construct.name || ''" (ngModelChange)="updateConstructInline(construct, 'name', $event)" placeholder="构件名称" />
+              } @else {
+                <strong>{{ construct.name || uid(construct) }}</strong>
+              }
+            </label>
+            <label>
+              <span>所属组件</span>
+              @if (canEdit()) {
+                <select data-testid="business-construct-owner-select" [ngModel]="selectedConstructComponentId()" (ngModelChange)="updateConstructInline(construct, 'businessComponentUid', $event)">
+                  <option value="">未归属组件</option>
+                  @for (component of components(); track uid(component)) {
+                    <option [value]="uid(component)">{{ component.name || uid(component) }}</option>
+                  }
+                </select>
+              } @else {
+                <strong>{{ componentForConstruct(construct)?.name || '未归属组件' }}</strong>
+              }
+            </label>
+            <label class="wide">
+              <span>说明</span>
+              @if (canEdit()) {
+                <input data-testid="business-construct-note-input" [ngModel]="construct.note || ''" (ngModelChange)="updateConstructInline(construct, 'note', $event)" placeholder="说明构件职责和边界" />
+              } @else {
+                <p>{{ construct.note || '暂无说明' }}</p>
+              }
+            </label>
           </div>
           <div class="summary-metrics">
-            <span>{{ componentForConstruct(construct)?.name || '未归属组件' }}</span>
-            <span>{{ entitiesFor(construct).length }} 个实体</span>
-            <span>{{ taskDefsFor(construct).length }} 个任务</span>
+            <span class="metric-pill entity">实体 {{ entitiesFor(construct).length }}</span>
+            <span class="metric-pill task">任务 {{ taskDefsFor(construct).length }}</span>
           </div>
         </section>
         <div class="business-construct-assets">
           <section class="construct-asset-panel" data-testid="business-construct-entities">
             <header>
-              <strong>关联实体</strong>
+              <strong><span class="asset-dot entity"></span>实体</strong>
               <button class="btn-ghost-sm" (click)="openEntitiesForConstruct(construct)">进入实体定义</button>
+              @if (canEdit()) {
+                <button class="btn-ghost-sm" data-testid="business-construct-new-entity" (click)="createEntityForConstruct(construct)">+ 新建实体</button>
+              }
             </header>
+            @if (canEdit() && unclassifiedEntities().length) {
+              <div class="construct-import-strip" data-testid="business-construct-entity-imports">
+                <span>可移入实体</span>
+                @for (entity of unclassifiedEntities(); track uid(entity)) {
+                  <button type="button" data-testid="business-construct-entity-attach" (click)="addEntityTo(entity, construct)">移入 {{ entity.name || uid(entity) }}</button>
+                }
+              </div>
+            }
             @for (entity of entitiesFor(construct); track uid(entity)) {
-              <div class="construct-asset-row">
-                <strong>{{ entity.name || uid(entity) }}</strong>
-                <span>{{ fieldCount(entity) }} 个字段</span>
+              <div class="construct-asset-row entity-row">
+                <strong><span class="asset-type-tag entity">实体</span>{{ entity.name || uid(entity) }}</strong>
+                <span><span class="asset-mini-pill">{{ fieldCount(entity) }} 个字段</span></span>
+                @if (canEdit()) {
+                  <button class="btn-ghost-sm danger" data-testid="business-construct-entity-detach" (click)="removeEntity(entity)">移出构件</button>
+                }
               </div>
             } @empty {
-              <div class="business-empty-inline">暂无关联实体</div>
+              <div class="business-empty-inline">暂无实体</div>
             }
           </section>
           <section class="construct-asset-panel" data-testid="business-construct-tasks">
             <header>
-              <strong>关联任务</strong>
+              <strong><span class="asset-dot task"></span>任务</strong>
               <button class="btn-ghost-sm" data-testid="business-construct-open-tasks" (click)="openTaskDefinitionsForConstruct(construct)">进入任务定义</button>
+              @if (canEdit()) {
+                <button class="btn-ghost-sm" data-testid="business-construct-new-task" (click)="createTaskForConstruct(construct)">+ 新建任务</button>
+              }
             </header>
+            @if (canEdit() && unclassifiedTaskDefs().length) {
+              <div class="construct-import-strip" data-testid="business-construct-task-imports">
+                <span>可移入任务</span>
+                @for (task of unclassifiedTaskDefs(); track uid(task)) {
+                  <button type="button" data-testid="business-construct-task-attach" (click)="addTaskDefTo(task, construct)">移入 {{ task.name || uid(task) }}</button>
+                }
+              </div>
+            }
             @for (task of taskDefsFor(construct); track uid(task)) {
-              <div class="construct-asset-row">
-                <strong>{{ task.name || uid(task) }}</strong>
-                <span>{{ task.type || 'Query' }} · {{ task.target || task.address || '未设置实现' }} · {{ taskNodeCount(task) }} 个节点引用</span>
+              <div class="construct-asset-row task-row">
+                <strong><span class="asset-type-tag task">{{ task.type || 'Query' }}</span>{{ task.name || uid(task) }}</strong>
+                <span><span class="asset-mini-pill">{{ task.target || task.address || '未设置实现' }}</span><span class="asset-mini-pill">{{ taskNodeCount(task) }} 个节点引用</span></span>
+                @if (canEdit()) {
+                  <button class="btn-ghost-sm danger" data-testid="business-construct-task-detach" (click)="removeTaskDef(task)">移出构件</button>
+                }
               </div>
             } @empty {
-              <div class="business-empty-inline">暂无关联任务</div>
+              <div class="business-empty-inline">暂无任务</div>
             }
           </section>
         </div>
@@ -263,34 +357,6 @@
     <app-entity-design-workbench [editing]="canEdit()" [showEditorToggle]="false" />
   }
 
-  @if (compDrawer()) {
-    <div class="drawer-overlay" data-testid="component-drawer" (click)="compDrawer.set(null)">
-      <aside class="drawer" [style.width.px]="drawerWidth()" (click)="$event.stopPropagation()">
-        <div class="drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
-        <header class="drawer-head">
-          <h3>组件</h3>
-          <button class="drawer-close" type="button" (click)="compDrawer.set(null)">×</button>
-        </header>
-        <div class="drawer-body">
-          <label>组件名称<input [(ngModel)]="compDrawer()!.name" placeholder="组件名称" /></label>
-          <label>组件类型
-            <select [(ngModel)]="compDrawer()!.kind">
-              <option value="core">核心组件</option>
-              <option value="generic">通用组件</option>
-            </select>
-          </label>
-          <label>说明<textarea rows="3" [(ngModel)]="compDrawer()!.note" placeholder="组件职责和边界"></textarea></label>
-        </div>
-        <footer class="drawer-actions">
-          <button class="btn btn-primary btn-sm" type="button" (click)="saveDrawerComp()">保存</button>
-          <button class="btn btn-outline btn-sm" type="button" (click)="compDrawer.set(null)">取消</button>
-          @if (compDrawer()!.uid) {
-            <button class="btn btn-outline btn-sm danger" type="button" (click)="deleteDrawerComp()">删除</button>
-          }
-        </footer>
-      </aside>
-    </div>
-  }
 
   @if (constructDrawer()) {
     <div class="drawer-overlay" data-testid="construct-drawer" (click)="constructDrawer.set(null)">
