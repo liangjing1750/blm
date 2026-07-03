@@ -27,7 +27,7 @@
         @for (comp of components(); track uid(comp)) {
           <div class="comp-grid-card business-component-card" data-testid="business-component-card" [class.is-generic]="componentKind(comp) === 'generic'">
             <div class="comp-grid-head">
-              <span class="comp-grid-label">{{ componentKind(comp) === 'generic' ? '通用组件' : '核心组件' }}</span>
+              <span class="comp-grid-label" [class.is-generic-label]="componentKind(comp) === 'generic'">{{ componentKind(comp) === 'generic' ? '通用组件' : '核心组件' }}</span>
               @if (canEdit()) {
                 <input class="business-component-name-input" data-testid="business-component-name-input" [ngModel]="comp.name || ''" (ngModelChange)="updateComponentInline(comp, 'name', $event)" placeholder="业务组件名称" />
               } @else {

@@ -14,33 +14,29 @@
 .comp-toolbar { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
 .comp-toolbar input { border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: 12px; max-width: 240px; }
 .comp-toolbar select { border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: 12px; }
-.business-component-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.business-component-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 
 /* 业务组件总览：只承载组件和构件层级，不在这里铺开实体、任务明细。 */
-.comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; max-height: calc(100vh - 148px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+.comp-grid { column-count: 4; column-gap: 8px; max-height: calc(100vh - 144px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .comp-grid::-webkit-scrollbar { width: 6px; }
 .comp-grid::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 
-.comp-grid-card { border: 1px solid #fecaca; border-left: 5px solid #dc2626; border-radius: 10px; background: linear-gradient(180deg, #ffffff, #fff7f7); overflow: hidden; display: flex; flex-direction: column; }
+.comp-grid-card { break-inside: avoid; margin: 0 0 8px; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 9px; background: #fff; overflow: hidden; display: inline-flex; width: 100%; flex-direction: column; vertical-align: top; }
 .comp-grid-card:nth-child(3n + 2),
-.comp-grid-card:nth-child(3n) { border-color: #fecaca; border-left-color: #dc2626; background: linear-gradient(180deg, #ffffff, #fff7f7); }
+.comp-grid-card:nth-child(3n) { border-color: #fecaca; border-left-color: #dc2626; background: #fff; }
 .comp-grid-card:hover { box-shadow: 0 6px 18px rgba(15,23,42,.08); transform: translateY(-1px); transition: box-shadow .12s, transform .12s; }
-.comp-grid-card.is-generic { border-color: #bbf7d0; border-left-color: #16a34a; background: linear-gradient(180deg, #ffffff, #f7fdf9); }
+.comp-grid-card.is-generic { border-color: #bbf7d0; border-left-color: #16a34a; background: #fff; }
 .comp-grid-card.is-generic:hover { border-color: #86efac; }
-.comp-grid-card.is-generic .comp-grid-head { background: linear-gradient(135deg, #16a34a, #22c55e); border-bottom-color: #16a34a; }
-.comp-grid-card.is-generic .comp-grid-label { background: rgba(255,255,255,.2); }
-.comp-grid-card.is-generic .comp-grid-name,
-.comp-grid-card.is-generic .business-component-count,
-.comp-grid-card.is-generic .comp-grid-edit { color: #fff; }
 
-.comp-grid-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: linear-gradient(135deg, #dc2626, #ef4444); border-bottom: 1px solid #dc2626; }
-.comp-grid-label { background: rgba(255,255,255,.2); color: #fff; border: 1px solid rgba(255,255,255,.36); border-radius: 999px; font-size: 10px; font-weight: 800; padding: 2px 7px; flex-shrink: 0; }
-.comp-grid-name { flex: 1; font-size: 13px; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.business-component-count { color: #64748b; font-size: 11px; flex-shrink: 0; }
-.business-component-note { color: #64748b; font-size: 12px; line-height: 1.5; margin: 8px 12px 2px; }
-.comp-grid-edit { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.28); border-radius: 6px; color: #fff; cursor: pointer; font-size: 11px; padding: 2px 8px; flex-shrink: 0; }
-.comp-grid-edit:hover { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.22); color: #fff; }
-.comp-grid-edit.danger:hover { border-color: #fecaca; color: #dc2626; }
+.comp-grid-head { display: flex; align-items: center; gap: 6px; padding: 7px 9px; background: #fff; border-bottom: 1px solid #eef2f7; }
+.comp-grid-label { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 999px; font-size: 10px; font-weight: 900; padding: 2px 7px; flex-shrink: 0; }
+.comp-grid-label.is-generic-label { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.comp-grid-name { flex: 1; font-size: 13px; font-weight: 800; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.business-component-count { border: 1px solid #e2e8f0; border-radius: 999px; background: #f8fafc; color: #64748b; font-size: 11px; padding: 1px 6px; flex-shrink: 0; }
+.business-component-note { color: #64748b; font-size: 12px; line-height: 1.4; margin: 6px 9px 0; }
+.comp-grid-edit { background: #fff; border: 1px solid #fecaca; border-radius: 6px; color: #dc2626; cursor: pointer; font-size: 11px; padding: 2px 7px; flex-shrink: 0; }
+.comp-grid-edit:hover,
+.comp-grid-edit.danger:hover { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
 .business-component-name-input,
 .business-component-note-input {
   min-width: 0;
@@ -53,32 +49,32 @@
   padding: 5px 8px;
 }
 .business-component-name-input { flex: 1; font-weight: 700; }
-.business-component-inline-editor { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; padding: 8px 12px 2px; align-items: center; }
+.business-component-inline-editor { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; padding: 6px 9px 1px; align-items: center; }
 .business-component-inline-editor.is-readonly { display: block; padding: 0; }
 .business-component-kind-toggle { display: inline-flex; border: 1px solid #dbe5f0; border-radius: 7px; overflow: hidden; background: #fff; }
 .business-component-kind-toggle button { border: 0; border-right: 1px solid #dbe5f0; background: #fff; color: #64748b; cursor: pointer; font-size: 11px; font-weight: 700; padding: 5px 8px; }
 .business-component-kind-toggle button:last-child { border-right: 0; }
 .business-component-kind-toggle button.active { background: #dbeafe; color: #1d4ed8; }
-.business-component-imports { display: grid; gap: 6px; margin: 8px 12px 2px; padding: 8px; border: 1px dashed #cbd5e1; border-radius: 7px; background: #f8fafc; }
+.business-component-imports { display: grid; gap: 5px; margin: 6px 9px 1px; padding: 7px; border: 1px dashed #cbd5e1; border-radius: 7px; background: #f8fafc; }
 .business-component-imports > span { color: #64748b; font-size: 11px; font-weight: 700; }
 .business-component-imports > div { display: flex; flex-wrap: wrap; gap: 6px; }
 .business-component-import-btn { border: 1px solid #bfdbfe; border-radius: 999px; background: #fff; color: #1d4ed8; cursor: pointer; font-size: 11px; padding: 3px 8px; }
 .business-component-import-btn:hover { background: #eff6ff; border-color: #60a5fa; }
 
-.comp-grid-constructs { padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.comp-grid-constructs { padding: 5px 7px 7px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .comp-grid-construct-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
-.comp-grid-construct { border: 1px solid #dbeafe; border-left: 4px solid #60a5fa; border-radius: 0 7px 7px 0; padding: 0; cursor: pointer; transition: border-color .12s, background .12s; background: #f8fbff; overflow: hidden; text-align: left; font: inherit; }
+.comp-grid-construct { border: 1px solid #dbeafe; border-left: 3px solid #60a5fa; border-radius: 0 7px 7px 0; padding: 0; cursor: pointer; transition: border-color .12s, background .12s; background: #f8fbff; overflow: hidden; text-align: left; font: inherit; }
 .comp-grid-construct:hover { border-color: #93c5fd; border-left-color: #2563eb; background: #eff6ff; }
 .comp-grid-construct.is-selected { border-color: #2563eb; background: #dbeafe; }
-.comp-grid-construct-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px; }
+.comp-grid-construct-head { display: flex; align-items: center; gap: 5px; padding: 5px 8px 4px 7px; }
 .comp-grid-construct-label { background: #1d4ed8; color: #fff; border-radius: 3px; font-size: 9px; font-weight: 700; padding: 1px 5px; flex-shrink: 0; }
 .comp-grid-construct-name { font-size: 12px; font-weight: 700; color: #334155; }
-.business-construct-metrics { display: flex; gap: 6px; padding: 0 10px 8px 8px; color: #64748b; font-size: 11px; }
+.business-construct-metrics { display: flex; gap: 5px; padding: 0 8px 6px 7px; color: #64748b; font-size: 11px; }
 .business-construct-metrics span { background: #fff; border: 1px solid #bfdbfe; border-radius: 5px; padding: 2px 6px; }
 .construct-move-btn { border: 1px solid #e2e8f0; border-radius: 7px; background: #fff; color: #64748b; cursor: pointer; font-size: 11px; padding: 0 8px; }
 .construct-move-btn:hover { border-color: #fecaca; background: #fef2f2; color: #dc2626; }
 
-.comp-grid-construct-add { display: flex; align-items: center; justify-content: center; min-height: 32px; border: 2px dashed #93c5fd; border-radius: 7px; background: #f8fbff; color: #2563eb; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.comp-grid-construct-add { display: flex; align-items: center; justify-content: center; min-height: 28px; border: 1px dashed #93c5fd; border-radius: 7px; background: #f8fbff; color: #2563eb; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .comp-grid-construct-add:hover { border-color: #2563eb; background: #eff6ff; }
 
 /* 业务构件详情：集中回答一个构件有哪些实体和任务资产。 */
@@ -131,9 +127,14 @@
 .business-empty-state strong { color: #1e293b; font-size: 14px; }
 
 @media (max-width: 900px) {
+  .comp-grid { column-count: 1; }
   .business-construct-summary { flex-direction: column; }
   .summary-metrics { justify-content: flex-start; min-width: 0; }
   .business-construct-assets { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 901px) and (max-width: 1280px) {
+  .comp-grid { column-count: 3; }
 }
 
 /* ─── Tab2: 任务定义卡片 ─────────────────── */
