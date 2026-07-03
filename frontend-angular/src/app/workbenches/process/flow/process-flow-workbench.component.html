@@ -89,7 +89,7 @@
                   @if (editing) { <span class="flow-gateway-edit-icon" (pointerdown)="$event.stopPropagation()" (click)="startNodeNameEdit(node, $event)" title="\u4fee\u6539\u540d\u79f0">&#x270e;</span> }
                 </div>
               } @else {
-                <div class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" [class.is-editing]="editing" data-testid="process-flow-node" [style.left.px]="node.x" [style.top.px]="node.y"
+                <div class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" [class.is-editing]="editing" data-testid="process-flow-node" [attr.data-base-id]="node.baseId" [style.left.px]="node.x" [style.top.px]="node.y"
                   (pointerdown)="startNodeDrag($event, node)"
                   (pointerup)="endNodeDrag($event, node)"
                   (dblclick)="startNodeNameEdit(node, $event)"

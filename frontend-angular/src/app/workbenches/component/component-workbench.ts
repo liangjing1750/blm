@@ -42,6 +42,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
 
   protected canEdit(): boolean { return this.editorOpen() && !this.runtime.readOnly; }
+  protected enableEditor(): void {
+    if (this.runtime.readOnly) return;
+    this.editorOpen.set(true);
+  }
   protected toggleEditor(): void {
     if (this.runtime.readOnly) {
       this.editorOpen.set(false);

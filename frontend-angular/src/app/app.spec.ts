@@ -3377,7 +3377,7 @@ describe('App', () => {
     ]);
   });
 
-  it('should reuse the rich text editor for task, step and rule details in the process editor', async () => {
+  it('should reuse the rich text editor for step and rule details without showing task-definition details in the node editor', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.ui['mainTab'] = 'processWorkbench';
@@ -3418,24 +3418,215 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     const task = runtime.doc.processes[0].nodes[0];
 
-    const taskEditor = compiled.querySelector<HTMLElement>('[data-testid="process-task-description-editor"]')!;
+    const taskEditor = compiled.querySelector<HTMLElement>('[data-testid="process-task-description-editor"]');
     const stepEditor = compiled.querySelector<HTMLElement>('[data-testid="process-step-note-editor"]')!;
     const ruleEditor = compiled.querySelector<HTMLElement>('[data-testid="process-rule-content-editor"]')!;
-    expect(taskEditor).toBeTruthy();
+    expect(taskEditor).toBeFalsy();
     expect(stepEditor).toBeTruthy();
     expect(ruleEditor).toBeTruthy();
 
-    taskEditor.innerHTML = '<ol><li><strong>任务说明</strong></li></ol>';
-    taskEditor.dispatchEvent(new Event('input', { bubbles: true }));
     stepEditor.innerHTML = '<ul><li><em>步骤描述</em></li></ul>';
     stepEditor.dispatchEvent(new Event('input', { bubbles: true }));
     ruleEditor.innerHTML = '<p><strong style="color:#2563eb">规则描述</strong></p>';
     ruleEditor.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
 
-    expect(task.description).toContain('<strong>任务说明</strong>');
+    expect(task.description).toBe('<p>旧说明</p>');
     expect(task.userSteps[0].note).toContain('<em>步骤描述</em>');
     expect(task.businessRules[0].content).toContain('规则描述');
+  });
+
+  it('should keep form and rule controls read-only until node editing is opened', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库预约流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '客户提交入库预约',
+          roleIds: [],
+          userSteps: [],
+          forms: [{
+            uid: 'form-1',
+            name: '预约表单',
+            sections: [{ uid: 'sec-1', name: '基本信息', fields: [{ uid: 'field-1', name: '仓单号', type: 'Text', note: '说明' }] }],
+          }],
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [{ uid: 'rule-check', name: '校验规则', content: '<p>规则</p>' }],
+        }],
+      }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.componentRef.setInput('editing', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector<HTMLInputElement>('[data-testid="task-form-name"]')?.disabled).toBe(true);
+    expect(compiled.querySelector<HTMLTextAreaElement>('[data-testid="task-form-field-note"]')?.readOnly).toBe(true);
+    expect(compiled.querySelector<HTMLTextAreaElement>('.node-rule-name-textarea')?.readOnly).toBe(true);
+    expect(compiled.querySelector<HTMLElement>('[data-testid="process-rule-content-editor"]')?.getAttribute('contenteditable')).toBe('false');
+  });
+
+  it('should ask with a centered custom dialog before copying entity fields into a form section', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库预约流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '客户提交入库预约',
+          roleIds: [],
+          userSteps: [],
+          forms: [{ uid: 'form-1', name: '预约表单', sections: [{ uid: 'sec-1', name: '基本信息', fields: [] }] }],
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [],
+        }],
+      }],
+      entities: [{ uid: 'entity-1', name: '仓单', fields: [{ name: '仓单号', type: 'string' }, { name: '状态', type: 'string' }] }],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-section-entity"]')!;
+    select.value = 'entity-1';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="task-form-copy-entity-dialog"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="task-form-copy-fields"]')?.textContent).toContain('复制实体字段');
+    expect(compiled.querySelector('[data-testid="task-form-skip-fields"]')?.textContent).toContain('不复制实体字段');
+    expect(runtime.doc.processes[0].nodes[0].forms[0].sections[0].fields).toHaveLength(0);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-copy-fields"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.doc.processes[0].nodes[0].forms[0].sections[0].fields).toHaveLength(2);
+  });
+
+  it('should cascade process options from the selected stage in the node editor', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'proc-inbound';
+    runtime.ui['taskId'] = 'task-in';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [
+        { uid: 'stage-in', name: '入库' },
+        { uid: 'stage-out', name: '出库' },
+      ],
+      stageFlowRefs: [
+        { uid: 'ref-in', stageUid: 'stage-in', processUid: 'proc-inbound' },
+        { uid: 'ref-out', stageUid: 'stage-out', processUid: 'proc-outbound' },
+      ],
+      processes: [
+        { uid: 'proc-inbound', name: '入库流程', nodes: [{ uid: 'task-in', name: '入库节点', userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }] },
+        { uid: 'proc-outbound', name: '出库流程', nodes: [{ uid: 'task-out', name: '出库节点', userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }] },
+      ],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const selects = compiled.querySelectorAll<HTMLSelectElement>('.node-top-select select');
+    const stageSelect = selects[0];
+    const processSelect = selects[1];
+    expect(Array.from(processSelect.options).map((option) => option.value)).toEqual(['proc-inbound']);
+
+    stageSelect.value = 'stage-out';
+    stageSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const nextProcessSelect = compiled.querySelectorAll<HTMLSelectElement>('.node-top-select select')[1];
+    expect(Array.from(nextProcessSelect.options).map((option) => option.value)).toEqual(['proc-outbound']);
+    expect(nextProcessSelect.value).toBe('proc-outbound');
+    expect(runtime.ui['procId']).toBe('proc-outbound');
+    expect(runtime.ui['taskId']).toBe('task-out');
+  });
+
+  it('should render one shared process node per role while keeping one task in the document', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'proc-shared';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [
+        { uid: 'role-delivery', id: 'role-delivery', name: '交割部' },
+        { uid: 'role-warehouse', id: 'role-warehouse', name: '仓库' },
+        { uid: 'role-product', id: 'role-product', name: '品种负责人' },
+        { uid: 'role-customer', id: 'role-customer', name: '客户' },
+      ],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'proc-shared',
+        name: '仓储仓单监管',
+        nodes: [{ uid: 'node-query', name: '查询仓储仓单', role_ids: ['role-delivery', 'role-warehouse', 'role-product', 'role-customer'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+        flow: { edges: [] },
+      }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const renderedNodes = Array.from(compiled.querySelectorAll<HTMLElement>('[data-testid="process-flow-node"]'));
+
+    expect(renderedNodes).toHaveLength(4);
+    expect(renderedNodes.every((node) => node.textContent?.includes('共享'))).toBe(true);
+    expect(new Set(renderedNodes.map((node) => node.getAttribute('data-base-id')))).toEqual(new Set(['node-query']));
+    expect(runtime.doc.processes[0].nodes).toHaveLength(1);
   });
 
   it('should show application services associated with a process node without exposing orchestration internals', async () => {

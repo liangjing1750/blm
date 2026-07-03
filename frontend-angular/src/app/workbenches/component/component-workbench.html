@@ -354,7 +354,7 @@
 
   <!-- Tab 3: 实体定义 -->
   @if (activeTab() === 'entity') {
-    <app-entity-design-workbench [editing]="canEdit()" [showEditorToggle]="false" />
+    <app-entity-design-workbench [editing]="canEdit()" [showEditorToggle]="false" (editRequested)="enableEditor()" />
   }
 
 

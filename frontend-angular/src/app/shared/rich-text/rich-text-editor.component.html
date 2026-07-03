@@ -13,13 +13,13 @@
   <div
     #editor
     class="node-rich-content rich-text-editor"
-    contenteditable="true"
+    [attr.contenteditable]="readonly ? 'false' : 'true'"
     role="textbox"
     aria-multiline="true"
     [attr.data-testid]="testIdPrefix + '-editor'"
     [attr.data-placeholder]="placeholder"
-    (focus)="focusAtEnd(editor)"
-    (input)="emitValue()"
+    (focus)="readonly ? null : focusAtEnd(editor)"
+    (input)="readonly ? null : emitValue()"
     (paste)="handlePaste($event)"
     (keydown)="handleKeydown($event)"
   ></div>

@@ -5,10 +5,13 @@
       <button class="seg-btn" [class.active]="view() === 'state'" type="button" data-testid="entity-design-switch-state" (click)="setView('state')">状态图</button>
     </div>
     <span class="live-diagram-hint entity-shortcut-hint">
-      拖拽移动节点 · 点击实体切换编辑对象 · Ctrl+A全选实体 · Ctrl+点击多选 · Shift+左键拖拽框选
+      <strong>拖拽</strong>移动节点 · 点击实体切换编辑对象 · <strong>双击实体</strong>进入编辑 · <strong>Ctrl+A</strong>全选实体 · <strong>Ctrl+点击</strong>多选 · <strong>Shift+左键拖拽</strong>框选
     </span>
-    <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-entity" (click)="addEntity()">＋ 新建实体</button>
-    <button class="btn btn-ghost-sm" type="button" data-testid="entity-design-reset-layout" (click)="resetLayout()">重置布局</button>
+    @if (canEditRelation() || canEditState()) {
+      <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-open-drawer" (click)="openSelectedEntityDrawer()" [disabled]="!selectedEntityId()">编辑属性</button>
+      <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-entity" (click)="addEntity()">＋ 新建实体</button>
+      <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-reset-layout" (click)="resetLayout()">重置布局</button>
+    }
     @if (view() === 'state') {
       <div class="entity-state-zoom-controls" data-testid="entity-state-zoom-controls">
         <button class="btn btn-ghost-sm" type="button" data-testid="state-zoom-out" (click)="nudgeStateZoom(-0.1)">－</button>
@@ -29,10 +32,10 @@
   </div>
 
   <div class="entity-design-body" [class.has-drawer]="editorOpen() && selectedEntity()" [style.grid-template-columns]="drawerGridColumns()">
-    <div class="entity-design-canvas-shell" data-testid="entity-design-canvas-shell">
+    <div class="entity-design-canvas-shell" data-testid="entity-design-canvas-shell" (wheel)="onRelationWheel($event)">
       @if (view() === 'relation') {
-        <div class="entity-relation-canvas ef-canvas" id="ef-canvas-entity-diagram" data-testid="entity-design-relation-view">
-          <div class="entity-board ef-board" id="ef-board-entity-diagram" [class.is-editing]="editorOpen()" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
+        <div class="entity-relation-canvas ef-canvas" id="ef-canvas-entity-diagram" data-testid="entity-design-relation-view" [ngStyle]="relationCanvasSize()">
+          <div class="entity-board ef-board" id="ef-board-entity-diagram" [class.is-editing]="canEditRelation()" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
             @for (frame of componentFrames(); track frame.key) {
               <div class="entity-component-frame ef-component-frame" [ngStyle]="frameStyle(frame)"></div>
               <div class="entity-component-title ef-component-title" [style.left.px]="frame.left + 18" [style.top.px]="frame.top + 10">{{ frame.label }}</div>
@@ -58,7 +61,7 @@
             }
 
             @for (node of nodes(); track node.id) {
-              <button class="entity-node ef-node ef-draggable" [class.is-selected]="isSelected(node.entity)" [class.ef-selected]="isSelected(node.entity)" [class.is-focus]="entityId(selectedEntity()) === node.id" [class.ef-focus]="entityId(selectedEntity()) === node.id" [class.ef-muted]="selectedEntityId() && entityId(selectedEntity()) !== node.id && !isSelected(node.entity)" type="button" data-testid="entity-design-node" [attr.data-id]="node.id" [ngStyle]="nodeStyle(node)" (mousedown)="startEntityDrag(node.entity, $event)" (click)="$event.stopPropagation(); selectEntity(node.entity, $event)">
+              <button class="entity-node ef-node ef-draggable" [class.is-selected]="isSelected(node.entity)" [class.ef-selected]="isSelected(node.entity)" [class.is-focus]="selectedEntityId() === node.id" [class.ef-focus]="selectedEntityId() === node.id" [class.ef-muted]="selectedEntityId() && selectedEntityId() !== node.id && !isSelected(node.entity)" type="button" data-testid="entity-design-node" [attr.data-id]="node.id" [ngStyle]="nodeStyle(node)" (mousedown)="startEntityDrag(node.entity, $event)" (click)="$event.stopPropagation(); selectEntity(node.entity, $event)" (dblclick)="openEntityDrawer(node.entity, $event)">
                 <span class="entity-node-component">{{ node.constructName }}</span>
                 <strong class="ef-nname">{{ node.entity.name || '未命名实体' }}</strong>
                 <em>{{ (node.entity.fields || []).length }} 字段</em>
@@ -73,79 +76,106 @@
         <div class="entity-state-workbench" data-testid="entity-design-state-view">
           @if (selectedEntity(); as entity) {
             <aside class="entity-state-browser">
-              <div class="entity-state-browser-head">实体</div>
-              @for (item of entities(); track entityId(item)) {
-                <button class="entity-state-chip" [class.active]="entityId(item) === entityId(entity)" type="button" (click)="selectEntity(item)">
-                  <span>{{ item.name || '未命名实体' }}</span>
-                  <em>{{ constructLabel(item) }}</em>
-                </button>
+              @for (group of stateEntityGroups(); track group.name) {
+                <div class="entity-state-group">
+                  <div class="entity-state-group-title">{{ group.name }}</div>
+                  <div class="entity-state-group-list">
+                    @for (item of group.items; track entityId(item)) {
+                      <button class="entity-state-chip" [class.active]="entityId(item) === entityId(entity)" type="button" (click)="selectEntity(item)">
+                        {{ item.name || '未命名实体' }}
+                      </button>
+                    }
+                  </div>
+                </div>
               }
             </aside>
 
-            <div class="entity-state-stage" [ngStyle]="stateMainShellStyle()">
-              <div class="entity-state-card" data-testid="entity-state-diagram">
-                <div class="entity-state-title">
-                  <div>
-                    <strong>{{ entity.name || '未命名实体' }}</strong>
-                    <span>状态字段 {{ stateFields().length }} · 当前值 {{ stateValues().length }}</span>
-                  </div>
-                  @if (selectedStateField(); as field) {
-                    <select class="entity-state-field-select-inline" data-testid="entity-state-field-select-inline" [value]="field.name || ''" (change)="setStateField($any($event.target).value)">
-                      @for (candidate of stateFields(); track fieldId(candidate, $index)) {
-                        <option [value]="candidate.name || ''">{{ candidate.name || '未命名状态字段' }}</option>
-                      }
-                    </select>
-                  }
-                </div>
-
-                <div class="entity-state-field-scope">
-                  @for (panel of statePanels(); track panel.name || $index) {
-                    <button class="entity-state-overview-field" data-testid="entity-state-overview-field" [attr.data-testid-alt]="'entity-state-overview-field-' + $index" [class.active]="panel.active" [class.role-primary]="panel.role === 'primary'" [class.role-secondary]="panel.role === 'secondary'" type="button" (click)="setStateField(panel.name)">
-                      <span>{{ panel.name || '未命名状态字段' }}</span>
-                      <em>{{ panel.role === 'primary' ? '主状态' : panel.role === 'secondary' ? '子状态' : '状态字段' }}</em>
-                      <strong>{{ panel.values.length }} 个值</strong>
-                    </button>
-                  } @empty {
-                    <div class="entity-state-empty-panel">
-                      暂无状态字段。可在关系图编辑抽屉中把字段标记为状态字段，或填写状态值。
-                    </div>
-                  }
-                </div>
-
-                <div class="entity-state-graph-canvas" data-testid="entity-state-graph-canvas" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true">
-                  <div class="entity-state-zoom-shell" data-testid="entity-state-zoom-shell" [ngStyle]="stateZoomStyle()">
-                    <div class="entity-state-zoom-target" data-testid="entity-state-zoom-target" [ngStyle]="stateZoomTargetStyle()">
-                      <div class="entity-state-board" [ngStyle]="stateBoardStyle()">
-                        <svg class="entity-state-svg" [attr.width]="stateBoard().width" [attr.height]="stateBoard().height" aria-hidden="true">
-                          <defs>
-                            <marker id="entity-state-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                              <path d="M 0 0 L 10 5 L 0 10 z"></path>
-                            </marker>
-                          </defs>
-                          @for (transition of stateBoard().transitions; track transition.label + '-' + $index) {
-                            <path class="entity-state-link" data-testid="entity-state-graph-link" [class.selected]="transition.selected" [attr.d]="transition.path" [attr.data-state-action]="transition.label" marker-end="url(#entity-state-arrow)" (click)="selectTransition(transition.index, $event)"></path>
-                            <g class="entity-state-link-label-group" data-testid="entity-state-link-label-group" [attr.transform]="'translate(' + transition.labelX + ' ' + transition.labelY + ')'" (mousedown)="startStateLabelDrag(transition, $event)">
-                              <rect x="-24" y="-15" width="48" height="20" rx="10"></rect>
-                              <text class="entity-state-link-label" [attr.x]="transition.labelX" [attr.y]="transition.labelY" text-anchor="middle" dominant-baseline="middle">{{ transition.label }}</text>
-                            </g>
-                          }
-                        </svg>
-                        @for (node of stateBoard().nodes; track node.name; let nodeIndex = $index) {
-                          @if (node.marker?.kind === 'initial') {
-                            <span class="entity-state-marker entity-state-start-dot" data-testid="entity-state-start-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
-                          }
-                          <div class="entity-state-node" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'" [attr.data-testid]="'entity-state-node-' + nodeIndex" [ngStyle]="stateNodeStyle(node)" (mousedown)="startStateNodeDrag(node, $event)">
-                            <span class="entity-state-node-label">{{ node.name }}</span>
-                          </div>
-                          @if (node.marker?.kind === 'terminal') {
-                            <span class="entity-state-marker entity-state-end-dot-outer" data-testid="entity-state-end-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
-                            <span class="entity-state-marker entity-state-end-dot-inner" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
-                          }
-                        }
-                        @if (!stateBoard().nodes.length) {
-                          <div class="entity-empty" data-testid="entity-state-empty">暂无状态值。</div>
+            <div class="entity-state-stage">
+              <div class="entity-state-main-shell" [ngStyle]="stateMainShellStyle()">
+                <div class="entity-state-main">
+                  <div class="entity-state-card" data-testid="entity-state-diagram">
+                    <div class="entity-state-card-head">
+                      <div>
+                        <div class="entity-state-card-title">{{ entity.name || '未命名实体' }}</div>
+                        <div class="entity-state-card-subtitle">状态总览 · 当前编辑字段：{{ activeStateFieldLabel() }}</div>
+                      </div>
+                      <div class="entity-state-card-summary">
+                        @for (panel of statePanels(); track panel.name || $index) {
+                          <button class="entity-state-field-chip" [class.active]="panel.active" type="button" [attr.data-testid]="'entity-state-overview-field-' + $index" (click)="setStateField(panel.name)">
+                            {{ panel.name || '未命名状态字段' }}
+                          </button>
                         }
                       </div>
+                    </div>
+
+                    <div class="entity-state-overview-grid">
+                      @for (panel of statePanels(); track panel.name || $index) {
+                        <section class="entity-state-field-panel" data-testid="entity-state-overview-field" [class.active]="panel.active" [class.role-primary]="panel.role === 'primary'" [class.role-secondary]="panel.role === 'secondary'" type="button" (click)="setStateField(panel.name)">
+                          <div class="entity-state-field-panel-head">
+                            <div>
+                              <div class="entity-state-field-panel-title">{{ panel.name || '未命名状态字段' }}</div>
+                              <div class="entity-state-field-panel-meta">{{ panel.values.length }} 个状态值</div>
+                            </div>
+                            <div class="entity-state-field-panel-badges">
+                              <span class="entity-state-field-badge" [class.role-primary]="panel.role === 'primary'" [class.role-secondary]="panel.role === 'secondary'">{{ stateRoleLabel(panel.role) }}</span>
+                              @if (panel.active) {
+                                <span class="entity-state-field-badge active">编辑中</span>
+                              }
+                            </div>
+                          </div>
+                          <div class="entity-state-card-values">
+                            @for (node of stateBoard().nodes; track node.name) {
+                              <span class="entity-state-value-chip" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'">{{ node.name }} · {{ stateNodeKindLabel(node.kind) }}</span>
+                            }
+                          </div>
+                          @if (panel.active) {
+                            <div class="entity-state-graph" data-testid="entity-state-graph-canvas" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true">
+                              <div class="entity-state-zoom-shell" data-testid="entity-state-zoom-shell" [ngStyle]="stateZoomStyle()">
+                                <div class="entity-state-zoom-target" data-testid="entity-state-zoom-target" [ngStyle]="stateZoomTargetStyle()">
+                                  <div class="entity-state-canvas" [ngStyle]="stateBoardStyle()">
+                                    <svg class="entity-state-svg" [attr.width]="stateBoard().width" [attr.height]="stateBoard().height" [attr.viewBox]="'0 0 ' + stateBoard().width + ' ' + stateBoard().height" aria-hidden="true">
+                                      <defs>
+                                        <marker id="entity-state-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+                                          <path d="M 0 0 L 8 4 L 0 8 z"></path>
+                                        </marker>
+                                      </defs>
+                                      @for (transition of stateBoard().transitions; track transition.label + '-' + $index) {
+                                        <path class="entity-state-link" data-testid="entity-state-graph-link" [class.selected]="transition.selected" [attr.d]="transition.path" [attr.data-state-action]="transition.label" marker-end="url(#entity-state-arrow)" (click)="selectTransition(transition.index, $event)"></path>
+                                        <g class="entity-state-link-label-group" data-testid="entity-state-link-label-group" (mousedown)="startStateLabelDrag(transition, $event)">
+                                          <rect class="entity-state-link-label-box" [attr.x]="transition.labelX - 24" [attr.y]="transition.labelY - 15" width="48" height="20" rx="10"></rect>
+                                          <text class="entity-state-link-label" [attr.x]="transition.labelX" [attr.y]="transition.labelY" text-anchor="middle" dominant-baseline="middle">{{ transition.label }}</text>
+                                        </g>
+                                      }
+                                    </svg>
+                                    <div class="entity-state-board" [ngStyle]="stateBoardStyle()">
+                                      @for (node of stateBoard().nodes; track node.name; let nodeIndex = $index) {
+                                        @if (node.marker?.kind === 'initial') {
+                                          <span class="entity-state-marker entity-state-start-dot" data-testid="entity-state-start-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
+                                        }
+                                        <div class="entity-state-node" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'" [attr.data-testid]="'entity-state-node-' + nodeIndex" [ngStyle]="stateNodeStyle(node)" (mousedown)="startStateNodeDrag(node, $event)">
+                                          <span class="entity-state-node-label">{{ node.name }}</span>
+                                        </div>
+                                        @if (node.marker?.kind === 'terminal') {
+                                          <span class="entity-state-marker entity-state-end-dot-outer" data-testid="entity-state-end-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
+                                        }
+                                      }
+                                      @if (!stateBoard().nodes.length) {
+                                        <div class="entity-empty" data-testid="entity-state-empty">暂无状态值。</div>
+                                      }
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          } @else {
+                            <div class="diag-empty entity-state-field-empty">点击字段块查看状态图。</div>
+                          }
+                        </section>
+                      } @empty {
+                        <div class="diag-empty" data-testid="entity-state-empty">
+                          当前实体还未定义状态字段，请先在字段表中标记主状态或子状态，再在字段规则中填写状态值。
+                        </div>
+                      }
                     </div>
                   </div>
                 </div>
@@ -159,96 +189,124 @@
     </div>
 
     @if (view() === 'relation' && editorOpen() && selectedEntity(); as entity) {
-      <aside class="entity-design-drawer entity-drawer open" data-testid="entity-design-drawer">
-        <div class="entity-design-drawer-resize" data-testid="entity-drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
-        <div class="entity-design-drawer-head">
-          <h3>{{ entity.name || '未命名实体' }}</h3>
-          <button class="drawer-close" type="button" data-testid="entity-design-drawer-close" (click)="editorOpen.set(false)">×</button>
+      <aside class="entity-design-drawer entity-drawer open" data-testid="entity-design-drawer" [style.width.px]="drawerWidth()">
+        <div class="drawer-resize-handle entity-design-drawer-resize" data-testid="entity-drawer-resize-handle" (mousedown)="startDrawerResize($event)"></div>
+        <div class="drawer-head entity-design-drawer-head">
+          <div class="drawer-crumb">
+            <span>{{ entity.name || '未命名' }}</span>
+          </div>
+          <div class="drawer-actions">
+            <button class="btn btn-outline btn-sm" type="button" data-testid="entity-duplicate-button" (click)="duplicateEntity(entity)">复制实体</button>
+            <button class="btn btn-danger btn-sm" type="button" data-testid="entity-design-delete" (click)="removeEntity(entity)">删除</button>
+            <button class="drawer-close" type="button" data-testid="entity-design-drawer-close" (click)="editorOpen.set(false)" title="关闭编辑">✕</button>
+          </div>
         </div>
         <div class="entity-design-drawer-body drawer-body">
-          <section class="entity-edit-section">
-            <h4>实体定义</h4>
-            <label class="entity-field">
-              <span>实体名称</span>
+          <div class="form-grid entity-form-grid">
+            <div class="field-group">
+              <label>实体名称</label>
               <input type="text" data-testid="entity-design-name" [value]="entity.name || ''" (input)="setEntityName(entity, $any($event.target).value)">
-            </label>
-            <label class="entity-field">
-              <span>归属构件</span>
+            </div>
+            <div class="field-group">
+              <label>所属业务构件</label>
               <select data-testid="entity-design-construct" [value]="entity.businessConstructUid || entity.businessConstructId || entity.constructUid || entity.constructId || ''" (change)="setEntityConstruct(entity, $any($event.target).value)">
                 <option value="">未分组构件</option>
                 @for (construct of constructs(); track constructId(construct)) {
-                  <option [value]="constructId(construct)">{{ construct.name || constructId(construct) }}</option>
+                  <option [value]="constructId(construct)">{{ constructOptionLabel(construct) }}</option>
                 }
               </select>
-            </label>
-            <label class="entity-field entity-field-wide">
-              <span>说明</span>
-              <textarea rows="2" data-testid="entity-design-note" [value]="entity.note || ''" (input)="setEntityNote(entity, $any($event.target).value)"></textarea>
-            </label>
-          </section>
-
-          <section class="entity-edit-section">
-            <div class="entity-section-head">
-              <h4>字段</h4>
-              <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-field" (click)="addField(entity)">＋ 字段</button>
             </div>
-            @for (field of entity.fields || []; track fieldId(field, $index); let index = $index) {
-              <div class="entity-field-row" data-testid="entity-design-field-row">
-                <input type="text" aria-label="字段名称" [value]="field.name || ''" (input)="setField(field, 'name', $any($event.target).value)">
-                <select aria-label="字段类型" [value]="field.type || 'string'" (change)="setField(field, 'type', $any($event.target).value)">
-                  <option value="string">string</option>
-                  <option value="number">number</option>
-                  <option value="boolean">boolean</option>
-                  <option value="date">date</option>
-                  <option value="object">object</option>
-                </select>
-                <input type="text" aria-label="状态值" placeholder="状态值，用逗号分隔" [value]="field.state_values || ''" (input)="setField(field, 'state_values', $any($event.target).value)">
-                <label class="entity-mini-check" title="主键">
-                  <input type="checkbox" [checked]="field.is_key" (change)="setFieldBoolean(field, 'is_key', $any($event.target).checked)">
-                  <span>键</span>
-                </label>
-                <select aria-label="状态角色" [value]="field.status_role || ''" (change)="setFieldStatusRole(field, $any($event.target).value)">
-                  <option value="">普通</option>
-                  <option value="primary">主状态</option>
-                  <option value="secondary">子状态</option>
-                </select>
-                <button class="stage-quick-btn" type="button" title="上移字段" (click)="moveField(entity, index, -1)" [disabled]="index === 0">↑</button>
-                <button class="stage-quick-btn" type="button" title="下移字段" (click)="moveField(entity, index, 1)" [disabled]="index === (entity.fields || []).length - 1">↓</button>
-                <button class="stage-quick-btn danger" type="button" title="删除字段" (click)="removeField(entity, index)">×</button>
+            <div class="field-group" style="grid-column:1/-1">
+              <label>说明</label>
+              <input type="text" data-testid="entity-design-note" [value]="entity.note || ''" placeholder="简要说明" (input)="setEntityNote(entity, $any($event.target).value)">
+            </div>
+          </div>
+
+          @if (entityReferences(entity).length) {
+            <section class="form-section entity-edit-section entity-reference-section">
+              <h4>被以下流程节点引用</h4>
+              <div class="task-ref-list">
+                @for (ref of entityReferences(entity); track ref.processName + '-' + ref.taskName + '-' + $index) {
+                  <span class="task-ref" [title]="ref.processName">{{ ref.taskName }}</span>
+                }
               </div>
-              <input class="entity-field-note" type="text" aria-label="字段说明" placeholder="字段说明" [value]="field.note || ''" (input)="setField(field, 'note', $any($event.target).value)">
-            } @empty {
-              <p class="entity-muted">暂无字段。</p>
+            </section>
+          }
+
+          <section class="form-section entity-edit-section">
+            <h4>字段 <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-field" (click)="addField(entity)">＋</button></h4>
+            @if ((entity.fields || []).length) {
+              <table class="field-table">
+                <thead>
+                  <tr><th>字段名</th><th>类型</th><th title="主键">主键</th><th title="主状态字段">状态</th><th>字段规则</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                  @for (field of entity.fields || []; track fieldId(field, $index); let index = $index) {
+                    <tr data-testid="entity-design-field-row">
+                      <td class="field-td-name"><input type="text" [attr.data-testid]="'entity-field-name-' + index" [value]="field.name || ''" placeholder="字段名" (input)="setField(field, 'name', $any($event.target).value)"></td>
+                      <td class="field-td-type"><select [attr.data-testid]="'entity-field-type-' + index" [value]="field.type || 'string'" (change)="setField(field, 'type', $any($event.target).value)">
+                        @for (type of fieldTypes; track type.value) {
+                          <option [value]="type.value">{{ type.label }}</option>
+                        }
+                      </select></td>
+                      <td style="text-align:center"><input type="checkbox" [checked]="field.is_key" (change)="setFieldBoolean(field, 'is_key', $any($event.target).checked)"></td>
+                      <td class="field-status-cell">
+                        <span class="field-status-role-wrap" [class.field-status-role-wrap-none]="!field.status_role" [class.field-status-role-wrap-primary]="field.status_role === 'primary'" [class.field-status-role-wrap-secondary]="field.status_role === 'secondary'">
+                          <select class="field-status-role-select" [class.field-status-role-select-none]="!field.status_role" [class.field-status-role-select-primary]="field.status_role === 'primary'" [class.field-status-role-select-secondary]="field.status_role === 'secondary'" [attr.data-testid]="'entity-status-role-' + index" aria-label="字段状态角色" [value]="field.status_role || ''" (change)="setFieldStatusRole(field, $any($event.target).value)">
+                            <option value="">否</option>
+                            <option value="primary">主</option>
+                            <option value="secondary">子</option>
+                          </select>
+                        </span>
+                      </td>
+                      <td class="field-td-note"><textarea class="auto-resize" rows="1" placeholder="字段规则" [style.height.px]="fieldRuleHeight(field)" [value]="field.note || field.state_values || ''" (input)="setField(field, 'note', $any($event.target).value)"></textarea></td>
+                      <td class="field-actions-cell"><div class="field-actions">
+                        <button class="field-action field-add-after" type="button" [attr.data-testid]="'entity-field-add-after-' + index" title="在下方插入字段" (click)="addField(entity)">+</button>
+                        <button class="field-action field-move-up" type="button" [attr.data-testid]="'entity-field-move-up-' + index" title="上移" (click)="moveField(entity, index, -1)" [disabled]="index === 0">↑</button>
+                        <button class="field-action field-move-down" type="button" [attr.data-testid]="'entity-field-move-down-' + index" title="下移" (click)="moveField(entity, index, 1)" [disabled]="index === (entity.fields || []).length - 1">↓</button>
+                        <button class="field-del" type="button" [attr.data-testid]="'entity-field-delete-' + index" (click)="removeField(entity, index)">✕</button>
+                      </div></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="no-refs">暂无字段</p>
             }
           </section>
 
-          <section class="entity-edit-section">
-            <div class="entity-section-head">
-              <h4>实体关系</h4>
-              <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-relation" (click)="addRelation(entity)" [disabled]="entities().length < 2">＋ 关系</button>
-            </div>
+          <section class="form-section entity-edit-section">
+            <h4>实体关系 <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-relation" (click)="addRelation(entity)" [disabled]="entities().length < 2">＋</button></h4>
+            <p class="rel-scope-tip">仅显示与当前实体直接相关的关系，减少全局噪音。</p>
             @for (relation of relationsForEntity(entity); track relation.uid || relation.id || $index; let index = $index) {
-              <div class="entity-relation-row" data-testid="entity-design-relation-row">
-                <span>{{ entity.name || '当前实体' }}</span>
-                <strong>→</strong>
-                <select [value]="relation.to || relation.target || ''" (change)="setRelation(relation, 'to', $any($event.target).value)">
-                  @for (target of entities(); track entityId(target)) {
-                    @if (entityId(target) !== entityId(entity)) {
-                      <option [value]="entityId(target)">{{ target.name || entityId(target) }}</option>
-                    }
+              <div class="rel-row entity-relation-row" data-testid="entity-design-relation-row">
+                <select [value]="relationFromValue(relation) || entityId(entity)" (change)="setRelation(relation, 'from', $any($event.target).value)">
+                  @for (source of entities(); track entityId(source)) {
+                    <option [value]="entityId(source)">{{ source.name || entityId(source) }}</option>
                   }
                 </select>
-                <input type="text" aria-label="关系说明" [value]="relation.label || relation.type || ''" (input)="setRelation(relation, 'label', $any($event.target).value)">
-                <button class="stage-quick-btn" type="button" title="上移关系" (click)="moveRelation(entity, index, -1)" [disabled]="index === 0">↑</button>
-                <button class="stage-quick-btn" type="button" title="下移关系" (click)="moveRelation(entity, index, 1)" [disabled]="index === relationsForEntity(entity).length - 1">↓</button>
-                <button class="stage-quick-btn danger" type="button" title="删除关系" (click)="removeRelation(entity, index)">×</button>
+                <select class="rel-type-select" (change)="setRelation(relation, 'type', $any($event.target).value)" [value]="relationTypeValue(relation)">
+                  <option value="1:1">1:1</option>
+                  <option value="1:N">1:N</option>
+                  <option value="N:N">N:N</option>
+                </select>
+                <select [value]="relationToValue(relation)" (change)="setRelation(relation, 'to', $any($event.target).value)">
+                  @for (target of entities(); track entityId(target)) {
+                    <option [value]="entityId(target)">{{ target.name || entityId(target) }}</option>
+                  }
+                </select>
+                <input type="text" data-testid="entity-relation-label" class="rel-label-input" placeholder="关系说明" [value]="relation.label || ''" (input)="setRelation(relation, 'label', $any($event.target).value)">
+                <div class="rel-actions">
+                  <button class="rel-action rel-add-after" type="button" title="在下方插入关系" (click)="addRelation(entity)">+</button>
+                  <button class="rel-action rel-move-up" type="button" title="上移" (click)="moveRelation(entity, index, -1)" [disabled]="index === 0">↑</button>
+                  <button class="rel-action rel-move-down" type="button" title="下移" (click)="moveRelation(entity, index, 1)" [disabled]="index === relationsForEntity(entity).length - 1">↓</button>
+                  <button class="field-del" type="button" (click)="removeRelation(entity, index)">✕</button>
+                </div>
               </div>
             } @empty {
-              <p class="entity-muted">暂无关系。</p>
+              <p class="no-refs">当前实体暂无关系</p>
             }
           </section>
-
-          <button class="btn btn-danger btn-sm entity-delete-btn" type="button" data-testid="entity-design-delete" (click)="removeEntity(entity)">删除实体</button>
         </div>
       </aside>
     }

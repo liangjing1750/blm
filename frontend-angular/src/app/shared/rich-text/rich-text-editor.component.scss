@@ -85,52 +85,52 @@
   outline: 0;
 }
 
-.node-rich-content b,
-.node-rich-content strong {
+:host ::ng-deep .node-rich-content b,
+:host ::ng-deep .node-rich-content strong {
   font-weight: 900;
 }
 
-.node-rich-content ul,
-.node-rich-content ol {
+:host ::ng-deep .node-rich-content ul,
+:host ::ng-deep .node-rich-content ol {
   margin: 7px 0 7px 28px;
   padding-left: 22px;
 }
 
-.node-rich-content ul {
+:host ::ng-deep .node-rich-content ul {
   list-style-type: disc;
 }
 
-.node-rich-content ol {
+:host ::ng-deep .node-rich-content ol {
   list-style-type: decimal;
 }
 
-.node-rich-content ol ol {
+:host ::ng-deep .node-rich-content ol ol {
   list-style-type: lower-alpha;
 }
 
-.node-rich-content ol ol ol {
+:host ::ng-deep .node-rich-content ol ol ol {
   list-style-type: lower-roman;
 }
 
-.node-rich-content ul ul {
+:host ::ng-deep .node-rich-content ul ul {
   list-style-type: circle;
 }
 
-.node-rich-content ul ul ul {
+:host ::ng-deep .node-rich-content ul ul ul {
   list-style-type: square;
 }
 
-.node-rich-content li {
+:host ::ng-deep .node-rich-content li {
   margin: 4px 0;
   padding-left: 2px;
 }
 
-.node-rich-content li::marker {
+:host ::ng-deep .node-rich-content li::marker {
   color: #2563eb;
   font-weight: 800;
 }
 
-.node-rich-content ol > li::marker {
+:host ::ng-deep .node-rich-content ol > li::marker {
   font-size: .96em;
 }
 

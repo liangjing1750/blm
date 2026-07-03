@@ -231,6 +231,13 @@ describe('ComponentWorkbenchComponent', () => {
   });
 
   it('keeps entity relation view read-only until editing is opened', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.entities[0].fields = [
+      { name: '技术主键', type: 'string', note: '最多可输入二百个字符，用于验证字段规则内容较长时编辑框自动撑高。' },
+    ];
+    runtime.doc.processes = [
+      { uid: 'process-1', name: '线下查库', nodes: [{ uid: 'node-1', name: '新增线上查库', entity_ops: [{ entity_id: 'entity-1' }] }] },
+    ];
     Array.from(host.querySelectorAll<HTMLButtonElement>('.view-toggle-group .vtb')).find((button) => button.textContent?.includes('实体定义'))?.click();
     fixture.detectChanges();
 
@@ -248,11 +255,23 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
     expect(getAngularRuntimeState().doc.entities[0].pos).toBeUndefined();
 
-    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="entity-design-node"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     fixture.detectChanges();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('关闭编辑');
     expect(host.querySelector('.entity-board')?.classList.contains('is-editing')).toBe(true);
     expect(host.querySelector('[data-testid="entity-design-drawer"]')).toBeTruthy();
     expect(host.querySelector('.entity-design-drawer-resize')).toBeTruthy();
+    expect(host.querySelector('.entity-reference-section')?.textContent).toContain('新增线上查库');
+    expect(Array.from(host.querySelector<HTMLSelectElement>('[data-testid="entity-status-role-0"]')!.options).map((option) => option.textContent?.trim())).toEqual(['否', '主', '子']);
+    expect(Number.parseInt(host.querySelector<HTMLTextAreaElement>('.field-td-note textarea')!.style.height, 10)).toBeGreaterThan(28);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="entity-design-drawer-close"]')?.click();
+    fixture.detectChanges();
+    const editPropertyButton = host.querySelector<HTMLButtonElement>('[data-testid="entity-design-open-drawer"]')!;
+    expect(editPropertyButton.disabled).toBe(false);
+    editPropertyButton.click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="entity-design-drawer"]')).toBeTruthy();
   });
 
   it('keeps component workspace read-only until the editor is opened', () => {
@@ -297,6 +316,53 @@ describe('ComponentWorkbenchComponent', () => {
     expect(getComputedStyle(shell).overflowY).toBe('auto');
     expect(Number.parseInt(board.style.width, 10)).toBeGreaterThan(1500);
     expect(Number.parseInt(board.style.height, 10)).toBeGreaterThan(900);
+  });
+
+  it('keeps relation property editing disabled until a concrete entity is selected', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'relation';
+    runtime.ui['entityId'] = '';
+    runtime.doc.entities = [
+      { uid: 'entity-1', name: '实体一', fields: [], businessConstructUid: 'construct-1', pos: { x: 80, y: 80 } },
+    ];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('editing', true);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const editPropertyButton = entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-open-drawer"]')!;
+    expect(editPropertyButton.disabled).toBe(true);
+
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-node"]')?.click();
+    entityFixture.detectChanges();
+    expect(editPropertyButton.disabled).toBe(false);
+  });
+
+  it('zooms the relation graph with Ctrl plus mouse wheel only', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'relation';
+    runtime.ui['entityId'] = '';
+    runtime.doc.entities = [
+      { uid: 'entity-1', name: '实体一', fields: [], businessConstructUid: 'construct-1', pos: { x: 80, y: 80 } },
+      { uid: 'entity-2', name: '实体二', fields: [], businessConstructUid: 'construct-1', pos: { x: 340, y: 120 } },
+    ];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const shell = entityHost.querySelector<HTMLElement>('[data-testid="entity-design-canvas-shell"]')!;
+    const board = entityHost.querySelector<HTMLElement>('.entity-board')!;
+    expect(board.style.transform).toBe('scale(1)');
+
+    shell.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    entityFixture.detectChanges();
+    expect(board.style.transform).toBe('scale(1)');
+
+    shell.dispatchEvent(new WheelEvent('wheel', { bubbles: true, ctrlKey: true, deltaY: -100 }));
+    entityFixture.detectChanges();
+    expect(board.style.transform).toBe('scale(1.1)');
   });
 
   it('renders entity state fallback transitions through a legacy side channel', () => {
@@ -346,6 +412,70 @@ describe('ComponentWorkbenchComponent', () => {
     expect(selected.join(' ')).toContain('订单');
     expect(selected.join(' ')).toContain('订单明细');
     expect(entityHost.querySelector('[data-testid="entity-design-drawer"]')).toBeTruthy();
+  });
+
+  it('keeps legacy relation shortcuts and drag gestures distinct', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.modified = false;
+    runtime.doc.entities = [
+      { uid: 'entity-1', name: '订单', fields: [], businessConstructUid: 'construct-1', pos: { x: 80, y: 80 } },
+      { uid: 'entity-2', name: '订单明细', fields: [], businessConstructUid: 'construct-1', pos: { x: 280, y: 80 } },
+    ];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('editing', true);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const findNode = (id: string) => entityHost.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+    const firstNode = findNode('entity-1');
+
+    firstNode.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, ctrlKey: true, clientX: 80, clientY: 80 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 180, clientY: 180 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    firstNode.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    entityFixture.detectChanges();
+
+    expect(runtime.doc.entities[0].pos).toEqual({ x: 80, y: 80 });
+    expect(runtime.modified).toBe(false);
+
+    findNode('entity-1').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, shiftKey: true, clientX: 70, clientY: 70 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 360, clientY: 140 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    entityFixture.detectChanges();
+
+    expect(findNode('entity-1').classList.contains('is-selected')).toBe(true);
+    expect(findNode('entity-2').classList.contains('is-selected')).toBe(true);
+  });
+
+  it('scopes Ctrl+A to the relation graph and keeps the graph as a two-axis scroll host', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'relation';
+    runtime.doc.entities = [
+      { uid: 'entity-1', name: '订单', fields: [], businessConstructUid: 'construct-1', pos: { x: 80, y: 80 } },
+      { uid: 'entity-2', name: '订单明细', fields: [], businessConstructUid: 'construct-1', pos: { x: 1280, y: 760 } },
+    ];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const shell = entityHost.querySelector<HTMLElement>('[data-testid="entity-design-canvas-shell"]')!;
+
+    expect(getComputedStyle(shell).overflowX).toBe('auto');
+    expect(getComputedStyle(shell).overflowY).toBe('auto');
+
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-switch-state"]')?.click();
+    entityFixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ctrlKey: true, key: 'a' }));
+    entityFixture.detectChanges();
+    expect(entityHost.querySelectorAll('.entity-node.is-selected').length).toBe(0);
+
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="entity-design-switch-relation"]')?.click();
+    entityFixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ctrlKey: true, key: 'a' }));
+    entityFixture.detectChanges();
+    expect(entityHost.querySelectorAll('.entity-node.is-selected').length).toBe(2);
   });
 
   it('reuses legacy state marker and label positions', () => {

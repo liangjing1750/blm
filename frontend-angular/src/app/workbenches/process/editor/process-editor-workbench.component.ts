@@ -65,6 +65,13 @@ interface ProcessApplicationService {
   nodeRefs?: string[];
 }
 
+interface PendingEntityFieldCopy {
+  form: LegacyTaskForm;
+  section: LegacyTaskFormSection;
+  entityId: string;
+  count: number;
+}
+
 @Component({
   selector: 'app-process-editor-workbench',
   standalone: true,
@@ -113,6 +120,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly moreOpen = signal(false);
   protected readonly formCopyMenuId = signal('');
   protected readonly formNotice = signal('');
+  protected readonly pendingEntityFieldCopy = signal<PendingEntityFieldCopy | null>(null);
   protected readonly activeNodeSection = signal('node-role-section');
   protected readonly stepTypes = [
     { value: 'Click', label: '点击' },
@@ -571,6 +579,19 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     })).filter((stage) => stage.id);
   }
 
+  protected processesForStage(stageId: string): LegacyProcess[] {
+    const normalizedStageId = String(stageId || '').trim();
+    if (!normalizedStageId) return this.processes();
+    const processIds = new Set(
+      this.adapter.stageFlowRefs()
+        .filter((item) => String(item.stageUid || item.stageId || '').trim() === normalizedStageId)
+        .map((item) => String(item.processUid || item.processId || '').trim())
+        .filter(Boolean),
+    );
+    const scoped = this.processes().filter((process) => processIds.has(this.processId(process)));
+    return scoped.length ? scoped : this.processes();
+  }
+
   protected selectStage(stageId: string): void {
     if (!stageId) return;
     // 模块意图：节点视图里的阶段选择只用于限定“阶段-流程-节点”的维护上下文，不能跳转到阶段详情。
@@ -1019,6 +1040,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected addForm(task: LegacyProcessNode): void {
+    if (!this.editing) return;
     task.forms ||= [];
     const id = this.nextLocalId('F', task.forms);
     task.forms.push({
@@ -1033,16 +1055,19 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected setFormName(task: LegacyProcessNode, form: LegacyTaskForm, value: string): void {
+    if (!this.editing) return;
     this.adapter.setFormName(task, form, value);
     this.refresh();
   }
 
   protected removeForm(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    if (!this.editing) return;
     this.adapter.removeForm(task, form);
     this.refresh();
   }
 
   protected duplicateForm(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    if (!this.editing) return;
     task.forms ||= [];
     const clone = structuredClone(form);
     const id = this.nextLocalId('F', task.forms);
@@ -1066,6 +1091,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected duplicateFormSkeleton(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    if (!this.editing) return;
     task.forms ||= [];
     const clone = structuredClone(form);
     const id = this.nextLocalId('F', task.forms);
@@ -1083,6 +1109,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected setFormPurpose(form: LegacyTaskForm, value: string): void {
+    if (!this.editing) return;
     form.purpose = value;
     this.adapter.touch();
     this.refresh();
@@ -1090,6 +1117,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
 
   protected toggleFormCopyMenu(form: LegacyTaskForm, event: MouseEvent): void {
     event.stopPropagation();
+    if (!this.editing) return;
     this.formCopyMenuId.set(this.formCopyMenuId() === this.formKey(form) ? '' : this.formKey(form));
   }
 
@@ -1098,11 +1126,13 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected copyFormToCurrentTask(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    if (!this.editing) return;
     this.duplicateForm(task, form);
     this.showFormNotice('已复制到当前节点');
   }
 
   protected copyFormToOtherTask(form: LegacyTaskForm): void {
+    if (!this.editing) return;
     // 模块意图：复刻旧版“复制到其他节点/粘贴到当前节点”，让跨节点表单复用不依赖抽屉外状态。
     // 关键流程：优先写入浏览器剪贴板，同时落一份 localStorage，兼容无剪贴板权限的本地预览环境。
     // 边界细节：复制的是完整表单结构，粘贴时会重置 form/section/field id，避免同节点内 id 冲突。
@@ -1118,6 +1148,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected async pasteFormToCurrentTask(task: LegacyProcessNode): Promise<void> {
+    if (!this.editing) return;
     let payload = '';
     try {
       payload = await navigator.clipboard?.readText?.() || '';
@@ -1162,6 +1193,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected setFormEntity(form: LegacyTaskForm, value: string): void {
+    if (!this.editing) return;
     const previousEntityId = this.formEntityId(form);
     form.entity_id = value;
     this.sections(form).forEach((section) => {
@@ -1169,7 +1201,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
       if (!current || current === previousEntityId || current === value) {
         section.entity_id = value;
         this.clearInvalidEntityFieldMappings(form, section);
-        if (this.shouldCopyEntityFields(form, section)) this.syncFormSectionFieldsFromEntity(form, section);
+        this.askEntityFieldCopy(form, section, value);
       }
     });
     this.adapter.touch();
@@ -1177,6 +1209,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected addFormSection(form: LegacyTaskForm, afterSection?: LegacyTaskFormSection): void {
+    if (!this.editing) return;
     const sections = this.sections(form);
     const id = this.nextLocalId('SEC', sections);
     const section: LegacyTaskFormSection = { id, uid: id, name: `分组${sections.length + 1}`, note: '', entity_id: '', fields: [] };
@@ -1187,6 +1220,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected moveFormSection(form: LegacyTaskForm, section: LegacyTaskFormSection, delta: number): void {
+    if (!this.editing) return;
     const sections = this.sections(form);
     const index = sections.indexOf(section);
     const nextIndex = index + delta;
@@ -1197,6 +1231,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected removeFormSection(form: LegacyTaskForm, section: LegacyTaskFormSection): void {
+    if (!this.editing) return;
     const sections = this.sections(form);
     if (sections.length <= 1) return;
     form.sections = sections.filter((item) => item !== section);
@@ -1205,20 +1240,23 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected setFormSection(section: LegacyTaskFormSection, key: 'name' | 'note' | 'entity_id', value: string): void {
+    if (!this.editing) return;
     section[key] = value;
     this.adapter.touch();
     this.refresh();
   }
 
   protected setFormSectionEntity(form: LegacyTaskForm, section: LegacyTaskFormSection, value: string): void {
+    if (!this.editing) return;
     section.entity_id = value;
     this.clearInvalidEntityFieldMappings(form, section);
-    if (this.shouldCopyEntityFields(form, section)) this.syncFormSectionFieldsFromEntity(form, section);
+    this.askEntityFieldCopy(form, section, value);
     this.adapter.touch();
     this.refresh();
   }
 
   protected addFormField(section: LegacyTaskFormSection, afterField?: LegacyFormField): void {
+    if (!this.editing) return;
     section.fields ||= [];
     const id = this.nextLocalId('FLD', section.fields);
     const field: LegacyFormField = { id, uid: id, name: '', type: 'Text', required: false, entity_field: '', note: '' };
@@ -1229,17 +1267,20 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected setFormField(field: LegacyFormField, key: 'name' | 'type' | 'note' | 'entity_field', value: string): void {
+    if (!this.editing) return;
     field[key] = value;
     this.adapter.touch();
     this.refresh();
   }
 
   protected setFormFieldRequired(field: LegacyFormField, value: boolean): void {
+    if (!this.editing) return;
     this.adapter.setFormFieldRequired(field, value);
     this.refresh();
   }
 
   protected moveFormField(section: LegacyTaskFormSection, field: LegacyFormField, delta: number): void {
+    if (!this.editing) return;
     section.fields ||= [];
     const index = section.fields.indexOf(field);
     const nextIndex = index + delta;
@@ -1250,6 +1291,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected removeFormField(section: LegacyTaskFormSection, field: LegacyFormField): void {
+    if (!this.editing) return;
     section.fields = (section.fields || []).filter((item) => item !== field);
     this.adapter.touch();
     this.refresh();
@@ -1271,11 +1313,13 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected addBusinessRule(task: LegacyProcessNode): void {
+    if (!this.editing) return;
     this.adapter.addBusinessRule(task);
     this.refresh();
   }
 
   protected addCommonBusinessRules(task: LegacyProcessNode): void {
+    if (!this.editing) return;
     task.businessRules ||= [];
     const rules = task.businessRules;
     const nextRule = (name: string, content: string): LegacyBusinessRule => {
@@ -1296,11 +1340,13 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected setBusinessRule(task: LegacyProcessNode, index: number, value: string): void {
+    if (!this.editing) return;
     this.adapter.setBusinessRule(task, index, value);
     this.adapter.touch();
   }
 
   protected setBusinessRuleName(task: LegacyProcessNode, index: number, value: string): void {
+    if (!this.editing) return;
     task.businessRules ||= [];
     const current = task.businessRules[index];
     if (!current || typeof current === 'string') {
@@ -1312,6 +1358,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected moveBusinessRule(task: LegacyProcessNode, index: number, delta: number): void {
+    if (!this.editing) return;
     task.businessRules ||= [];
     const nextIndex = index + delta;
     if (index < 0 || nextIndex < 0 || nextIndex >= task.businessRules.length) return;
@@ -1321,6 +1368,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected removeBusinessRule(task: LegacyProcessNode, index: number): void {
+    if (!this.editing) return;
     this.adapter.removeBusinessRule(task, index);
     this.refresh();
   }
@@ -1355,18 +1403,31 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     });
   }
 
-  private shouldCopyEntityFields(form: LegacyTaskForm, section: LegacyTaskFormSection): boolean {
-    // 模块意图：关联实体时沿用旧版二选一确认，不强制把实体字段灌入表单。
-    // 关键流程：只有目标实体确实有字段时才询问；确认复制字段，取消则只建立实体关联。
-    // 边界细节：测试环境没有实现 window.confirm，此时按旧版快捷路径默认复制，避免交互被中断。
+  private askEntityFieldCopy(form: LegacyTaskForm, section: LegacyTaskFormSection, entityId: string): void {
+    // 模块意图：把旧版“关联实体后是否复制字段”的确认语义迁出浏览器 confirm，变成可控的居中业务对话框。
+    // 关键流程：实体无字段或清空关联时不弹窗；有字段时只记录待确认状态，真正复制由用户点击按钮触发。
+    // 边界细节：待确认状态持有当前表单/分组引用，确保确认后仍写回用户刚操作的分组。
     const count = this.entityFieldsForSection(form, section).length;
-    if (!count) return false;
-    try {
-      const result = window.confirm(`实体有 ${count} 个字段，是否复制到当前表单分组？\n确定：复制字段\n取消：不复制字段`);
-      return typeof result === 'boolean' ? result : true;
-    } catch {
-      return true;
+    if (!entityId || !count) {
+      this.pendingEntityFieldCopy.set(null);
+      return;
     }
+    this.pendingEntityFieldCopy.set({ form, section, entityId, count });
+  }
+
+  protected confirmEntityFieldCopy(copyFields: boolean): void {
+    if (!this.editing) return;
+    const pending = this.pendingEntityFieldCopy();
+    if (!pending) return;
+    if (copyFields) this.syncFormSectionFieldsFromEntity(pending.form, pending.section);
+    this.pendingEntityFieldCopy.set(null);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected entityFieldCopyEntityName(pending: PendingEntityFieldCopy): string {
+    const entity = this.entities().find((item) => this.entityId(item) === pending.entityId);
+    return String(entity?.name || pending.entityId || '已关联实体');
   }
 
   private showFormNotice(message: string): void {

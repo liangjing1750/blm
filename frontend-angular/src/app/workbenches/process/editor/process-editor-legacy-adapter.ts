@@ -101,6 +101,8 @@ export interface LegacyProcessNode {
   role?: string;
   role_id?: string;
   roleIds?: string[];
+  role_ids?: string[];
+  roles?: string[];
   description?: string;
   userSteps?: LegacyUserStep[];
   forms?: LegacyTaskForm[];
@@ -410,8 +412,21 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     },
     taskRoleIds(task) {
       if (typeof legacyWindow.getTaskRoleIds === 'function') return legacyWindow.getTaskRoleIds(task);
-      const ids = Array.isArray(task.roleIds) ? task.roleIds : task.role_id ? [task.role_id] : task.role ? [task.role] : [];
-      return ids.map((item) => String(item || '').trim()).filter(Boolean);
+      const rawIds = Array.isArray(task.roleIds) && task.roleIds.length
+        ? task.roleIds
+        : Array.isArray(task.role_ids) && task.role_ids.length
+        ? task.role_ids
+        : Array.isArray(task.roles) && task.roles.length
+        ? task.roles
+        : task.role_id
+        ? [task.role_id]
+        : task.role
+        ? [task.role]
+        : [];
+      return rawIds
+        .flatMap((item) => String(item || '').split(/[、,，/]/))
+        .map((item) => String(item || '').trim())
+        .filter(Boolean);
     },
     setTaskRoleIds(task, roleIds) {
       const process = currentProcess();
@@ -420,6 +435,7 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
         legacyWindow.setTaskRoles(processId(process), taskId(task), ids);
       } else {
         task.roleIds = ids;
+        task.role_ids = ids;
         task.role_id = ids[0] || '';
         task.role = ids[0] || '';
       }
@@ -430,13 +446,13 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       if (!id) return [];
       const refs = typeof legacyWindow.getProcessStageRefs === 'function'
         ? legacyWindow.getProcessStageRefs(id, document())
-        : [];
+        : (document().stageFlowRefs || []).filter((ref) => String(ref.processUid || ref.processId || '').trim() === id);
       return refs
         .map((ref) => String(ref.stageUid || ref.stageId || '').trim())
         .filter(Boolean)
         .map((stageId) => ({
           id: stageId,
-          name: legacyWindow.getStageDisplayName?.(stageId, document()) || stageId,
+          name: legacyWindow.getStageDisplayName?.(stageId, document()) || (document().stages || []).find((stage) => String(stage.uid || stage.id || '').trim() === stageId)?.name || stageId,
         }));
     },
     openStage(stageId) {

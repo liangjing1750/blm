@@ -85,6 +85,36 @@
   font-weight: 800;
 }
 
+.task-form-copy-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3200;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, .34);
+}
+
+.task-form-copy-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .24);
+}
+
+.task-form-copy-dialog h4,
+.task-form-copy-dialog p {
+  margin: 0 0 8px;
+}
+
+.task-form-copy-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .node-task-form-card .task-form-purpose {
   width: 100%;
   min-height: 38px;
@@ -236,6 +266,21 @@
   background: #fff;
   color: #0f172a;
   font-size: 12px;
+}
+
+.node-task-form-card .task-form-field-note {
+  min-height: 66px;
+  resize: vertical;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.node-task-form-card input:disabled,
+.node-task-form-card select:disabled,
+.node-task-form-card textarea[readonly] {
+  background: #f8fafc;
+  color: #64748b;
+  cursor: default;
 }
 
 .node-task-form-card .task-form-required-cell input {

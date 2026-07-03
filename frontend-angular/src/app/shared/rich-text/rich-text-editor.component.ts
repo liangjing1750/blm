@@ -13,6 +13,7 @@ export class RichTextEditorComponent implements AfterViewInit, OnChanges {
   @Input() label = '';
   @Input() placeholder = '';
   @Input() value = '';
+  @Input() readonly = false;
   @Input() testIdPrefix = 'rich-text';
   @Output() readonly valueChange = new EventEmitter<string>();
   @ViewChild('editor') private readonly editorRef?: ElementRef<HTMLElement>;
@@ -45,6 +46,7 @@ export class RichTextEditorComponent implements AfterViewInit, OnChanges {
   }
 
   protected handlePaste(event: ClipboardEvent): void {
+    if (this.readonly) return;
     event.preventDefault();
     const editor = this.editorRef?.nativeElement;
     const text = event.clipboardData?.getData('text/plain') || '';
@@ -55,6 +57,7 @@ export class RichTextEditorComponent implements AfterViewInit, OnChanges {
   }
 
   protected apply(command: 'bold' | 'ordered' | 'unordered' | 'indent' | 'outdent' | 'secondOrdered'): void {
+    if (this.readonly) return;
     const editor = this.editorRef?.nativeElement;
     if (!editor) return;
     editor.focus();
@@ -77,6 +80,7 @@ export class RichTextEditorComponent implements AfterViewInit, OnChanges {
   }
 
   protected handleKeydown(event: KeyboardEvent): void {
+    if (this.readonly) return;
     const editor = this.editorRef?.nativeElement;
     if (!editor) return;
     const key = String(event.key || '').toLowerCase();

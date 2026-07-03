@@ -1,5 +1,10 @@
 .component-workbench { display: flex; flex-direction: column; height: calc(100vh - 92px); }
 
+.component-workbench > app-entity-design-workbench {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 
 .comp-tab-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 8px 12px 12px; min-height: 0; }
 .comp-tab-body::-webkit-scrollbar { width: 8px; }
