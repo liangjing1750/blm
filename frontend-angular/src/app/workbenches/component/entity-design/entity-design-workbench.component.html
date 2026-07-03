@@ -32,7 +32,7 @@
   </div>
 
   <div class="entity-design-body" [class.has-drawer]="editorOpen() && selectedEntity()" [style.grid-template-columns]="drawerGridColumns()">
-    <div class="entity-design-canvas-shell" data-testid="entity-design-canvas-shell" (wheel)="onRelationWheel($event)">
+    <div class="entity-design-canvas-shell" data-testid="entity-design-canvas-shell" [style.margin-right.px]="relationDrawerOffset()" (wheel)="onRelationWheel($event)">
       @if (view() === 'relation') {
         <div class="entity-relation-canvas ef-canvas" id="ef-canvas-entity-diagram" data-testid="entity-design-relation-view" [ngStyle]="relationCanvasSize()">
           <div class="entity-board ef-board" id="ef-board-entity-diagram" [class.is-editing]="canEditRelation()" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
@@ -62,9 +62,7 @@
 
             @for (node of nodes(); track node.id) {
               <button class="entity-node ef-node ef-draggable" [class.is-selected]="isSelected(node.entity)" [class.ef-selected]="isSelected(node.entity)" [class.is-focus]="selectedEntityId() === node.id" [class.ef-focus]="selectedEntityId() === node.id" [class.ef-muted]="selectedEntityId() && selectedEntityId() !== node.id && !isSelected(node.entity)" type="button" data-testid="entity-design-node" [attr.data-id]="node.id" [ngStyle]="nodeStyle(node)" (mousedown)="startEntityDrag(node.entity, $event)" (click)="$event.stopPropagation(); selectEntity(node.entity, $event)" (dblclick)="openEntityDrawer(node.entity, $event)">
-                <span class="entity-node-component">{{ node.constructName }}</span>
                 <strong class="ef-nname">{{ node.entity.name || '未命名实体' }}</strong>
-                <em>{{ (node.entity.fields || []).length }} 字段</em>
               </button>
             }
             @if (selectionBox()) {
@@ -91,7 +89,7 @@
             </aside>
 
             <div class="entity-state-stage">
-              <div class="entity-state-main-shell" [ngStyle]="stateMainShellStyle()">
+              <div class="entity-state-main-shell" [ngStyle]="stateMainShellStyle()" (wheel)="onStateDiagramWheel($event)">
                 <div class="entity-state-main">
                   <div class="entity-state-card" data-testid="entity-state-diagram">
                     <div class="entity-state-card-head">
@@ -129,7 +127,7 @@
                             }
                           </div>
                           @if (panel.active) {
-                            <div class="entity-state-graph" data-testid="entity-state-graph-canvas" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true">
+                            <div class="entity-state-graph" data-testid="entity-state-graph-canvas" [class.readonly]="!canEditState()" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true">
                               <div class="entity-state-zoom-shell" data-testid="entity-state-zoom-shell" [ngStyle]="stateZoomStyle()">
                                 <div class="entity-state-zoom-target" data-testid="entity-state-zoom-target" [ngStyle]="stateZoomTargetStyle()">
                                   <div class="entity-state-canvas" [ngStyle]="stateBoardStyle()">
@@ -148,6 +146,15 @@
                                       }
                                     </svg>
                                     <div class="entity-state-board" [ngStyle]="stateBoardStyle()">
+                                      @if (canEditState()) {
+                                        @for (transition of stateBoard().transitions; track transition.label + '-hitbox-' + $index) {
+                                          @for (_point of transition.points.slice(0, -1); track $index) {
+                                            <div class="entity-state-link-route-hitbox" data-testid="entity-state-link-route-hitbox" style="position:absolute;z-index:3;cursor:move" [ngStyle]="stateRouteHitboxStyle(transition, $index)" (mousedown)="startStateRouteDrag(transition, $index, $event)"></div>
+                                          }
+                                          <button class="entity-state-link-endpoint-handle entity-state-link-endpoint-from" type="button" data-testid="entity-state-link-endpoint-handle" style="position:absolute;z-index:6;width:12px;height:12px;border:2px solid #2563eb;border-radius:50%;background:#fff" [ngStyle]="stateEndpointHandleStyle(transition, 'from')" (mousedown)="selectTransition(transition.index, $event)" title="调整起点锚点"></button>
+                                          <button class="entity-state-link-endpoint-handle entity-state-link-endpoint-to" type="button" data-testid="entity-state-link-endpoint-handle" style="position:absolute;z-index:6;width:12px;height:12px;border:2px solid #2563eb;border-radius:50%;background:#fff" [ngStyle]="stateEndpointHandleStyle(transition, 'to')" (mousedown)="selectTransition(transition.index, $event)" title="调整终点锚点"></button>
+                                        }
+                                      }
                                       @for (node of stateBoard().nodes; track node.name; let nodeIndex = $index) {
                                         @if (node.marker?.kind === 'initial') {
                                           <span class="entity-state-marker entity-state-start-dot" data-testid="entity-state-start-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
@@ -313,72 +320,94 @@
     @if (view() === 'state' && stateEditorOpen() && selectedEntity(); as entity) {
       <aside class="state-editor-drawer" data-testid="state-editor-drawer" [style.width.px]="stateDrawerWidth()">
         <div class="state-editor-drawer-resize" data-testid="state-editor-drawer-resize-handle" (mousedown)="startStateDrawerResize($event)"></div>
-        <div class="entity-design-drawer-head">
-          <h3>状态编辑 · {{ entity.name || '未命名实体' }}</h3>
-          <button class="drawer-close" type="button" data-testid="state-editor-close" (click)="stateEditorOpen.set(false)">×</button>
+        <div class="drawer-head">
+          <div class="drawer-crumb">
+            <span>状态图编辑</span>
+            <span class="dc-sep">/</span>
+            <span>{{ selectedStateFieldOptionLabel() }}</span>
+          </div>
+          <div class="drawer-actions">
+            <button class="drawer-close" type="button" data-testid="state-editor-close" (click)="stateEditorOpen.set(false)" title="关闭编辑">×</button>
+          </div>
         </div>
-        <div class="entity-design-drawer-body state-editor-body">
-          <section class="entity-edit-section">
-            <h4>状态字段</h4>
-            <label class="entity-field">
-              <span>当前字段</span>
-              <select data-testid="entity-state-field-select" [value]="stateFieldName()" (change)="setStateField($any($event.target).value)">
-                @for (field of stateFields(); track fieldId(field, $index)) {
-                  <option [value]="field.name || ''">{{ field.name || '未命名状态字段' }}</option>
+        <div class="drawer-body state-editor-body">
+          <div class="entity-state-editor">
+            <div class="entity-state-editor-head">
+              <div>
+                <h4>状态图编辑</h4>
+                <p class="entity-state-editor-hint">左侧总览会同时展示主状态字段和所有子状态字段；右侧只编辑当前选中的状态字段，点击总览块可快速切换。</p>
+              </div>
+              <div class="entity-state-editor-actions">
+                <button class="btn btn-outline btn-sm" type="button" data-testid="entity-transition-route-reset-all" (click)="resetAllStateTransitionRoutes(entity)" [disabled]="!selectedStateField()">重置所有连线</button>
+                <button class="btn btn-outline btn-sm" type="button" data-testid="entity-transition-add-button" (click)="addTransition(entity)">＋ 添加流转</button>
+              </div>
+            </div>
+            <div class="entity-state-config-row">
+              <label class="field-group">
+                <span>状态字段</span>
+                <select data-testid="entity-state-field-select" [value]="stateFieldName()" (change)="setStateField($any($event.target).value)">
+                  @for (field of stateFields(); track fieldId(field, $index)) {
+                    <option [value]="field.name || ''">{{ stateFieldOptionLabel(field) }}</option>
+                  }
+                </select>
+              </label>
+              <label class="field-group entity-state-values-field">
+                <span>状态值来源 <span class="inline-help" tabindex="0" data-tip="请在字段表的字段规则中填写状态值，并用 / 分隔，例如：草稿/待审核/审核通过/已作废">?</span></span>
+                <div class="entity-state-values-readonly" data-testid="entity-state-values-text">{{ stateValues().join(' / ') || '请在下方“字段规则”中填写，例如：草稿/待审核/审核通过/已作废' }}</div>
+              </label>
+            </div>
+            <div class="entity-state-kind-editor">
+              <div class="entity-state-kind-head">
+                <div>
+                  <h5>状态节点属性</h5>
+                  <p class="entity-state-editor-hint">每个状态都需要标记为初始状态、中间状态或结束状态。图上会按这个属性做纵向展开。</p>
+                </div>
+              </div>
+              <div class="entity-state-kind-list" data-testid="entity-state-kind-list">
+                @for (node of stateBoard().nodes; track node.name; let index = $index) {
+                  <label class="entity-state-kind-row">
+                    <span class="entity-state-kind-name">{{ node.name }}</span>
+                    <select [attr.data-testid]="'entity-state-kind-' + index" [value]="node.kind" (change)="setStateNodeKind(entity, node.name, $any($event.target).value)">
+                      <option value="initial">初始状态</option>
+                      <option value="intermediate">中间状态</option>
+                      <option value="terminal">结束状态</option>
+                    </select>
+                  </label>
+                } @empty {
+                  <p class="entity-muted">暂无节点类型。</p>
                 }
-              </select>
-            </label>
-            <label class="entity-field">
-              <span>状态值</span>
-              <textarea rows="3" data-testid="entity-state-values-text" readonly [value]="stateValues().join(' / ')"></textarea>
-            </label>
-          </section>
-
-          <section class="entity-edit-section">
-            <h4>节点类型</h4>
-            <div class="entity-state-kind-list" data-testid="entity-state-kind-list">
-              @for (node of stateBoard().nodes; track node.name; let index = $index) {
-                <label class="entity-state-kind-row">
-                  <span>{{ node.name }}</span>
-                  <select [attr.data-testid]="'entity-state-kind-' + index" [value]="node.kind" (change)="setStateNodeKind(entity, node.name, $any($event.target).value)">
-                    <option value="initial">开始</option>
-                    <option value="intermediate">中间</option>
-                    <option value="terminal">结束</option>
+              </div>
+            </div>
+            @if (stateFields().length > 1) {
+              <p class="entity-state-editor-hint">同一实体的多个状态字段已同步展示在左侧总览里；当前编辑区只落在右侧选中的那一个字段上。</p>
+            }
+            <div class="entity-transition-list">
+              @for (item of selectedStateTransitions(entity); track item.transition.uid || item.transition.id || item.index; let rowIndex = $index) {
+                <div class="entity-transition-row" data-testid="entity-design-transition-row">
+                  <select [attr.data-testid]="'entity-transition-from-' + rowIndex" [value]="item.transition.from || ''" (change)="setTransition(item.transition, 'from', $any($event.target).value)">
+                    @for (value of stateValues(); track value) {
+                      <option [value]="value">{{ value }}</option>
+                    }
                   </select>
-                </label>
+                  <span class="entity-transition-arrow">→</span>
+                  <select [attr.data-testid]="'entity-transition-to-' + rowIndex" [value]="item.transition.to || ''" (change)="setTransition(item.transition, 'to', $any($event.target).value)">
+                    @for (value of stateValues(); track value) {
+                      <option [value]="value">{{ value }}</option>
+                    }
+                  </select>
+                  <input type="text" [attr.data-testid]="'entity-transition-note-' + item.index" placeholder="备注说明" [value]="item.transition.note || item.transition.action || item.transition.label || ''" (input)="setTransitionNote(item.transition, $any($event.target).value)">
+                  <div class="entity-transition-actions">
+                    <button class="transition-action" type="button" title="在下方插入流转" (click)="addTransition(entity)">+</button>
+                    <button class="transition-action" type="button" title="上移" (click)="moveTransition(entity, item.index, -1)" [disabled]="rowIndex === 0">↑</button>
+                    <button class="transition-action" type="button" title="下移" (click)="moveTransition(entity, item.index, 1)" [disabled]="rowIndex === selectedStateTransitions(entity).length - 1">↓</button>
+                    <button class="transition-action transition-action-delete" type="button" title="删除" (click)="removeTransition(entity, item.index)">×</button>
+                  </div>
+                </div>
               } @empty {
-                <p class="entity-muted">暂无节点类型。</p>
+                <p class="no-refs">暂无状态流转，先添加一条边，例如：草稿 → 待审核。</p>
               }
             </div>
-          </section>
-
-          <section class="entity-edit-section">
-            <div class="entity-section-head">
-              <h4>状态流转</h4>
-              <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-transition" (click)="addTransition(entity)">＋ 流转</button>
-            </div>
-            @for (item of selectedStateTransitions(entity); track item.transition.uid || item.transition.id || item.index; let rowIndex = $index) {
-              <div class="entity-transition-row" data-testid="entity-design-transition-row">
-                <select [attr.data-testid]="'entity-transition-from-' + rowIndex" [value]="item.transition.from || ''" (change)="setTransition(item.transition, 'from', $any($event.target).value)">
-                  @for (value of stateValues(); track value) {
-                    <option [value]="value">{{ value }}</option>
-                  }
-                </select>
-                <strong>→</strong>
-                <select [attr.data-testid]="'entity-transition-to-' + rowIndex" [value]="item.transition.to || ''" (change)="setTransition(item.transition, 'to', $any($event.target).value)">
-                  @for (value of stateValues(); track value) {
-                    <option [value]="value">{{ value }}</option>
-                  }
-                </select>
-                <input type="text" aria-label="动作" [value]="item.transition.action || item.transition.label || ''" (input)="setTransition(item.transition, 'action', $any($event.target).value)">
-                <button class="stage-quick-btn" type="button" title="上移流转" (click)="moveTransition(entity, item.index, -1)" [disabled]="item.index === 0">↑</button>
-                <button class="stage-quick-btn" type="button" title="下移流转" (click)="moveTransition(entity, item.index, 1)" [disabled]="item.index === (entity.state_transitions || []).length - 1">↓</button>
-                <button class="stage-quick-btn danger" type="button" title="删除流转" (click)="removeTransition(entity, item.index)">×</button>
-              </div>
-            } @empty {
-              <p class="entity-muted">暂无状态流转。</p>
-            }
-          </section>
+          </div>
         </div>
       </aside>
     }

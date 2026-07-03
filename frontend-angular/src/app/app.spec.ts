@@ -128,6 +128,8 @@ describe('App', () => {
   });
 
   it('should open Easy Agent with a BLM handoff when clicking the AI assistant entry', async () => {
+    localStorage.setItem('blm.collab.userId', 'user-ai-1');
+    localStorage.setItem('blm.collab.userName', 'AI 用户');
     const openedUrls: string[] = [];
     vi.spyOn(window, 'open').mockImplementation((url?: string | URL) => {
       openedUrls.push(String(url || ''));
@@ -144,6 +146,10 @@ describe('App', () => {
           documentId: 'agent.json',
           currentRoute: '/process?doc=agent.json&tab=process&proc=proc-inbound&task=node-submit',
           currentPageTitle: '交割监管平台',
+          user: {
+            id: 'user-ai-1',
+            name: 'AI 用户',
+          },
         });
         expect(body.documentSummary).toMatchObject({
           roles: 1,

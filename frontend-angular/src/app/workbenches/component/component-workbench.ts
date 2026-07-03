@@ -3,6 +3,7 @@ import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
+import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
 
 type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
 
@@ -14,7 +15,7 @@ interface TechnicalHandover { runtimeKind?: string; target?: string; note?: stri
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; technicalHandover?: TechnicalHandover; constructUid?: string; businessComponentUid?: string; }
 
 @Component({
-  selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent],
+  selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent, RichTextEditorComponent],
   templateUrl: './component-workbench.html', styleUrl: './component-workbench.scss',
 })
 export class ComponentWorkbenchComponent implements OnInit, OnDestroy {

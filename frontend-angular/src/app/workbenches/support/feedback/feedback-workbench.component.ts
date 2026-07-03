@@ -5,6 +5,16 @@ import { ApiService, FeedbackDocument, FeedbackItem } from '../../../core/api/ap
 
 const CATEGORIES = ['需求功能', '体验改进', '轻微缺陷', '严重问题'];
 const STATUSES = ['待处理', '处理中', '已解决', '已关闭'];
+const NEW_FEEDBACK_ATTACHMENT_KEY = '__new__';
+const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
+
+interface PendingFeedbackAttachment {
+  uid: string;
+  filename: string;
+  size: number;
+  contentType: string;
+  dataBase64: string;
+}
 
 @Component({
   selector: 'app-feedback-workbench',
@@ -22,6 +32,8 @@ export class FeedbackWorkbenchComponent implements OnInit {
   protected readonly doc = signal<FeedbackDocument>({ items: [] });
   protected readonly loading = signal(false);
   protected readonly statusMessage = signal('');
+  protected readonly pendingAttachments = signal<Record<string, PendingFeedbackAttachment[]>>({});
+  protected readonly uploading = signal<Record<string, boolean>>({});
   protected readonly ownerFilter = signal<'mine' | 'all'>('mine');
   protected readonly categoryFilter = signal('');
   protected readonly statusFilter = signal('');
@@ -102,16 +114,20 @@ export class FeedbackWorkbenchComponent implements OnInit {
       this.statusMessage.set('请先填写反馈标题。');
       return;
     }
-    await this.saveFeedback({
+    const uid = this.createLocalUid('fb');
+    const saved = await this.saveFeedback({
       action: 'add',
-      item: {
+      data: {
+        uid,
         category: this.newCategory,
-        status: '待处理',
         title,
         description: this.newDescription.trim(),
-        author: this.currentUserName(),
       },
     }, '反馈已提交。');
+    if (saved) {
+      const created = saved.items?.find((item) => item.uid === uid);
+      await this.uploadPendingAttachments(uid, created?.messages?.[0]?.uid || '', NEW_FEEDBACK_ATTACHMENT_KEY);
+    }
     this.creating.set(false);
   }
 
@@ -121,14 +137,19 @@ export class FeedbackWorkbenchComponent implements OnInit {
       this.statusMessage.set('请先填写对话内容。');
       return;
     }
-    await this.saveFeedback({
-      action: 'message',
+    const saved = await this.saveFeedback({
+      action: 'reply',
       uid: item.uid,
-      message: {
-        author: this.currentUserName(),
-        content,
+      data: {
+        reply: content,
+        status: '',
       },
-    }, '对话已追加。');
+    }, '对话已发送。');
+    if (!saved) return;
+    const savedItem = saved.items?.find((entry) => entry.uid === item.uid);
+    const messages = savedItem?.messages || [];
+    const messageUid = messages[messages.length - 1]?.uid || '';
+    await this.uploadPendingAttachments(item.uid, messageUid, this.replyDraftKey(item.uid));
     this.replyContent = '';
   }
 
@@ -136,11 +157,54 @@ export class FeedbackWorkbenchComponent implements OnInit {
     await this.saveFeedback({
       action: 'update',
       uid: item.uid,
-      patch: {
+      data: {
         category: item.category,
         status: item.status,
       },
     }, '反馈状态已更新。');
+  }
+
+  protected replyDraftKey(uid: string): string {
+    return `__message__${uid}`;
+  }
+
+  protected pendingFor(key: string): PendingFeedbackAttachment[] {
+    return this.pendingAttachments()[key] || [];
+  }
+
+  protected attachmentUrl(itemUid: string, attachment: Record<string, unknown>): string {
+    return this.api.feedbackAttachmentUrl(itemUid, String(attachment['uid'] || ''));
+  }
+
+  protected attachmentName(attachment: Record<string, unknown>): string {
+    return String(attachment['filename'] || attachment['name'] || 'attachment');
+  }
+
+  protected isImageAttachment(attachment: Record<string, unknown>): boolean {
+    const contentType = String(attachment['contentType'] || '').toLowerCase();
+    return contentType.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(this.attachmentName(attachment));
+  }
+
+  protected async pasteFeedbackAttachments(event: ClipboardEvent, key: string): Promise<void> {
+    const files = Array.from(event.clipboardData?.items || [])
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    if (!files.length) return;
+    event.preventDefault();
+    await this.queueFeedbackFiles(key, files);
+  }
+
+  protected async onAttachmentInput(key: string, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    await this.queueFeedbackFiles(key, Array.from(input?.files || []));
+    if (input) input.value = '';
+  }
+
+  protected removePendingAttachment(key: string, attachmentUid: string): void {
+    const pending = { ...this.pendingAttachments() };
+    pending[key] = (pending[key] || []).filter((entry) => entry.uid !== attachmentUid);
+    this.pendingAttachments.set(pending);
   }
 
   private async loadFeedback(): Promise<void> {
@@ -158,26 +222,104 @@ export class FeedbackWorkbenchComponent implements OnInit {
     }
   }
 
-  private async saveFeedback(payload: Record<string, unknown>, message: string): Promise<void> {
+  private async saveFeedback(payload: Record<string, unknown>, message: string): Promise<FeedbackDocument | null> {
     this.loading.set(true);
     this.statusMessage.set('');
     try {
       const saved = await this.api.saveFeedback({
-        user: this.currentUserName(),
+        user: { name: this.currentUserName() },
         ...payload,
       });
       this.doc.set(saved || { items: [] });
       this.statusMessage.set(message);
-      if ((payload['action'] === 'add') && this.items()[0]?.uid) this.selectedUid.set(this.items()[0].uid);
+      if ((payload['action'] === 'add') && payload['data'] && typeof payload['data'] === 'object') {
+        const uid = String((payload['data'] as Record<string, unknown>)['uid'] || '');
+        if (uid) this.selectedUid.set(uid);
+      }
+      return saved || { items: [] };
     } catch (error) {
       this.statusMessage.set(error instanceof Error ? error.message : String(error));
+      return null;
     } finally {
       this.loading.set(false);
     }
   }
 
+  private async queueFeedbackFiles(key: string, files: File[]): Promise<void> {
+    const entries = await this.readFeedbackAttachmentFiles(files);
+    if (!entries.length) return;
+    const safeKey = key || NEW_FEEDBACK_ATTACHMENT_KEY;
+    const pending = { ...this.pendingAttachments() };
+    pending[safeKey] = [...(pending[safeKey] || []), ...entries];
+    this.pendingAttachments.set(pending);
+    this.statusMessage.set('附件已添加。');
+  }
+
+  private async readFeedbackAttachmentFiles(files: File[]): Promise<PendingFeedbackAttachment[]> {
+    const result: PendingFeedbackAttachment[] = [];
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        this.statusMessage.set(`附件过大：${file.name || '未命名文件'}，单个附件不能超过 20MB。`);
+        continue;
+      }
+      const dataBase64 = await this.readFileBase64(file);
+      if (!dataBase64) {
+        this.statusMessage.set(`附件读取失败：${file.name || '未命名文件'}`);
+        continue;
+      }
+      result.push({
+        uid: this.createLocalUid('fbatt-local'),
+        filename: file.name || 'clipboard-image.png',
+        size: Number(file.size || 0),
+        contentType: file.type || 'application/octet-stream',
+        dataBase64,
+      });
+    }
+    return result;
+  }
+
+  private readFileBase64(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || '').split(',', 2)[1] || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  }
+
+  private async uploadPendingAttachments(itemUid: string, messageUid: string, key: string): Promise<void> {
+    const entries = this.pendingFor(key);
+    if (!itemUid || !messageUid || !entries.length) return;
+    this.uploading.set({ ...this.uploading(), [key]: true });
+    let latest: FeedbackDocument | null = null;
+    try {
+      for (const entry of entries) {
+        latest = await this.api.uploadFeedbackAttachment({
+          uid: itemUid,
+          messageUid,
+          filename: entry.filename,
+          contentType: entry.contentType,
+          dataBase64: entry.dataBase64,
+          user: { name: this.currentUserName() },
+        });
+      }
+      if (latest) this.doc.set(latest);
+      const pending = { ...this.pendingAttachments() };
+      pending[key] = [];
+      this.pendingAttachments.set(pending);
+    } catch (error) {
+      this.statusMessage.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.uploading.set({ ...this.uploading(), [key]: false });
+    }
+  }
+
   private currentUserName(): string {
     return localStorage.getItem('blm.collab.userName')?.trim() || 'agent';
+  }
+
+  private createLocalUid(prefix: string): string {
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
   }
 
   private feedbackSortKey(item: FeedbackItem): string {

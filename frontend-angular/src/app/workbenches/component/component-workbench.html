@@ -383,7 +383,14 @@
                   <textarea data-testid="taskdef-handover-note" [(ngModel)]="ensureTaskHandover(td).note" rows="2" placeholder="说明这个构件任务未来如何被运行时、领域服务、查询服务或 Agent 承接"></textarea>
                 </section>
                 <section class="taskdef-edit-section taskdef-edit-note-section">
-                  <textarea [(ngModel)]="td.note" rows="2" placeholder="描述" class="taskdef-edit-note"></textarea>
+                  <app-rich-text-editor
+                    class="taskdef-rich-text"
+                    label="任务详情"
+                    placeholder="描述任务用途、输入输出口径、边界条件或处理说明"
+                    testIdPrefix="taskdef-note"
+                    [value]="td.note || ''"
+                    (valueChange)="td.note = $event"
+                  ></app-rich-text-editor>
                 </section>
                 <div class="taskdef-actions"><button class="btn btn-primary btn-sm" [attr.data-testid]="'taskdef-save-' + uid(td)" (click)="saveInlineEdit(td)">保存</button><button class="btn btn-outline btn-sm" (click)="cancelInlineEdit(td)">取消</button></div>
               </div>
@@ -395,7 +402,11 @@
                   <strong>{{ td.name || uid(td) }}</strong>
                   @if (td.target) { <code>{{ td.target }}</code> }
                   @if (td.address) { <span class="taskdef-addr">{{ td.address }}</span> }
-                  <span class="taskdef-meta">{{ constructName(tdConstructId(td)) }} · {{ taskNodes(td).length }} 节点引用</span>
+                  <span class="taskdef-meta">
+                    <span>{{ constructName(tdConstructId(td)) }}</span>
+                    <span [class.warn]="!(td.target || td.address)"> {{ td.target || td.address ? '已设置实现' : '未设置实现' }}</span>
+                    <span>{{ taskNodes(td).length }} 个节点引用</span>
+                  </span>
                   <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
                   @if (canEdit()) {
                     <button class="btn-ghost-sm" [attr.data-testid]="'taskdef-edit-' + uid(td)" (click)="startEditInline(td); $event.stopPropagation()">编辑</button>
@@ -415,7 +426,16 @@
                       </table>
                     </div>
                   }
-                  @if (td.note) { <p class="taskdef-note">{{ td.note }}</p> }
+                  @if (td.note) {
+                    <app-rich-text-editor
+                      class="taskdef-rich-text"
+                      label="任务详情"
+                      placeholder=""
+                      testIdPrefix="taskdef-note-preview"
+                      [value]="td.note || ''"
+                      [readonly]="true"
+                    ></app-rich-text-editor>
+                  }
                 </div>
                 }
               </div>

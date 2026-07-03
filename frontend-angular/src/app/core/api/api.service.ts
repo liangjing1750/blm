@@ -58,6 +58,10 @@ export interface AgentHandoffPayload {
   currentPageTitle?: string;
   currentUserIntent?: string;
   pluginId: 'blm-agent-plugin';
+  user?: {
+    id: string;
+    name: string;
+  };
   documentSummary?: Record<string, unknown>;
 }
 
@@ -213,6 +217,14 @@ export class ApiService {
 
   async saveFeedback(payload: Record<string, unknown>): Promise<FeedbackDocument> {
     return this.postJson('/api/feedback', payload);
+  }
+
+  async uploadFeedbackAttachment(payload: Record<string, unknown>): Promise<FeedbackDocument> {
+    return this.postJson('/api/feedback/attachment', payload);
+  }
+
+  feedbackAttachmentUrl(uid: string, attachmentUid: string): string {
+    return `/api/feedback/attachment/${encodeURIComponent(uid)}/${encodeURIComponent(attachmentUid)}`;
   }
 
   async createAgentHandoff(payload: AgentHandoffPayload): Promise<{ handoffId: string }> {

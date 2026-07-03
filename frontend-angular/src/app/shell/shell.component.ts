@@ -811,6 +811,7 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   private buildAgentHandoffPayload(): AgentHandoffPayload {
     const doc = this.runtime.doc || {};
+    const user = this.collaboration.currentUser();
     return {
       sourceApp: 'blm',
       workspaceId: String(doc?.meta?.space || '').trim(),
@@ -819,6 +820,10 @@ export class ShellComponent implements OnInit, OnDestroy {
       selectedBusinessObject: this.currentBusinessObjectSelection(),
       currentPageTitle: this.currentDocumentLabel(),
       pluginId: 'blm-agent-plugin',
+      user: {
+        id: String(user.id || '').trim() || 'anonymous',
+        name: String(user.name || '').trim() || 'agent',
+      },
       documentSummary: this.documentSummary(doc),
     };
   }
