@@ -37,6 +37,8 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   protected doc(): any { this.version(); return getAngularRuntimeState().doc || {}; }
   protected components(): LegacyComp[] { return this.doc().businessComponents || []; }
+  protected coreComponents(): LegacyComp[] { return this.components().filter((comp) => this.componentKind(comp) === 'core'); }
+  protected genericComponents(): LegacyComp[] { return this.components().filter((comp) => this.componentKind(comp) === 'generic'); }
   protected constructs(): LegacyConstruct[] { return this.doc().businessConstructs || []; }
   protected entities(): LegacyEntity[] { return this.doc().entities || []; }
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
@@ -67,6 +69,17 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     const cid = this.uid(comp);
     const explicitIds = new Set(comp.constructUids || []);
     return this.constructs().filter((c) => this.constructComponentId(c) === cid || explicitIds.has(this.uid(c)));
+  }
+  protected visibleConstructsFor(comp: LegacyComp): LegacyConstruct[] {
+    const list = this.constructsFor(comp);
+    return this.expandedComp() === this.uid(comp) ? list : list.slice(0, 3);
+  }
+  protected hiddenConstructCount(comp: LegacyComp): number {
+    return Math.max(0, this.constructsFor(comp).length - this.visibleConstructsFor(comp).length);
+  }
+  protected toggleComponentConstructs(comp: LegacyComp): void {
+    const id = this.uid(comp);
+    this.expandedComp.set(this.expandedComp() === id ? '' : id);
   }
   protected ungroupedConstructs(): LegacyConstruct[] {
     const groupedIds = new Set<string>();

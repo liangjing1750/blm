@@ -17,19 +17,25 @@
 .business-component-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 
 /* 业务组件总览：只承载组件和构件层级，不在这里铺开实体、任务明细。 */
-.comp-grid { column-count: 4; column-gap: 8px; max-height: calc(100vh - 144px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
-.comp-grid::-webkit-scrollbar { width: 6px; }
-.comp-grid::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.business-component-sections { display: grid; gap: 12px; }
+.business-component-group { display: grid; gap: 7px; }
+.business-component-group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; color: #334155; }
+.business-component-group-head strong { font-size: 13px; font-weight: 900; }
+.business-component-group-head span { border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; color: #64748b; font-size: 11px; padding: 1px 7px; }
+.business-component-group--core .business-component-group-head strong { color: #92400e; }
+.business-component-group--generic .business-component-group-head strong { color: #15803d; }
 
-.comp-grid-card { break-inside: avoid; margin: 0 0 8px; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 9px; background: #fff; overflow: hidden; display: inline-flex; width: 100%; flex-direction: column; vertical-align: top; }
+.comp-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; overflow: visible; align-items: start; }
+
+.comp-grid-card { min-height: 306px; border: 1px solid #dbe5f0; border-left: 3px solid #cbd5e1; border-radius: 9px; background: #fff; overflow: hidden; display: flex; width: 100%; flex-direction: column; }
 .comp-grid-card:nth-child(3n + 2),
-.comp-grid-card:nth-child(3n) { border-color: #fecaca; border-left-color: #dc2626; background: #fff; }
+.comp-grid-card:nth-child(3n) { border-color: #dbe5f0; border-left-color: #cbd5e1; background: #fff; }
 .comp-grid-card:hover { box-shadow: 0 6px 18px rgba(15,23,42,.08); transform: translateY(-1px); transition: box-shadow .12s, transform .12s; }
-.comp-grid-card.is-generic { border-color: #bbf7d0; border-left-color: #16a34a; background: #fff; }
-.comp-grid-card.is-generic:hover { border-color: #86efac; }
+.comp-grid-card.is-generic { border-color: #dbe5f0; border-left-color: #cbd5e1; background: #fff; }
+.comp-grid-card.is-generic:hover { border-color: #cbd5e1; }
 
 .comp-grid-head { display: flex; align-items: center; gap: 6px; padding: 7px 9px; background: #fff; border-bottom: 1px solid #eef2f7; }
-.comp-grid-label { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 999px; font-size: 10px; font-weight: 900; padding: 2px 7px; flex-shrink: 0; }
+.comp-grid-label { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; border-radius: 999px; font-size: 10px; font-weight: 900; padding: 2px 7px; flex-shrink: 0; }
 .comp-grid-label.is-generic-label { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
 .comp-grid-name { flex: 1; font-size: 13px; font-weight: 800; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .business-component-count { border: 1px solid #e2e8f0; border-radius: 999px; background: #f8fafc; color: #64748b; font-size: 11px; padding: 1px 6px; flex-shrink: 0; }
@@ -61,11 +67,11 @@
 .business-component-import-btn { border: 1px solid #bfdbfe; border-radius: 999px; background: #fff; color: #1d4ed8; cursor: pointer; font-size: 11px; padding: 3px 8px; }
 .business-component-import-btn:hover { background: #eff6ff; border-color: #60a5fa; }
 
-.comp-grid-constructs { padding: 5px 7px 7px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.comp-grid-constructs { min-height: 164px; padding: 5px 7px 7px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .comp-grid-construct-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
-.comp-grid-construct { border: 1px solid #dbeafe; border-left: 3px solid #60a5fa; border-radius: 0 7px 7px 0; padding: 0; cursor: pointer; transition: border-color .12s, background .12s; background: #f8fbff; overflow: hidden; text-align: left; font: inherit; }
-.comp-grid-construct:hover { border-color: #93c5fd; border-left-color: #2563eb; background: #eff6ff; }
-.comp-grid-construct.is-selected { border-color: #2563eb; background: #dbeafe; }
+.comp-grid-construct { border: 1px solid #e2e8f0; border-left: 3px solid #60a5fa; border-radius: 0 7px 7px 0; padding: 0; cursor: pointer; transition: border-color .12s, background .12s; background: #f8fafc; overflow: hidden; text-align: left; font: inherit; }
+.comp-grid-construct:hover { border-color: #bfdbfe; border-left-color: #2563eb; background: #f8fbff; }
+.comp-grid-construct.is-selected { border-color: #2563eb; background: #eff6ff; }
 .comp-grid-construct-head { display: flex; align-items: center; gap: 5px; padding: 5px 8px 4px 7px; }
 .comp-grid-construct-label { background: #1d4ed8; color: #fff; border-radius: 3px; font-size: 9px; font-weight: 700; padding: 1px 5px; flex-shrink: 0; }
 .comp-grid-construct-name { font-size: 12px; font-weight: 700; color: #334155; }
@@ -74,6 +80,8 @@
 .construct-move-btn { border: 1px solid #e2e8f0; border-radius: 7px; background: #fff; color: #64748b; cursor: pointer; font-size: 11px; padding: 0 8px; }
 .construct-move-btn:hover { border-color: #fecaca; background: #fef2f2; color: #dc2626; }
 
+.comp-grid-construct-more { border: 0; background: transparent; color: #2563eb; cursor: pointer; font: inherit; font-size: 11px; font-weight: 800; padding: 3px 6px; text-align: left; }
+.comp-grid-construct-more:hover { color: #1d4ed8; text-decoration: underline; }
 .comp-grid-construct-add { display: flex; align-items: center; justify-content: center; min-height: 28px; border: 1px dashed #93c5fd; border-radius: 7px; background: #f8fbff; color: #2563eb; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .comp-grid-construct-add:hover { border-color: #2563eb; background: #eff6ff; }
 
@@ -127,14 +135,14 @@
 .business-empty-state strong { color: #1e293b; font-size: 14px; }
 
 @media (max-width: 900px) {
-  .comp-grid { column-count: 1; }
+  .comp-grid { grid-template-columns: 1fr; }
   .business-construct-summary { flex-direction: column; }
   .summary-metrics { justify-content: flex-start; min-width: 0; }
   .business-construct-assets { grid-template-columns: 1fr; }
 }
 
 @media (min-width: 901px) and (max-width: 1280px) {
-  .comp-grid { column-count: 3; }
+  .comp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* ─── Tab2: 任务定义卡片 ─────────────────── */
