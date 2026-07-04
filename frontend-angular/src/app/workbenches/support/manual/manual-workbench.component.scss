@@ -1,9 +1,30 @@
 .manual-wrap {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   background: #f8fafc;
+}
+
+.utility-return-work {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  right: 16px;
+  height: 34px;
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 14px;
+}
+
+.utility-return-work:hover {
+  background: #eff6ff;
 }
 
 .manual-body {

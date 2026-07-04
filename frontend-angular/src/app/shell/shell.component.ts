@@ -306,6 +306,17 @@ export class ShellComponent implements OnInit, OnDestroy {
     });
   }
 
+  @HostListener('window:blm-return-to-workbench')
+  protected returnToWorkFromUtility(): void {
+    const target = this.utilityReturnWorkbench();
+    this.runtime.ui['mainTab'] = target;
+    this.runtime.ui['utilityReturnMainTab'] = '';
+    this.activeDropdown.set('');
+    this.refreshShellView();
+    void this.router.navigateByUrl(routePathFromWorkbenchId(target));
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
   protected currentDocumentLabel(): string {
     // 模块意图：顶部展示给用户的是业务文档名称，而不是服务端持久化 key。
     // 关键流程：属性保存会更新 meta.title/domain；这里优先读取 meta，刷新界面时能立即看到已生效的文档名。
@@ -617,6 +628,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   protected openManual(): void {
+    this.rememberUtilityReturnWorkbench();
     this.runtime.ui['mainTab'] = 'manual';
     this.activeDropdown.set('');
     this.refreshShellView();
@@ -625,6 +637,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   protected openFeedback(): void {
+    this.rememberUtilityReturnWorkbench();
     this.runtime.ui['mainTab'] = 'feedback';
     this.activeDropdown.set('');
     this.refreshShellView();
@@ -1793,6 +1806,18 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected refreshShellView(): void {
     this.shellVersion.update((value) => value + 1);
+  }
+
+  private rememberUtilityReturnWorkbench(): void {
+    const current = String(this.runtime.ui['mainTab'] || 'panoramaWorkbench');
+    this.runtime.ui['utilityReturnMainTab'] = ['manual', 'feedback'].includes(current)
+      ? String(this.runtime.ui['utilityReturnMainTab'] || 'panoramaWorkbench')
+      : current;
+  }
+
+  private utilityReturnWorkbench(): string {
+    const target = String(this.runtime.ui['utilityReturnMainTab'] || '').trim();
+    return target && !['manual', 'feedback'].includes(target) ? target : 'panoramaWorkbench';
   }
 
   private async runBusy(action: () => Promise<void>): Promise<void> {

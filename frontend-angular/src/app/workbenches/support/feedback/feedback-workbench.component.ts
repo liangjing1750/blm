@@ -68,6 +68,10 @@ export class FeedbackWorkbenchComponent implements OnInit {
 
   constructor(private readonly api: ApiService) {}
 
+  protected returnToWork(): void {
+    window.dispatchEvent(new CustomEvent('blm-return-to-workbench'));
+  }
+
   async ngOnInit(): Promise<void> {
     await this.loadFeedback();
   }

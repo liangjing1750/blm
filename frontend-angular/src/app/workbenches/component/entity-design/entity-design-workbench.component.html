@@ -151,15 +151,15 @@
                                       <path class="entity-state-link entity-state-link-anchor" [attr.d]="link.path" [attr.marker-end]="link.terminal ? null : 'url(#entity-state-arrow)'"></path>
                                     }
                                     @for (transition of panel.board.transitions; track transition.label + '-' + $index) {
-                                      <path class="entity-state-link" data-testid="entity-state-graph-link" [class.selected]="transition.selected" [attr.d]="transition.path" [attr.data-state-action]="transition.label" marker-end="url(#entity-state-arrow)" (click)="panel.active && selectTransition(transition.index, $event)"></path>
-                                      <g class="entity-state-link-label-group" data-testid="entity-state-link-label-group" [attr.transform]="'rotate(' + transition.labelAngle + ' ' + transition.labelX + ' ' + transition.labelY + ')'" (mousedown)="panel.active && startStateLabelDrag(transition, $event)">
+                                      <path class="entity-state-link" data-testid="entity-state-graph-link" [class.selected]="transition.selected" [attr.d]="transition.path" [attr.data-state-action]="transition.label" marker-end="url(#entity-state-arrow)" (click)="selectTransition(transition.index, $event)"></path>
+                                      <g class="entity-state-link-label-group" data-testid="entity-state-link-label-group" [attr.transform]="'rotate(' + transition.labelAngle + ' ' + transition.labelX + ' ' + transition.labelY + ')'" (mousedown)="startStateLabelDrag(transition, $event)">
                                         <rect class="entity-state-link-label-box" [attr.x]="transition.labelX - transition.labelWidth / 2" [attr.y]="transition.labelY - transition.labelHeight / 2" [attr.width]="transition.labelWidth" [attr.height]="transition.labelHeight" rx="10"></rect>
                                         <text class="entity-state-link-label" [attr.x]="transition.labelX" [attr.y]="transition.labelY" text-anchor="middle" dominant-baseline="middle">{{ transition.label }}</text>
                                       </g>
                                     }
                                   </svg>
                                   <div class="entity-state-board" [ngStyle]="stateBoardStyle(panel.board)">
-                                    @if (canEditState() && panel.active) {
+                                    @if (canEditState()) {
                                       @for (transition of panel.board.transitions; track transition.label + '-hitbox-' + $index) {
                                         @for (_point of transition.points.slice(0, -1); track $index) {
                                           <div class="entity-state-link-route-hitbox" data-testid="entity-state-link-route-hitbox" style="position:absolute;z-index:3;cursor:move" [ngStyle]="stateRouteHitboxStyle(transition, $index)" (mousedown)="startStateRouteDrag(transition, $index, $event)"></div>
@@ -170,13 +170,13 @@
                                     }
                                     @for (node of panel.board.nodes; track node.name; let nodeIndex = $index) {
                                       @if (node.marker?.kind === 'initial') {
-                                        <span class="entity-state-marker entity-state-start-dot" data-testid="entity-state-start-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="panel.active && startStateMarkerDrag(node, $event)"></span>
+                                        <span class="entity-state-marker entity-state-start-dot" data-testid="entity-state-start-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
                                       }
-                                      <div class="entity-state-node" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'" [attr.data-testid]="'entity-state-node-' + nodeIndex" [ngStyle]="stateNodeStyle(node)" (mousedown)="panel.active && startStateNodeDrag(node, $event)">
+                                      <div class="entity-state-node" [class.kind-initial]="node.kind === 'initial'" [class.kind-terminal]="node.kind === 'terminal'" [attr.data-testid]="'entity-state-node-' + nodeIndex" [ngStyle]="stateNodeStyle(node)" (mousedown)="startStateNodeDrag(node, $event)">
                                         <span class="entity-state-node-label">{{ node.name }}</span>
                                       </div>
                                       @if (node.marker?.kind === 'terminal') {
-                                        <span class="entity-state-marker entity-state-end-dot-outer" data-testid="entity-state-end-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="panel.active && startStateMarkerDrag(node, $event)"></span>
+                                        <span class="entity-state-marker entity-state-end-dot-outer" data-testid="entity-state-end-dot" [ngStyle]="stateMarkerStyle(node.marker)" (mousedown)="startStateMarkerDrag(node, $event)"></span>
                                       }
                                     }
                                     @if (!panel.board.nodes.length) {

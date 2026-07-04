@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, HostListener, Input, Output, computed, signal, OnInit, OnDestroy } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, HostListener, Input, Output, computed, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import {
   EntityDesignAdapter,
@@ -59,6 +59,7 @@ interface EntityFrame {
 
 interface StateNodeLayout {
   name: string;
+  fieldName: string;
   kind: 'initial' | 'intermediate' | 'terminal';
   x: number;
   y: number;
@@ -129,6 +130,7 @@ interface EntityDragState {
 interface StateNodeDragState {
   entityId: string;
   stateName: string;
+  fieldName: string;
   dragKind: 'node' | 'marker';
   startClientX: number;
   startClientY: number;
@@ -204,6 +206,10 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       this.selectedEntityIds.set(new Set([startupEntityId]));
       this.editorOpen.set(true);
     }
+    if (this.view() === 'state') {
+      this.ensureActiveStateField(this.selectedEntity());
+      this.stateEditorOpen.set(this.externalEditing());
+    }
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
   }
 
@@ -211,6 +217,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
   }
   // 模块意图：实体设计在构件工作台内独立运行，复刻旧实体关系图/状态图的核心体验，但不调用 entity-legacy 渲染函数。
+  private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly nodeWidth = 120;
   private readonly nodeHeight = 38;
   private readonly entityGapX = 40;
@@ -285,7 +292,10 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     return fields.find((field) => String(field.name || '') === selected) || fields[0] || null;
   });
   protected readonly stateValues = computed(() => this.collectStateValues(this.selectedEntity(), this.selectedStateField()?.name || ''));
-  protected readonly statePanels = computed(() => this.buildStatePanels(this.selectedEntity()));
+  protected readonly statePanels = computed(() => {
+    this.version();
+    return this.buildStatePanels(this.selectedEntity());
+  });
   protected readonly stateEntityGroups = computed(() => this.groupStateEntities());
   protected readonly groupFrames = computed(() => this.computeGroupFrames(this.nodes()));
   protected readonly componentFrames = computed(() => this.computeComponentFrames(this.groupFrames()));
@@ -944,6 +954,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     this.stateNodeDragState = {
       entityId: this.entityId(entity),
       stateName: node.name,
+      fieldName: node.fieldName,
       dragKind: 'node',
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -964,6 +975,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     this.stateNodeDragState = {
       entityId: this.entityId(entity),
       stateName: node.name,
+      fieldName: node.fieldName,
       dragKind: 'marker',
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -1073,9 +1085,9 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         x: Math.max(4, Math.round(drag.startLeft + dx)),
         y: Math.max(4, Math.round(drag.startTop + dy)),
       };
-      if (drag.dragKind === 'marker') this.setStateMarkerPosition(entity, drag.stateName, nextPoint, false);
-      else this.setStateNodePosition(entity, drag.stateName, nextPoint, false);
-      this.version.update((value) => value + 1);
+      if (drag.dragKind === 'marker') this.setStateMarkerPosition(entity, drag.stateName, nextPoint, false, drag.fieldName);
+      else this.setStateNodePosition(entity, drag.stateName, nextPoint, false, drag.fieldName);
+      this.refreshDuringStateDrag();
       return;
     }
     if (this.stateLabelDragState) {
@@ -1090,7 +1102,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         x: Math.max(4, Math.round(drag.startX + dx)),
         y: Math.max(4, Math.round(drag.startY + dy)),
       }, false);
-      this.version.update((value) => value + 1);
+      this.refreshDuringStateDrag();
       return;
     }
     if (this.stateRouteDragState) {
@@ -1102,7 +1114,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       const entity = this.entities().find((item) => this.entityId(item) === drag.entityId);
       if (!entity) return;
       this.setStateTransitionRoute(entity, drag.transitionIndex, this.shiftStateRouteSegment(drag.points, drag.segmentIndex, dx, dy), false);
-      this.version.update((value) => value + 1);
+      this.refreshDuringStateDrag();
       return;
     }
     if (this.selectionBox()) {
@@ -1185,6 +1197,12 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   private changed(): void {
     this.adapter.markChanged();
     this.version.update((value) => value + 1);
+  }
+
+  private refreshDuringStateDrag(): void {
+    // 关键流程：document 级 mousemove 可能落在 Angular 检测节奏之外，拖拽中需要立刻把坐标写回视图。
+    this.version.update((value) => value + 1);
+    this.changeDetector.detectChanges();
   }
 
   private syncRuntimeEntityId(entityId: string): void {
@@ -1631,7 +1649,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         const marker = node.kind === 'initial'
           ? { kind: 'initial' as const, x: savedMarker?.x ?? x + width / 2, y: savedMarker?.y ?? y - markerGap, size: startDotR * 2 }
           : (node.kind === 'terminal' ? { kind: 'terminal' as const, x: savedMarker?.x ?? x + width / 2, y: savedMarker?.y ?? y + nodeH + markerGap, size: endOuterR * 2 } : undefined);
-        layouts.push({ name: node.name, kind: node.kind, row: rowIndex, x, y, width, height: nodeH, marker });
+        layouts.push({ name: node.name, fieldName, kind: node.kind, row: rowIndex, x, y, width, height: nodeH, marker });
       });
     });
     const nodeMap = new Map(layouts.map((node) => [node.name, node]));
@@ -1801,8 +1819,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     return 'intermediate';
   }
 
-  private setStateNodePosition(entity: EntityDesignEntity, stateName: string, pos: { x: number; y: number }, markChanged = true): void {
-    const fieldName = this.selectedStateField()?.name || '';
+  private setStateNodePosition(entity: EntityDesignEntity, stateName: string, pos: { x: number; y: number }, markChanged = true, fieldName = this.selectedStateField()?.name || ''): void {
     const values = this.collectStateValues(entity, fieldName);
     const nodes = this.syncEntityStateNodes(entity, values, fieldName);
     const node = nodes.find((item) => String(item.name || '') === stateName);
@@ -1811,8 +1828,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     if (markChanged) this.changed();
   }
 
-  private setStateMarkerPosition(entity: EntityDesignEntity, stateName: string, pos: { x: number; y: number }, markChanged = true): void {
-    const fieldName = this.selectedStateField()?.name || '';
+  private setStateMarkerPosition(entity: EntityDesignEntity, stateName: string, pos: { x: number; y: number }, markChanged = true, fieldName = this.selectedStateField()?.name || ''): void {
     const values = this.collectStateValues(entity, fieldName);
     const nodes = this.syncEntityStateNodes(entity, values, fieldName);
     const node = nodes.find((item) => String(item.name || '') === stateName);

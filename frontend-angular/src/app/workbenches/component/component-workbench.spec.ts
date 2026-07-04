@@ -8,6 +8,14 @@ describe('ComponentWorkbenchComponent', () => {
   let fixture: ComponentFixture<ComponentWorkbenchComponent>;
   let host: HTMLElement;
 
+  function mouseEvent(type: string, props: Partial<MouseEvent> = {}): MouseEvent {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries(props)) {
+      Object.defineProperty(event, key, { configurable: true, value });
+    }
+    return event;
+  }
+
   beforeEach(async () => {
     const runtime = getAngularRuntimeState();
     runtime.modified = false;
@@ -1327,5 +1335,45 @@ describe('ComponentWorkbenchComponent', () => {
     shell.dispatchEvent(new WheelEvent('wheel', { bubbles: true, ctrlKey: true, deltaY: -100 }));
     entityFixture.detectChanges();
     expect(target.style.transform).toBe('scale(1.1)');
+  });
+
+  it('updates state node position immediately while dragging', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: '订单',
+      fields: [{ uid: 'field-1', name: '状态', is_status: true, state_values: '草稿/审核中' }],
+      stateLayout: { '草稿': { x: 120, y: 90 } },
+      state_transitions: [{ from: '草稿', to: '审核中', action: '提交' }],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('initialView', 'state');
+    entityFixture.componentRef.setInput('initialEntityId', 'entity-1');
+    entityFixture.detectChanges();
+    (entityFixture.componentInstance as any).stateEditorOpen.set(true);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const node = Array.from(entityHost.querySelectorAll<HTMLElement>('.entity-state-node'))
+      .find((item) => item.textContent?.includes('草稿'))!;
+    const initialLeft = Number.parseInt(node.style.left, 10);
+    const initialTop = Number.parseInt(node.style.top, 10);
+
+    const nodeLayout = (entityFixture.componentInstance as any).stateBoard().nodes.find((item: any) => item.name === '草稿');
+    expect((entityFixture.componentInstance as any).canEditState()).toBe(true);
+    expect(nodeLayout).toBeTruthy();
+    (entityFixture.componentInstance as any).startStateNodeDrag(nodeLayout, mouseEvent('mousedown', { button: 0, clientX: 20, clientY: 20 }));
+    expect((entityFixture.componentInstance as any).stateNodeDragState).toBeTruthy();
+    (entityFixture.componentInstance as any).onDocumentMouseMove(mouseEvent('mousemove', { clientX: 60, clientY: 50 }));
+    const savedNode = runtime.doc.entities[0].fields[0].state_nodes?.find((item: any) => item.name === '草稿');
+    expect(savedNode?.pos).toEqual({ x: initialLeft + 40, y: initialTop + 30 });
+
+    const movedNode = Array.from(entityHost.querySelectorAll<HTMLElement>('.entity-state-node'))
+      .find((item) => item.textContent?.includes('草稿'))!;
+    expect(movedNode.style.left).toBe(`${initialLeft + 40}px`);
+    expect(movedNode.style.top).toBe(`${initialTop + 30}px`);
   });
 });

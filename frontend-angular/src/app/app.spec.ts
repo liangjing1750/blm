@@ -4661,12 +4661,24 @@ describe('App', () => {
     fixture.detectChanges();
     expect(location.path()).toBe('/manual');
     expect(compiled.querySelector('[data-testid="manual-workbench"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="manual-return-work"]')).toBeTruthy();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="manual-return-work"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(location.path()).toBe('/panorama');
+    expect(getAngularRuntimeState().ui['mainTab']).toBe('panoramaWorkbench');
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-feedback-button"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(location.path()).toBe('/feedback');
     expect(compiled.querySelector('[data-testid="feedback-workbench"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="feedback-return-work"]')).toBeTruthy();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="feedback-return-work"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(location.path()).toBe('/panorama');
+    expect(getAngularRuntimeState().ui['mainTab']).toBe('panoramaWorkbench');
   });
 
   it('should show read-only version labels and local recovery actions in history', async () => {

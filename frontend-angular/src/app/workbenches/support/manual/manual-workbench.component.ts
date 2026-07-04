@@ -76,6 +76,10 @@ export class ManualWorkbenchComponent implements OnInit {
     return this.rendered().html;
   }
 
+  protected returnToWork(): void {
+    window.dispatchEvent(new CustomEvent('blm-return-to-workbench'));
+  }
+
   protected isGroupCollapsed(groupId: string): boolean {
     return this.collapsedGroups()[groupId] !== false;
   }
