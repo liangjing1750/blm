@@ -81,33 +81,172 @@ describe('ComponentWorkbenchComponent', () => {
 
     const tree = host.querySelector<HTMLElement>('[data-testid="business-construct-tree-view"]')!;
     expect(tree).toBeTruthy();
-    expect(tree.querySelector('[data-testid="business-tree-component-comp-1"]')?.textContent).toContain('订单组件');
-    expect(tree.querySelector('[data-testid="business-tree-component-comp-1"]')?.textContent).toContain('1 个构件');
-    expect(tree.querySelector('[data-testid="business-tree-construct-construct-1"]')).toBeFalsy();
+    expect(tree.querySelector('[data-testid="mind-node-component-comp-1"]')?.textContent).toContain('订单组件');
+    expect(tree.querySelector('[data-testid="mind-node-component-comp-1"]')?.textContent).toContain('1 个构件');
+    expect(tree.querySelectorAll(':scope > .business-tree-canvas').length).toBe(0);
 
-    tree.querySelector<HTMLButtonElement>('[data-testid="business-tree-component-comp-1"]')?.click();
+    tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-component-comp-1"]')?.click();
     fixture.detectChanges();
-    expect(tree.querySelector('[data-testid="business-tree-children-comp-1"]')).toBeTruthy();
-    expect(tree.querySelector('[data-testid="business-tree-construct-construct-1"]')?.textContent).toContain('订单构件');
-    expect(tree.querySelector('[data-testid="business-tree-entity-entity-1"]')).toBeFalsy();
+    expect(tree.querySelector('[data-testid="mind-node-construct-construct-1"]')?.textContent).toContain('订单构件');
+    expect(tree.querySelector('[data-testid="mind-node-entity-entity-1"]')?.textContent).toContain('订单');
 
-    tree.querySelector<HTMLButtonElement>('[data-testid="business-tree-construct-construct-1"]')?.click();
+    tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
     fixture.detectChanges();
     expect(tree.querySelector('[data-testid="business-tree-leaves-construct-1"]')).toBeTruthy();
-    expect(tree.querySelector('[data-testid="business-tree-entity-entity-1"]')?.textContent).toContain('订单');
-    expect(tree.querySelector('[data-testid="business-tree-task-task-1"]')?.textContent).toContain('查询订单');
+    expect(tree.querySelector('[data-testid="mind-node-entity-entity-1"]')?.textContent).toContain('订单');
+    expect(tree.querySelector('[data-testid="mind-node-task-task-1"]')?.textContent).toContain('查询订单');
     expect(tree.querySelector('.business-tree-tag')?.textContent).toContain('核心组件');
 
-    tree.querySelector<HTMLButtonElement>('[data-testid="business-tree-entity-entity-1"]')?.click();
+    tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-entity-entity-1"]')?.click();
     fixture.detectChanges();
     expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('entity');
 
     host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
     fixture.detectChanges();
-    host.querySelector<HTMLButtonElement>('[data-testid="business-tree-task-task-1"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-node-task-task-1"]')?.click();
     fixture.detectChanges();
     expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('taskDef');
     expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
+  });
+
+  it('edits the business construct tree in place and moves aggregate children', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.businessComponents.push({ uid: 'comp-2', name: '支付组件', kind: 'generic' });
+    runtime.doc.businessConstructs.push({ uid: 'construct-3', name: '支付构件', businessComponentUid: 'comp-2' });
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    fixture.detectChanges();
+
+    const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-1"]')?.click();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessConstructNew');
+    expect(runtime.doc.businessConstructs.some((construct: any) => construct.name === '新构件' && construct.businessComponentUid === 'comp-1')).toBe(true);
+    expect(host.querySelector('[data-testid="business-tree-add-construct-comp-1"]')).toBeFalsy();
+    expect(host.querySelector('.mind-edit-strip')).toBeFalsy();
+
+    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    fixture.detectChanges();
+    const constructName = host.querySelector<HTMLInputElement>('[data-testid="mind-node-name-editor"]')!;
+    constructName.value = '订单履约构件';
+    constructName.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(runtime.doc.businessConstructs.find((construct: any) => construct.uid === 'construct-1')?.name).toBe('订单履约构件');
+
+    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')!.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-2"]')!.dispatchEvent(new Event('drop', { bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.businessConstructs.find((construct: any) => construct.uid === 'construct-1')?.businessComponentUid).toBe('comp-2');
+
+    host.querySelector<HTMLElement>('[data-testid="mind-node-entity-entity-1"]')!.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-3"]')!.dispatchEvent(new Event('drop', { bubbles: true }));
+    host.querySelector<HTMLElement>('[data-testid="mind-node-task-task-1"]')!.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-3"]')!.dispatchEvent(new Event('drop', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.doc.entities.find((entity: any) => entity.uid === 'entity-1')?.businessConstructUid).toBe('construct-3');
+    expect(runtime.doc.taskDefinitions.find((task: any) => task.uid === 'task-1')?.constructUid).toBe('construct-3');
+    expect(runtime.modified).toBe(true);
+  });
+
+  it('models business constructs as a compact keyboard-driven mind map', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.businessComponents.push({ uid: 'comp-2', name: '支付组件', kind: 'generic' });
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    fixture.detectChanges();
+
+    const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
+    expect(canvas).toBeTruthy();
+    expect(host.querySelector('[data-testid="business-mindmap-zoom"]')?.textContent).toContain('80%');
+    expect(host.querySelector('[data-testid="mind-node-component-comp-1"]')?.textContent).toContain('订单组件');
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')?.textContent).toContain('订单构件');
+
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, ctrlKey: true, bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="business-mindmap-zoom"]')?.textContent).toContain('90%');
+
+    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
+    fixture.detectChanges();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.businessConstructs.some((construct: any) => construct.name === '新构件' && construct.businessComponentUid === 'comp-1')).toBe(true);
+
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-child-menu"]')?.textContent?.trim()).toBe('实体任务');
+    expect(host.querySelector('[data-testid="mind-child-option-entity"]')?.classList.contains('is-active')).toBe(true);
+
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-child-option-task"]')?.classList.contains('is-active')).toBe(true);
+
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.taskDefinitions.some((task: any) => task.name === '新任务' && task.constructUid === 'construct-1')).toBe(true);
+    expect(host.querySelector('[data-testid="mind-child-menu"]')).toBeFalsy();
+    expect(host.querySelector('[data-testid="mind-node-name-editor"]')).toBeTruthy();
+
+    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.entities.some((entity: any) => entity.name === '新实体' && entity.businessConstructUid === 'construct-1')).toBe(true);
+    expect(host.querySelector('[data-testid="mind-node-name-editor"]')).toBeTruthy();
+
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-1"]')?.click();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')?.classList.contains('is-selected')).toBe(true);
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-entity-entity-1"]')?.classList.contains('is-selected')).toBe(true);
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')?.classList.contains('is-selected')).toBe(true);
+
+    const constructNode = host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')!;
+    const targetComponent = host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-2"]')!;
+    constructNode.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    targetComponent.dispatchEvent(new Event('drop', { bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.businessConstructs.find((construct: any) => construct.uid === 'construct-1')?.businessComponentUid).toBe('comp-2');
+  });
+
+  it('collapses individual and all mind map branches without losing the global skeleton', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    fixture.detectChanges();
+
+    const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="mind-node-entity-entity-1"]')).toBeTruthy();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-collapse-construct-construct-1"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="mind-node-entity-entity-1"]')).toBeFalsy();
+    expect(host.querySelector('[data-testid="mind-node-task-task-1"]')).toBeFalsy();
+
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-1"]')?.click();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-component-comp-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')).toBeFalsy();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-expand-all"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="mind-node-entity-entity-1"]')).toBeTruthy();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-collapse-all"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-component-comp-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')).toBeFalsy();
   });
 
   it('keeps construct header fixed while entity and task lists scroll independently', () => {

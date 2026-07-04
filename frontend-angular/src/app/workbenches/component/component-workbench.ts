@@ -32,6 +32,13 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly expandedComp = signal('');
   protected readonly expandedTreeComponentId = signal('');
   protected readonly expandedTreeConstructId = signal('');
+  protected readonly mindMapZoom = signal(0.8);
+  protected readonly selectedMindNode = signal<{ type: 'component' | 'construct' | 'entity' | 'task'; id: string } | null>(null);
+  protected readonly editingMindNode = signal<{ type: 'component' | 'construct' | 'entity' | 'task'; id: string } | null>(null);
+  protected readonly mindChildMenu = signal<{ constructId: string; active: 'entity' | 'task' } | null>(null);
+  protected readonly collapsedMindComponents = signal<Set<string>>(new Set());
+  protected readonly collapsedMindConstructs = signal<Set<string>>(new Set());
+  protected readonly draggingMindNode = signal<{ type: 'component' | 'construct' | 'entity' | 'task'; id: string } | null>(null);
   protected readonly editTaskDef = signal<Partial<LegacyTaskDef> | null>(null);
   protected readonly taskDefKeyword = signal('');
   // 抽屉状态
@@ -104,6 +111,280 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     event?.stopPropagation();
     const id = this.uid(construct);
     this.expandedTreeConstructId.set(this.expandedTreeConstructId() === id ? '' : id);
+  }
+  protected mindMapZoomPercent(): number {
+    return Math.round(this.mindMapZoom() * 100);
+  }
+  protected resetMindMapZoom(): void {
+    this.mindMapZoom.set(0.8);
+  }
+  protected onMindMapWheel(event: WheelEvent): void {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const delta = event.deltaY < 0 ? 0.1 : -0.1;
+    this.mindMapZoom.update((zoom) => Math.min(1.6, Math.max(0.5, Math.round((zoom + delta) * 10) / 10)));
+  }
+  protected selectMindNode(type: 'component' | 'construct' | 'entity' | 'task', id: string, event?: Event): void {
+    event?.stopPropagation();
+    this.selectedMindNode.set({ type, id });
+    this.mindChildMenu.set(null);
+    if (type === 'component') this.expandedTreeComponentId.set(id);
+    if (type === 'construct') this.expandedTreeConstructId.set(id);
+  }
+  protected isMindNodeSelected(type: 'component' | 'construct' | 'entity' | 'task', id: string): boolean {
+    const selected = this.selectedMindNode();
+    return selected?.type === type && selected.id === id;
+  }
+  protected onMindMapKeydown(event: KeyboardEvent): void {
+    if (!this.canEdit()) return;
+    const menu = this.mindChildMenu();
+    if (menu && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
+      event.preventDefault();
+      this.handleMindChildMenuKey(event.key, menu);
+      return;
+    }
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      event.preventDefault();
+      this.moveMindSelection(event.key);
+      return;
+    }
+    if (event.key === ' ') {
+      event.preventDefault();
+      this.toggleSelectedMindNode();
+      return;
+    }
+    if (event.key !== 'Enter' && event.key !== 'Tab' && event.key.toLowerCase() !== 't') return;
+    const selected = this.selectedMindNode();
+    if (!selected) return;
+    event.preventDefault();
+    if (event.key === 'Enter') {
+      this.createMindSibling(selected);
+      return;
+    }
+    if (event.key.toLowerCase() === 't') {
+      if (selected.type === 'construct') {
+        const construct = this.constructs().find((item) => this.uid(item) === selected.id);
+        if (construct) this.createTaskForConstruct(construct);
+      }
+      return;
+    }
+    this.openOrCreateMindChild(selected);
+  }
+  protected isMindChildMenuOpenFor(construct: LegacyConstruct): boolean {
+    return this.mindChildMenu()?.constructId === this.uid(construct);
+  }
+  protected isMindChildOptionActive(option: 'entity' | 'task'): boolean {
+    return this.mindChildMenu()?.active === option;
+  }
+  protected isMindComponentCollapsed(comp: LegacyComp): boolean {
+    return this.collapsedMindComponents().has(this.uid(comp));
+  }
+  protected isMindConstructCollapsed(construct: LegacyConstruct): boolean {
+    return this.collapsedMindConstructs().has(this.uid(construct));
+  }
+  protected toggleMindComponent(comp: LegacyComp, event?: Event): void {
+    event?.stopPropagation();
+    this.toggleMindSet(this.collapsedMindComponents, this.uid(comp));
+  }
+  protected toggleMindConstruct(construct: LegacyConstruct, event?: Event): void {
+    event?.stopPropagation();
+    this.toggleMindSet(this.collapsedMindConstructs, this.uid(construct));
+  }
+  protected collapseAllMindNodes(): void {
+    this.collapsedMindComponents.set(new Set(this.components().map((comp) => this.uid(comp))));
+    this.collapsedMindConstructs.set(new Set(this.constructs().map((construct) => this.uid(construct))));
+    this.mindChildMenu.set(null);
+  }
+  protected expandAllMindNodes(): void {
+    this.collapsedMindComponents.set(new Set());
+    this.collapsedMindConstructs.set(new Set());
+    this.mindChildMenu.set(null);
+  }
+  protected startMindRename(type: 'component' | 'construct' | 'entity' | 'task', id: string, event: Event): void {
+    if (!this.canEdit()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.selectedMindNode.set({ type, id });
+    this.editingMindNode.set({ type, id });
+  }
+  protected isMindNodeEditing(type: 'component' | 'construct' | 'entity' | 'task', id: string): boolean {
+    const editing = this.editingMindNode();
+    return editing?.type === type && editing.id === id;
+  }
+  protected updateMindNodeName(type: 'component' | 'construct' | 'entity' | 'task', id: string, value: string): void {
+    if (!this.canEdit()) return;
+    const target = type === 'component'
+      ? this.components().find((item) => this.uid(item) === id)
+      : type === 'construct'
+        ? this.constructs().find((item) => this.uid(item) === id)
+        : type === 'entity'
+          ? this.entities().find((item) => this.uid(item) === id)
+          : this.taskDefs().find((item) => this.uid(item) === id);
+    if (!target) return;
+    target.name = value;
+    this.touch();
+  }
+  protected finishMindRename(event?: Event): void {
+    event?.stopPropagation();
+    this.editingMindNode.set(null);
+  }
+  private handleMindChildMenuKey(key: string, menu: { constructId: string; active: 'entity' | 'task' }): void {
+    if (key === 'Escape') {
+      this.mindChildMenu.set(null);
+      return;
+    }
+    if (key === 'ArrowUp' || key === 'ArrowDown') {
+      this.mindChildMenu.set({ constructId: menu.constructId, active: menu.active === 'entity' ? 'task' : 'entity' });
+      return;
+    }
+    const construct = this.constructs().find((item) => this.uid(item) === menu.constructId);
+    if (!construct) return;
+    const created = menu.active === 'entity' ? this.createEntityForConstruct(construct) : this.createTaskForConstruct(construct);
+    if (created) this.focusMindNode(menu.active, this.uid(created), true);
+    this.mindChildMenu.set(null);
+  }
+  private toggleSelectedMindNode(): void {
+    const selected = this.selectedMindNode();
+    if (!selected) return;
+    if (selected.type === 'component') this.toggleMindSet(this.collapsedMindComponents, selected.id);
+    if (selected.type === 'construct') this.toggleMindSet(this.collapsedMindConstructs, selected.id);
+  }
+  private toggleMindSet(target: typeof this.collapsedMindComponents, id: string): void {
+    target.update((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  private moveMindSelection(key: string): void {
+    const selected = this.selectedMindNode();
+    if (!selected) return;
+    if (key === 'ArrowRight') {
+      const child = this.firstMindChild(selected);
+      if (child) this.focusMindNode(child.type, child.id);
+      return;
+    }
+    if (key === 'ArrowLeft') {
+      const parent = this.mindParent(selected);
+      if (parent) this.focusMindNode(parent.type, parent.id);
+      return;
+    }
+    const nodes = this.flatMindNodes();
+    const index = nodes.findIndex((node) => node.type === selected.type && node.id === selected.id);
+    if (index < 0) return;
+    const nextIndex = key === 'ArrowDown' ? Math.min(nodes.length - 1, index + 1) : Math.max(0, index - 1);
+    const next = nodes[nextIndex];
+    this.focusMindNode(next.type, next.id);
+  }
+  private focusMindNode(type: 'component' | 'construct' | 'entity' | 'task', id: string, rename = false): void {
+    this.selectedMindNode.set({ type, id });
+    this.mindChildMenu.set(null);
+    this.editingMindNode.set(rename ? { type, id } : null);
+    if (type === 'construct') this.expandedTreeConstructId.set(id);
+    if (type === 'component') this.expandedTreeComponentId.set(id);
+  }
+  private flatMindNodes(): Array<{ type: 'component' | 'construct' | 'entity' | 'task'; id: string }> {
+    const nodes: Array<{ type: 'component' | 'construct' | 'entity' | 'task'; id: string }> = [];
+    for (const group of this.groupedTreeComponents()) {
+      for (const comp of group.components) {
+        nodes.push({ type: 'component', id: this.uid(comp) });
+        if (this.isMindComponentCollapsed(comp)) continue;
+        for (const construct of this.constructsFor(comp)) {
+          nodes.push({ type: 'construct', id: this.uid(construct) });
+          if (this.isMindConstructCollapsed(construct)) continue;
+          for (const entity of this.entitiesFor(construct)) nodes.push({ type: 'entity', id: this.uid(entity) });
+          for (const task of this.taskDefsFor(construct)) nodes.push({ type: 'task', id: this.uid(task) });
+        }
+      }
+    }
+    return nodes;
+  }
+  private firstMindChild(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): { type: 'component' | 'construct' | 'entity' | 'task'; id: string } | null {
+    if (node.type === 'component') {
+      const comp = this.components().find((item) => this.uid(item) === node.id);
+      if (comp && this.isMindComponentCollapsed(comp)) return null;
+      const construct = comp ? this.constructsFor(comp)[0] : null;
+      return construct ? { type: 'construct', id: this.uid(construct) } : null;
+    }
+    if (node.type === 'construct') {
+      const construct = this.constructs().find((item) => this.uid(item) === node.id);
+      if (construct && this.isMindConstructCollapsed(construct)) return null;
+      const entity = construct ? this.entitiesFor(construct)[0] : null;
+      if (entity) return { type: 'entity', id: this.uid(entity) };
+      const task = construct ? this.taskDefsFor(construct)[0] : null;
+      return task ? { type: 'task', id: this.uid(task) } : null;
+    }
+    return null;
+  }
+  private mindParent(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): { type: 'component' | 'construct' | 'entity' | 'task'; id: string } | null {
+    if (node.type === 'construct') {
+      const construct = this.constructs().find((item) => this.uid(item) === node.id);
+      const compId = construct ? this.constructComponentId(construct) : '';
+      return compId ? { type: 'component', id: compId } : null;
+    }
+    if (node.type === 'entity') {
+      const entity = this.entities().find((item) => this.uid(item) === node.id);
+      const constructId = entity?.businessConstructUid || entity?.constructUid || '';
+      return constructId ? { type: 'construct', id: constructId } : null;
+    }
+    if (node.type === 'task') {
+      const task = this.taskDefs().find((item) => this.uid(item) === node.id);
+      return task?.constructUid ? { type: 'construct', id: task.constructUid } : null;
+    }
+    return null;
+  }
+  protected startMindDrag(type: 'component' | 'construct' | 'entity' | 'task', id: string, event: DragEvent): void {
+    if (!this.canEdit()) return;
+    event.stopPropagation();
+    this.draggingMindNode.set({ type, id });
+    event.dataTransfer?.setData('text/plain', `${type}:${id}`);
+  }
+  protected dropMindNode(targetType: 'component' | 'construct', targetId: string, event: DragEvent): void {
+    if (!this.canEdit()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const dragging = this.draggingMindNode();
+    if (!dragging) return;
+    if (targetType === 'component' && dragging.type === 'construct') {
+      const construct = this.constructs().find((item) => this.uid(item) === dragging.id);
+      if (construct) this.moveConstructToComponent(construct, targetId);
+    }
+    if (targetType === 'construct' && dragging.type === 'entity') {
+      const entity = this.entities().find((item) => this.uid(item) === dragging.id);
+      if (entity) this.moveEntityToConstruct(entity, targetId);
+    }
+    if (targetType === 'construct' && dragging.type === 'task') {
+      const task = this.taskDefs().find((item) => this.uid(item) === dragging.id);
+      if (task) this.moveTaskToConstruct(task, targetId);
+    }
+    this.draggingMindNode.set(null);
+  }
+  private createMindSibling(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): void {
+    if (node.type === 'construct') {
+      const construct = this.constructs().find((item) => this.uid(item) === node.id);
+      const component = construct ? this.components().find((item) => this.uid(item) === this.constructComponentId(construct)) : null;
+      if (component) this.createTreeConstructForComponent(component);
+    }
+    if (node.type === 'entity') {
+      const entity = this.entities().find((item) => this.uid(item) === node.id);
+      const construct = entity ? this.constructs().find((item) => this.uid(item) === (entity.businessConstructUid || entity.constructUid)) : null;
+      if (construct) this.createEntityForConstruct(construct);
+    }
+    if (node.type === 'task') {
+      const task = this.taskDefs().find((item) => this.uid(item) === node.id);
+      const construct = task ? this.constructs().find((item) => this.uid(item) === task.constructUid) : null;
+      if (construct) this.createTaskForConstruct(construct);
+    }
+  }
+  private openOrCreateMindChild(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): void {
+    if (node.type === 'component') {
+      const component = this.components().find((item) => this.uid(item) === node.id);
+      if (component) this.createTreeConstructForComponent(component);
+    }
+    if (node.type === 'construct') {
+      this.mindChildMenu.set({ constructId: node.id, active: 'entity' });
+    }
   }
   protected toggleComponentConstructs(comp: LegacyComp): void {
     const id = this.uid(comp);
@@ -266,27 +547,29 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected removeEntity(entity: LegacyEntity): void { if (!this.canEdit()) return; entity.businessConstructUid = ''; entity.businessConstructId = ''; entity.businessConstructUids = []; entity.constructUid = ''; entity.constructId = ''; this.touch(); }
   protected addTaskDefTo(td: LegacyTaskDef, construct: LegacyConstruct): void { if (!this.canEdit()) return; td.constructUid = this.uid(construct); this.touch(); }
   protected removeTaskDef(td: LegacyTaskDef): void { if (!this.canEdit()) return; td.constructUid = ''; this.touch(); }
-  protected createEntityForConstruct(construct: LegacyConstruct): void {
-    if (!this.canEdit()) return;
+  protected createEntityForConstruct(construct: LegacyConstruct): LegacyEntity | null {
+    if (!this.canEdit()) return null;
     const doc = this.doc();
     doc.entities ||= [];
     const id = 'ENT' + Date.now();
-    doc.entities.push({
+    const entity: LegacyEntity = {
       uid: id,
       id,
       name: this.uniqueEntityName('新实体'),
       fields: [],
       businessConstructUid: this.uid(construct),
       businessConstructUids: [this.uid(construct)],
-    });
+    };
+    doc.entities.push(entity);
     this.touch();
+    return entity;
   }
-  protected createTaskForConstruct(construct: LegacyConstruct): void {
-    if (!this.canEdit()) return;
+  protected createTaskForConstruct(construct: LegacyConstruct): LegacyTaskDef | null {
+    if (!this.canEdit()) return null;
     const doc = this.doc();
     doc.taskDefinitions ||= [];
     const id = 'TASK' + Date.now();
-    doc.taskDefinitions.push({
+    const task: LegacyTaskDef = {
       uid: id,
       id,
       name: this.uniqueTaskName('新任务'),
@@ -295,8 +578,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
       businessComponentUid: this.constructComponentId(construct),
       parameters: { inputs: [], outputs: [] },
       technicalHandover: { runtimeKind: '', target: '', note: '' },
-    });
+    };
+    doc.taskDefinitions.push(task);
     this.touch();
+    return task;
   }
   protected createConstructForComponent(comp: LegacyComp | null): void {
     if (!this.canEdit()) return;
@@ -316,6 +601,57 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     if (comp) comp.constructUids = [...new Set([...(comp.constructUids || []), id])];
     this.setSelectedConstruct(construct);
     this.switchTab('businessConstruct');
+    this.touch();
+  }
+  protected createTreeConstructForComponent(comp: LegacyComp): void {
+    if (!this.canEdit()) return;
+    const doc = this.doc();
+    doc.businessConstructs ||= [];
+    const id = 'CSTR' + Date.now();
+    const construct: LegacyConstruct = {
+      uid: id,
+      id,
+      name: this.uniqueConstructName('新构件'),
+      note: '',
+      businessComponentUid: this.uid(comp),
+      businessComponentId: this.uid(comp),
+      businessComponent: comp.name || '',
+    };
+    doc.businessConstructs.push(construct);
+    comp.constructUids = [...new Set([...(comp.constructUids || []), id])];
+    this.expandedTreeComponentId.set(this.uid(comp));
+    this.expandedTreeConstructId.set(id);
+    this.setSelectedConstruct(construct);
+    this.touch();
+  }
+  protected moveConstructToComponent(construct: LegacyConstruct, componentId: string): void {
+    if (!this.canEdit()) return;
+    const comp = this.components().find((item) => this.uid(item) === componentId) || null;
+    if (comp) {
+      this.attachConstructToComponent(construct, comp);
+      this.expandedTreeComponentId.set(this.uid(comp));
+      this.expandedTreeConstructId.set(this.uid(construct));
+    }
+  }
+  protected moveEntityToConstruct(entity: LegacyEntity, constructId: string): void {
+    if (!this.canEdit()) return;
+    const construct = this.constructs().find((item) => this.uid(item) === constructId);
+    if (!construct) return;
+    entity.businessConstructUid = constructId;
+    entity.businessConstructId = constructId;
+    entity.businessConstructUids = [constructId];
+    entity.constructUid = constructId;
+    entity.constructId = constructId;
+    this.expandedTreeConstructId.set(constructId);
+    this.touch();
+  }
+  protected moveTaskToConstruct(task: LegacyTaskDef, constructId: string): void {
+    if (!this.canEdit()) return;
+    const construct = this.constructs().find((item) => this.uid(item) === constructId);
+    if (!construct) return;
+    task.constructUid = constructId;
+    task.businessComponentUid = this.constructComponentId(construct);
+    this.expandedTreeConstructId.set(constructId);
     this.touch();
   }
   protected createConstructForSelectedComponent(): void {
@@ -508,7 +844,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected componentKind(comp: LegacyComp): 'core' | 'generic' {
     return comp.kind === 'generic' || comp.kind === 'common' ? 'generic' : 'core';
   }
-  private constructComponentId(construct: LegacyConstruct): string {
+  protected constructComponentId(construct: LegacyConstruct): string {
     return String(construct.businessComponentUid || construct.businessComponentId || '').trim();
   }
   private detachConstructFromComponents(construct: LegacyConstruct): void {

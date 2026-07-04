@@ -318,73 +318,116 @@
   <!-- 业务构件New：按人的功能树思路向右展开，节点是具体元素，类型只作为标签附着在节点上。 -->
   @if (activeTab() === 'businessConstructNew') {
     <div class="comp-tab-body business-tree-view" data-testid="business-construct-tree-view">
-      <div class="business-tree-canvas">
-        @for (group of groupedTreeComponents(); track group.kind) {
-          <section class="business-tree-group" [class.is-generic]="group.kind === 'generic'">
-            <header>
-              <strong>{{ group.title }}</strong>
-              <span>{{ group.components.length }} 个组件</span>
-            </header>
-            <div class="business-tree-map">
-              @for (comp of group.components; track uid(comp)) {
-                <article class="business-tree-branch" [class.is-open]="isTreeComponentExpanded(comp)">
-                  <button class="business-tree-node business-tree-node--component" [class.is-generic]="group.kind === 'generic'" [attr.data-testid]="'business-tree-component-' + uid(comp)" type="button" (click)="toggleTreeComponent(comp)">
-                    <span class="business-tree-tag" [class.is-generic]="group.kind === 'generic'">{{ group.title }}</span>
-                    <strong>{{ comp.name || uid(comp) }}</strong>
-                    <small>{{ treeComponentSummary(comp) }}</small>
-                    <span class="business-tree-fold">{{ isTreeComponentExpanded(comp) ? '−' : '+' }}</span>
-                  </button>
-                  @if (isTreeComponentExpanded(comp)) {
-                    <div class="business-tree-children" [attr.data-testid]="'business-tree-children-' + uid(comp)">
+      <header class="business-mindmap-toolbar">
+        <div>
+          <strong>业务组件功能图</strong>
+          <span>Enter 新增同级，Tab 新增子级，T 新增任务，双击重命名，Ctrl+滚轮缩放；拖拽构件、实体、任务可调整归属。</span>
+        </div>
+        <div class="business-mindmap-tools">
+          <span data-testid="business-mindmap-zoom">{{ mindMapZoomPercent() }}%</span>
+          <button class="business-tree-action" data-testid="mind-collapse-all" type="button" (click)="collapseAllMindNodes()">全部折叠</button>
+          <button class="business-tree-action" data-testid="mind-expand-all" type="button" (click)="expandAllMindNodes()">全部展开</button>
+          <button class="business-tree-action" type="button" (click)="resetMindMapZoom()">重置缩放</button>
+        </div>
+      </header>
+      <div class="business-mindmap-canvas" data-testid="business-mindmap-canvas" tabindex="0" (wheel)="onMindMapWheel($event)" (keydown)="onMindMapKeydown($event)">
+        <div class="business-mindmap-stage" [style.transform]="'scale(' + mindMapZoom() + ')'">
+          <div class="mind-root">业务组件</div>
+          <div class="mind-groups">
+            @for (group of groupedTreeComponents(); track group.kind) {
+              <section class="mind-group" [class.is-generic]="group.kind === 'generic'">
+                <header>
+                  <strong>{{ group.title }}</strong>
+                  <span>{{ group.components.length }} 个组件</span>
+                </header>
+                @for (comp of group.components; track uid(comp)) {
+                  <article class="mind-row">
+                    <button class="mind-node mind-node--component" [class.is-generic]="group.kind === 'generic'" [class.is-selected]="isMindNodeSelected('component', uid(comp))" [attr.data-testid]="'mind-node-component-' + uid(comp)" type="button" draggable="true" (click)="selectMindNode('component', uid(comp), $event)" (dblclick)="startMindRename('component', uid(comp), $event)" (dragstart)="startMindDrag('component', uid(comp), $event)" (dragover)="$event.preventDefault()" (drop)="dropMindNode('component', uid(comp), $event)">
+                      <span class="business-tree-tag" [class.is-generic]="group.kind === 'generic'">{{ group.title }}</span>
+                      @if (isMindNodeEditing('component', uid(comp))) {
+                        <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="comp.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('component', uid(comp), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
+                      } @else {
+                        <strong>{{ comp.name || uid(comp) }}</strong>
+                      }
+                      <small>{{ treeComponentSummary(comp) }}</small>
+                      @if (constructsFor(comp).length) {
+                        <span class="mind-fold" [attr.data-testid]="'mind-collapse-component-' + uid(comp)" (click)="toggleMindComponent(comp, $event)">{{ isMindComponentCollapsed(comp) ? '+' : '-' }}</span>
+                      }
+                    </button>
+                    <div class="mind-branch">
+                      @if (!isMindComponentCollapsed(comp)) {
                       @for (construct of constructsFor(comp); track uid(construct)) {
-                        <section class="business-tree-construct-line" [class.is-open]="isTreeConstructExpanded(construct)">
-                          <button class="business-tree-node business-tree-node--construct" [attr.data-testid]="'business-tree-construct-' + uid(construct)" type="button" (click)="toggleTreeConstruct(construct, $event)">
-                            <strong>{{ construct.name || uid(construct) }}</strong>
+                        <section class="mind-construct">
+                          <button class="mind-node mind-node--construct" [class.is-selected]="isMindNodeSelected('construct', uid(construct))" [attr.data-testid]="'mind-node-construct-' + uid(construct)" type="button" draggable="true" (click)="selectMindNode('construct', uid(construct), $event)" (dblclick)="startMindRename('construct', uid(construct), $event)" (dragstart)="startMindDrag('construct', uid(construct), $event)" (dragover)="$event.preventDefault()" (drop)="dropMindNode('construct', uid(construct), $event)">
+                            @if (isMindNodeEditing('construct', uid(construct))) {
+                              <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="construct.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('construct', uid(construct), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
+                              <span class="mind-input-label">{{ construct.name || uid(construct) }}</span>
+                            } @else {
+                              <strong>{{ construct.name || uid(construct) }}</strong>
+                            }
                             <small>{{ entitiesFor(construct).length }} 个实体 · {{ taskDefsFor(construct).length }} 个任务</small>
-                            <span class="business-tree-fold">{{ isTreeConstructExpanded(construct) ? '−' : '+' }}</span>
+                            @if (entitiesFor(construct).length || taskDefsFor(construct).length) {
+                              <span class="mind-fold" [attr.data-testid]="'mind-collapse-construct-' + uid(construct)" (click)="toggleMindConstruct(construct, $event)">{{ isMindConstructCollapsed(construct) ? '+' : '-' }}</span>
+                            }
                           </button>
-                          @if (isTreeConstructExpanded(construct)) {
-                            <div class="business-tree-leaves" [attr.data-testid]="'business-tree-leaves-' + uid(construct)">
-                              <div class="business-tree-leaf-group">
-                                @for (entity of entitiesFor(construct); track uid(entity)) {
-                                  <button class="business-tree-node business-tree-node--entity" [attr.data-testid]="'business-tree-entity-' + uid(entity)" type="button" (click)="openEntityFromTree(entity, construct)">
-                                    <strong>{{ entity.name || uid(entity) }}</strong>
-                                    <small>{{ fieldCount(entity) }} 个字段</small>
-                                  </button>
-                                } @empty {
-                                  <div class="business-tree-empty">暂无实体</div>
-                                }
-                              </div>
-                              <div class="business-tree-leaf-group">
-                                @for (task of taskDefsFor(construct); track uid(task)) {
-                                  <button class="business-tree-node business-tree-node--task" [attr.data-testid]="'business-tree-task-' + uid(task)" type="button" (click)="openTaskFromTree(task, construct)">
-                                    <span class="business-tree-tag task">{{ task.type || 'Query' }}</span>
-                                    <strong>{{ task.name || uid(task) }}</strong>
-                                    <small>{{ taskNodeCount(task) }} 个节点引用</small>
-                                  </button>
-                                } @empty {
-                                  <div class="business-tree-empty">暂无任务</div>
-                                }
-                              </div>
+                          @if (isMindChildMenuOpenFor(construct)) {
+                            <div class="mind-child-menu" data-testid="mind-child-menu">
+                              <div class="mind-child-option" data-testid="mind-child-option-entity" [class.is-active]="isMindChildOptionActive('entity')">实体</div>
+                              <div class="mind-child-option" data-testid="mind-child-option-task" [class.is-active]="isMindChildOptionActive('task')">任务</div>
                             </div>
+                          }
+                          @if (!isMindConstructCollapsed(construct)) {
+                          <div class="mind-leaves" [attr.data-testid]="'business-tree-leaves-' + uid(construct)">
+                            <div>
+                              @for (entity of entitiesFor(construct); track uid(entity)) {
+                                <button class="mind-node mind-node--entity" [class.is-selected]="isMindNodeSelected('entity', uid(entity))" [attr.data-testid]="'mind-node-entity-' + uid(entity)" type="button" draggable="true" (click)="canEdit() ? selectMindNode('entity', uid(entity), $event) : openEntityFromTree(entity, construct)" (dblclick)="startMindRename('entity', uid(entity), $event)" (dragstart)="startMindDrag('entity', uid(entity), $event)">
+                                  @if (isMindNodeEditing('entity', uid(entity))) {
+                                    <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="entity.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('entity', uid(entity), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
+                                  } @else {
+                                    <strong>{{ entity.name || uid(entity) }}</strong>
+                                  }
+                                  <small>{{ fieldCount(entity) }} 个字段</small>
+                                </button>
+                              } @empty {
+                                <div class="business-tree-empty">暂无实体</div>
+                              }
+                            </div>
+                            <div>
+                              @for (task of taskDefsFor(construct); track uid(task)) {
+                                <button class="mind-node mind-node--task" [class.is-selected]="isMindNodeSelected('task', uid(task))" [attr.data-testid]="'mind-node-task-' + uid(task)" type="button" draggable="true" (click)="canEdit() ? selectMindNode('task', uid(task), $event) : openTaskFromTree(task, construct)" (dblclick)="startMindRename('task', uid(task), $event)" (dragstart)="startMindDrag('task', uid(task), $event)">
+                                  <span class="business-tree-tag task">{{ task.type || 'Query' }}</span>
+                                  @if (isMindNodeEditing('task', uid(task))) {
+                                    <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="task.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('task', uid(task), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
+                                  } @else {
+                                    <strong>{{ task.name || uid(task) }}</strong>
+                                  }
+                                  <small>{{ taskNodeCount(task) }} 个节点引用</small>
+                                </button>
+                              } @empty {
+                                <div class="business-tree-empty">暂无任务</div>
+                              }
+                            </div>
+                          </div>
                           }
                         </section>
                       } @empty {
                         <div class="business-tree-empty">暂无构件</div>
                       }
+                      }
                     </div>
-                  }
-                </article>
-              }
-            </div>
-          </section>
-        } @empty {
-          <div class="business-empty-state">
-            <strong>暂无业务组件</strong>
-            <span>功能树需要先有具体组件、构件、实体或任务。</span>
+                  </article>
+                }
+              </section>
+            } @empty {
+              <div class="business-empty-state">
+                <strong>暂无业务组件</strong>
+                <span>功能树需要先有具体组件、构件、实体或任务。</span>
+              </div>
+            }
           </div>
-        }
+        </div>
       </div>
+
     </div>
   }
 
