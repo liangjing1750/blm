@@ -26,6 +26,24 @@
 .app-interface-meta span { border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; color: #64748b; font-size: 11px; padding: 4px 6px; text-align: center; }
 .app-service-empty-inline, .app-service-empty-state { color: #94a3b8; font-size: 12px; padding: 16px; }
 .app-service-empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #fff; }
+.app-service-shell { display: grid; grid-template-columns: 220px minmax(360px, 1fr) minmax(360px, 460px); gap: 12px; min-height: 0; height: calc(100% - 44px); }
+.app-service-nav, .app-interface-list, .app-service-detail { min-height: 0; overflow: auto; border: 1px solid #dbe5f0; border-radius: 10px; background: #fff; }
+.app-service-nav { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.app-service-nav-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 8px; background: #fff; color: #334155; padding: 9px 10px; cursor: pointer; text-align: left; }
+.app-service-nav-item:hover, .app-service-nav-item.active { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+.app-service-nav-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
+.app-service-nav-item strong { border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 11px; padding: 2px 7px; }
+.app-service-nav-actions { display: flex; gap: 6px; padding: 6px 2px 2px; }
+.app-interface-list { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.app-interface-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; }
+.app-interface-row:hover, .app-interface-row.active { border-color: #3b82f6; background: #f8fbff; }
+.app-interface-row > div { min-width: 0; }
+.app-interface-row strong, .app-interface-row code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-interface-counts { color: #64748b; font-size: 12px; white-space: nowrap; }
+.app-service-detail { padding: 14px 16px; }
+.app-service-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 12px; }
+.app-service-detail-head h3 { margin: 6px 0 3px; color: #0f172a; font-size: 17px; }
+.app-service-detail-head code { color: #64748b; font-size: 12px; background: #f1f5f9; border-radius: 5px; padding: 2px 6px; }
 .svc-groups { display: flex; flex-direction: column; gap: 12px; }
 .svc-group { border: 1px solid #dbe5f0; border-radius: 10px; background: #f8fafc; overflow: hidden; }
 .svc-group-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; }
@@ -100,6 +118,8 @@
 .orch-param-label { font-size: 10px; font-weight: 700; color: #94a3b8; margin-right: 2px; }
 .orch-param { background: #f1f5f9; border-radius: 4px; font-size: 10px; padding: 1px 6px; color: #475569; }
 .orch-param.required { background: #fef3c7; color: #92400e; }
+.orch-param-warning, .orch-map-warning { display: inline-flex; align-items: center; border-radius: 999px; background: #fff7ed; border: 1px solid #fed7aa; color: #c2410c; font-size: 11px; font-weight: 700; padding: 2px 8px; width: fit-content; }
+.orch-map-warning { flex: 0 0 auto; }
 
 .orch-mapping-row { display: flex; align-items: center; gap: 4px; padding: 4px 0; flex-wrap: wrap; }
 .orch-mapping-row input { min-width: 180px; flex: 1 1 220px; border: 1px solid #e2e8f0; border-radius: 5px; font-size: 12px; padding: 5px 7px; }

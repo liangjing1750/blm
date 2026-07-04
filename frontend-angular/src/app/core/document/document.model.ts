@@ -80,6 +80,7 @@ export interface ProcessNode {
   entity_ops?: EntityOperation[];
   forms?: ProcessForm[];
   serviceUids?: string[];
+  taskDefinitionUids?: string[];
 }
 
 export interface EntityOperation {

@@ -93,6 +93,7 @@ export function normalizeDocument(raw: Partial<BlmDocument> | null | undefined):
   document.businessComponents = document.businessComponents.map((component, index) => normalizeComponent(component, index));
   document.businessConstructs = document.businessConstructs.map((construct, index) => normalizeConstruct(construct, index));
   document.taskDefinitions = document.taskDefinitions.map((taskDefinition, index) => normalizeTaskDefinition(taskDefinition, index));
+  migrateLegacyNodeTaskOrchestration(document);
   document.serviceGroups = document.serviceGroups.map((group, index) => normalizeServiceGroup(group, index));
   document.services = document.services.map((service, index) => normalizeService(document, service, index));
   document.terms = document.terms.map((term, index) => ({
@@ -116,6 +117,92 @@ function normalizeServiceGroup(group: ServiceGroup, index: number): ServiceGroup
     name: String(group.name || `服务${index + 1}`).trim(),
     desc: String(group.desc || '').trim(),
   };
+}
+
+function migrateLegacyNodeTaskOrchestration(document: BlmDocument): void {
+  const serviceGroups = document.serviceGroups as ServiceGroup[];
+  const services = document.services as ApplicationService[];
+  const serviceByNode = new Map<string, ApplicationService>();
+  for (const service of services) {
+    for (const nodeRef of service.nodeRefs || []) {
+      if (nodeRef) serviceByNode.set(String(nodeRef), service);
+    }
+  }
+
+  for (const process of document.processes) {
+    const processUid = identityOf(process);
+    const processName = String(process.name || processUid || '流程').trim();
+    let groupUid = `service-group-${safeIdentitySegment(processUid || processName)}`;
+    for (const node of process.nodes || []) {
+      const nodeUid = identityOf(node);
+      const taskDefinitionUids = legacyNodeTaskDefinitionUids(node);
+      if (!nodeUid || !taskDefinitionUids.length) continue;
+      node.serviceUids ||= [];
+      if (serviceByNode.has(nodeUid)) {
+        const existing = serviceByNode.get(nodeUid)!;
+        if (!node.serviceUids.includes(existing.uid)) node.serviceUids.push(existing.uid);
+        continue;
+      }
+
+      if (!serviceGroups.some((group) => identityOf(group) === groupUid)) {
+        serviceGroups.push({
+          uid: groupUid,
+          name: `${processName}应用服务`,
+          desc: '由流程节点任务编排迁移生成',
+        });
+      }
+
+      const serviceUid = uniqueServiceUid(services, `service-${safeIdentitySegment(nodeUid)}`);
+      const nodeName = String(node.name || nodeUid).trim();
+      const service: ApplicationService = {
+        uid: serviceUid,
+        name: `${nodeName}应用接口`,
+        serviceGroupUid: groupUid,
+        method: 'POST',
+        path: '',
+        desc: '由流程节点任务编排迁移生成',
+        taskDefinitionUids,
+        nodeRefs: [nodeUid],
+        requestParams: [],
+        responseParams: [],
+        orchestration: {
+          variables: [],
+          steps: taskDefinitionUids.map((taskDefinitionUid, index) => legacyTaskStep(document, serviceUid, taskDefinitionUid, index)),
+          returnMapping: [],
+        },
+      };
+      services.push(service);
+      serviceByNode.set(nodeUid, service);
+      if (!node.serviceUids.includes(serviceUid)) node.serviceUids.push(serviceUid);
+    }
+  }
+}
+
+function legacyNodeTaskDefinitionUids(node: Process['nodes'][number]): string[] {
+  const nodeLike = node as Process['nodes'][number] & {
+    tasks?: Array<string | { taskDefinitionUid?: string; taskDefUid?: string; uid?: string; id?: string }>;
+    taskDefinitions?: Array<string | { uid?: string; id?: string }>;
+  };
+  return uniqueStrings([
+    ...(node.taskDefinitionUids || []),
+    ...(nodeLike.tasks || []).map((task) => typeof task === 'string' ? task : task.taskDefinitionUid || task.taskDefUid || task.uid || task.id || ''),
+    ...(nodeLike.taskDefinitions || []).map((task) => typeof task === 'string' ? task : task.uid || task.id || ''),
+  ]);
+}
+
+function safeIdentitySegment(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'item';
+}
+
+function uniqueServiceUid(services: ApplicationService[], baseUid: string): string {
+  const used = new Set(services.map((service) => identityOf(service)));
+  if (!used.has(baseUid)) return baseUid;
+  let index = 2;
+  while (used.has(`${baseUid}-${index}`)) index += 1;
+  return `${baseUid}-${index}`;
 }
 
 function normalizeComponent(component: BusinessComponent, index: number): BusinessComponent {

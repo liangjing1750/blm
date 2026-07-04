@@ -213,6 +213,51 @@ describe('document model algorithms', () => {
     ]);
   });
 
+  it('migrates legacy node task orchestration into node-scoped application interfaces', () => {
+    const document = normalizeDocument({
+      meta: { domain: '测试模型' },
+      processes: [
+        {
+          uid: 'process-inbound',
+          name: '入库流程',
+          nodes: [
+            {
+              uid: 'node-submit',
+              name: '提交入库预约',
+              taskDefinitionUids: ['task-check-warehouse', 'task-save-reservation'],
+            } as any,
+          ],
+        },
+      ],
+      taskDefinitions: [
+        { uid: 'task-check-warehouse', name: '校验仓库状态' },
+        { uid: 'task-save-reservation', name: '保存入库预约' },
+      ],
+    });
+
+    expect(document.serviceGroups).toEqual([
+      { uid: 'service-group-process-inbound', name: '入库流程应用服务', desc: '由流程节点任务编排迁移生成' },
+    ]);
+    expect(document.services.map((service) => ({
+      uid: service.uid,
+      name: service.name,
+      serviceGroupUid: service.serviceGroupUid,
+      nodeRefs: service.nodeRefs,
+      taskDefinitionUids: service.taskDefinitionUids,
+      steps: service.orchestration?.steps.map((step) => step.taskDefinitionUid),
+    }))).toEqual([
+      {
+        uid: 'service-node-submit',
+        name: '提交入库预约应用接口',
+        serviceGroupUid: 'service-group-process-inbound',
+        nodeRefs: ['node-submit'],
+        taskDefinitionUids: ['task-check-warehouse', 'task-save-reservation'],
+        steps: ['task-check-warehouse', 'task-save-reservation'],
+      },
+    ]);
+    expect(document.processes[0].nodes[0].serviceUids).toEqual(['service-node-submit']);
+  });
+
   it('keeps structured task parameters on task definitions', () => {
     const document = normalizeDocument({
       meta: { domain: '测试模型' },

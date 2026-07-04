@@ -2777,9 +2777,10 @@ describe('App', () => {
 
     const group = compiled.querySelector('[data-testid="service-group-card-group-inbound"]');
     expect(group?.textContent).toContain('入库预约服务');
-    expect(group?.textContent).toContain('提交入库预约');
-    expect(group?.textContent).toContain('/inbound-reservations/submit');
-    expect(compiled.querySelector('[data-testid="interface-card-interface-submit"]')).toBeTruthy();
+    const card = compiled.querySelector('[data-testid="interface-card-interface-submit"]');
+    expect(card?.textContent).toContain('提交入库预约');
+    expect(card?.textContent).toContain('/inbound-reservations/submit');
+    expect(card).toBeTruthy();
   });
 
   it('should let users maintain service groups and interfaces inside the selected group', async () => {
@@ -2828,6 +2829,8 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-card-group-inbound"]')?.click();
+    fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-group-inbound"]')?.click();
     fixture.detectChanges();
     const groupName = compiled.querySelector<HTMLInputElement>('[data-testid="service-group-name-group-inbound"]')!;
@@ -2862,8 +2865,12 @@ describe('App', () => {
 
     expect(runtime.doc.serviceGroups[0].name).toBe('入库预约服务');
     expect(runtime.doc.services.find((service: any) => service.uid === 'interface-submit')?.serviceGroupUid).toBe('group-outbound');
-    expect(compiled.querySelector('[data-testid="service-group-card-group-outbound"]')?.textContent).toContain('提交入库预约');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-card-group-outbound"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="interface-card-interface-submit"]')?.textContent).toContain('提交入库预约');
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-card-group-inbound"]')?.click();
+    fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-group-inbound"]')?.click();
     fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-delete-group-inbound"]')?.click();
@@ -2931,6 +2938,8 @@ describe('App', () => {
     expect(runtime.doc.services).toHaveLength(0);
     expect(confirmSpy).not.toHaveBeenCalled();
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-card-group-inbound"]')?.click();
+    fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-group-inbound"]')?.click();
     fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="service-group-delete-group-inbound"]')?.click();

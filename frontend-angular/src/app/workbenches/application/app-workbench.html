@@ -23,57 +23,89 @@
         }
       </div>
 
-      <div class="svc-groups app-service-groups">
-        @for (item of groupedServices(); track item.group ? uid(item.group) : '__ungrouped__') {
-          <section class="svc-group app-service-group-card" [attr.data-testid]="item.group ? 'service-group-card-' + uid(item.group) : 'service-group-card-ungrouped'">
-            <header class="svc-group-head app-service-group-head">
-              <div>
-                <strong>{{ serviceGroupTitle(item.group) }}</strong>
-                <p>{{ serviceGroupDesc(item.group) }}</p>
-              </div>
-              <span>{{ item.services.length }} 个接口</span>
-              @if (canEdit() && item.group; as group) {
-                <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-edit-' + uid(group)" (click)="openServiceGroupDrawer(group)">编辑服务</button>
-                <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-add-interface-' + uid(group)" (click)="createInterface(uid(group))">+ 接口</button>
-              } @else if (canEdit()) {
-                <button class="btn-ghost-sm" type="button" data-testid="service-group-add-interface-ungrouped" (click)="createInterface('')">+ 接口</button>
-              }
-            </header>
+      <div class="app-service-shell">
+        <aside class="app-service-nav" data-testid="service-group-rail">
+          <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()==='__all__'" (click)="selectServiceGroup('__all__')">
+            <span>全部服务</span><strong>{{ services().length }}</strong>
+          </button>
+          @for (group of serviceGroups(); track uid(group)) {
+            <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()===uid(group)" [attr.data-testid]="'service-group-card-' + uid(group)" (click)="selectServiceGroup(uid(group))">
+              <span>{{ group.name }}</span><strong>{{ serviceGroupCount(group) }}</strong>
+            </button>
+          }
+          <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()==='__ungrouped__'" data-testid="service-group-card-ungrouped" (click)="selectServiceGroup('__ungrouped__')">
+            <span>未分组接口</span><strong>{{ serviceGroupCount(null) }}</strong>
+          </button>
+          @if (canEdit() && selectedServiceGroup(); as group) {
+            <div class="app-service-nav-actions">
+              <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-edit-' + uid(group)" (click)="openServiceGroupDrawer(group)">编辑服务</button>
+              <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-add-interface-' + uid(group)" (click)="createInterface(uid(group))">+ 接口</button>
+            </div>
+          } @else if (canEdit() && selectedServiceGroupUid()==='__ungrouped__') {
+            <div class="app-service-nav-actions">
+              <button class="btn-ghost-sm" type="button" data-testid="service-group-add-interface-ungrouped" (click)="createInterface('')">+ 接口</button>
+            </div>
+          }
+        </aside>
 
-            <div class="svc-cards app-interface-grid">
-              @for (svc of item.services; track uid(svc)) {
-                <article class="svc-card app-interface-card" [attr.data-testid]="'interface-card-' + uid(svc)" (click)="openServiceDrawer(svc)">
-                  <div class="svc-head app-interface-card-head">
-                    <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
-                    <div>
-                      <strong>{{ svc.name || uid(svc) }}</strong>
-                      <code>{{ svc.path || '/' }}</code>
-                    </div>
-                    @if (canEdit()) {
-                      <button class="btn-ghost-sm" type="button" [attr.data-testid]="'interface-edit-' + uid(svc)" (click)="startEdit(svc); $event.stopPropagation()">编辑</button>
-                    }
-                  </div>
-                  <div class="app-interface-meta">
-                    <span>请求 {{ requestParamCount(svc) }}</span>
-                    <span>响应 {{ responseParamCount(svc) }}</span>
-                    <span>编排 {{ stepCount(svc) }}</span>
-                    <span>节点 {{ (svc.nodeRefs || []).length }}</span>
-                  </div>
-                </article>
-              } @empty {
-                <div class="app-service-empty-inline">暂无接口</div>
+        <section class="app-interface-list" data-testid="application-interface-list">
+          @for (svc of filteredServices(); track uid(svc)) {
+            <article class="svc-card app-interface-row" [class.active]="selectedService()?.uid === svc.uid" [attr.data-testid]="'interface-card-' + uid(svc)" (click)="selectService(svc)">
+              <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
+              <div>
+                <strong>{{ svc.name || uid(svc) }}</strong>
+                <code>{{ svc.path || '/' }}</code>
+              </div>
+              <span class="app-interface-counts">请求 {{ requestParamCount(svc) }} · 响应 {{ responseParamCount(svc) }} · 编排 {{ stepCount(svc) }} · 节点 {{ (svc.nodeRefs || []).length }}</span>
+              @if (canEdit()) {
+                <button class="btn-ghost-sm" type="button" [attr.data-testid]="'interface-edit-' + uid(svc)" (click)="startEdit(svc); $event.stopPropagation()">编辑</button>
+              }
+            </article>
+          } @empty {
+            <div class="app-service-empty-state">
+              <strong>暂无接口</strong>
+              <span>当前分类下还没有应用接口。</span>
+              @if (canEdit()) {
+                <button class="btn btn-primary btn-sm" type="button" (click)="createInterface(selectedServiceGroupUid()==='__ungrouped__' ? '' : selectedServiceGroupUid())">新建接口</button>
               }
             </div>
-          </section>
-        } @empty {
-          <div class="app-service-empty-state">
-            <strong>暂无应用服务</strong>
-            <span>先新建服务，再添加接口。</span>
-            @if (canEdit()) {
-              <button class="btn btn-primary btn-sm" type="button" (click)="createServiceGroup()">新建服务</button>
-            }
-          </div>
-        }
+          }
+        </section>
+
+        <aside class="app-service-detail" data-testid="application-interface-detail">
+          @if (selectedService(); as svc) {
+            <header class="app-service-detail-head">
+              <div>
+                <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
+                <h3>{{ svc.name || uid(svc) }}</h3>
+                <code>{{ svc.path || '/' }}</code>
+              </div>
+              @if (canEdit()) {
+                <button class="btn btn-outline btn-sm" type="button" (click)="startEdit(svc)">编辑接口</button>
+              }
+            </header>
+            <section class="drawer-section">
+              <div class="drawer-section-head"><strong>基础信息</strong></div>
+              <p class="drawer-read-row"><span>服务分类</span><strong>{{ serviceGroupTitle(serviceGroupFor(svc)) }}</strong></p>
+              <p class="drawer-read-row"><span>关联节点</span><strong>{{ (svc.nodeRefs || []).length }} 个</strong></p>
+              <p class="drawer-read-row"><span>说明</span><strong>{{ svc.desc || '暂无说明' }}</strong></p>
+            </section>
+            <section class="drawer-section">
+              <div class="drawer-section-head"><strong>请求参数</strong><span>{{ requestParamCount(svc) }}</span></div>
+              @for (row of paramRows(serviceRequestParams(svc)); track row.testPath) {
+                <p class="drawer-read-row" [style.padding-left.px]="row.level * 16"><span>{{ row.param.name || '未命名参数' }}</span><strong>{{ row.param.type || 'String' }}</strong></p>
+              } @empty { <p class="muted">暂无请求参数</p> }
+            </section>
+            <section class="drawer-section">
+              <div class="drawer-section-head"><strong>响应参数</strong><span>{{ responseParamCount(svc) }}</span></div>
+              @for (row of paramRows(serviceResponseParams(svc)); track row.testPath) {
+                <p class="drawer-read-row" [style.padding-left.px]="row.level * 16"><span>{{ row.param.name || '未命名参数' }}</span><strong>{{ row.param.type || 'String' }}</strong></p>
+              } @empty { <p class="muted">暂无响应参数</p> }
+            </section>
+          } @else {
+            <div class="app-service-empty-inline">请选择一个接口查看详情</div>
+          }
+        </aside>
       </div>
     </div>
   }
@@ -124,6 +156,9 @@
                   <div class="orch-step-params">
                     @if ((td.parameters?.inputs||[]).length) { <div class="orch-param-group"><span class="orch-param-label">输入</span>@for(p of td.parameters!.inputs!; track p.name){<span class="orch-param" [class.required]="p.required">{{ p.name }}</span>}</div> }
                     @if ((td.parameters?.outputs||[]).length) { <div class="orch-param-group"><span class="orch-param-label">输出</span>@for(p of td.parameters!.outputs!; track p.name){<span class="orch-param" [class.required]="p.required">{{ p.name }}</span>}</div> }
+                    @for (param of requiredInputWarnings(step); track param.name) {
+                      <span class="orch-param-warning" [attr.data-testid]="'required-param-warning-' + step.uid + '-' + param.name">{{ param.name }} 必填未映射</span>
+                    }
                   </div>
                 }
 
@@ -154,6 +189,9 @@
                       </select>
                       @if (canEdit()) {
                         <button class="btn-ghost-sm danger" type="button" (click)="removeInputMapping(step, mi)">×</button>
+                      }
+                      @if (mappingSourceWarning(svc, step, m); as warning) {
+                        <span class="orch-map-warning" [attr.data-testid]="'mapping-source-warning-' + step.uid + '-' + mi">{{ warning }}</span>
                       }
                     </div>
                   }

@@ -27,7 +27,24 @@ describe('ApplicationWorkbenchComponent', () => {
         parameterMappings: [],
         nodeRefs: [],
       }],
-      taskDefinitions: [{ uid: 'task-1', name: '保存订单', parameters: { inputs: [], outputs: [] } }],
+      taskDefinitions: [
+        {
+          uid: 'task-1',
+          name: '保存订单',
+          parameters: {
+            inputs: [{ name: 'orderId', type: 'String', required: true, note: '' }],
+            outputs: [{ name: 'savedId', type: 'String', required: false, note: '' }],
+          },
+        },
+        {
+          uid: 'task-2',
+          name: '创建待办',
+          parameters: {
+            inputs: [{ name: 'savedId', type: 'String', required: true, note: '' }],
+            outputs: [{ name: 'todoId', type: 'String', required: false, note: '' }],
+          },
+        },
+      ],
       processes: [],
       businessComponents: [],
       businessConstructs: [],
@@ -74,7 +91,7 @@ describe('ApplicationWorkbenchComponent', () => {
 
     const group = host.querySelector('[data-testid="service-group-card-service-group-1"]');
     expect(group?.textContent).toContain('订单服务');
-    expect(group?.textContent).toContain('1 个接口');
+    expect(group?.textContent).toContain('1');
 
     const card = host.querySelector('[data-testid="interface-card-svc-1"]');
     expect(card?.textContent).toContain('POST');
@@ -87,17 +104,17 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector('.svc-params-table')).toBeFalsy();
   });
 
-  it('opens an interface drawer in read-only mode when editing is closed', () => {
+  it('shows interface details in read-only mode when editing is closed', () => {
     host.querySelector<HTMLElement>('[data-testid="interface-card-svc-1"]')?.click();
     fixture.detectChanges();
 
-    const drawer = host.querySelector('[data-testid="service-interface-drawer"]');
-    expect(drawer?.textContent).toContain('提交订单');
-    expect(drawer?.textContent).toContain('/orders');
-    expect(drawer?.textContent).toContain('请求参数');
-    expect(drawer?.textContent).toContain('响应参数');
-    expect(drawer?.querySelector('input')).toBeFalsy();
-    expect(drawer?.querySelector('[data-testid^="service-save-"]')).toBeFalsy();
+    const detail = host.querySelector('[data-testid="application-interface-detail"]');
+    expect(detail?.textContent).toContain('提交订单');
+    expect(detail?.textContent).toContain('/orders');
+    expect(detail?.textContent).toContain('请求参数');
+    expect(detail?.textContent).toContain('响应参数');
+    expect(host.querySelector('[data-testid="service-interface-drawer"]')).toBeFalsy();
+    expect(detail?.querySelector('input')).toBeFalsy();
   });
 
   it('keeps application service mutations read-only until the editor is opened', () => {
@@ -122,6 +139,71 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.textContent).toContain('关闭编辑');
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-new"]')).toBeTruthy();
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-interface-new"]')).toBeTruthy();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-group-card-service-group-1"]')?.click();
+    fixture.detectChanges();
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-service-group-1"]')).toBeTruthy();
+  });
+
+  it('uses task definition parameters as orchestration mapping targets', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['applicationWorkbenchTab'] = 'orchestration';
+    runtime.doc.services[0].requestParams = [{ name: 'orderId', type: 'String', required: true, note: '' }];
+    runtime.doc.services[0].orchestration = {
+      variables: [],
+      steps: [{ uid: 'step-1', name: '保存订单', stepAlias: 'step1', taskDefinitionUid: 'task-1', inputMapping: [{ source: '', target: '' }], outputMapping: [] }],
+      returnMapping: [],
+    };
+    fixture = TestBed.createComponent(ApplicationWorkbenchComponent);
+    fixture.detectChanges();
+    host = fixture.nativeElement as HTMLElement;
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    (fixture.componentInstance as any).selectOrchestrationService('svc-1');
+    fixture.detectChanges();
+
+    const targetOptions = Array.from(host.querySelectorAll<HTMLOptionElement>('[data-testid="mapping-input-target-step-1-0"] option'))
+      .map((option) => option.value);
+    expect(targetOptions).toContain('orderId');
+    expect(targetOptions).not.toContain('manualOnlyParam');
+    expect(host.querySelector('[data-testid="required-param-warning-step-1-orderId"]')?.textContent).toContain('必填未映射');
+  });
+
+  it('warns before reordering steps and clears mappings whose source is no longer in context', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['applicationWorkbenchTab'] = 'orchestration';
+    runtime.doc.services[0].requestParams = [{ name: 'orderId', type: 'String', required: true, note: '' }];
+    runtime.doc.services[0].orchestration = {
+      variables: [],
+      steps: [
+        { uid: 'step-1', name: '保存订单', stepAlias: 'step1', taskDefinitionUid: 'task-1', inputMapping: [], outputMapping: [] },
+        { uid: 'step-2', name: '创建待办', stepAlias: 'step2', taskDefinitionUid: 'task-2', inputMapping: [{ source: 'step.step1.output.savedId', target: 'savedId' }], outputMapping: [] },
+      ],
+      returnMapping: [],
+    };
+    const confirmations: string[] = [];
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      confirmations.push(detail.message);
+      detail.markHandled();
+      detail.resolve(true);
+    };
+    window.addEventListener('blm-runtime-confirm', listener);
+    try {
+      fixture = TestBed.createComponent(ApplicationWorkbenchComponent);
+      fixture.detectChanges();
+      host = fixture.nativeElement as HTMLElement;
+      (fixture.componentInstance as any).editorOpen.set(true);
+      (fixture.componentInstance as any).selectOrchestrationService('svc-1');
+      await (fixture.componentInstance as any).moveStep(runtime.doc.services[0], 1, -1);
+      fixture.detectChanges();
+    } finally {
+      window.removeEventListener('blm-runtime-confirm', listener);
+    }
+
+    expect(confirmations[0]).toContain('输入映射可能需要重新设置');
+    const steps = runtime.doc.services[0].orchestration.steps;
+    expect(steps.map((step: any) => step.uid)).toEqual(['step-2', 'step-1']);
+    expect(steps[0].inputMapping[0].source).toBe('');
+    expect(host.querySelector('[data-testid="mapping-source-warning-step-2-0"]')?.textContent).toContain('来源已失效');
   });
 });

@@ -32,6 +32,8 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly activeTab = signal<AppTab>(this.restoreActiveTab());
   protected readonly svcKeyword = signal('');
   protected readonly orchSvcId = signal('');
+  protected readonly selectedServiceGroupUid = signal('__all__');
+  protected readonly selectedServiceId = signal('');
   protected readonly selectedStepUid = signal('');
   protected readonly editorOpen = signal(false);
   protected readonly serviceDrawerId = signal('');
@@ -65,8 +67,13 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   // ─── Tab 1: 应用服务 ──────────────────────────
   protected filteredServices(): LegacyService[] {
     const kw = this.svcKeyword().toLowerCase();
-    if (!kw) return this.services();
-    return this.services().filter((s) => (s.name || '').toLowerCase().includes(kw) || (s.path || '').toLowerCase().includes(kw));
+    const groupUid = this.selectedServiceGroupUid();
+    return this.services().filter((s) => {
+      const matchesKeyword = !kw || (s.name || '').toLowerCase().includes(kw) || (s.path || '').toLowerCase().includes(kw);
+      const matchesGroup = groupUid === '__all__'
+        || (groupUid === '__ungrouped__' ? !s.serviceGroupUid : String(s.serviceGroupUid || '') === groupUid);
+      return matchesKeyword && matchesGroup;
+    });
   }
 
   // 模块意图：服务分组只表达接口聚合，不表达部署单元或领域服务边界。
@@ -83,6 +90,31 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     const ungrouped = services.filter((service) => !service.serviceGroupUid || !groupedIds.has(String(service.serviceGroupUid)));
     if (ungrouped.length) result.push({ group: null, services: ungrouped });
     return result;
+  }
+
+  protected selectServiceGroup(groupUid: string): void {
+    this.selectedServiceGroupUid.set(groupUid);
+    this.selectedServiceId.set('');
+  }
+
+  protected selectedServiceGroup(): LegacyServiceGroup | null {
+    const groupUid = this.selectedServiceGroupUid();
+    return this.serviceGroups().find((group) => this.uid(group) === groupUid) || null;
+  }
+
+  protected serviceGroupCount(group: LegacyServiceGroup | null): number {
+    const groupUid = group ? this.uid(group) : '';
+    return this.services().filter((service) => group ? String(service.serviceGroupUid || '') === groupUid : !service.serviceGroupUid).length;
+  }
+
+  protected selectedService(): LegacyService | null {
+    const services = this.filteredServices();
+    return services.find((service) => this.uid(service) === this.selectedServiceId()) || services[0] || null;
+  }
+
+  protected selectService(svc: LegacyService): void {
+    this.ensureServiceShape(svc);
+    this.selectedServiceId.set(this.uid(svc));
   }
 
   protected orderedSteps(svc: LegacyService): OrchestrationStep[] { return this.orchestrationSteps(svc); }
@@ -109,6 +141,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected openServiceDrawer(svc: LegacyService): void {
     this.ensureServiceShape(svc);
+    this.selectService(svc);
     this.serviceDrawerId.set(this.uid(svc));
   }
   protected closeServiceDrawer(): void {
@@ -383,12 +416,19 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.selectedStepUid.set(steps[Math.min(idx, steps.length - 1)]?.uid || '');
     this.touch();
   }
-  protected moveStep(svc: LegacyService, idx: number, dir: number): void {
+  protected async moveStep(svc: LegacyService, idx: number, dir: number): Promise<void> {
     if (!this.canEdit()) return;
     const steps = this.orchestrationSteps(svc);
     const ni = idx + dir;
     if (ni < 0 || ni >= steps.length) return;
+    const confirmed = await confirmRuntimeAction('调整任务顺序会改变后续步骤可用的上下文，输入映射可能需要重新设置。继续调整吗？', {
+      title: '调整编排顺序',
+      confirmLabel: '调整并清理失效映射',
+    });
+    if (!confirmed) return;
     [steps[idx], steps[ni]] = [steps[ni], steps[idx]];
+    this.selectedStepUid.set(steps[ni]?.uid || steps[idx]?.uid || '');
+    this.repairInvalidInputMappings(svc);
     this.touch();
   }
   protected addInputMapping(step: OrchestrationStep): void {
@@ -471,6 +511,15 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     if (!step) return this.requestVariableOptions(svc);
     return this.inputSourceOptions(svc, step);
   }
+  protected requiredInputWarnings(step: OrchestrationStep): TaskParam[] {
+    const mappedTargets = new Set((step.inputMapping || []).filter((mapping) => mapping.source).map((mapping) => mapping.target));
+    return (this.stepTaskDef(step)?.parameters?.inputs || []).filter((param) => param.required && !mappedTargets.has(param.name));
+  }
+  protected mappingSourceWarning(svc: LegacyService, step: OrchestrationStep, mapping: ParamMappingV3): string {
+    if (mapping.source && !this.inputSourceOptions(svc, step).some((option) => option.value === mapping.source)) return '来源已失效';
+    if (!mapping.source && String(mapping.note || '').includes('来源已失效')) return '来源已失效';
+    return '';
+  }
   private requestVariableOptions(svc: LegacyService): VariableOption[] {
     return this.paramVariableOptions(this.serviceRequestParams(svc), 'request');
   }
@@ -495,6 +544,18 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     if (!name) return '';
     const type = String(param.type || '').toLowerCase();
     return type === 'array' || type === 'list' ? `${name}[]` : name;
+  }
+
+  private repairInvalidInputMappings(svc: LegacyService): void {
+    for (const step of this.orchestrationSteps(svc)) {
+      const validSources = new Set(this.inputSourceOptions(svc, step).map((option) => option.value));
+      for (const mapping of step.inputMapping || []) {
+        if (mapping.source && !validSources.has(mapping.source)) {
+          mapping.source = '';
+          mapping.note = '来源已失效：调换步骤顺序后原来源不在上下文中';
+        }
+      }
+    }
   }
 
   protected touch(): void { markAngularRuntimeModified(); this.version.update((v) => v + 1); }
