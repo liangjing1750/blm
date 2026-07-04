@@ -2,10 +2,10 @@ import { CommonModule } from '@angular/common';
 import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
-import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
 
-type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
+type ComponentTab = 'businessComponent' | 'businessConstruct' | 'businessConstructNew' | 'taskDef' | 'entity';
 
 interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; note?: string; entityUids?: string[]; taskDefinitionUids?: string[]; constructUids?: string[]; }
 interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; businessComponentId?: string; businessComponent?: string; }
@@ -16,7 +16,8 @@ interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: strin
 
 @Component({
   selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent, RichTextEditorComponent],
-  templateUrl: './component-workbench.html', styleUrl: './component-workbench.scss',
+  templateUrl: './component-workbench.html',
+  styleUrls: ['./component-workbench.scss', './component-workbench-tree.scss'],
 })
 export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   private readonly onRefresh = () => this.version.update((v) => v + 1);
@@ -40,6 +41,13 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected components(): LegacyComp[] { return this.doc().businessComponents || []; }
   protected coreComponents(): LegacyComp[] { return this.components().filter((comp) => this.componentKind(comp) === 'core'); }
   protected genericComponents(): LegacyComp[] { return this.components().filter((comp) => this.componentKind(comp) === 'generic'); }
+  protected groupedTreeComponents(): Array<{ kind: 'core' | 'generic'; title: string; components: LegacyComp[] }> {
+    const groups: Array<{ kind: 'core' | 'generic'; title: string; components: LegacyComp[] }> = [
+      { kind: 'core', title: '核心组件', components: this.coreComponents() },
+      { kind: 'generic', title: '通用组件', components: this.genericComponents() },
+    ];
+    return groups.filter((group) => group.components.length);
+  }
   protected constructs(): LegacyConstruct[] { return this.doc().businessConstructs || []; }
   protected entities(): LegacyEntity[] { return this.doc().entities || []; }
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
@@ -146,6 +154,16 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected openEntitiesForConstruct(construct: LegacyConstruct): void {
     this.setSelectedConstruct(construct);
     this.switchTab('entity');
+  }
+  protected openEntityFromTree(entity: LegacyEntity, construct: LegacyConstruct): void {
+    this.setSelectedConstruct(construct);
+    this.runtime.ui['entityId'] = this.uid(entity);
+    this.runtime.ui['entityView'] = this.runtime.ui['entityView'] || 'relation';
+    this.switchTab('entity');
+  }
+  protected openTaskFromTree(task: LegacyTaskDef, construct: LegacyConstruct): void {
+    this.openTaskDefinitionsForConstruct(construct);
+    this.taskDefKeyword.set(task.name || this.uid(task));
   }
   protected updateConstructInline(construct: LegacyConstruct, key: 'name' | 'note' | 'businessComponentUid', value: string): void {
     if (!this.canEdit()) return;
@@ -293,9 +311,13 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     else { const ex = (doc.businessComponents || []).find((c: any) => (c.uid || c.id) === d.uid); if (ex) Object.assign(ex, d); }
     this.compDrawer.set(null); this.touch();
   }
-  protected deleteComp(comp: LegacyComp): void {
+  protected async deleteComp(comp: LegacyComp): Promise<void> {
     if (!this.canEdit()) return;
-    if (!window.confirm(`确认删除业务组件“${comp.name || this.uid(comp)}”吗？组件下的构件会移入未分组。`)) return;
+    const confirmed = await confirmRuntimeAction(`确认删除业务组件“${comp.name || this.uid(comp)}”吗？组件下的构件会移入未分组。`, {
+      title: '删除业务组件',
+      confirmLabel: '删除',
+    });
+    if (!confirmed) return;
     for (const construct of this.constructsFor(comp)) {
       construct.businessComponentUid = '';
       construct.businessComponentId = '';
@@ -435,7 +457,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected async deleteTaskDef(td: LegacyTaskDef): Promise<void> {
     if (!this.canEdit()) return;
-    if (!window.confirm(`确认删除"${td.name || this.uid(td)}"吗？`)) return;
+    const confirmed = await confirmRuntimeAction(`确认删除“${td.name || this.uid(td)}”吗？`, {
+      title: '删除任务定义',
+      confirmLabel: '删除',
+    });
+    if (!confirmed) return;
     this.doc().taskDefinitions = this.taskDefs().filter((t) => (t.uid || t.id) !== (td.uid || td.id));
     this.touch();
   }
@@ -533,7 +559,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   private restoreActiveTab(): ComponentTab {
     const saved = String(this.runtime.ui['componentWorkbenchTab'] || '').trim();
     if (saved === 'component' || saved === 'service' || saved === 'orchestration') return 'businessComponent';
-    return ['businessComponent', 'businessConstruct', 'taskDef', 'entity'].includes(saved)
+    return ['businessComponent', 'businessConstruct', 'businessConstructNew', 'taskDef', 'entity'].includes(saved)
       ? saved as ComponentTab
       : 'businessComponent';
   }

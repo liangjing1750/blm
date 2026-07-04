@@ -190,6 +190,10 @@ describe('App', () => {
     expect(opened.searchParams.get('plugin')).toBe('blm-agent-plugin');
     expect(opened.searchParams.get('source')).toBe('blm');
     expect(opened.searchParams.get('handoffId')).toBe('handoff-test-1');
+    expect(opened.searchParams.get('userId')).toBe('user-ai-1');
+    expect(opened.searchParams.get('userName')).toBe('AI 用户');
+    expect(opened.searchParams.get('documentId')).toBe('agent.json');
+    expect(opened.searchParams.get('route')).toBe('/process?doc=agent.json&tab=process&proc=proc-inbound&task=node-submit');
   });
 
   it('should open a custom create-document dialog without browser prompt', () => {
@@ -3543,6 +3547,79 @@ describe('App', () => {
     expect(runtime.doc.processes[0].nodes[0].forms[0].sections[0].fields).toHaveLength(2);
   });
 
+  it('should keep form copy as a title-row icon and confirm before deleting a form', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库预约流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '客户提交入库预约',
+          roleIds: [],
+          userSteps: [],
+          forms: [
+            { uid: 'form-1', name: '预约表单', sections: [{ uid: 'sec-1', name: '基本信息', fields: [] }] },
+            { uid: 'form-2', name: '确认表单', sections: [{ uid: 'sec-2', name: '基本信息', fields: [] }] },
+          ],
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [],
+        }],
+      }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const confirmEvents: Array<{ message: string; resolve: (confirmed: boolean) => void; markHandled: () => void }> = [];
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const onConfirm = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      detail.markHandled();
+      confirmEvents.push(detail);
+    };
+    window.addEventListener('blm-runtime-confirm', onConfirm);
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.componentRef.setInput('editing', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const firstCard = compiled.querySelector<HTMLElement>('[data-testid="process-form-card"]')!;
+    const copyButton = firstCard.querySelector<HTMLButtonElement>('[data-testid="task-form-duplicate"]')!;
+    expect(copyButton.getAttribute('aria-label')).toContain('复制表单');
+    expect(copyButton.textContent?.trim()).not.toBe('复制');
+
+    firstCard.querySelector<HTMLButtonElement>('[data-testid="task-form-delete"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.doc.processes[0].nodes[0].forms).toHaveLength(2);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(confirmEvents).toHaveLength(1);
+    expect(confirmEvents[0].message).toContain('预约表单');
+
+    confirmEvents[0].resolve(true);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(runtime.doc.processes[0].nodes[0].forms).toHaveLength(1);
+    expect(runtime.doc.processes[0].nodes[0].forms[0].name).toBe('确认表单');
+
+    window.removeEventListener('blm-runtime-confirm', onConfirm);
+    confirmSpy.mockRestore();
+  });
+
   it('should cascade process options from the selected stage in the node editor', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
@@ -4504,6 +4581,10 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-delete-button"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('删除');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/copy', expect.objectContaining({ method: 'POST' }));
     expect(fetchSpy).toHaveBeenCalledWith('/api/version/create', expect.objectContaining({ method: 'POST' }));
@@ -4829,8 +4910,16 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="trash-clear-selected-button"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('回收站');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="trash-clear-all-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('回收站');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
     await fixture.whenStable();
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/trash/delete', expect.objectContaining({ method: 'POST' }));

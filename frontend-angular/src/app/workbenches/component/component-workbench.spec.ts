@@ -14,6 +14,8 @@ describe('ComponentWorkbenchComponent', () => {
     runtime.currentFile = 'workbench-test.json';
     runtime.ui['componentWorkbenchTab'] = 'businessComponent';
     runtime.ui['componentWorkbenchConstructId'] = '';
+    runtime.ui['entityView'] = 'relation';
+    runtime.ui['entityId'] = '';
     runtime.doc = {
       meta: { domain: 'Workbench Test' },
       businessComponents: [{ uid: 'comp-1', name: '订单组件', kind: 'core' }],
@@ -48,7 +50,7 @@ describe('ComponentWorkbenchComponent', () => {
 
   it('splits the component workspace into business component and construct views', () => {
     const tabs = Array.from(host.querySelectorAll('.proc-view-toolbar .view-toggle-group .vtb')).map((tab) => tab.textContent?.trim());
-    expect(tabs).toEqual(['业务组件', '业务构件', '任务定义', '实体定义']);
+    expect(tabs).toEqual(['业务组件', '业务构件', '业务构件New', '任务定义', '实体定义']);
     expect(host.textContent).not.toContain('组件构件');
     expect(host.querySelector('[data-testid="business-component-view"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="business-component-card"]')?.textContent).toContain('订单组件');
@@ -65,10 +67,46 @@ describe('ComponentWorkbenchComponent', () => {
     expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessConstruct');
     expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
     expect(host.querySelector('[data-testid="business-construct-view"]')?.textContent).toContain('订单构件');
+    expect(host.querySelector('[data-testid="business-construct-name-input"]')).toBeFalsy();
+    expect(host.querySelector('.business-construct-title-field')).toBeFalsy();
     expect(host.querySelector('[data-testid="business-construct-entities"]')?.textContent).toContain('订单');
     expect(host.querySelector('[data-testid="business-construct-tasks"]')?.textContent).toContain('查询订单');
     expect(host.querySelector('[data-testid="business-construct-return"]')).toBeFalsy();
     expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
+  });
+
+  it('renders a rightward business construct tree with element nodes and drills into definitions', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    fixture.detectChanges();
+
+    const tree = host.querySelector<HTMLElement>('[data-testid="business-construct-tree-view"]')!;
+    expect(tree).toBeTruthy();
+    expect(tree.querySelectorAll('.business-tree-column')).toHaveLength(4);
+    expect(tree.querySelector('[data-testid="business-tree-component-comp-1"]')?.textContent).toContain('订单组件');
+    expect(tree.querySelector('[data-testid="business-tree-construct-construct-1"]')?.textContent).toContain('订单构件');
+    expect(tree.querySelector('[data-testid="business-tree-entity-entity-1"]')?.textContent).toContain('订单');
+    expect(tree.querySelector('[data-testid="business-tree-task-task-1"]')?.textContent).toContain('查询订单');
+    expect(tree.querySelector('.business-tree-tag')?.textContent).toContain('核心组件');
+
+    tree.querySelector<HTMLButtonElement>('[data-testid="business-tree-entity-entity-1"]')?.click();
+    fixture.detectChanges();
+    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('entity');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="business-tree-task-task-1"]')?.click();
+    fixture.detectChanges();
+    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('taskDef');
+    expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
+  });
+
+  it('keeps construct header fixed while entity and task lists scroll independently', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-tab"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="business-construct-summary"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="business-construct-entity-scroll"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="business-construct-task-scroll"]')).toBeTruthy();
   });
 
   it('edits a construct inline and cascades component and construct selectors', () => {
@@ -176,14 +214,18 @@ describe('ComponentWorkbenchComponent', () => {
   it('confirms before deleting a business component', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const confirmSpy = vi.fn((event: Event) => {
+      event.preventDefault();
+      (event as CustomEvent<{ resolve: (confirmed: boolean) => void }>).detail.resolve(false);
+    });
+    window.addEventListener('blm-runtime-confirm', confirmSpy);
 
     host.querySelector<HTMLButtonElement>('.comp-grid-edit.danger')?.click();
     fixture.detectChanges();
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(getAngularRuntimeState().doc.businessComponents).toHaveLength(1);
-    confirmSpy.mockRestore();
+    window.removeEventListener('blm-runtime-confirm', confirmSpy);
   });
 
   it('moves ungrouped constructs into and out of a component from the component card', () => {
@@ -236,7 +278,7 @@ describe('ComponentWorkbenchComponent', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
     fixture.detectChanges();
 
-    host.querySelector<HTMLElement>('[data-testid="taskdef-head-task-1"]')?.click();
+    host.querySelector<HTMLElement>('.taskdef-card')?.click();
     fixture.detectChanges();
     const preview = host.querySelector<HTMLElement>('[data-testid="taskdef-note-preview-editor"]')!;
     expect(preview).toBeTruthy();
@@ -253,6 +295,18 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
 
     expect(runtime.doc.taskDefinitions[0].note).toContain('新的任务详情');
+  });
+
+  it('opens an empty task definition detail by clicking the whole task card', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('.taskdef-detail')).toBeFalsy();
+    host.querySelector<HTMLElement>('.taskdef-card')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('.taskdef-detail')).toBeTruthy();
+    expect(host.querySelector('.taskdef-empty-detail')?.textContent).toContain('暂无更多详情');
   });
 
   it('keeps entity relation view read-only until editing is opened', () => {
@@ -647,6 +701,79 @@ describe('ComponentWorkbenchComponent', () => {
     expect(entityHost.querySelectorAll('[data-testid="entity-state-link-endpoint-handle"]').length).toBe(4);
   });
 
+  it('uses legacy side-channel routing for backward and long forward state transitions', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: 'Order',
+      fields: [{ uid: 'field-1', name: 'Status', is_status: true, state_values: 'Start/Middle/Review/Done' }],
+      state_nodes: [
+        { name: 'Start', kind: 'initial' },
+        { name: 'Middle', kind: 'intermediate' },
+        { name: 'Review', kind: 'intermediate' },
+        { name: 'Done', kind: 'terminal' },
+      ],
+      state_transitions: [
+        { from: 'Start', to: 'Review', action: 'skip' },
+        { from: 'Review', to: 'Middle', action: 'return' },
+        { from: 'Done', to: 'Start', action: 'restart' },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('initialView', 'state');
+    entityFixture.componentRef.setInput('initialEntityId', 'entity-1');
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const paths = Array.from(entityHost.querySelectorAll<SVGPathElement>('[data-testid="entity-state-graph-link"]'))
+      .map((path) => path.getAttribute('d') || '');
+
+    const longForwardX = (paths[0].match(/L\s+(\d+)\s+\d+\s+L\s+\1\s+\d+/) || [])[1];
+    const backwardX = (paths[1].match(/L\s+(\d+)\s+\d+\s+L\s+\1\s+\d+/) || [])[1];
+    const restartX = (paths[2].match(/L\s+(\d+)\s+\d+\s+L\s+\1\s+\d+/) || [])[1];
+    const sideChannels = [longForwardX, backwardX, restartX].map(Number);
+    expect(sideChannels.every((x) => x < 80 || x > 320)).toBe(true);
+    expect(new Set(sideChannels).size).toBeGreaterThan(1);
+  });
+
+  it('honors legacy manual state route anchors', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: 'Order',
+      fields: [{ uid: 'field-1', name: 'Status', is_status: true, state_values: 'Draft/Review' }],
+      state_nodes: [
+        { name: 'Draft', kind: 'initial' },
+        { name: 'Review', kind: 'terminal' },
+      ],
+      state_transitions: [
+        { from: 'Draft', to: 'Review', action: 'submit', route: { mode: 'manual', fromAnchor: 'right', toAnchor: 'left', waypoints: [{ x: 360, y: 90 }] } },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('initialView', 'state');
+    entityFixture.componentRef.setInput('initialEntityId', 'entity-1');
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    const path = entityHost.querySelector<SVGPathElement>('[data-testid="entity-state-graph-link"]')?.getAttribute('d') || '';
+    const initialNode = entityHost.querySelector<HTMLElement>('.entity-state-node.kind-initial')!;
+    const terminalNode = entityHost.querySelector<HTMLElement>('.entity-state-node.kind-terminal')!;
+    const startX = parseInt(initialNode.style.left, 10) + parseInt(initialNode.style.width, 10);
+    const startY = parseInt(initialNode.style.top, 10) + parseInt(initialNode.style.height, 10) / 2;
+    const endX = parseInt(terminalNode.style.left, 10);
+    const endY = parseInt(terminalNode.style.top, 10) + parseInt(terminalNode.style.height, 10) / 2;
+
+    expect(path).toContain(`M ${startX} ${startY}`);
+    expect(path).toContain(`L ${endX} ${endY}`);
+  });
+
   it('persists legacy state transition route drags', () => {
     fixture.destroy();
     const runtime = getAngularRuntimeState();
@@ -751,11 +878,148 @@ describe('ComponentWorkbenchComponent', () => {
     expect(drawer.textContent).toContain('主：状态');
     expect(drawer.textContent).toContain('状态值来源');
     expect(drawer.textContent).toContain('状态节点属性');
-    expect(entityHost.querySelector('[data-testid="entity-transition-route-reset-all"]')).toBeTruthy();
-    expect(entityHost.querySelector('[data-testid="entity-transition-add-button"]')?.textContent).toContain('添加流转');
+    expect(entityHost.querySelector('[data-testid="entity-transition-route-reset-all"]')).toBeFalsy();
+    expect(entityHost.querySelector('[data-testid="entity-transition-add-button"]')).toBeFalsy();
+    expect(entityHost.querySelector('[data-testid="entity-transition-section-title"]')?.textContent).toContain('状态流转');
     expect(Array.from(drawer.querySelectorAll('option')).map((option) => option.textContent?.trim())).toEqual(
       expect.arrayContaining(['初始状态', '中间状态', '结束状态']),
     );
+  });
+
+  it('uses state-specific edit toolbar actions and shortcut hints', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: 'Order',
+      fields: [{ uid: 'field-1', name: 'Status', is_status: true, status_role: 'primary', state_values: 'Draft/Review/Done' }],
+      state_transitions: [{ from: 'Draft', to: 'Review', action: 'submit', field_name: 'Status' }],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('initialView', 'state');
+    entityFixture.componentRef.setInput('initialEntityId', 'entity-1');
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="state-editor-open"]')?.click();
+    entityFixture.detectChanges();
+
+    expect(entityHost.querySelector('[data-testid="entity-design-add-entity"]')).toBeNull();
+    expect(entityHost.querySelector('[data-testid="state-toolbar-add-transition"]')).toBeTruthy();
+    expect(entityHost.querySelector('[data-testid="state-toolbar-reset-routes"]')).toBeTruthy();
+    expect(entityHost.querySelector('[data-testid="entity-state-shortcut-hint"]')?.textContent).toContain('Ctrl+');
+  });
+
+  it('shows current state field values in transition dropdowns', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: 'Order',
+      fields: [
+        { uid: 'field-1', name: 'MainStatus', is_status: true, status_role: 'primary', state_values: 'Draft/Review/Done' },
+        { uid: 'field-2', name: 'SubStatus', status_role: 'secondary', state_values: 'Queued/Running/Closed' },
+      ],
+      state_transitions: [
+        { from: 'Queued', to: 'Running', action: 'start', field_name: 'SubStatus' },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('initialView', 'state');
+    entityFixture.componentRef.setInput('initialEntityId', 'entity-1');
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="state-editor-open"]')?.click();
+    entityFixture.detectChanges();
+    entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-state-field-select"]')!.value = 'SubStatus';
+    entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-state-field-select"]')!.dispatchEvent(new Event('change', { bubbles: true }));
+    entityFixture.detectChanges();
+
+    const options = Array.from(entityHost.querySelectorAll<HTMLOptionElement>('[data-testid="entity-transition-from-0"] option'))
+      .map((option) => option.textContent?.trim());
+    expect(options).toEqual(['Queued', 'Running', 'Closed']);
+  });
+
+  it('keeps legacy transition endpoint values selected even when they are absent from the state field list', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: 'Order',
+      fields: [{ uid: 'field-1', name: 'Status', is_status: true, status_role: 'primary', state_values: '初始状态/结束状态' }],
+      state_transitions: [
+        { from: '待复核', to: '复核驳回', action: '驳回', field_name: 'Status' },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('initialView', 'state');
+    entityFixture.componentRef.setInput('initialEntityId', 'entity-1');
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="state-editor-open"]')?.click();
+    entityFixture.detectChanges();
+
+    const from = entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-transition-from-0"]')!;
+    const to = entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-transition-to-0"]')!;
+    expect(from.value).toBe('待复核');
+    expect(to.value).toBe('复核驳回');
+    expect(Array.from(from.options).map((option) => option.value)).toContain('待复核');
+    expect(Array.from(to.options).map((option) => option.value)).toContain('复核驳回');
+  });
+
+  it('shows every state field diagram and keeps state editing integrated with local draft changes', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'state-edit-draft.json';
+    runtime.ui['entityView'] = 'state';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.entities = [{
+      uid: 'entity-1',
+      name: '订单',
+      fields: [
+        { uid: 'field-1', name: '主状态', is_status: true, status_role: 'primary', state_values: '草稿/审核中/完成' },
+        { uid: 'field-2', name: '质押状态', status_role: 'secondary', state_values: '待签收/签收中/签收成功' },
+      ],
+      state_transitions: [
+        { from: '草稿', to: '审核中', action: '提交', field_name: '主状态' },
+        { from: '待签收', to: '签收中', action: '签收', field_name: '质押状态' },
+      ],
+    }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('initialView', 'state');
+    entityFixture.componentRef.setInput('initialEntityId', 'entity-1');
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+    entityHost.querySelector<HTMLButtonElement>('[data-testid="state-editor-open"]')?.click();
+    entityFixture.detectChanges();
+
+    expect(entityHost.querySelectorAll('[data-testid="entity-state-graph-canvas"]')).toHaveLength(2);
+    expect(entityHost.querySelector<HTMLElement>('.entity-state-main-shell')?.style.marginRight).toBe('0px');
+    const drawer = entityHost.querySelector<HTMLElement>('[data-testid="state-editor-drawer"]')!;
+    expect(drawer.querySelector('[data-testid="entity-transition-add-button"]')).toBeNull();
+    expect(drawer.querySelector('[data-testid="entity-transition-route-reset-all"]')).toBeNull();
+    expect(drawer.querySelector('[data-testid="entity-transition-section-title"]')?.textContent).toContain('状态流转');
+
+    const localChange = vi.fn();
+    window.addEventListener('blm-runtime-local-change', localChange);
+    entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-transition-to-0"]')!.value = '完成';
+    entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-transition-to-0"]')!.dispatchEvent(new Event('change', { bubbles: true }));
+    entityFixture.detectChanges();
+    window.removeEventListener('blm-runtime-local-change', localChange);
+
+    expect(runtime.modified).toBe(true);
+    expect(runtime.collab.pendingSnapshot).toBe(true);
+    expect(localChange).toHaveBeenCalled();
   });
 
   it('opens the embedded state editor drawer from the component editor toggle', () => {
@@ -766,7 +1030,7 @@ describe('ComponentWorkbenchComponent', () => {
       fields: [{ uid: 'field-1', name: '状态', is_status: true, status_role: 'primary', state_values: '草稿/审核中/已完成' }],
       state_transitions: [{ from: '草稿', to: '审核中', action: '提交', field_name: '状态' }],
     }];
-    host.querySelectorAll<HTMLButtonElement>('.vtb')[3]?.click();
+    host.querySelectorAll<HTMLButtonElement>('.vtb')[4]?.click();
     fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="entity-design-switch-state"]')?.click();
     fixture.detectChanges();
@@ -776,7 +1040,7 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
 
     expect(host.querySelector('[data-testid="state-editor-drawer"]')).toBeTruthy();
-    expect(host.querySelector<HTMLElement>('.entity-state-main-shell')?.style.marginRight).toBe('620px');
+    expect(host.querySelector<HTMLElement>('.entity-state-main-shell')?.style.marginRight).toBe('0px');
   });
 
   it('zooms the state diagram with Ctrl plus mouse wheel only', () => {

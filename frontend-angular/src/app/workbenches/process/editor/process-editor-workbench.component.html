@@ -227,7 +227,9 @@
                       </select>
                       <span class="task-form-entity-summary" data-testid="task-form-entity-summary">{{ formEntitySummary(form) }}</span>
                       <span class="task-form-field-count">{{ formFieldCount(form) }} 字段</span>
-                      <button class="step-action" type="button" data-testid="task-form-duplicate" title="复制表单" [disabled]="!editing" (click)="toggleFormCopyMenu(form, $event)">复制</button>
+                      <button class="step-action task-form-icon-action" type="button" data-testid="task-form-duplicate" aria-label="复制表单" title="复制表单" [disabled]="!editing" (click)="toggleFormCopyMenu(form, $event)">
+                        <span aria-hidden="true">⧉</span>
+                      </button>
                       @if (formCopyMenuId() === formKey(form)) {
                         <div class="form-copy-menu" data-testid="task-form-copy-menu" (click)="$event.stopPropagation()">
                           <button type="button" (click)="copyFormToCurrentTask(task, form)">复制到当前节点</button>
@@ -235,7 +237,7 @@
                           <button type="button" (click)="pasteFormToCurrentTask(task)">粘贴到当前节点</button>
                         </div>
                       }
-                      <button class="step-del" type="button" title="删除表单" [disabled]="!editing" (click)="removeForm(task, form)">×</button>
+                      <button class="step-del task-form-icon-action" type="button" data-testid="task-form-delete" aria-label="删除表单" title="删除表单" [disabled]="!editing" (click)="removeForm(task, form)">×</button>
                     </div>
                     <textarea class="task-form-purpose" rows="1" data-testid="task-form-purpose" [readonly]="!editing" [ngModel]="form.purpose || ''" (input)="autoGrow($any($event.target)); setFormPurpose(form, $any($event.target).value)" placeholder="表单用途，如：筛选、列表、新增、详情、输出说明"></textarea>
                     <div class="task-form-sections">
@@ -488,4 +490,18 @@
   }
 } @else {
   <div class="diag-empty" data-testid="process-editor-empty">暂无流程。</div>
+}
+
+
+@if (renameNodeTarget()) {
+  <div class="task-form-copy-dialog-backdrop" data-testid="process-node-rename-dialog">
+    <div class="task-form-copy-dialog" role="dialog" aria-modal="true" aria-labelledby="process-node-rename-title">
+      <h4 id="process-node-rename-title">修改节点名称</h4>
+      <input class="step-textarea" type="text" data-testid="process-node-rename-input" [ngModel]="renameNodeValue()" (ngModelChange)="renameNodeValue.set($event)" />
+      <div class="task-form-copy-dialog-actions">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="process-node-rename-cancel" (click)="closeRenameNodeDialog()">取消</button>
+        <button class="btn btn-primary btn-sm" type="button" data-testid="process-node-rename-submit" (click)="submitRenameNodeDialog()">确认</button>
+      </div>
+    </div>
+  </div>
 }

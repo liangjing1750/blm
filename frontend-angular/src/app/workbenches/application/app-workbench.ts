@@ -293,9 +293,10 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   // JSON 导入
   protected importJsonVisible = signal(false);
   protected importJsonText = signal('');
+  protected importJsonError = signal('');
   protected importJsonTarget = signal<'requestParams'|'responseParams'>('requestParams');
 
-  protected startImportJson(target: 'requestParams'|'responseParams'): void { if (!this.canEdit()) return; this.importJsonTarget.set(target); this.importJsonText.set(''); this.importJsonVisible.set(true); }
+  protected startImportJson(target: 'requestParams'|'responseParams'): void { if (!this.canEdit()) return; this.importJsonTarget.set(target); this.importJsonText.set(''); this.importJsonError.set(''); this.importJsonVisible.set(true); }
   protected doImportJson(svc: LegacyService): void {
     if (!this.canEdit()) return;
     try {
@@ -305,8 +306,9 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
         if (!arr.some(p => p.name === key)) arr.push(this.paramFromJsonValue(key, val));
       }
       this.importJsonVisible.set(false);
+      this.importJsonError.set('');
       this.touch();
-    } catch { alert('JSON 格式错误'); }
+    } catch { this.importJsonError.set('JSON 格式错误，请检查后再导入。'); }
   }
 
   private paramFromJsonValue(name: string, value: any): ServiceParam {

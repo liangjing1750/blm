@@ -8,7 +8,7 @@ import {
   BusinessModelTask,
   createBusinessModelLegacyAdapter,
 } from './business-model-legacy-adapter';
-import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 
 type BusinessModelMode = 'component' | 'construct';
 
@@ -188,9 +188,13 @@ export class BusinessModelWorkbenchComponent implements OnInit, OnDestroy {
     this.changed();
   }
 
-  protected deleteComponent(component: BusinessModelComponent): void {
+  protected async deleteComponent(component: BusinessModelComponent): Promise<void> {
     if (this.constructs().some((construct) => this.constructBelongsToComponent(construct, component))) {
-      window.alert?.('当前业务组件下还有业务构件，请先调整或删除构件。');
+      await confirmRuntimeAction('当前业务组件下还有业务构件，请先调整或删除构件。', {
+        title: '无法删除组件',
+        confirmLabel: '知道了',
+        cancelLabel: '关闭',
+      });
       return;
     }
     const components = this.adapter.components();

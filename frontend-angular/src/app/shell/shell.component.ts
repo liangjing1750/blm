@@ -8,7 +8,7 @@ import { CollaborationService } from '../core/collaboration/collaboration.servic
 import { LocalCollabDraftService } from '../core/collaboration/local-collab-draft.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
-import { RuntimeConfirmEventDetail, getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
+import { RuntimeConfirmEventDetail, confirmRuntimeAction, getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
 import { HistoryDialogComponent, HistoryDialogTab } from '../core/shell/history/history-dialog.component';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
 import { ShellNotificationComponent, ShellNotificationKind } from '../core/shell/notification/shell-notification.component';
@@ -486,7 +486,7 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.showToast('请先打开文档。');
       return;
     }
-    if (!window.confirm(`确定删除“${this.currentDocumentLabel()}”吗？删除后会进入回收站。`)) return;
+    if (!await confirmRuntimeAction(`确定删除“${this.currentDocumentLabel()}”吗？删除后会进入回收站。`, { title: '删除文档', confirmLabel: '删除' })) return;
     const deletingName = this.runtime.currentFile;
     await this.runBusy(async () => {
       await this.api.deleteDocument(deletingName);
@@ -701,21 +701,22 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected async archiveHistorySnapshot(row: any): Promise<void> {
     const id = String(row?.id || row?.snapshot_id || '').trim();
     if (!this.runtime.currentFile || !id) return;
-    const message = window.prompt('给这个归档版本填写说明：', `历史记录 ${id}`);
-    if (message === null) return;
+    if (!await confirmRuntimeAction(`确认把历史记录 ${id} 归档为版本吗？`, { title: '归档历史记录', confirmLabel: '归档版本' })) return;
     await this.runBusy(async () => {
       const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
-      await this.api.createVersion(this.runtime.currentFile, loaded?.document || loaded, String(message || '').trim());
+      await this.api.createVersion(this.runtime.currentFile, loaded?.document || loaded, `历史记录 ${id}`);
       const versions = await this.api.versions(this.runtime.currentFile).catch(() => []);
       this.versionRows.set(versions || []);
+      this.archiveVersionMessage = '';
       this.showToast('历史记录已归档为版本。');
+      this.modal.set('history');
     });
   }
 
   protected async restoreHistorySnapshot(row: any): Promise<void> {
     const id = String(row?.id || row?.snapshot_id || '').trim();
     if (!this.runtime.currentFile || !id) return;
-    if (!window.confirm('本地恢复会把这个历史版本设为当前文档，点击“立即同步”后才会影响其他人。继续吗？')) return;
+    if (!await confirmRuntimeAction('本地恢复会把这个历史版本设为当前文档，点击“立即同步”后才会影响其他人。继续吗？', { title: '本地恢复', confirmLabel: '恢复' })) return;
     await this.runBusy(async () => {
       const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
       const document = loaded?.document || loaded;
@@ -728,7 +729,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected async restoreSubmitSnapshot(row: any): Promise<void> {
     const submitId = String(row?.submitId || '').trim();
     if (!this.runtime.currentFile || !submitId) return;
-    if (!window.confirm('本地恢复会把这次提交设为当前文档，点击“立即同步”后才会影响其他人。继续吗？')) return;
+    if (!await confirmRuntimeAction('本地恢复会把这次提交设为当前文档，点击“立即同步”后才会影响其他人。继续吗？', { title: '本地恢复', confirmLabel: '恢复' })) return;
     await this.runBusy(async () => {
       const loaded = await this.api.loadCollabSubmit(this.runtime.currentFile, submitId);
       const document = loaded?.document || loaded;
@@ -798,13 +799,18 @@ export class ShellComponent implements OnInit, OnDestroy {
     }
     this.activeDropdown.set('');
     await this.runBusy(async () => {
-      const handoff = await this.api.createAgentHandoff(this.buildAgentHandoffPayload());
+      const payload = this.buildAgentHandoffPayload();
+      const handoff = await this.api.createAgentHandoff(payload);
       const handoffId = String(handoff?.handoffId || '').trim();
       if (!handoffId) throw new Error('Easy Agent handoff 创建失败');
       const url = new URL('http://127.0.0.1:8088/');
       url.searchParams.set('plugin', 'blm-agent-plugin');
       url.searchParams.set('source', 'blm');
       url.searchParams.set('handoffId', handoffId);
+      url.searchParams.set('userId', String(payload.user?.id || 'anonymous'));
+      url.searchParams.set('userName', String(payload.user?.name || 'agent'));
+      url.searchParams.set('documentId', String(payload.documentId || ''));
+      url.searchParams.set('route', String(payload.currentRoute || ''));
       window.open(url.toString(), '_blank', 'noopener');
     });
   }
@@ -1397,7 +1403,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected async clearSelectedTrash(): Promise<void> {
     const entryIds = Array.from(this.selectedTrashIds());
     if (!entryIds.length) return;
-    if (!window.confirm(`确定彻底清理选中的 ${entryIds.length} 个回收站文档吗？`)) return;
+    if (!await confirmRuntimeAction(`确定彻底清理选中的 ${entryIds.length} 个回收站文档吗？`, { title: '清理回收站', confirmLabel: '清理' })) return;
     await this.runBusy(async () => {
       await this.api.deleteTrash(entryIds);
       this.selectedTrashIds.set(new Set());
@@ -1408,7 +1414,7 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected async clearAllTrash(): Promise<void> {
     if (!this.sortedTrashEntries().length) return;
-    if (!window.confirm('确定彻底清空回收站吗？该操作不可恢复。')) return;
+    if (!await confirmRuntimeAction('确定彻底清空回收站吗？该操作不可恢复。', { title: '清空回收站', confirmLabel: '清空' })) return;
     await this.runBusy(async () => {
       await this.api.clearTrash();
       this.selectedTrashIds.set(new Set());

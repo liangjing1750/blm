@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, HostListener, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../../shared/rich-text/rich-text-editor.component';
 import { sanitizeRichTextHtml } from '../../../shared/rich-text/rich-text-utils';
 import {
@@ -120,6 +120,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly moreOpen = signal(false);
   protected readonly formCopyMenuId = signal('');
   protected readonly formNotice = signal('');
+  protected readonly renameNodeTarget = signal<LegacyProcessNode | null>(null);
+  protected readonly renameNodeValue = signal('');
   protected readonly pendingEntityFieldCopy = signal<PendingEntityFieldCopy | null>(null);
   protected readonly activeNodeSection = signal('node-role-section');
   protected readonly stepTypes = [
@@ -613,11 +615,23 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
 
   protected startRenameNode(node: LegacyProcessNode, event: MouseEvent): void {
     event.stopPropagation();
-    const name = window.prompt('修改节点名称', node.name || '');
-    if (name !== null && name.trim()) {
-      this.adapter.setTaskField(node, 'name', name.trim());
-      this.version.update((v) => v + 1);
-    }
+    if (!this.editing) return;
+    this.renameNodeTarget.set(node);
+    this.renameNodeValue.set(String(node.name || ''));
+  }
+
+  protected closeRenameNodeDialog(): void {
+    this.renameNodeTarget.set(null);
+    this.renameNodeValue.set('');
+  }
+
+  protected submitRenameNodeDialog(): void {
+    const node = this.renameNodeTarget();
+    const name = this.renameNodeValue().trim();
+    if (!node || !name) return;
+    this.adapter.setTaskField(node, 'name', name);
+    this.closeRenameNodeDialog();
+    this.version.update((v) => v + 1);
   }
 
   protected forms(task: LegacyProcessNode): LegacyTaskForm[] {
@@ -1060,8 +1074,13 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
-  protected removeForm(task: LegacyProcessNode, form: LegacyTaskForm): void {
+  protected async removeForm(task: LegacyProcessNode, form: LegacyTaskForm): Promise<void> {
     if (!this.editing) return;
+    const confirmed = await confirmRuntimeAction(`确认删除表单“${form.name || this.formKey(form) || '未命名表单'}”吗？`, {
+      title: '删除表单',
+      confirmLabel: '删除',
+    });
+    if (!confirmed) return;
     this.adapter.removeForm(task, form);
     this.refresh();
   }

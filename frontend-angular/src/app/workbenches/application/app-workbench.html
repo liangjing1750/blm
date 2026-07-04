@@ -221,6 +221,9 @@
       <div class="comp-dialog" (click)="$event.stopPropagation()">
         <h3>从 JSON 导入{{ importJsonTarget() === 'requestParams' ? '输入' : '输出' }}参数</h3>
         <textarea [ngModel]="importJsonText()" (ngModelChange)="importJsonText.set($event)" rows="8" placeholder='粘贴 JSON，如 {"reservation":{"warehouseUid":"WH-A","items":[{"productCode":"CU"}]}}' class="svc-json-import"></textarea>
+        @if (importJsonError()) {
+          <p class="import-json-error" data-testid="import-json-error">{{ importJsonError() }}</p>
+        }
         <div class="comp-dialog-actions">
           <button class="btn btn-outline btn-sm" type="button" (click)="importJsonVisible.set(false)">取消</button>
           <button class="btn btn-primary btn-sm" type="button" (click)="doImportJson(serviceDrawer()!)">导入</button>

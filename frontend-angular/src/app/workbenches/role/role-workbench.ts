@@ -395,7 +395,7 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
     const confirmed = await (this.legacy().showAppConfirm?.(`确认删除角色”${role.name || this.roleIdentity(role)}”？`, {
       title: '删除角色',
       confirmLabel: '删除',
-    }) ?? Promise.resolve(window.confirm(`确认删除角色”${role.name || this.roleIdentity(role)}”？`)));
+    }) ?? Promise.resolve(false));
     if (!confirmed) return;
     const target = this.roleIdentity(role);
     this.document().roles = this.roles().filter((item) => this.roleIdentity(item) !== target);

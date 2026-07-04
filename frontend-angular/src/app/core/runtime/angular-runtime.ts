@@ -188,7 +188,7 @@ export function confirmRuntimeAction(message: string, options: RuntimeConfirmOpt
         },
       },
     }));
-    if (!handled) resolve(window.confirm(message));
+    if (!handled) resolve(false);
   });
 }
 

@@ -4,6 +4,7 @@
       <div class="view-toggle-group">
         <button class="vtb" [class.active]="activeTab()==='businessComponent'" (click)="switchTab('businessComponent')">业务组件</button>
         <button class="vtb" data-testid="component-businessconstruct-tab" [class.active]="activeTab()==='businessConstruct'" (click)="switchTab('businessConstruct')">业务构件</button>
+        <button class="vtb" data-testid="component-businessconstruct-new-tab" [class.active]="activeTab()==='businessConstructNew'" (click)="switchTab('businessConstructNew')">业务构件New</button>
         <button class="vtb" data-testid="component-taskdef-tab" [class.active]="activeTab()==='taskDef'" (click)="switchTab('taskDef')">任务定义</button>
         <button class="vtb" [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
       </div>
@@ -196,7 +197,7 @@
   @if (activeTab() === 'businessConstruct') {
     <div class="comp-tab-body business-construct-view" data-testid="business-construct-view">
       @if (selectedConstruct(); as construct) {
-        <section class="business-construct-summary business-construct-edit-card">
+        <section class="business-construct-summary business-construct-edit-card" data-testid="business-construct-summary">
           <div class="business-construct-fields">
             <label class="business-construct-nav-field">
               <span>所属组件</span>
@@ -215,14 +216,12 @@
                 }
               </select>
             </label>
-            <label class="business-construct-title-field">
-              <span>构件名称</span>
-              @if (canEdit()) {
+            @if (canEdit()) {
+              <label class="business-construct-title-field">
+                <span>构件名称</span>
                 <input data-testid="business-construct-name-input" [ngModel]="construct.name || ''" (ngModelChange)="updateConstructInline(construct, 'name', $event)" placeholder="构件名称" />
-              } @else {
-                <strong>{{ construct.name || uid(construct) }}</strong>
-              }
-            </label>
+              </label>
+            }
             <label class="business-construct-note-field">
               <span>说明</span>
               @if (canEdit()) {
@@ -259,17 +258,19 @@
                 }
               </div>
             }
-            @for (entity of entitiesFor(construct); track uid(entity)) {
-              <div class="construct-asset-row entity-row">
-                <strong><span class="asset-type-tag entity">实体</span>{{ entity.name || uid(entity) }}</strong>
-                <span><span class="asset-mini-pill">{{ fieldCount(entity) }} 个字段</span></span>
-                @if (canEdit()) {
-                  <button class="btn-ghost-sm danger" data-testid="business-construct-entity-detach" (click)="removeEntity(entity)">移出构件</button>
-                }
-              </div>
-            } @empty {
-              <div class="business-empty-inline">暂无实体</div>
-            }
+            <div class="construct-asset-scroll" data-testid="business-construct-entity-scroll">
+              @for (entity of entitiesFor(construct); track uid(entity)) {
+                <div class="construct-asset-row entity-row">
+                  <strong><span class="asset-type-tag entity">实体</span>{{ entity.name || uid(entity) }}</strong>
+                  <span><span class="asset-mini-pill">{{ fieldCount(entity) }} 个字段</span></span>
+                  @if (canEdit()) {
+                    <button class="btn-ghost-sm danger" data-testid="business-construct-entity-detach" (click)="removeEntity(entity)">移出构件</button>
+                  }
+                </div>
+              } @empty {
+                <div class="business-empty-inline">暂无实体</div>
+              }
+            </div>
           </section>
           <section class="construct-asset-panel" data-testid="business-construct-tasks">
             <header>
@@ -289,17 +290,19 @@
                 }
               </div>
             }
-            @for (task of taskDefsFor(construct); track uid(task)) {
-              <div class="construct-asset-row task-row">
-                <strong><span class="asset-type-tag task">{{ task.type || 'Query' }}</span>{{ task.name || uid(task) }}</strong>
-                <span><span class="asset-mini-pill">{{ task.target || task.address || '未设置实现' }}</span><span class="asset-mini-pill">{{ taskNodeCount(task) }} 个节点引用</span></span>
-                @if (canEdit()) {
-                  <button class="btn-ghost-sm danger" data-testid="business-construct-task-detach" (click)="removeTaskDef(task)">移出构件</button>
-                }
-              </div>
-            } @empty {
-              <div class="business-empty-inline">暂无任务</div>
-            }
+            <div class="construct-asset-scroll" data-testid="business-construct-task-scroll">
+              @for (task of taskDefsFor(construct); track uid(task)) {
+                <div class="construct-asset-row task-row">
+                  <strong><span class="asset-type-tag task">{{ task.type || 'Query' }}</span>{{ task.name || uid(task) }}</strong>
+                  <span><span class="asset-mini-pill">{{ task.target || task.address || '未设置实现' }}</span><span class="asset-mini-pill">{{ taskNodeCount(task) }} 个节点引用</span></span>
+                  @if (canEdit()) {
+                    <button class="btn-ghost-sm danger" data-testid="business-construct-task-detach" (click)="removeTaskDef(task)">移出构件</button>
+                  }
+                </div>
+              } @empty {
+                <div class="business-empty-inline">暂无任务</div>
+              }
+            </div>
           </section>
         </div>
       } @else {
@@ -309,6 +312,84 @@
           <button class="btn btn-primary btn-sm" (click)="returnToBusinessComponents()">返回业务组件</button>
         </div>
       }
+    </div>
+  }
+
+  <!-- 业务构件New：按人的功能树思路向右展开，节点是具体元素，类型只作为标签附着在节点上。 -->
+  @if (activeTab() === 'businessConstructNew') {
+    <div class="comp-tab-body business-tree-view" data-testid="business-construct-tree-view">
+      <header class="business-tree-title">
+        <div>
+          <strong>业务组件功能树</strong>
+          <span>从组件到构件，再到实体与任务，按固定深度向右阅读。</span>
+        </div>
+        <span class="business-tree-root">业务组件</span>
+      </header>
+      <div class="business-tree-canvas">
+        @for (group of groupedTreeComponents(); track group.kind) {
+          <section class="business-tree-group" [class.is-generic]="group.kind === 'generic'">
+            <header>
+              <strong>{{ group.title }}</strong>
+              <span>{{ group.components.length }} 个组件</span>
+            </header>
+            @for (comp of group.components; track uid(comp)) {
+              <div class="business-tree-row">
+                <div class="business-tree-column business-tree-column--component">
+                  <button class="business-tree-node business-tree-node--component" [class.is-generic]="group.kind === 'generic'" [attr.data-testid]="'business-tree-component-' + uid(comp)" type="button">
+                    <span class="business-tree-tag" [class.is-generic]="group.kind === 'generic'">{{ group.title }}</span>
+                    <strong>{{ comp.name || uid(comp) }}</strong>
+                    <small>{{ constructsFor(comp).length }} 个构件</small>
+                  </button>
+                </div>
+                <div class="business-tree-column business-tree-column--construct">
+                  @for (construct of constructsFor(comp); track uid(construct)) {
+                    <button class="business-tree-node business-tree-node--construct" [attr.data-testid]="'business-tree-construct-' + uid(construct)" type="button" (click)="openBusinessConstruct(construct)">
+                      <strong>{{ construct.name || uid(construct) }}</strong>
+                      <small>{{ entitiesFor(construct).length }} 个实体 · {{ taskDefsFor(construct).length }} 个任务</small>
+                    </button>
+                  } @empty {
+                    <div class="business-tree-empty">暂无构件</div>
+                  }
+                </div>
+                <div class="business-tree-column business-tree-column--entity">
+                  @for (construct of constructsFor(comp); track uid(construct)) {
+                    <div class="business-tree-stack" [attr.data-parent]="uid(construct)">
+                      @for (entity of entitiesFor(construct); track uid(entity)) {
+                        <button class="business-tree-node business-tree-node--entity" [attr.data-testid]="'business-tree-entity-' + uid(entity)" type="button" (click)="openEntityFromTree(entity, construct)">
+                          <strong>{{ entity.name || uid(entity) }}</strong>
+                          <small>{{ fieldCount(entity) }} 个字段</small>
+                        </button>
+                      } @empty {
+                        <div class="business-tree-empty">暂无实体</div>
+                      }
+                    </div>
+                  }
+                </div>
+                <div class="business-tree-column business-tree-column--task">
+                  @for (construct of constructsFor(comp); track uid(construct)) {
+                    <div class="business-tree-stack" [attr.data-parent]="uid(construct)">
+                      @for (task of taskDefsFor(construct); track uid(task)) {
+                        <button class="business-tree-node business-tree-node--task" [attr.data-testid]="'business-tree-task-' + uid(task)" type="button" (click)="openTaskFromTree(task, construct)">
+                          <span class="business-tree-tag task">{{ task.type || 'Query' }}</span>
+                          <strong>{{ task.name || uid(task) }}</strong>
+                          <small>{{ taskNodeCount(task) }} 个节点引用</small>
+                        </button>
+                      } @empty {
+                        <div class="business-tree-empty">暂无任务</div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </section>
+        } @empty {
+          <div class="business-empty-state">
+            <strong>暂无业务组件</strong>
+            <span>功能树需要先有具体组件、构件、实体或任务。</span>
+          </div>
+        }
+      </div>
     </div>
   }
 
@@ -331,7 +412,7 @@
       </div>
       <div class="taskdef-cards">
         @for (td of pagedTaskDefs(); track uid(td)) {
-          <div class="taskdef-card" [class.editing]="isEditingTask(td)">
+          <div class="taskdef-card" [class.editing]="isEditingTask(td)" (click)="!isEditingTask(td) && toggleTaskExpand(uid(td))">
             @if (isEditingTask(td)) {
               <!-- 编辑模式 -->
               <div class="taskdef-edit-body taskdef-edit-layout">
@@ -397,7 +478,7 @@
             } @else {
               <!-- 查看模式 -->
               <div class="taskdef-view">
-                <div class="taskdef-head" [attr.data-testid]="'taskdef-head-' + uid(td)" (click)="toggleTaskExpand(uid(td))">
+                <div class="taskdef-head" [attr.data-testid]="'taskdef-head-' + uid(td)">
                   <span class="taskdef-type" [class.query]="td.type !== 'Service'" [class.service]="td.type === 'Service'">{{ td.type === 'Service' ? 'Service' : 'Query' }}</span>
                   <strong>{{ td.name || uid(td) }}</strong>
                   @if (td.target) { <code>{{ td.target }}</code> }
@@ -413,7 +494,7 @@
                     <button class="btn-ghost-sm danger" (click)="deleteTaskDef(td); $event.stopPropagation()">删除</button>
                   }
                 </div>
-                @if (isTaskExpanded(uid(td)) && ((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note || hasTaskHandover(td))) {
+                @if (isTaskExpanded(uid(td))) {
                 <div class="taskdef-detail">
                   @if ((td.parameters?.inputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输入参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.inputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
                   @if ((td.parameters?.outputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输出参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.outputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
@@ -435,6 +516,9 @@
                       [value]="td.note || ''"
                       [readonly]="true"
                     ></app-rich-text-editor>
+                  }
+                  @if (!((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note || hasTaskHandover(td))) {
+                    <div class="taskdef-empty-detail">暂无更多详情，可打开编辑补充参数、说明或技术承接。</div>
                   }
                 </div>
                 }

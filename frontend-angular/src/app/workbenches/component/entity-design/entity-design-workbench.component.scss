@@ -1,7 +1,7 @@
 :host {
   display: block;
   height: 100%;
-  min-height: 0;
+  min-height: 0
 }
 
 .entity-design {
@@ -9,7 +9,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   height: 100%;
-  min-height: 0;
+  min-height: 0
 }
 
 .entity-design-toolbar {
@@ -18,8 +18,7 @@
   gap: 10px;
   padding: 6px 10px;
   border: 1px solid #d7e2ef;
-  border-radius: 8px;
-  background: #fff;
+  border-radius: 8px
 }
 
 .entity-visually-hidden {
@@ -28,18 +27,18 @@
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
-  white-space: nowrap;
+  white-space: nowrap
 }
 
 .entity-design-body {
   position: relative;
   display: block;
   min-height: 0;
-  overflow: hidden;
+  overflow: hidden
 }
 
 .entity-design-body.has-drawer {
-  display: block;
+  display: block
 }
 
 .entity-design-canvas-shell {
@@ -52,30 +51,30 @@
   border-radius: 10px;
   background: #fff;
   scrollbar-gutter: stable;
-  transition: margin-right .12s ease;
+  transition: margin-right .12s ease
 }
 
 .entity-design-canvas-shell::-webkit-scrollbar,
 .entity-design-drawer-body::-webkit-scrollbar {
   width: 6px;
-  height: 6px;
+  height: 6px
 }
 
 .entity-design-canvas-shell::-webkit-scrollbar-thumb,
 .entity-design-drawer-body::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: #c7d2df;
+  background: #c7d2df
 }
 
 .entity-relation-canvas,
 .entity-state-workbench {
   min-width: 900px;
   min-height: 520px;
-  padding: 8px 14px;
+  padding: 8px 14px
 }
 
 .entity-relation-canvas {
-  display: inline-block;
+  display: inline-block
 }
 
 .entity-state-workbench {
@@ -83,37 +82,38 @@
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 14px;
   flex: 1;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   padding: 12px 16px 16px;
   overflow: hidden;
-  background: #f8fafc;
+  background: #f8fafc
 }
 
-.entity-state-browser {
+.entity-state-browser {;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden auto;
   padding: 12px;
   border: 1px solid var(--border, #d7e2ef);
   border-radius: 12px;
-  background: #fff;
+  background: #fff
 }
 
 .entity-state-group + .entity-state-group {
-  margin-top: 12px;
+  margin-top: 12px
 }
 
 .entity-state-group-title {
   margin-bottom: 8px;
   color: #475569;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 700
 }
 
 .entity-state-group-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 6px
 }
 
 .entity-state-chip {
@@ -125,14 +125,14 @@
   color: #0f172a;
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: pointer
 }
 
 .entity-state-chip.active {
   border-color: #2563eb;
   background: #eff6ff;
   color: #2563eb;
-  font-weight: 600;
+  font-weight: 600
 }
 
 .entity-state-stage {
@@ -141,7 +141,7 @@
   min-height: 0;
   overflow: hidden;
   display: flex;
-  flex-direction: column;
+  flex-direction: column
 }
 
 .entity-state-main-shell {
@@ -149,12 +149,12 @@
   min-height: 0;
   height: 100%;
   overflow: auto;
-  transition: margin-right .12s ease;
+  transition: margin-right .12s ease
 }
 
 .entity-state-main {
   min-width: 0;
-  padding: 0 14px 14px 0;
+  padding: 0 14px 14px 0
 }
 
 .entity-state-card {
@@ -162,13 +162,13 @@
   padding: 14px 16px 16px;
   border: 1px solid var(--border, #d7e2ef);
   border-radius: 12px;
-  background: #fff;
+  background: #fff
 }
 
 .entity-board {
   position: relative;
   border-radius: 0;
-  background: #fff;
+  background: #fff
 }
 
 .entity-board.is-editing {
@@ -176,21 +176,21 @@
     linear-gradient(#e6eef8 1px, transparent 1px),
     linear-gradient(90deg, #e6eef8 1px, transparent 1px),
     #fff;
-  background-size: 180px 128px;
+  background-size: 180px 128px
 }
 
 .entity-component-frame,
 .entity-group-frame {
   position: absolute;
   box-sizing: border-box;
-  pointer-events: none;
+  pointer-events: none
 }
 
 .entity-component-frame {
   z-index: 0;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  background: rgba(248, 250, 252, 0.72);
+  background: rgba(248, 250, 252, 0.72)
 }
 
 .entity-component-title {
@@ -208,14 +208,14 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
-  pointer-events: none;
+  pointer-events: none
 }
 
 .entity-group-frame {
   z-index: 1;
   border: 1px dashed var(--entity-frame-color);
   border-radius: 8px;
-  background: var(--entity-frame-fill);
+  background: var(--entity-frame-fill)
 }
 
 .entity-group-title {
@@ -229,7 +229,7 @@
   font-weight: 800;
   line-height: 18px;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: nowrap
 }
 
 .entity-rel-svg {
@@ -237,26 +237,26 @@
   position: absolute;
   inset: 0;
   overflow: visible;
-  pointer-events: none;
+  pointer-events: none
 }
 
 .entity-rel-svg marker path {
-  fill: #64748b;
+  fill: #64748b
 }
 
 .entity-rel-line {
   fill: none;
   stroke-linecap: round;
   cursor: pointer;
-  pointer-events: stroke;
+  pointer-events: stroke
 }
 
 .entity-rel-line.is-dashed {
-  stroke-dasharray: 5 3;
+  stroke-dasharray: 5 3
 }
 
 .entity-rel-line.is-muted {
-  filter: grayscale(0.3);
+  filter: grayscale(0.3)
 }
 
 .entity-rel-label {
@@ -274,7 +274,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   transform: translate(-50%, -50%);
-  pointer-events: none;
+  pointer-events: none
 }
 
 .entity-node {
@@ -293,25 +293,25 @@
   font-family: inherit;
   font-size: 14px;
   text-align: center;
-  user-select: none;
+  user-select: none
 }
 
 .entity-node:hover,
 .entity-node.is-focus {
   border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14)
 }
 
 .entity-node.is-selected {
   outline: 2px solid #2563eb;
-  outline-offset: 2px;
+  outline-offset: 2px
 }
 
 .entity-node-component {
   display: none;
   color: var(--entity-accent);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 800
 }
 
 .entity-node strong {
@@ -320,14 +320,14 @@
   font-weight: 800;
   line-height: normal;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: nowrap
 }
 
 .entity-node em {
   display: none;
   color: #64748b;
   font-size: 12px;
-  font-style: normal;
+  font-style: normal
 }
 
 .entity-selection-box {
@@ -336,7 +336,7 @@
   border: 1px dashed #60a5fa;
   border-radius: 8px;
   background: rgba(147, 197, 253, 0.14);
-  pointer-events: none;
+  pointer-events: none
 }
 
 .entity-state-card-head {
@@ -344,14 +344,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 12px
 }
 
 .entity-state-card-summary {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 8px
 }
 
 .entity-state-field-chip {
@@ -362,32 +362,32 @@
   color: #64748b;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 700
 }
 
 .entity-state-field-chip.active {
   border-color: #2563eb;
   background: #eff6ff;
-  color: #2563eb;
+  color: #2563eb
 }
 
 .entity-state-card-title {
   color: #0f172a;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 700
 }
 
 .entity-state-card-subtitle {
   margin-top: 4px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 12px
 }
 
 .entity-state-card-values {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 6px
 }
 
 .entity-state-value-chip {
@@ -399,25 +399,25 @@
   background: #eff6ff;
   color: #2563eb;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 600
 }
 
 .entity-state-value-chip.kind-initial {
   border-color: #67e8f9;
   background: #ecfeff;
-  color: #155e75;
+  color: #155e75
 }
 
 .entity-state-value-chip.kind-terminal {
   border-color: #fda4af;
   background: #fff1f2;
-  color: #be123c;
+  color: #be123c
 }
 
 .entity-state-overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
+  gap: 12px
 }
 
 .entity-state-field-panel {
@@ -426,18 +426,18 @@
   border-radius: 12px;
   background: linear-gradient(180deg, #fbfdff 0%, #fff 100%);
   cursor: pointer;
-  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease
 }
 
 .entity-state-field-panel:hover {
   border-color: #bfdbfe;
-  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.08);
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.08)
 }
 
 .entity-state-field-panel.active {
   border-color: #3b82f6;
   background: #fff;
-  box-shadow: 0 10px 22px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 10px 22px rgba(59, 130, 246, 0.12)
 }
 
 .entity-state-field-panel-head {
@@ -445,20 +445,20 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 10px
 }
 
 .entity-state-field-panel-title {
   color: #0f172a;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 700
 }
 
 .entity-state-field-panel-meta {
   margin-top: 4px;
   color: #64748b;
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.5
 }
 
 .entity-state-field-panel-badges {
@@ -466,7 +466,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 6px
 }
 
 .entity-state-field-badge {
@@ -478,54 +478,54 @@
   background: #f8fafc;
   color: #64748b;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 700
 }
 
 .entity-state-field-badge.role-primary {
   border-color: #93c5fd;
   background: #eff6ff;
-  color: #1d4ed8;
+  color: #1d4ed8
 }
 
 .entity-state-field-badge.role-secondary {
   border-color: #fdba74;
   background: #fff7ed;
-  color: #c2410c;
+  color: #c2410c
 }
 
 .entity-state-field-badge.active {
   border-color: #bfdbfe;
   background: #dbeafe;
-  color: #1d4ed8;
+  color: #1d4ed8
 }
 
 .entity-state-field-empty {
-  margin-top: 8px;
+  margin-top: 8px
 }
 
 .entity-state-graph {
   width: 100%;
   overflow: auto;
-  padding-bottom: 4px;
+  padding-bottom: 4px
 }
 
 .entity-state-zoom-shell {
-  position: relative;
+  position: relative
 }
 
 .entity-state-zoom-target {
-  position: relative;
+  position: relative
 }
 
 .entity-state-canvas {
   position: relative;
-  min-width: 100%;
+  min-width: 100%
 }
 
 .entity-state-board {
   position: relative;
   pointer-events: auto;
-  overflow: visible;
+  overflow: visible
 }
 
 .entity-state-svg {
@@ -534,11 +534,11 @@
   left: 0;
   top: 0;
   overflow: visible;
-  pointer-events: none;
+  pointer-events: none
 }
 
 .entity-state-svg marker path {
-  fill: #64748b;
+  fill: #64748b
 }
 
 .entity-state-link {
@@ -547,23 +547,23 @@
   stroke-linecap: round;
   stroke-width: 1.8;
   cursor: pointer;
-  pointer-events: stroke;
+  pointer-events: stroke
 }
 
 .entity-state-link.selected {
   stroke: #2563eb;
-  stroke-width: 2.5;
+  stroke-width: 2.5
 }
 
 .entity-state-link-label-group {
   cursor: move;
-  pointer-events: auto;
+  pointer-events: auto
 }
 
 .entity-state-link-label-group rect {
   fill: rgba(255, 255, 255, 0.01);
   stroke: none;
-  pointer-events: all;
+  pointer-events: all
 }
 
 .entity-state-link-label {
@@ -573,7 +573,7 @@
   stroke-linejoin: round;
   stroke-width: 4px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 600
 }
 
 .entity-state-node {
@@ -590,19 +590,19 @@
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
   text-align: center;
   cursor: move;
-  user-select: none;
+  user-select: none
 }
 
 .entity-state-node.kind-initial {
   border-color: #38bdf8;
   background: #e0f2fe;
-  color: #0f4c81;
+  color: #0f4c81
 }
 
 .entity-state-node.kind-terminal {
   border-color: #fb7185;
   background: #ffe4e6;
-  color: #9f1239;
+  color: #9f1239
 }
 
 .entity-state-node-label {
@@ -613,7 +613,7 @@
   line-height: 1.25;
   text-align: center;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: nowrap
 }
 
 .entity-state-marker {
@@ -622,20 +622,20 @@
   box-sizing: border-box;
   border-radius: 50%;
   cursor: move;
-  pointer-events: auto;
+  pointer-events: auto
 }
 
 .entity-state-start-dot {
   width: 12px;
   height: 12px;
-  background: #0f172a;
+  background: #0f172a
 }
 
 .entity-state-end-dot-outer {
   width: 20px;
   height: 20px;
   border: 2.4px solid #0f172a;
-  background: #fff;
+  background: #fff
 }
 
 .entity-state-end-dot-outer::after {
@@ -647,7 +647,7 @@
   height: 10px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: #0f172a;
+  background: #0f172a
 }
 
 .entity-design-drawer {
@@ -665,7 +665,7 @@
   border-left: 1px solid var(--border, #d7e2ef);
   border-radius: 0;
   background: #fff;
-  box-shadow: -6px 0 24px rgba(0, 0, 0, .1);
+  box-shadow: -6px 0 24px rgba(0, 0, 0, .1)
 }
 
 .state-editor-drawer {
@@ -682,7 +682,7 @@
   border-left: 1px solid var(--border, #d7e2ef);
   border-radius: 0;
   background: #fff;
-  box-shadow: -6px 0 24px rgba(0, 0, 0, .08);
+  box-shadow: -6px 0 24px rgba(0, 0, 0, .08)
 }
 
 .state-editor-drawer-resize {
@@ -692,22 +692,24 @@
   bottom: 0;
   left: 0;
   width: 6px;
-  cursor: ew-resize;
+  cursor: ew-resize
 }
 
 .state-editor-drawer-resize::after {
-  content: none;
+  content: none
 }
 
 .state-editor-body {
   background: #fff;
-  padding: 14px 16px;
+  padding: 12px 14px;
+  color: #1e293b;
+  font-size: 12px
 }
 
 .state-editor-drawer .entity-state-editor {
   width: 100%;
   padding: 0;
-  background: transparent;
+  background: transparent
 }
 
 .entity-state-editor-head {
@@ -715,21 +717,22 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 10px
 }
 
 .entity-state-editor-head h4 {
   margin: 0 0 4px;
   color: #0f172a;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 800
 }
 
 .entity-state-editor-hint {
   margin: 0;
   color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.55
 }
 
 .entity-state-editor-actions {
@@ -737,55 +740,59 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px
 }
 
 .entity-state-config-row {
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px
 }
 
 .entity-state-values-readonly {
   width: 100%;
-  min-height: 40px;
-  padding: 10px 12px;
+  min-height: 32px;
+  padding: 7px 10px;
   border: 1px dashed var(--border, #d7e2ef);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #f8fafc;
   color: #64748b;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45
 }
 
 .entity-state-kind-editor {
-  margin-bottom: 14px;
-  padding: 12px;
+  margin-bottom: 10px;
+  padding: 10px;
   border: 1px solid var(--border, #d7e2ef);
-  background: #f8fafc;
+  border-radius: 10px;
+  background: #f8fafc
 }
+
 
 .entity-state-kind-head h5 {
   margin: 0 0 4px;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 800
 }
 
 .entity-transition-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px
 }
 
 .entity-transition-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) minmax(160px, 1.1fr) 116px;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #f8fafc;
+  border-radius: 9px;
+  background: #fbfdff
 }
 
 .entity-transition-row input {
@@ -796,20 +803,20 @@
   border-radius: 8px;
   background: #fff;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 12px
 }
 
 .entity-transition-arrow {
   color: #64748b;
   font-weight: 700;
-  text-align: center;
+  text-align: center
 }
 
 .entity-transition-actions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 4px
 }
 
 .transition-action {
@@ -820,19 +827,18 @@
   height: 24px;
   border: 1px solid #dbe5f0;
   background: #fff;
-  cursor: pointer;
+  cursor: pointer
 }
 
 .transition-action:hover {
   border-color: #93c5fd;
-  color: #2563eb;
+  color: #2563eb
 }
 
 .transition-action:disabled {
   opacity: .4;
-  cursor: not-allowed;
+  cursor: not-allowed
 }
-
 
 .entity-design-drawer-resize {
   position: absolute;
@@ -843,16 +849,16 @@
   width: 5px;
   cursor: ew-resize;
   background: transparent;
-  transition: background .15s;
+  transition: background .15s
 }
 
 .entity-design-drawer-resize::after {
-  content: none;
+  content: none
 }
 
 .entity-design-drawer-resize:hover {
   background: #3b82f6;
-  opacity: .5;
+  opacity: .5
 }
 
 .entity-design-drawer-head {
@@ -863,7 +869,7 @@
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border, #d7e2ef);
-  background: #fff;
+  background: #fff
 }
 
 .drawer-crumb {
@@ -874,20 +880,20 @@
   overflow: hidden;
   color: #0f172a;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 600
 }
 
 .drawer-crumb span {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: nowrap
 }
 
 .drawer-actions {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 6px;
+  gap: 6px
 }
 
 .drawer-close {
@@ -898,41 +904,41 @@
   color: #64748b;
   cursor: pointer;
   font-size: 16px;
-  line-height: 1;
+  line-height: 1
 }
 
 .drawer-close:hover {
   background: #f1f5f9;
-  color: #0f172a;
+  color: #0f172a
 }
 
 .entity-design-drawer-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 14px 16px;
+  padding: 14px 16px
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 12px
 }
 
 .entity-form-grid {
-  margin-bottom: 16px;
+  margin-bottom: 16px
 }
 
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 6px
 }
 
 .field-group label {
   color: #475569;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 600
 }
 
 .field-group input,
@@ -943,25 +949,25 @@
   border-radius: 8px;
   background: #fff;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 13px
 }
 
 .entity-edit-section {
-  margin-top: 14px;
+  margin-top: 14px
 }
 
 .entity-edit-section h4 {
   margin: 0 0 8px;
   color: #0f172a;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 700
 }
 
 .entity-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 10px
 }
 
 .entity-shortcut-hint strong {
@@ -970,14 +976,14 @@
   border-radius: 4px;
   background: #eff6ff;
   color: var(--accent, #2563eb);
-  font-weight: 800;
+  font-weight: 800
 }
 
 .task-ref-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 4px;
+  padding-top: 4px
 }
 
 .task-ref {
@@ -990,13 +996,13 @@
   background: #eff6ff;
   color: var(--accent, #2563eb);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 600
 }
 
 .field-table {
   width: 100%;
   margin-bottom: 8px;
-  border-collapse: collapse;
+  border-collapse: collapse
 }
 
 .field-table th {
@@ -1006,16 +1012,16 @@
   color: #64748b;
   font-size: 11px;
   font-weight: 600;
-  text-align: left;
+  text-align: left
 }
 
 .field-table td {
   padding: 4px 6px;
-  border-bottom: 1px solid var(--border, #d7e2ef);
+  border-bottom: 1px solid var(--border, #d7e2ef)
 }
 
 .field-table tr:hover td {
-  background: #f8fafc;
+  background: #f8fafc
 }
 
 .field-table input[type=text],
@@ -1028,13 +1034,13 @@
   border-radius: 6px;
   background: #fff;
   color: #0f172a;
-  font-size: 12px;
+  font-size: 12px
 }
 
 .field-table input[type=checkbox] {
   width: 15px;
   height: 15px;
-  cursor: pointer;
+  cursor: pointer
 }
 
 .field-td-name { width: 120px; }
@@ -1054,17 +1060,17 @@
   background: #fafbfc;
   color: #0f172a;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.5
 }
 
 .field-td-note textarea[style*="height"] {
   max-height: none;
-  overflow: auto;
+  overflow: auto
 }
 
 .field-status-cell {
   width: 94px;
-  text-align: center;
+  text-align: center
 }
 
 .field-status-role-wrap {
@@ -1073,7 +1079,7 @@
   padding: 2px;
   border: 1px solid var(--border, #d7e2ef);
   border-radius: 999px;
-  background: #f8fafc;
+  background: #f8fafc
 }
 
 .field-status-role-select {
@@ -1086,39 +1092,39 @@
   color: #475569;
   font-size: 12px;
   font-weight: 700;
-  appearance: none;
+  appearance: none
 }
 
 .field-status-role-select:focus {
-  outline: none;
+  outline: none
 }
 
 .field-status-role-wrap:focus-within {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, .14);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .14)
 }
 
 .field-status-role-wrap-primary {
   border-color: #93c5fd;
-  background: #eff6ff;
+  background: #eff6ff
 }
 
 .field-status-role-select-primary {
-  color: #1d4ed8;
+  color: #1d4ed8
 }
 
 .field-status-role-wrap-secondary {
   border-color: #fdba74;
-  background: #fff7ed;
+  background: #fff7ed
 }
 
 .field-status-role-select-secondary {
-  color: #c2410c;
+  color: #c2410c
 }
 
 .field-actions-cell {
   width: 116px;
   white-space: nowrap;
-  text-align: right;
+  text-align: right
 }
 
 .field-actions,
@@ -1126,7 +1132,7 @@
   display: inline-flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 4px
 }
 
 .field-action,
@@ -1143,14 +1149,14 @@
   color: #64748b;
   cursor: pointer;
   font-size: 12px;
-  line-height: 1;
+  line-height: 1
 }
 
 .field-action:hover,
 .rel-action:hover {
   border-color: #bfdbfe;
   background: #eff6ff;
-  color: #2563eb;
+  color: #2563eb
 }
 
 .field-action:disabled,
@@ -1158,7 +1164,7 @@
   opacity: .45;
   cursor: not-allowed;
   background: #f8fafc;
-  color: #94a3b8;
+  color: #94a3b8
 }
 
 .field-del {
@@ -1173,23 +1179,23 @@
   border-radius: 4px;
   background: none;
   color: #64748b;
-  cursor: pointer;
+  cursor: pointer
 }
 
 .field-del:hover {
   background: #fee2e2;
-  color: #dc2626;
+  color: #dc2626
 }
 
 .rel-scope-tip,
 .no-refs {
   margin: 0 0 8px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 12px
 }
 
 .no-refs {
-  font-style: italic;
+  font-style: italic
 }
 
 .rel-row {
@@ -1197,7 +1203,7 @@
   grid-template-columns: minmax(110px, 1fr) 76px minmax(110px, 1fr) minmax(120px, 1fr) auto;
   gap: 6px;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 6px
 }
 
 .rel-row input,
@@ -1209,32 +1215,32 @@
   border-radius: 6px;
   background: #fff;
   color: #0f172a;
-  font-size: 12px;
+  font-size: 12px
 }
 
 .entity-state-kind-list {
   display: grid;
-  gap: 8px;
+  gap: 6px
 }
 
 .entity-state-kind-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 110px;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding: 8px;
+  padding: 6px 8px;
   border: 1px solid #e5edf6;
-  border-radius: 10px;
-  background: #fff;
+  border-radius: 8px;
+  background: #fff
 }
 
 .entity-state-kind-row span {
   overflow: hidden;
   color: #0f172a;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: nowrap
 }
 
 .entity-state-kind-row select,
@@ -1244,22 +1250,22 @@
   border-radius: 8px;
   background: #fff;
   color: #0f172a;
-  font-size: 13px;
-  padding: 8px 9px;
+  font-size: 12px;
+  padding: 5px 8px
 }
 
 .entity-field-note {
   width: 100%;
-  box-sizing: border-box;
+  box-sizing: border-box
 }
 
 .entity-muted,
 .entity-empty {
   margin: 0;
   color: #64748b;
-  font-size: 13px;
+  font-size: 13px
 }
 
 .entity-delete-btn {
-  justify-self: stretch;
+  justify-self: stretch
 }
