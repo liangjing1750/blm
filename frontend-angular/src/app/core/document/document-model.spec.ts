@@ -213,7 +213,7 @@ describe('document model algorithms', () => {
     ]);
   });
 
-  it('keeps structured task parameters and technical handover metadata', () => {
+  it('keeps structured task parameters on task definitions', () => {
     const document = normalizeDocument({
       meta: { domain: '测试模型' },
       taskDefinitions: [
@@ -224,11 +224,6 @@ describe('document model algorithms', () => {
             inputs: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
             outputs: [{ name: 'reservationId', type: 'String', note: '预约标识' }],
           },
-          technicalHandover: {
-            runtimeKind: 'DomainServiceJar',
-            target: 'InboundReservationService.submit',
-            note: '由 FSM 内嵌领域服务承接。',
-          },
         },
       ],
     });
@@ -236,11 +231,6 @@ describe('document model algorithms', () => {
     expect(document.taskDefinitions[0].parameters).toEqual({
       inputs: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
       outputs: [{ name: 'reservationId', type: 'String', required: false, note: '预约标识' }],
-    });
-    expect(document.taskDefinitions[0].technicalHandover).toEqual({
-      runtimeKind: 'DomainServiceJar',
-      target: 'InboundReservationService.submit',
-      note: '由 FSM 内嵌领域服务承接。',
     });
   });
 });

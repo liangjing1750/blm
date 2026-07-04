@@ -692,10 +692,10 @@ describe('App', () => {
       taskDefinitions: [{
         uid: 'task-1',
         name: '保存仓单',
-        technicalHandover: {
-          summary: '领域服务承接',
-          designDescription: '<p><strong>调用聚合根保存仓单</strong></p>',
-        },
+        address: 'planTaskHandler.saveWarehouseReceipt',
+        target: '仓单领域服务',
+        parameters: { inputs: [], outputs: [] },
+        note: '<p><strong>调用聚合根保存仓单</strong></p>',
       }],
       terms: [],
       rules: [],
@@ -718,31 +718,30 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="entity"]')).toBeTruthy();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).not.toContain('流程节点: 提交申请');
 
-    const outlineButtons = Array.from(compiled.querySelectorAll<HTMLButtonElement>('.preview-outline-link'));
-    outlineButtons.find((button) => button.textContent?.includes('全景视图'))?.click();
+    const outlineButton = (label: string, extra?: string) => Array
+      .from(compiled.querySelectorAll<HTMLButtonElement>('.preview-outline-link'))
+      .find((button) => button.textContent?.includes(label) && (!extra || button.textContent?.includes(extra)));
+    outlineButton('全景视图')?.click();
     fixture.detectChanges();
     let rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
     expect(rendered?.querySelector('[data-testid="preview-stage-panorama"]')).toBeTruthy();
     expect(rendered?.textContent).toContain('入库监管');
 
-    outlineButtons.find((button) => button.textContent?.includes('阶段视图') && button.textContent?.includes('入库'))?.click();
+    outlineButton('阶段视图', '入库')?.click();
     fixture.detectChanges();
     rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
-    expect(rendered?.querySelector('[data-testid="preview-stage-graph"]')).toBeTruthy();
-    const stagePreviewRect = rendered?.querySelector<SVGRectElement>('[data-testid="preview-stage-graph"] .diagram-node rect');
-    expect(stagePreviewRect?.getAttribute('fill')).toMatch(/^#/);
-    expect(stagePreviewRect?.getAttribute('stroke')).toMatch(/^#/);
+    const stagePreview = rendered?.querySelector('[data-testid="preview-stage-detail-stage-1"]');
+    expect(stagePreview).toBeTruthy();
+    expect(stagePreview?.querySelector('.stage-flow-node')?.textContent).toContain('入库流程');
+    expect(stagePreview?.querySelector('.stage-flow-svg')).toBeTruthy();
     expect(rendered?.textContent).toContain('入库流程');
 
-    outlineButtons.find((button) => button.textContent?.includes('入库流程'))?.click();
+    outlineButton('入库流程')?.click();
     fixture.detectChanges();
     rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
     expect(rendered?.querySelector('[data-testid="preview-process-graph"]')).toBeTruthy();
-    const processPreviewRect = rendered?.querySelector<SVGRectElement>('[data-testid="preview-process-graph"] .diagram-node rect');
-    const processPreviewEdge = rendered?.querySelector<SVGPathElement>('[data-testid="preview-process-graph"] .diagram-edge');
-    expect(processPreviewRect?.getAttribute('fill')).toMatch(/^#/);
-    expect(processPreviewEdge?.getAttribute('fill')).toBe('none');
-    expect(processPreviewEdge?.getAttribute('stroke')).toMatch(/^#/);
+    expect(rendered?.querySelector('[data-testid="preview-process-graph"] .flow-node')?.textContent).toContain('提交申请');
+    expect(rendered?.querySelector('[data-testid="preview-process-graph"] .flow-edge')).toBeTruthy();
     expect(rendered?.textContent).toContain('流程节点: 提交申请');
     expect(rendered?.querySelector('.pv-task-description strong')?.textContent).toContain('任务说明');
     const stepRichText = rendered?.querySelectorAll('.pv-rich-text')[1];
@@ -753,20 +752,19 @@ describe('App', () => {
     expect(rendered?.innerHTML).not.toContain('&lt;strong&gt;核对仓单&lt;/strong&gt;');
     expect(scrollSpy).toHaveBeenCalled();
 
-    outlineButtons.find((button) => button.textContent?.includes('实体关系图'))?.click();
+    outlineButton('实体关系图')?.click();
     fixture.detectChanges();
     const entityOverview = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector<HTMLElement>('[data-testid="preview-entity-overview"]');
     expect(entityOverview).toBeTruthy();
-    const entityOverviewRect = entityOverview?.querySelector<SVGRectElement>('.diagram-node rect');
-    expect(entityOverviewRect?.getAttribute('fill')).toMatch(/^#/);
+    expect(entityOverview?.querySelector('.entity-node')?.textContent).toContain('仓单');
 
-    outlineButtons.find((button) => button.textContent?.includes('仓单'))?.click();
+    outlineButton('仓单')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('实体: 仓单');
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-testid="preview-entity-state-graph"]')).toBeTruthy();
-    const entityStateRect = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector<SVGRectElement>('[data-testid="preview-entity-state-graph"] .diagram-node rect');
-    expect(entityStateRect?.getAttribute('fill')).toMatch(/^#/);
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('.pv-technical-design strong')?.textContent).toContain('调用聚合根保存仓单');
+    const entityStateGraph = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-testid="preview-entity-state-graph"]');
+    expect(entityStateGraph).toBeTruthy();
+    expect(entityStateGraph?.textContent).toContain('草稿');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('调用聚合根保存仓单');
 
     compiled.querySelector<HTMLButtonElement>('#preview-raw-toggle')?.click();
     fixture.detectChanges();
@@ -2586,7 +2584,7 @@ describe('App', () => {
     expect(runtime.doc.roles[0].desc).toBe('自定义描述');
   });
 
-  it('should edit task technical handover in the component workbench', async () => {
+  it('should edit task definition through the legacy task contract fields', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.ui['mainTab'] = 'constructWorkbench';
@@ -2609,11 +2607,9 @@ describe('App', () => {
             inputs: [{ name: 'warehouseId', type: 'String', required: true, note: '仓库标识' }],
             outputs: [{ name: 'reservationId', type: 'String', required: false, note: '预约标识' }],
           },
-          technicalHandover: {
-            runtimeKind: 'DomainServiceJar',
-            target: 'InboundReservationService.submit',
-            note: '由 FSM 内嵌领域服务承接。',
-          },
+          address: 'planTaskHandler.saveInboundReservation',
+          target: 'InboundReservationService.submit',
+          note: '<p>由 FSM 内嵌领域服务承接。</p>',
         },
       ],
       services: [],
@@ -2642,32 +2638,29 @@ describe('App', () => {
     taskHead!.click();
     fixture.detectChanges();
 
-    expect(compiled.querySelector('[data-testid="taskdef-technical-handover-task-save"]')?.textContent).toContain('技术承接');
-    expect(compiled.querySelector('[data-testid="taskdef-technical-handover-task-save"]')?.textContent).toContain('DomainServiceJar');
-    expect(compiled.querySelector('[data-testid="taskdef-technical-handover-task-save"]')?.textContent).toContain('InboundReservationService.submit');
+    expect(compiled.querySelector('[data-testid="taskdef-technical-handover-task-save"]')).toBeFalsy();
+    expect(taskHead!.textContent).toContain('InboundReservationService.submit');
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="taskdef-edit-task-save"]')?.click();
     fixture.detectChanges();
 
-    const runtimeKind = compiled.querySelector<HTMLInputElement>('[data-testid="taskdef-handover-runtime-kind"]')!;
-    const target = compiled.querySelector<HTMLInputElement>('[data-testid="taskdef-handover-target"]')!;
-    const note = compiled.querySelector<HTMLTextAreaElement>('[data-testid="taskdef-handover-note"]')!;
-    runtimeKind.value = 'QueryHttp';
-    runtimeKind.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(compiled.querySelector('[data-testid="taskdef-handover-runtime-kind"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="taskdef-handover-target"]')).toBeFalsy();
+    const inputs = Array.from(compiled.querySelectorAll<HTMLInputElement>('.taskdef-edit-basics input'));
+    const target = inputs.find((input) => input.classList.contains('taskdef-edit-target'))!;
+    const address = inputs.find((input) => input.placeholder.includes('/api/'))!;
     target.value = 'GET /query/inbound-reservations';
     target.dispatchEvent(new Event('input', { bubbles: true }));
-    note.value = '查询服务通过事件溯源落库后提供。';
-    note.dispatchEvent(new Event('input', { bubbles: true }));
+    address.value = '/query/inbound-reservations';
+    address.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
 
     compiled.querySelector<HTMLButtonElement>('[data-testid="taskdef-save-task-save"]')?.click();
     fixture.detectChanges();
 
-    expect(runtime.doc.taskDefinitions[0].technicalHandover).toEqual({
-      runtimeKind: 'QueryHttp',
-      target: 'GET /query/inbound-reservations',
-      note: '查询服务通过事件溯源落库后提供。',
-    });
+    expect(runtime.doc.taskDefinitions[0].target).toBe('GET /query/inbound-reservations');
+    expect(runtime.doc.taskDefinitions[0].address).toBe('/query/inbound-reservations');
+    expect(runtime.doc.taskDefinitions[0].technicalHandover).toBeUndefined();
     expect(runtime.modified).toBe(true);
   });
 
@@ -3788,10 +3781,8 @@ describe('App', () => {
             inputs: [{ name: 'warehouseId', type: 'String', required: true }],
             outputs: [{ name: 'reservationId', type: 'String' }],
           },
-          technicalHandover: {
-            runtimeKind: 'DomainServiceJar',
-            target: 'InboundReservationService.submit',
-          },
+          address: 'planTaskHandler.saveInboundReservation',
+          target: 'InboundReservationService.submit',
         },
       ],
       services: [
@@ -3903,6 +3894,8 @@ describe('App', () => {
     fixture.detectChanges();
     compiled.querySelector<HTMLButtonElement>('[data-testid="process-switch-node"]')?.click();
     fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="editor-editing-open"]')?.click();
+    fixture.detectChanges();
 
     const entitySection = compiled.querySelector('[data-testid="process-entity-operation-section"]');
     expect(entitySection?.textContent).toContain('入库预约');
@@ -3924,6 +3917,8 @@ describe('App', () => {
     const formEntitySelect = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-entity"]')!;
     formEntitySelect.value = 'entity-reservation';
     formEntitySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-copy-fields"]')?.click();
     fixture.detectChanges();
 
     const form = runtime.doc.processes[0].nodes[0].forms[0];

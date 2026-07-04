@@ -473,7 +473,14 @@
                 </div>
                 <div class="taskdef-edit-row">
                   <input [(ngModel)]="td.address" placeholder="地址 /api/..." />
-                  <select [(ngModel)]="td.constructUid"><option value="">未归属构件</option>@for(c of constructs(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}</select>
+                  <select data-testid="taskdef-edit-component" [ngModel]="taskDefEditComponentId(td)" (ngModelChange)="selectTaskDefEditComponent(td, $event)">
+                    <option value="">未归属组件</option>
+                    @for(c of components(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
+                  </select>
+                  <select data-testid="taskdef-edit-construct" [ngModel]="td.constructUid || ''" (ngModelChange)="selectTaskDefEditConstruct(td, $event)">
+                    <option value="">未归属构件</option>
+                    @for(c of constructsForTaskEdit(td); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
+                  </select>
                 </div>
                 </section>
                 @if (td.parameters; as p) {
@@ -494,14 +501,6 @@
                   <tbody>@for(param of p.outputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(p.outputs||[], $index)">×</button></td></tr>}</tbody></table> }
                 </section>
                 }
-                <section class="taskdef-edit-section taskdef-edit-params taskdef-handover-edit">
-                  <div class="taskdef-edit-section-head"><strong>技术承接</strong></div>
-                  <div class="taskdef-edit-row">
-                    <input data-testid="taskdef-handover-runtime-kind" [(ngModel)]="ensureTaskHandover(td).runtimeKind" placeholder="运行承接类型，如 DomainServiceJar / QueryHttp" />
-                    <input data-testid="taskdef-handover-target" [(ngModel)]="ensureTaskHandover(td).target" placeholder="目标标识，如 InboundReservationService.submit" />
-                  </div>
-                  <textarea data-testid="taskdef-handover-note" [(ngModel)]="ensureTaskHandover(td).note" rows="2" placeholder="说明这个构件任务未来如何被运行时、领域服务、查询服务或 Agent 承接"></textarea>
-                </section>
                 <section class="taskdef-edit-section taskdef-edit-note-section">
                   <app-rich-text-editor
                     class="taskdef-rich-text"
@@ -537,15 +536,6 @@
                 <div class="taskdef-detail">
                   @if ((td.parameters?.inputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输入参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.inputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
                   @if ((td.parameters?.outputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输出参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.outputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
-                  @if (hasTaskHandover(td)) {
-                    <div class="taskdef-params" [attr.data-testid]="'taskdef-technical-handover-' + uid(td)">
-                      <span class="taskdef-params-label">技术承接</span>
-                      <table>
-                        <tr><th>运行承接类型</th><th>目标标识</th><th>说明</th></tr>
-                        <tr><td>{{ td.technicalHandover?.runtimeKind || '-' }}</td><td>{{ td.technicalHandover?.target || '-' }}</td><td class="muted">{{ td.technicalHandover?.note || '-' }}</td></tr>
-                      </table>
-                    </div>
-                  }
                   @if (td.note) {
                     <app-rich-text-editor
                       class="taskdef-rich-text"
@@ -556,8 +546,8 @@
                       [readonly]="true"
                     ></app-rich-text-editor>
                   }
-                  @if (!((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note || hasTaskHandover(td))) {
-                    <div class="taskdef-empty-detail">暂无更多详情，可打开编辑补充参数、说明或技术承接。</div>
+                  @if (!((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note)) {
+                    <div class="taskdef-empty-detail">暂无更多详情，可打开编辑补充参数或详细设计。</div>
                   }
                 </div>
                 }

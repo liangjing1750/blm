@@ -405,7 +405,11 @@ describe('ComponentWorkbenchComponent', () => {
 
     expect(host.querySelector('.taskdef-edit-layout')).toBeTruthy();
     expect(host.querySelector('.taskdef-edit-basics')).toBeTruthy();
-    expect(host.querySelectorAll('.taskdef-edit-params').length).toBeGreaterThanOrEqual(3);
+    expect(host.querySelector('[data-testid="taskdef-edit-component"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="taskdef-edit-construct"]')).toBeTruthy();
+    expect(host.querySelectorAll('.taskdef-edit-params').length).toBe(2);
+    expect(host.querySelector('[data-testid="taskdef-handover-runtime-kind"]')).toBeFalsy();
+    expect(host.querySelector('[data-testid="taskdef-handover-target"]')).toBeFalsy();
 
     host.querySelectorAll<HTMLButtonElement>('.taskdef-edit-section-head button').forEach((button) => button.click());
     fixture.detectChanges();
@@ -413,6 +417,7 @@ describe('ComponentWorkbenchComponent', () => {
     const draft = getAngularRuntimeState().doc.taskDefinitions.find((task: any) => !task.uid);
     expect(draft.parameters.inputs).toHaveLength(1);
     expect(draft.parameters.outputs).toHaveLength(1);
+    expect(draft.technicalHandover).toBeUndefined();
   });
 
   it('renders and edits task definition details with the shared rich text editor', () => {

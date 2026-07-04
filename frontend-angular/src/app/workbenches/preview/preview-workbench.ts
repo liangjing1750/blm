@@ -29,6 +29,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   protected readonly runtime = getAngularRuntimeState();
   protected readonly exportWait = signal<{ title: string; description: string } | null>(null);
   protected readonly showRaw = signal(false);
+  private readonly loadedPreviewSections = signal<Set<string>>(new Set());
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly markdown = computed(() => this.buildMarkdown());
   protected readonly renderedHtml = computed<SafeHtml>(() => this.sanitizer.bypassSecurityTrustHtml(this.renderDocumentHtml()));
@@ -41,6 +42,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
 
   protected jumpTo(anchorId: string): void {
     this.ensurePreviewSection(anchorId);
+    this.ensureAllPreviewSections();
     document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -209,6 +211,9 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   }
 
   private previewLazySectionHtml(anchorId: string, kind: string, title: string, index = 0): string {
+    if (this.loadedPreviewSections().has(anchorId)) {
+      return this.renderPreviewSectionByKind(anchorId, kind, index);
+    }
     return `<section id="${this.esc(anchorId)}" class="pv-lazy-section" data-preview-lazy="${this.esc(kind)}" data-preview-index="${index}" data-preview-loaded="false">
       <h3>${this.esc(title)}</h3>
       <div class="pv-lazy-placeholder"><span>滚动到这里或点击大纲后生成内容</span></div>
@@ -233,7 +238,20 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     if (!el || el.dataset['previewLoaded'] === 'true') return;
     const kind = el.dataset['previewLazy'] || '';
     const index = Number(el.dataset['previewIndex'] || 0) || 0;
-    const html = kind === 'stage-panorama'
+    const html = this.renderPreviewSectionByKind(anchorId, kind, index);
+    if (!html) return;
+    this.loadedPreviewSections.update((loaded) => new Set(loaded).add(anchorId));
+    this.previewLazyObserver?.unobserve(el);
+    el.outerHTML = html;
+  }
+
+  private ensureAllPreviewSections(): void {
+    Array.from(document.querySelectorAll<HTMLElement>('[data-preview-lazy]'))
+      .forEach((section) => this.ensurePreviewSection(section.id));
+  }
+
+  private renderPreviewSectionByKind(anchorId: string, kind: string, index: number): string {
+    return kind === 'stage-panorama'
       ? this.renderStagePanorama(this.runtime.doc || {})
       : kind === 'stage'
         ? this.renderStageDetail(this.asArray(this.runtime.doc?.stages)[index], index)
@@ -244,9 +262,6 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
             : kind === 'entity'
               ? this.renderEntityDetail(this.asArray(this.runtime.doc?.entities)[index], index)
               : '';
-    if (!html) return;
-    this.previewLazyObserver?.unobserve(el);
-    el.outerHTML = html;
   }
 
   private renderStageDetail(stage: any, index: number): string {
@@ -577,7 +592,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return `<h2 id="preview-components">组件构件</h2>
       ${components.length ? `<h3>业务组件</h3><table><thead><tr><th>组件</th><th>类型</th><th>说明</th></tr></thead><tbody>${components.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.kind || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
       ${constructs.length ? `<h3>业务构件</h3><table><thead><tr><th>构件</th><th>所属组件</th><th>说明</th></tr></thead><tbody>${constructs.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.businessComponentUid || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
-      ${taskDefinitions.length ? `<h3>任务定义</h3><table><thead><tr><th>任务</th><th>构件</th><th>技术承接</th></tr></thead><tbody>${taskDefinitions.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.constructUid || item.businessConstructUid || '')}</td><td>${this.renderTechnicalHandover(item.technicalHandover)}</td></tr>`).join('')}</tbody></table>` : ''}`;
+      ${taskDefinitions.length ? `<h3>任务定义</h3><table><thead><tr><th>任务</th><th>构件</th><th>地址</th><th>目标</th><th>参数</th><th>详细设计</th></tr></thead><tbody>${taskDefinitions.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.constructUid || item.businessConstructUid || '')}</td><td>${this.esc(item.address || '')}</td><td>${this.esc(item.target || '')}</td><td>${this.esc(this.taskParameterSummary(item.parameters))}</td><td>${this.richTextCell(item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}`;
   }
 
   private buildMarkdown(): string {
@@ -610,15 +625,10 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       .filter((rule) => rule.name || rule.content);
   }
 
-  private renderTechnicalHandover(handover: any): string {
-    if (!handover) return '';
-    if (typeof handover === 'string') return this.richTextCell(handover);
-    const summary = [handover.summary, handover.runtimeKind, handover.target]
-      .filter(Boolean)
-      .map((item) => this.esc(item))
-      .join(' / ');
-    const detail = handover.designDescription || handover.description || handover.detail || handover.note || '';
-    return `${summary ? `<div class="pv-note">${summary}</div>` : ''}${detail ? `<div class="pv-technical-design">${this.previewRichTextHtml(detail)}</div>` : ''}`;
+  private taskParameterSummary(parameters: any): string {
+    const inputs = this.asArray(parameters?.inputs).length;
+    const outputs = this.asArray(parameters?.outputs).length;
+    return `入参 ${inputs} · 出参 ${outputs}`;
   }
 
   private previewRichTextHtml(value: unknown): string {

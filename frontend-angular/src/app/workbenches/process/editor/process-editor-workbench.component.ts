@@ -1215,10 +1215,12 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     if (!this.editing) return;
     const previousEntityId = this.formEntityId(form);
     form.entity_id = value;
+    form.entityId = value;
     this.sections(form).forEach((section) => {
       const current = String(section.entity_id || '').trim();
       if (!current || current === previousEntityId || current === value) {
         section.entity_id = value;
+        section.entityId = value;
         this.clearInvalidEntityFieldMappings(form, section);
         this.askEntityFieldCopy(form, section, value);
       }

@@ -150,7 +150,6 @@ export interface TaskDefinition {
   constructUid?: string;
   businessComponentUid?: string;
   parameters?: TaskParameterBag;
-  technicalHandover?: TechnicalHandover;
 }
 
 export interface TaskParameter {
@@ -167,12 +166,6 @@ export interface TaskParameterBag {
 }
 
 export type TaskIntent = 'Query' | 'Command' | 'Validate' | 'Calculate' | 'Notify' | 'StateChange' | 'Event' | 'Service' | 'Process';
-
-export interface TechnicalHandover {
-  runtimeKind?: string;
-  target?: string;
-  note?: string;
-}
 
 export interface ServiceGroup {
   uid: string;

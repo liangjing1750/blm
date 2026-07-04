@@ -11,8 +11,7 @@ interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; 
 interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; businessComponentId?: string; businessComponent?: string; }
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructId?: string; businessConstructUids?: string[]; constructUid?: string; constructId?: string; }
 interface TaskParam { name: string; type: string; required: boolean; note: string; }
-interface TechnicalHandover { runtimeKind?: string; target?: string; note?: string; }
-interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; technicalHandover?: TechnicalHandover; constructUid?: string; businessComponentUid?: string; }
+interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; businessComponentUid?: string; }
 
 @Component({
   selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent, RichTextEditorComponent],
@@ -608,7 +607,6 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
       constructUid: this.uid(construct),
       businessComponentUid: this.constructComponentId(construct),
       parameters: { inputs: [], outputs: [] },
-      technicalHandover: { runtimeKind: '', target: '', note: '' },
     };
     doc.taskDefinitions.push(task);
     this.touch();
@@ -794,6 +792,36 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return String(td.constructUid || '').trim();
   }
 
+  protected taskDefEditComponentId(td: LegacyTaskDef): string {
+    const explicit = String(td.businessComponentUid || '').trim();
+    if (explicit) return explicit;
+    const construct = this.constructs().find((item) => this.uid(item) === this.tdConstructId(td));
+    return construct ? this.constructComponentId(construct) : '';
+  }
+
+  protected constructsForTaskEdit(td: LegacyTaskDef): LegacyConstruct[] {
+    const componentId = this.taskDefEditComponentId(td);
+    if (!componentId) return this.constructs();
+    return this.constructs().filter((construct) => this.constructComponentId(construct) === componentId);
+  }
+
+  protected selectTaskDefEditComponent(td: LegacyTaskDef, componentId: string): void {
+    if (!this.canEdit()) return;
+    td.businessComponentUid = componentId;
+    if (td.constructUid && !this.constructsForTaskEdit(td).some((construct) => this.uid(construct) === td.constructUid)) {
+      td.constructUid = '';
+    }
+    this.touch();
+  }
+
+  protected selectTaskDefEditConstruct(td: LegacyTaskDef, constructId: string): void {
+    if (!this.canEdit()) return;
+    td.constructUid = constructId;
+    const construct = this.constructs().find((item) => this.uid(item) === constructId);
+    td.businessComponentUid = construct ? this.constructComponentId(construct) : this.taskDefEditComponentId(td);
+    this.touch();
+  }
+
   protected filteredTaskDefs(): LegacyTaskDef[] {
     const compId = this.taskDefCompId();
     const constructId = this.taskDefConstructId();
@@ -824,9 +852,9 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected isTaskExpanded(id: string): boolean { return this.expandedTaskIds().has(id); }
   protected startEditInline(td?: LegacyTaskDef): void {
     if (!this.canEdit()) return;
-    if (td) { this.ensureTaskHandover(td); this.editingTaskId.set(this.uid(td)); return; }
+    if (td) { this.editingTaskId.set(this.uid(td)); return; }
     // 新建
-    const base: LegacyTaskDef = { uid: '', name: '', type: 'Query', target: '', address: '', note: '', constructUid: '', parameters: { inputs: [], outputs: [] }, technicalHandover: { runtimeKind: '', target: '', note: '' } };
+    const base: LegacyTaskDef = { uid: '', name: '', type: 'Query', querySourceKind: '', target: '', address: '', note: '', constructUid: '', parameters: { inputs: [], outputs: [] } };
     this.doc().taskDefinitions ||= [];
     this.doc().taskDefinitions.push(base);
     this.editingTaskId.set('');
@@ -835,7 +863,6 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected saveInlineEdit(td: LegacyTaskDef): void {
     if (!this.canEdit()) return;
     td.parameters ||= { inputs: [], outputs: [] };
-    this.ensureTaskHandover(td);
     this.editingTaskId.set('');
     this.touch();
   }
@@ -860,14 +887,6 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected addParam(arr: TaskParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); }
   protected removeParam(arr: TaskParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); }
   protected isEditingTask(td: LegacyTaskDef): boolean { return this.editingTaskId() === this.uid(td) || (!td.uid && this.editingTaskId() === ''); }
-  protected ensureTaskHandover(td: LegacyTaskDef): TechnicalHandover {
-    td.technicalHandover ||= { runtimeKind: '', target: '', note: '' };
-    return td.technicalHandover;
-  }
-  protected hasTaskHandover(td: LegacyTaskDef): boolean {
-    const handover = td.technicalHandover;
-    return Boolean(handover?.runtimeKind || handover?.target || handover?.note);
-  }
 
   // ─── Utils ────────────────────────────────────────
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
