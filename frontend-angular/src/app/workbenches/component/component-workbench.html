@@ -15,183 +15,6 @@
     </div>
   </div>
 
-  <!-- 业务组件：只看组件与构件分组，实体和任务明细留到构件详情页。 -->
-  @if (false && activeTab() === 'businessComponent') {
-    <div class="comp-tab-body business-component-view" data-testid="business-component-view">
-      <div class="business-component-toolbar">
-        @if (canEdit()) {
-          <button class="btn btn-primary btn-sm" data-testid="business-component-add" (click)="addComponentInline()">+ 新建业务组件</button>
-        }
-      </div>
-      <div class="business-component-sections">
-        <section class="business-component-group business-component-group--core">
-          <header class="business-component-group-head">
-            <strong>核心组件</strong>
-            <span>{{ coreComponents().length }} 个组件</span>
-          </header>
-          <div class="comp-grid business-component-grid">
-        @for (comp of coreComponents(); track uid(comp)) {
-          <div class="comp-grid-card business-component-card" data-testid="business-component-card" [class.is-generic]="componentKind(comp) === 'generic'">
-            <div class="comp-grid-head">
-              <span class="comp-grid-label" [class.is-generic-label]="componentKind(comp) === 'generic'">{{ componentKind(comp) === 'generic' ? '通用组件' : '核心组件' }}</span>
-              @if (canEdit()) {
-                <input class="business-component-name-input" data-testid="business-component-name-input" [ngModel]="comp.name || ''" (ngModelChange)="updateComponentInline(comp, 'name', $event)" placeholder="业务组件名称" />
-              } @else {
-                <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
-              }
-              <span class="business-component-count">{{ constructsFor(comp).length }} 个构件</span>
-              @if (canEdit()) {
-                <button class="comp-grid-edit danger" (click)="deleteComp(comp)" title="删除组件">删除</button>
-              }
-            </div>
-            <div class="business-component-inline-editor" [class.is-readonly]="!canEdit()">
-              @if (canEdit()) {
-                <div class="business-component-kind-toggle" data-testid="business-component-kind-toggle">
-                  <button type="button" [class.active]="componentKind(comp) === 'core'" (click)="updateComponentInline(comp, 'kind', 'core')">核心组件</button>
-                  <button type="button" [class.active]="componentKind(comp) === 'generic'" (click)="updateComponentInline(comp, 'kind', 'generic')">通用组件</button>
-                </div>
-                <input class="business-component-note-input" data-testid="business-component-note-input" [ngModel]="comp.note || ''" (ngModelChange)="updateComponentInline(comp, 'note', $event)" placeholder="说明组件职责和边界" />
-              } @else if (comp.note) {
-                <p class="business-component-note">{{ comp.note }}</p>
-              } @else {
-                <p class="business-component-note muted">暂无说明</p>
-              }
-            </div>
-            @if (canEdit() && ungroupedConstructs().length) {
-              <div class="business-component-imports" data-testid="business-component-imports">
-                <span>可移入构件</span>
-                <div>
-                  @for (construct of ungroupedConstructs(); track uid(construct)) {
-                    <button type="button" class="business-component-import-btn" data-testid="construct-attach-button" (click)="attachConstructToComponent(construct, comp)">移入 {{ construct.name || uid(construct) }}</button>
-                  }
-                </div>
-              </div>
-            }
-            <div class="comp-grid-constructs">
-              @for (construct of visibleConstructsFor(comp); track uid(construct)) {
-                <div class="comp-grid-construct-wrap">
-                  <button class="comp-grid-construct business-construct-entry" data-testid="business-construct-entry" [class.is-selected]="isSelectedConstruct(construct)" (click)="openBusinessConstruct(construct)">
-                    <div class="comp-grid-construct-head">
-                      <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
-                    </div>
-                    <div class="business-construct-metrics">
-                      <span>{{ entitiesFor(construct).length }} 个实体</span>
-                      <span>{{ taskDefsFor(construct).length }} 个任务</span>
-                    </div>
-                  </button>
-                  @if (canEdit()) {
-                    <button class="construct-move-btn" data-testid="construct-detach-button" type="button" (click)="detachConstructFromComponent(construct); $event.stopPropagation()">移出</button>
-                  }
-                </div>
-              } @empty {
-                <div class="business-empty-inline">暂无业务构件</div>
-              }
-              @if (hiddenConstructCount(comp)) {
-                <button class="comp-grid-construct-more" type="button" (click)="toggleComponentConstructs(comp)">还有 {{ hiddenConstructCount(comp) }} 个构件</button>
-              } @else if (constructsFor(comp).length > 3) {
-                <button class="comp-grid-construct-more" type="button" (click)="toggleComponentConstructs(comp)">收起构件</button>
-              }
-              @if (canEdit()) {
-                <button class="comp-grid-construct-add" data-testid="business-construct-add" (click)="createConstructForComponent(comp)">+ 新建构件</button>
-              }
-            </div>
-          </div>
-        } @empty {
-          <div class="business-empty-inline business-empty-group">暂无核心组件</div>
-        }
-          </div>
-        </section>
-
-        <section class="business-component-group business-component-group--generic">
-          <header class="business-component-group-head">
-            <strong>通用组件</strong>
-            <span>{{ genericComponents().length }} 个组件</span>
-          </header>
-          <div class="comp-grid business-component-grid">
-        @for (comp of genericComponents(); track uid(comp)) {
-          <div class="comp-grid-card business-component-card" data-testid="business-component-card" [class.is-generic]="componentKind(comp) === 'generic'">
-            <div class="comp-grid-head">
-              <span class="comp-grid-label is-generic-label">通用组件</span>
-              @if (canEdit()) {
-                <input class="business-component-name-input" data-testid="business-component-name-input" [ngModel]="comp.name || ''" (ngModelChange)="updateComponentInline(comp, 'name', $event)" placeholder="业务组件名称" />
-              } @else {
-                <span class="comp-grid-name">{{ comp.name || uid(comp) }}</span>
-              }
-              <span class="business-component-count">{{ constructsFor(comp).length }} 个构件</span>
-              @if (canEdit()) {
-                <button class="comp-grid-edit danger" (click)="deleteComp(comp)" title="删除组件">删除</button>
-              }
-            </div>
-            <div class="business-component-inline-editor" [class.is-readonly]="!canEdit()">
-              @if (canEdit()) {
-                <div class="business-component-kind-toggle" data-testid="business-component-kind-toggle">
-                  <button type="button" [class.active]="componentKind(comp) === 'core'" (click)="updateComponentInline(comp, 'kind', 'core')">核心组件</button>
-                  <button type="button" [class.active]="componentKind(comp) === 'generic'" (click)="updateComponentInline(comp, 'kind', 'generic')">通用组件</button>
-                </div>
-                <input class="business-component-note-input" data-testid="business-component-note-input" [ngModel]="comp.note || ''" (ngModelChange)="updateComponentInline(comp, 'note', $event)" placeholder="说明组件职责和边界" />
-              } @else if (comp.note) {
-                <p class="business-component-note">{{ comp.note }}</p>
-              } @else {
-                <p class="business-component-note muted">暂无说明</p>
-              }
-            </div>
-            @if (canEdit() && ungroupedConstructs().length) {
-              <div class="business-component-imports" data-testid="business-component-imports">
-                <span>可移入构件</span>
-                <div>
-                  @for (construct of ungroupedConstructs(); track uid(construct)) {
-                    <button type="button" class="business-component-import-btn" data-testid="construct-attach-button" (click)="attachConstructToComponent(construct, comp)">移入 {{ construct.name || uid(construct) }}</button>
-                  }
-                </div>
-              </div>
-            }
-            <div class="comp-grid-constructs">
-              @for (construct of visibleConstructsFor(comp); track uid(construct)) {
-                <div class="comp-grid-construct-wrap">
-                  <button class="comp-grid-construct business-construct-entry" data-testid="business-construct-entry" [class.is-selected]="isSelectedConstruct(construct)" (click)="openBusinessConstruct(construct)">
-                    <div class="comp-grid-construct-head">
-                      <span class="comp-grid-construct-name">{{ construct.name || uid(construct) }}</span>
-                    </div>
-                    <div class="business-construct-metrics">
-                      <span>{{ entitiesFor(construct).length }} 个实体</span>
-                      <span>{{ taskDefsFor(construct).length }} 个任务</span>
-                    </div>
-                  </button>
-                  @if (canEdit()) {
-                    <button class="construct-move-btn" data-testid="construct-detach-button" type="button" (click)="detachConstructFromComponent(construct); $event.stopPropagation()">移出</button>
-                  }
-                </div>
-              } @empty {
-                <div class="business-empty-inline">暂无业务构件</div>
-              }
-              @if (hiddenConstructCount(comp)) {
-                <button class="comp-grid-construct-more" type="button" (click)="toggleComponentConstructs(comp)">还有 {{ hiddenConstructCount(comp) }} 个构件</button>
-              } @else if (constructsFor(comp).length > 3) {
-                <button class="comp-grid-construct-more" type="button" (click)="toggleComponentConstructs(comp)">收起构件</button>
-              }
-              @if (canEdit()) {
-                <button class="comp-grid-construct-add" data-testid="business-construct-add" (click)="createConstructForComponent(comp)">+ 新建构件</button>
-              }
-            </div>
-          </div>
-        } @empty {
-          <div class="business-empty-inline business-empty-group">暂无通用组件</div>
-        }
-          </div>
-        </section>
-        @if (!components().length) {
-          <div class="business-empty-state">
-            <strong>暂无业务组件</strong>
-            <span>先新建业务组件，再为组件添加业务构件。</span>
-            @if (canEdit()) {
-              <button class="btn btn-primary btn-sm" (click)="addComponentInline()">新建业务组件</button>
-            }
-          </div>
-        }
-      </div>
-    </div>
-  }
-
   <!-- 业务构件：承接组件总览里的点击，集中展示一个构件的实体和任务资产。 -->
   @if (activeTab() === 'businessConstruct') {
     <div class="comp-tab-body business-construct-view" data-testid="business-construct-view">
@@ -320,10 +143,13 @@
       <header class="business-mindmap-toolbar" data-testid="business-mindmap-toolbar">
         <div>
           <strong>业务组件地图</strong>
-          <span>Enter 新增同级，Tab 新增子级，T 新增任务，双击重命名，Ctrl+滚轮缩放；拖拽构件、实体、任务可调整归属。</span>
+          <span>Enter 新增同级，Tab 新增子级；子级菜单用方向键循环选择，Delete 删除，Space 折叠/展开，双击重命名，Ctrl+滚轮缩放。</span>
         </div>
         <div class="business-mindmap-tools" data-testid="business-mindmap-tools">
           <span data-testid="business-mindmap-zoom">{{ mindMapZoomPercent() }}%</span>
+          @if (canEdit() && !components().length && groupedTreeComponents().length) {
+            <button class="business-tree-action" data-testid="mind-create-first-component" type="button" (click)="addComponentInline()">创建第一个业务组件</button>
+          }
           <button class="business-tree-action" data-testid="mind-collapse-all" type="button" (click)="collapseAllMindNodes()">全部折叠</button>
           <button class="business-tree-action" data-testid="mind-expand-all" type="button" (click)="expandAllMindNodes()">全部展开</button>
           <button class="business-tree-action" type="button" (click)="resetMindMapZoom()">重置缩放</button>
@@ -434,7 +260,7 @@
 
   <!-- Tab 2: 任务定义 -->
   @if (activeTab() === 'taskDef') {
-    <div class="comp-tab-body">
+    <div class="comp-tab-body taskdef-map-view">
       <div class="comp-toolbar">
         <select [ngModel]="taskDefCompId()" (ngModelChange)="selectTaskDefComp($event)">
           <option value="">全部组件</option>
@@ -449,120 +275,118 @@
           <button class="btn btn-primary btn-sm" (click)="startEditInline()">+ 新建任务</button>
         }
       </div>
-      <div class="taskdef-cards">
-        @for (td of pagedTaskDefs(); track uid(td)) {
-          <div class="taskdef-card" [class.editing]="isEditingTask(td)" (click)="!isEditingTask(td) && toggleTaskExpand(uid(td))">
-            @if (isEditingTask(td)) {
-              <!-- 编辑模式 -->
-              <div class="taskdef-edit-body taskdef-edit-layout">
-                <section class="taskdef-edit-section taskdef-edit-basics">
-                  <div class="taskdef-edit-section-head"><strong>基础信息</strong></div>
-                <div class="taskdef-edit-row">
-                  <input [(ngModel)]="td.name" placeholder="任务名称" class="taskdef-edit-name" />
-                  <select [(ngModel)]="td.type">
-                    <option value="Query">Query</option>
-                    <option value="Command">Command</option>
-                    <option value="Validate">Validate</option>
-                    <option value="Calculate">Calculate</option>
-                    <option value="Notify">Notify</option>
-                    <option value="StateChange">StateChange</option>
-                    <option value="Event">Event</option>
-                    <option value="Service">Service</option>
-                  </select>
-                  <input [(ngModel)]="td.target" placeholder="实现标识" class="taskdef-edit-target" />
-                </div>
-                <div class="taskdef-edit-row">
-                  <input [(ngModel)]="td.address" placeholder="地址 /api/..." />
-                  <select data-testid="taskdef-edit-component" [ngModel]="taskDefEditComponentId(td)" (ngModelChange)="selectTaskDefEditComponent(td, $event)">
-                    <option value="">未归属组件</option>
-                    @for(c of components(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
-                  </select>
-                  <select data-testid="taskdef-edit-construct" [ngModel]="td.constructUid || ''" (ngModelChange)="selectTaskDefEditConstruct(td, $event)">
-                    <option value="">未归属构件</option>
-                    @for(c of constructsForTaskEdit(td); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
-                  </select>
-                </div>
-                </section>
-                @if (td.parameters; as p) {
-                <section class="taskdef-edit-section taskdef-edit-params">
-                  <div class="taskdef-edit-section-head">
-                    <strong>输入参数</strong>
-                    <button class="btn-ghost-sm" (click)="addParam(p.inputs || [])">+ 参数</button>
-                  </div>
-                  @if ((p.inputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                  <tbody>@for(param of p.inputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(p.inputs||[], $index)">×</button></td></tr>}</tbody></table> }
-                </section>
-                <section class="taskdef-edit-section taskdef-edit-params">
-                  <div class="taskdef-edit-section-head">
-                    <strong>输出参数</strong>
-                    <button class="btn-ghost-sm" (click)="addParam(p.outputs || [])">+ 参数</button>
-                  </div>
-                  @if ((p.outputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                  <tbody>@for(param of p.outputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(p.outputs||[], $index)">×</button></td></tr>}</tbody></table> }
-                </section>
-                }
-                <section class="taskdef-edit-section taskdef-edit-note-section">
-                  <app-rich-text-editor
-                    class="taskdef-rich-text"
-                    label="任务详情"
-                    placeholder="描述任务用途、输入输出口径、边界条件或处理说明"
-                    testIdPrefix="taskdef-note"
-                    [value]="td.note || ''"
-                    (valueChange)="td.note = $event"
-                  ></app-rich-text-editor>
-                </section>
-                <div class="taskdef-actions"><button class="btn btn-primary btn-sm" [attr.data-testid]="'taskdef-save-' + uid(td)" (click)="saveInlineEdit(td)">保存</button><button class="btn btn-outline btn-sm" (click)="cancelInlineEdit(td)">取消</button></div>
+      <div class="taskdef-service-map" data-testid="taskdef-service-map">
+        @for (group of taskDefConstructGroups(); track group.id) {
+          <section class="taskdef-construct-group" [attr.data-testid]="'taskdef-construct-group-' + group.id">
+            <header class="taskdef-construct-header">
+              <div>
+                <span class="taskdef-component-chip">{{ group.componentName }}</span>
+                <strong>{{ group.constructName }}</strong>
               </div>
-            } @else {
-              <!-- 查看模式 -->
-              <div class="taskdef-view">
-                <div class="taskdef-head" [attr.data-testid]="'taskdef-head-' + uid(td)">
-                  <span class="taskdef-type" [class.query]="td.type !== 'Service'" [class.service]="td.type === 'Service'">{{ td.type === 'Service' ? 'Service' : 'Query' }}</span>
-                  <strong>{{ td.name || uid(td) }}</strong>
-                  @if (td.target) { <code>{{ td.target }}</code> }
-                  @if (td.address) { <span class="taskdef-addr">{{ td.address }}</span> }
-                  <span class="taskdef-meta">
-                    <span>{{ constructName(tdConstructId(td)) }}</span>
-                    <span [class.warn]="!(td.target || td.address)"> {{ td.target || td.address ? '已设置实现' : '未设置实现' }}</span>
-                    <span>{{ taskNodes(td).length }} 个节点引用</span>
-                  </span>
-                  <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
-                  @if (canEdit()) {
-                    <button class="btn-ghost-sm" [attr.data-testid]="'taskdef-edit-' + uid(td)" (click)="startEditInline(td); $event.stopPropagation()">编辑</button>
-                    <button class="btn-ghost-sm danger" (click)="deleteTaskDef(td); $event.stopPropagation()">删除</button>
+              <span>{{ group.tasks.length }} 个能力</span>
+            </header>
+            <div class="taskdef-capability-grid">
+              @for (td of group.tasks; track uid(td)) {
+                <article class="taskdef-card taskdef-capability-card" [class.editing]="isEditingTask(td)" [attr.data-testid]="'taskdef-card-' + uid(td)" (click)="!isEditingTask(td) && toggleTaskExpand(uid(td))">
+                  @if (isEditingTask(td)) {
+                    <div class="taskdef-edit-body taskdef-edit-layout">
+                      <section class="taskdef-edit-section taskdef-edit-basics">
+                        <div class="taskdef-edit-section-head"><strong>基础信息</strong></div>
+                        <div class="taskdef-edit-row">
+                          <input [(ngModel)]="td.name" placeholder="任务名称" class="taskdef-edit-name" />
+                          <select [(ngModel)]="td.type">
+                            <option value="Query">Query</option>
+                            <option value="Command">Command</option>
+                            <option value="Validate">Validate</option>
+                            <option value="Calculate">Calculate</option>
+                            <option value="Notify">Notify</option>
+                            <option value="StateChange">StateChange</option>
+                            <option value="Event">Event</option>
+                            <option value="Service">Service</option>
+                          </select>
+                          <input [(ngModel)]="td.target" placeholder="实现标识" class="taskdef-edit-target" />
+                        </div>
+                        <div class="taskdef-edit-row">
+                          <input [(ngModel)]="td.address" placeholder="地址 /api/..." />
+                          <select data-testid="taskdef-edit-component" [ngModel]="taskDefEditComponentId(td)" (ngModelChange)="selectTaskDefEditComponent(td, $event)">
+                            <option value="">未归属组件</option>
+                            @for(c of components(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
+                          </select>
+                          <select data-testid="taskdef-edit-construct" [ngModel]="td.constructUid || ''" (ngModelChange)="selectTaskDefEditConstruct(td, $event)">
+                            <option value="">未归属构件</option>
+                            @for(c of constructsForTaskEdit(td); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
+                          </select>
+                        </div>
+                      </section>
+                      @if (td.parameters; as p) {
+                        <section class="taskdef-edit-section taskdef-edit-params">
+                          <div class="taskdef-edit-section-head">
+                            <strong>输入参数</strong>
+                            <button class="btn-ghost-sm" (click)="addParam(p.inputs || []); $event.stopPropagation()">+ 参数</button>
+                          </div>
+                          @if ((p.inputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                          <tbody>@for(param of p.inputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(p.inputs||[], $index)">×</button></td></tr>}</tbody></table> }
+                        </section>
+                        <section class="taskdef-edit-section taskdef-edit-params">
+                          <div class="taskdef-edit-section-head">
+                            <strong>输出参数</strong>
+                            <button class="btn-ghost-sm" (click)="addParam(p.outputs || []); $event.stopPropagation()">+ 参数</button>
+                          </div>
+                          @if ((p.outputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
+                          <tbody>@for(param of p.outputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" (click)="removeParam(p.outputs||[], $index)">×</button></td></tr>}</tbody></table> }
+                        </section>
+                      }
+                      <section class="taskdef-edit-section taskdef-edit-note-section">
+                        <app-rich-text-editor class="taskdef-rich-text" label="任务详情" placeholder="描述任务用途、输入输出口径、边界条件或处理说明" testIdPrefix="taskdef-note" [value]="td.note || ''" (valueChange)="td.note = $event"></app-rich-text-editor>
+                      </section>
+                      <div class="taskdef-actions"><button class="btn btn-primary btn-sm" [attr.data-testid]="'taskdef-save-' + uid(td)" (click)="saveInlineEdit(td); $event.stopPropagation()">保存</button><button class="btn btn-outline btn-sm" (click)="cancelInlineEdit(td); $event.stopPropagation()">取消</button></div>
+                    </div>
+                  } @else {
+                    <div class="taskdef-capability-head" [attr.data-testid]="'taskdef-head-' + uid(td)">
+                      <span class="taskdef-type" [class.query]="td.type !== 'Service'" [class.service]="td.type === 'Service'">{{ td.type === 'Service' ? 'Service' : 'Query' }}</span>
+                      <strong>{{ td.name || uid(td) }}</strong>
+                      @if (td.target) { <code>{{ td.target }}</code> }
+                      <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
+                    </div>
+                    <div class="taskdef-capability-meta">
+                      <span [class.warn]="!(td.target || td.address)">{{ td.target || td.address ? '已设置实现' : '未设置实现' }}</span>
+                      <span>入参 {{ (td.parameters?.inputs || []).length }}</span>
+                      <span>出参 {{ (td.parameters?.outputs || []).length }}</span>
+                      <span>{{ taskNodes(td).length }} 个节点引用</span>
+                    </div>
+                    @if (td.target || td.address) {
+                      <code class="taskdef-capability-address">{{ td.target || td.address }}</code>
+                    }
+                    @if (canEdit()) {
+                      <div class="taskdef-card-actions">
+                        <button class="btn-ghost-sm" [attr.data-testid]="'taskdef-edit-' + uid(td)" (click)="startEditInline(td); $event.stopPropagation()">编辑</button>
+                        <button class="btn-ghost-sm danger" (click)="deleteTaskDef(td); $event.stopPropagation()">删除</button>
+                      </div>
+                    }
+                    @if (isTaskExpanded(uid(td))) {
+                      <div class="taskdef-detail">
+                        @if ((td.parameters?.inputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输入参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.inputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
+                        @if ((td.parameters?.outputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输出参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.outputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
+                        @if (td.note) {
+                          <app-rich-text-editor class="taskdef-rich-text" label="任务详情" placeholder="" testIdPrefix="taskdef-note-preview" [value]="td.note || ''" [readonly]="true"></app-rich-text-editor>
+                        }
+                        @if (!((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note)) {
+                          <div class="taskdef-empty-detail">暂无更多详情，可打开编辑补充参数或详细设计。</div>
+                        }
+                      </div>
+                    }
                   }
-                </div>
-                @if (isTaskExpanded(uid(td))) {
-                <div class="taskdef-detail">
-                  @if ((td.parameters?.inputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输入参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.inputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
-                  @if ((td.parameters?.outputs||[]).length) { <div class="taskdef-params"><span class="taskdef-params-label">输出参数</span><table><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th></tr>@for(p of td.parameters!.outputs!; track $index){<tr><td>{{p.name}}</td><td>{{p.type}}</td><td>{{p.required?'✓':''}}</td><td class="muted">{{p.note}}</td></tr>}</table></div> }
-                  @if (td.note) {
-                    <app-rich-text-editor
-                      class="taskdef-rich-text"
-                      label="任务详情"
-                      placeholder=""
-                      testIdPrefix="taskdef-note-preview"
-                      [value]="td.note || ''"
-                      [readonly]="true"
-                    ></app-rich-text-editor>
-                  }
-                  @if (!((td.parameters?.inputs||[]).length || (td.parameters?.outputs||[]).length || td.note)) {
-                    <div class="taskdef-empty-detail">暂无更多详情，可打开编辑补充参数或详细设计。</div>
-                  }
-                </div>
-                }
-              </div>
-            }
+                </article>
+              }
+            </div>
+          </section>
+        } @empty {
+          <div class="business-empty-state" data-testid="taskdef-empty-map">
+            <strong>暂无任务能力</strong>
+            <span>先在业务构件中沉淀任务，或打开编辑后新建任务。</span>
           </div>
         }
       </div>
-      @if (taskDefTotalPages() > 1) {
-        <div class="comp-pagination">
-          <button [disabled]="taskDefPage()===1" (click)="taskDefPage.set(taskDefPage()-1)">‹ 上一页</button>
-          <span>{{ taskDefPage() }} / {{ taskDefTotalPages() }}（{{ filteredTaskDefs().length }} 条）</span>
-          <button [disabled]="taskDefPage()===taskDefTotalPages()" (click)="taskDefPage.set(taskDefPage()+1)">下一页 ›</button>
-        </div>
-      }
     </div>
   }
 

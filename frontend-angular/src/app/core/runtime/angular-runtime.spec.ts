@@ -3,7 +3,9 @@ import {
   canRedoAngularRuntimeDocument,
   canUndoAngularRuntimeDocument,
   clearAngularRuntimeUndoHistory,
+  canGoBackAngularNavigation,
   getAngularRuntimeState,
+  goBackAngularNavigation,
   markAngularRuntimeModified,
   redoAngularRuntimeDocument,
   replaceRuntimeDocument,
@@ -81,5 +83,18 @@ describe('angular runtime undo history', () => {
 
     expect(canUndoAngularRuntimeDocument()).toBe(false);
     expect(runtime.doc.meta.domain).toBe('Edit 5');
+  });
+
+  it('returns from component entity definition to the business component map before main workbench history', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'constructWorkbench';
+    runtime.ui['componentWorkbenchTab'] = 'entity';
+    runtime.ui['componentWorkbenchReturnTab'] = 'businessComponent';
+
+    expect(canGoBackAngularNavigation()).toBe(true);
+    expect(goBackAngularNavigation()).toBe('constructWorkbench');
+    expect(runtime.ui['mainTab']).toBe('constructWorkbench');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessComponent');
+    expect(runtime.ui['componentWorkbenchReturnTab']).toBe('');
   });
 });

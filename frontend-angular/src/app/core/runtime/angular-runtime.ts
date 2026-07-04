@@ -282,10 +282,11 @@ export function confirmRuntimeAction(message: string, options: RuntimeConfirmOpt
 }
 
 export function canGoBackAngularNavigation(): boolean {
-  return angularNavigationHistory().length > 0;
+  return hasAngularInternalBackNavigation() || angularNavigationHistory().length > 0;
 }
 
 export function getAngularBackNavigationTitle(): string {
+  if (hasAngularInternalBackNavigation()) return '返回到业务组件';
   const previous = angularNavigationHistory()[angularNavigationHistory().length - 1];
   if (!previous) return '当前没有可返回的位置';
   const labels: Record<string, string> = {
@@ -300,6 +301,8 @@ export function getAngularBackNavigationTitle(): string {
 }
 
 export function goBackAngularNavigation(): string | null {
+  const internalTarget = consumeAngularInternalBackNavigation();
+  if (internalTarget) return internalTarget;
   const history = angularNavigationHistory();
   let previous = history.pop();
   const current = captureAngularNavigationSnapshot();
@@ -311,6 +314,20 @@ export function goBackAngularNavigation(): string | null {
   runtimeState.ui['procId'] = previous.procId || '';
   runtimeState.ui['taskId'] = previous.taskId || null;
   runtimeState.ui['entityId'] = previous.entityId || '';
+  emitRuntimeRefresh();
+  return runtimeState.ui['mainTab'];
+}
+
+function hasAngularInternalBackNavigation(): boolean {
+  return runtimeState.ui['mainTab'] === 'constructWorkbench'
+    && runtimeState.ui['componentWorkbenchTab'] === 'entity'
+    && !!runtimeState.ui['componentWorkbenchReturnTab'];
+}
+
+function consumeAngularInternalBackNavigation(): string | null {
+  if (!hasAngularInternalBackNavigation()) return null;
+  runtimeState.ui['componentWorkbenchTab'] = String(runtimeState.ui['componentWorkbenchReturnTab'] || 'businessComponent');
+  runtimeState.ui['componentWorkbenchReturnTab'] = '';
   emitRuntimeRefresh();
   return runtimeState.ui['mainTab'];
 }

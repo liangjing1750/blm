@@ -6,6 +6,8 @@ import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModifie
 import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
 
 type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
+const UNASSIGNED_COMPONENT_ID = '__unassigned_component__';
+const UNASSIGNED_CONSTRUCT_ID = '__unassigned_construct__';
 
 interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; note?: string; entityUids?: string[]; taskDefinitionUids?: string[]; constructUids?: string[]; }
 interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; businessComponentId?: string; businessComponent?: string; }
@@ -56,11 +58,20 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected components(): LegacyComp[] { return this.doc().businessComponents || []; }
   protected coreComponents(): LegacyComp[] { return this.components().filter((comp) => this.componentKind(comp) === 'core'); }
   protected genericComponents(): LegacyComp[] { return this.components().filter((comp) => this.componentKind(comp) === 'generic'); }
+  protected unassignedComponent(): LegacyComp {
+    return { uid: UNASSIGNED_COMPONENT_ID, name: '未归属组件', kind: 'generic' };
+  }
+  protected unassignedConstruct(): LegacyConstruct {
+    return { uid: UNASSIGNED_CONSTRUCT_ID, name: '未归属构件', businessComponentUid: UNASSIGNED_COMPONENT_ID };
+  }
   protected groupedTreeComponents(): Array<{ kind: 'core' | 'generic'; title: string; components: LegacyComp[] }> {
     const groups: Array<{ kind: 'core' | 'generic'; title: string; components: LegacyComp[] }> = [
       { kind: 'core', title: '核心组件', components: this.coreComponents() },
       { kind: 'generic', title: '通用组件', components: this.genericComponents() },
     ];
+    if (this.unclassifiedEntities().length || this.unclassifiedTaskDefs().length || this.ungroupedConstructs().length) {
+      groups[1].components = [...groups[1].components, this.unassignedComponent()];
+    }
     return groups.filter((group) => group.components.length);
   }
   protected constructs(): LegacyConstruct[] { return this.doc().businessConstructs || []; }
@@ -90,6 +101,9 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
 
   // 业务组件/业务构件：总览只展示分组关系，详情页再展开实体与任务资产。
   protected constructsFor(comp: LegacyComp): LegacyConstruct[] {
+    if (this.uid(comp) === UNASSIGNED_COMPONENT_ID) {
+      return [this.unassignedConstruct(), ...this.ungroupedConstructs()];
+    }
     const cid = this.uid(comp);
     const explicitIds = new Set(comp.constructUids || []);
     return this.constructs().filter((c) => this.constructComponentId(c) === cid || explicitIds.has(this.uid(c)));
@@ -172,7 +186,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     }
     if (!this.canEdit()) return;
     const menu = this.mindChildMenu();
-    if (menu && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
+    if (menu && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape'].includes(event.key)) {
       event.preventDefault();
       this.handleMindChildMenuKey(event.key, menu);
       return;
@@ -182,19 +196,20 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
       this.moveMindSelection(event.key);
       return;
     }
-    if (event.key !== 'Enter' && event.key !== 'Tab' && event.key.toLowerCase() !== 't') return;
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      const selectedForDelete = this.selectedMindNode();
+      if (selectedForDelete) {
+        event.preventDefault();
+        void this.deleteSelectedMindNode(selectedForDelete);
+      }
+      return;
+    }
+    if (event.key !== 'Enter' && event.key !== 'Tab') return;
     const selected = this.selectedMindNode();
     if (!selected) return;
     event.preventDefault();
     if (event.key === 'Enter') {
       this.createMindSibling(selected);
-      return;
-    }
-    if (event.key.toLowerCase() === 't') {
-      if (selected.type === 'construct') {
-        const construct = this.constructs().find((item) => this.uid(item) === selected.id);
-        if (construct) this.createTaskForConstruct(construct);
-      }
       return;
     }
     this.openOrCreateMindChild(selected);
@@ -262,7 +277,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
       this.mindChildMenu.set(null);
       return;
     }
-    if (key === 'ArrowUp' || key === 'ArrowDown') {
+    if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
       this.mindChildMenu.set({ constructId: menu.constructId, active: menu.active === 'entity' ? 'task' : 'entity' });
       return;
     }
@@ -390,6 +405,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.draggingMindNode.set(null);
   }
   private createMindSibling(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): void {
+    if (node.type === 'component') {
+      this.addComponentInline('core');
+      return;
+    }
     if (node.type === 'construct') {
       const construct = this.constructs().find((item) => this.uid(item) === node.id);
       const component = construct ? this.components().find((item) => this.uid(item) === this.constructComponentId(construct)) : null;
@@ -407,6 +426,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     }
   }
   private openOrCreateMindChild(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): void {
+    if (node.id === UNASSIGNED_COMPONENT_ID || node.id === UNASSIGNED_CONSTRUCT_ID) return;
     if (node.type === 'component') {
       const component = this.components().find((item) => this.uid(item) === node.id);
       if (component) this.createTreeConstructForComponent(component);
@@ -414,6 +434,44 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     if (node.type === 'construct') {
       this.mindChildMenu.set({ constructId: node.id, active: 'entity' });
     }
+  }
+  private async deleteSelectedMindNode(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): Promise<void> {
+    if (!this.canEdit() || node.id === UNASSIGNED_COMPONENT_ID || node.id === UNASSIGNED_CONSTRUCT_ID) return;
+    const label = this.mindNodeLabel(node);
+    const confirmed = await confirmRuntimeAction(`确认删除“${label}”吗？`, { title: '删除节点', confirmLabel: '删除' });
+    if (!confirmed) return;
+    if (node.type === 'component') {
+      const component = this.components().find((item) => this.uid(item) === node.id);
+      if (component) {
+        for (const construct of this.constructsFor(component)) this.detachConstructFromComponent(construct);
+        this.doc().businessComponents = this.components().filter((item) => this.uid(item) !== node.id);
+      }
+    }
+    if (node.type === 'construct') {
+      const construct = this.constructs().find((item) => this.uid(item) === node.id);
+      if (construct) this.deleteConstruct(construct);
+    }
+    if (node.type === 'entity') {
+      this.doc().entities = this.entities().filter((item) => this.uid(item) !== node.id);
+    }
+    if (node.type === 'task') {
+      this.doc().taskDefinitions = this.taskDefs().filter((item) => this.uid(item) !== node.id);
+    }
+    this.selectedMindNode.set(null);
+    this.editingMindNode.set(null);
+    this.mindChildMenu.set(null);
+    this.touch();
+  }
+  private mindNodeLabel(node: { type: 'component' | 'construct' | 'entity' | 'task'; id: string }): string {
+    const source = node.type === 'component'
+      ? this.components()
+      : node.type === 'construct'
+        ? this.constructs()
+        : node.type === 'entity'
+          ? this.entities()
+          : this.taskDefs();
+    const item = source.find((candidate) => this.uid(candidate) === node.id);
+    return item?.name || node.id;
   }
   protected toggleComponentConstructs(comp: LegacyComp): void {
     const id = this.uid(comp);
@@ -427,10 +485,12 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return this.constructs().filter((construct) => !groupedIds.has(this.uid(construct)) && !this.constructComponentId(construct));
   }
   protected entitiesFor(construct: LegacyConstruct): LegacyEntity[] {
+    if (this.uid(construct) === UNASSIGNED_CONSTRUCT_ID) return this.unclassifiedEntities();
     const cid = this.uid(construct);
     return this.entities().filter((e) => e.businessConstructUid === cid || (e.businessConstructUids || []).includes(cid));
   }
   protected taskDefsFor(construct: LegacyConstruct): LegacyTaskDef[] {
+    if (this.uid(construct) === UNASSIGNED_CONSTRUCT_ID) return this.unclassifiedTaskDefs();
     const cid = this.uid(construct);
     return this.taskDefs().filter((t) => t.constructUid === cid);
   }
@@ -468,6 +528,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return this.uid(construct) === this.selectedConstructId();
   }
   protected openBusinessConstruct(construct: LegacyConstruct): void {
+    if (this.canEdit()) {
+      this.selectMindNode('construct', this.uid(construct));
+      return;
+    }
+    if (this.uid(construct) === UNASSIGNED_CONSTRUCT_ID) return;
     this.setSelectedConstruct(construct);
     this.switchTab('businessConstruct');
   }
@@ -492,6 +557,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected openEntityFromTree(entity: LegacyEntity, construct: LegacyConstruct): void {
     this.setSelectedConstruct(construct);
+    this.runtime.ui['componentWorkbenchReturnTab'] = 'businessComponent';
     this.runtime.ui['entityId'] = this.uid(entity);
     this.runtime.ui['entityView'] = this.runtime.ui['entityView'] || 'relation';
     this.switchTab('entity');
@@ -788,6 +854,25 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return Math.max(1, Math.ceil(this.filteredTaskDefs().length / this.taskDefPageSize));
   }
 
+  protected taskDefConstructGroups(): Array<{ id: string; constructName: string; componentName: string; tasks: LegacyTaskDef[] }> {
+    const groups = new Map<string, { id: string; constructName: string; componentName: string; tasks: LegacyTaskDef[] }>();
+    for (const task of this.filteredTaskDefs()) {
+      const constructId = this.tdConstructId(task);
+      const construct = this.constructs().find((item) => this.uid(item) === constructId) || null;
+      const groupId = construct ? this.uid(construct) : 'unclassified';
+      if (!groups.has(groupId)) {
+        groups.set(groupId, {
+          id: groupId,
+          constructName: construct?.name || '未归类任务',
+          componentName: construct ? this.componentName(this.constructComponentId(construct)) : '未归属组件',
+          tasks: [],
+        });
+      }
+      groups.get(groupId)!.tasks.push(task);
+    }
+    return Array.from(groups.values());
+  }
+
   protected tdConstructId(td: LegacyTaskDef): string {
     return String(td.constructUid || '').trim();
   }
@@ -854,7 +939,20 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     if (!this.canEdit()) return;
     if (td) { this.editingTaskId.set(this.uid(td)); return; }
     // 新建
-    const base: LegacyTaskDef = { uid: '', name: '', type: 'Query', querySourceKind: '', target: '', address: '', note: '', constructUid: '', parameters: { inputs: [], outputs: [] } };
+    const selectedConstructId = this.taskDefConstructId();
+    const selectedConstruct = this.constructs().find((construct) => this.uid(construct) === selectedConstructId);
+    const base: LegacyTaskDef = {
+      uid: '',
+      name: '',
+      type: 'Query',
+      querySourceKind: '',
+      target: '',
+      address: '',
+      note: '',
+      constructUid: selectedConstructId,
+      businessComponentUid: selectedConstruct ? this.constructComponentId(selectedConstruct) : this.taskDefCompId(),
+      parameters: { inputs: [], outputs: [] },
+    };
     this.doc().taskDefinitions ||= [];
     this.doc().taskDefinitions.push(base);
     this.editingTaskId.set('');
@@ -891,6 +989,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   // ─── Utils ────────────────────────────────────────
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }
   protected constructName(constructId: string): string { const c = this.constructs().find((x) => this.uid(x) === constructId); return c?.name || constructId || '未归类'; }
+  protected componentName(componentId: string): string {
+    const comp = this.components().find((item) => this.uid(item) === componentId);
+    return comp?.name || componentId || '未归属组件';
+  }
   protected componentKind(comp: LegacyComp): 'core' | 'generic' {
     return comp.kind === 'generic' || comp.kind === 'common' ? 'generic' : 'core';
   }

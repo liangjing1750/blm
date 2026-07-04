@@ -255,6 +255,81 @@ describe('ComponentWorkbenchComponent', () => {
     expect(tree.querySelector('[data-testid="mind-node-task-task-1"]')?.classList.contains('mind-node--task')).toBe(true);
   });
 
+  it('shows unclassified component and construct for unowned entities and tasks', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="mind-node-component-__unassigned_component__"]')?.textContent).toContain('未归属组件');
+    expect(host.querySelector('[data-testid="mind-node-construct-__unassigned_construct__"]')?.textContent).toContain('未归属构件');
+    expect(host.querySelector('[data-testid="mind-node-entity-entity-2"]')?.textContent).toContain('未分组实体');
+    expect(host.querySelector('[data-testid="mind-node-task-task-2"]')?.textContent).toContain('未分组任务');
+  });
+
+  it('selects instead of drilling in edit mode and supports component enter plus delete confirmation', async () => {
+    const runtime = getAngularRuntimeState();
+    const confirmState: { resolve?: (value: boolean) => void } = {};
+    const confirmSpy = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      detail.markHandled();
+      confirmState.resolve = detail.resolve;
+    });
+    window.addEventListener('blm-runtime-confirm', confirmSpy);
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
+    fixture.detectChanges();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessComponent');
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')?.classList.contains('is-selected')).toBe(true);
+
+    const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-node-component-comp-1"]')?.click();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.businessComponents.some((component: any) => component.name === '新业务组件')).toBe(true);
+
+    const taskNode = host.querySelector<HTMLButtonElement>('[data-testid="mind-node-task-task-1"]')!;
+    expect(taskNode).toBeTruthy();
+    taskNode.click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-node-task-task-1"]')?.classList.contains('is-selected')).toBe(true);
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    fixture.detectChanges();
+    expect(confirmSpy).toHaveBeenCalled();
+
+    expect(confirmState.resolve).toBeTruthy();
+    confirmState.resolve!(true);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    window.removeEventListener('blm-runtime-confirm', confirmSpy);
+    expect(runtime.doc.taskDefinitions.some((task: any) => task.uid === 'task-1')).toBe(false);
+  });
+
+  it('cycles the child create menu with horizontal and vertical arrows', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
+    fixture.detectChanges();
+
+    const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-child-option-entity"]')?.classList.contains('is-active')).toBe(true);
+
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-child-option-task"]')?.classList.contains('is-active')).toBe(true);
+
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-child-option-entity"]')?.classList.contains('is-active')).toBe(true);
+
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="mind-child-option-task"]')?.classList.contains('is-active')).toBe(true);
+  });
+
   it('keeps construct header fixed while entity and task lists scroll independently', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-tab"]')?.click();
     fixture.detectChanges();
@@ -334,7 +409,8 @@ describe('ComponentWorkbenchComponent', () => {
     expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('taskDef');
     const constructSelect = host.querySelector<HTMLSelectElement>('[data-testid="taskdef-construct-filter"]')!;
     expect(constructSelect.getAttribute('data-selected-construct')).toBe('construct-1');
-    expect(host.querySelector('.taskdef-cards')?.textContent).toContain('查询订单');
+    expect(host.querySelector('[data-testid="taskdef-service-map"]')?.textContent).toContain('查询订单');
+    expect(host.querySelector('[data-testid="taskdef-construct-group-construct-1"]')?.textContent).toContain('订单构件');
   });
 
   it('creates the first business component from an empty map and edits it inline', () => {
@@ -418,6 +494,37 @@ describe('ComponentWorkbenchComponent', () => {
     expect(draft.parameters.inputs).toHaveLength(1);
     expect(draft.parameters.outputs).toHaveLength(1);
     expect(draft.technicalHandover).toBeUndefined();
+  });
+
+  it('renders task definitions as a construct grouped service capability map', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.taskDefinitions.push({
+      uid: 'task-3',
+      name: '提交订单',
+      type: 'Service',
+      target: 'orderService.submit',
+      constructUid: 'construct-1',
+      parameters: { inputs: [{ name: '订单ID', type: 'String', required: true, note: '' }], outputs: [] },
+    });
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+
+    const map = host.querySelector<HTMLElement>('[data-testid="taskdef-service-map"]')!;
+    expect(map).toBeTruthy();
+    expect(host.querySelector('.taskdef-cards')).toBeFalsy();
+    expect(map.querySelector('[data-testid="taskdef-construct-group-construct-1"]')?.textContent).toContain('订单构件');
+    expect(map.querySelector('[data-testid="taskdef-construct-group-construct-1"]')?.textContent).toContain('2 个能力');
+    expect(map.querySelector('[data-testid="taskdef-card-task-1"]')?.textContent).toContain('查询订单');
+    expect(map.querySelector('[data-testid="taskdef-card-task-3"]')?.textContent).toContain('Service');
+    expect(map.querySelector('[data-testid="taskdef-card-task-3"]')?.textContent).toContain('入参 1');
+
+    host.querySelector<HTMLSelectElement>('[data-testid="taskdef-construct-filter"]')!.value = 'construct-2';
+    host.querySelector<HTMLSelectElement>('[data-testid="taskdef-construct-filter"]')!.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="taskdef-card-task-1"]')).toBeFalsy();
+    expect(host.querySelector('[data-testid="taskdef-empty-map"]')?.textContent).toContain('暂无任务能力');
   });
 
   it('renders and edits task definition details with the shared rich text editor', () => {
