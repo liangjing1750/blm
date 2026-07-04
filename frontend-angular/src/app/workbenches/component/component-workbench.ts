@@ -30,6 +30,8 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly editorOpen = signal(false);
   protected readonly selectedConstructId = signal(String(this.runtime.ui['componentWorkbenchConstructId'] || '').trim());
   protected readonly expandedComp = signal('');
+  protected readonly expandedTreeComponentId = signal('');
+  protected readonly expandedTreeConstructId = signal('');
   protected readonly editTaskDef = signal<Partial<LegacyTaskDef> | null>(null);
   protected readonly taskDefKeyword = signal('');
   // 抽屉状态
@@ -86,6 +88,23 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected hiddenConstructCount(comp: LegacyComp): number {
     return Math.max(0, this.constructsFor(comp).length - this.visibleConstructsFor(comp).length);
   }
+  protected isTreeComponentExpanded(comp: LegacyComp): boolean {
+    return this.expandedTreeComponentId() === this.uid(comp);
+  }
+  protected isTreeConstructExpanded(construct: LegacyConstruct): boolean {
+    return this.expandedTreeConstructId() === this.uid(construct);
+  }
+  protected toggleTreeComponent(comp: LegacyComp): void {
+    const id = this.uid(comp);
+    const next = this.expandedTreeComponentId() === id ? '' : id;
+    this.expandedTreeComponentId.set(next);
+    this.expandedTreeConstructId.set('');
+  }
+  protected toggleTreeConstruct(construct: LegacyConstruct, event?: Event): void {
+    event?.stopPropagation();
+    const id = this.uid(construct);
+    this.expandedTreeConstructId.set(this.expandedTreeConstructId() === id ? '' : id);
+  }
   protected toggleComponentConstructs(comp: LegacyComp): void {
     const id = this.uid(comp);
     this.expandedComp.set(this.expandedComp() === id ? '' : id);
@@ -104,6 +123,12 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected taskDefsFor(construct: LegacyConstruct): LegacyTaskDef[] {
     const cid = this.uid(construct);
     return this.taskDefs().filter((t) => t.constructUid === cid);
+  }
+  protected treeComponentSummary(comp: LegacyComp): string {
+    const constructs = this.constructsFor(comp);
+    const entities = constructs.reduce((sum, construct) => sum + this.entitiesFor(construct).length, 0);
+    const tasks = constructs.reduce((sum, construct) => sum + this.taskDefsFor(construct).length, 0);
+    return `${constructs.length} 个构件 · ${entities} 个实体 · ${tasks} 个任务`;
   }
   protected selectedConstruct(): LegacyConstruct | null {
     const selectedId = this.selectedConstructId();

@@ -81,9 +81,19 @@ describe('ComponentWorkbenchComponent', () => {
 
     const tree = host.querySelector<HTMLElement>('[data-testid="business-construct-tree-view"]')!;
     expect(tree).toBeTruthy();
-    expect(tree.querySelectorAll('.business-tree-column')).toHaveLength(4);
     expect(tree.querySelector('[data-testid="business-tree-component-comp-1"]')?.textContent).toContain('订单组件');
+    expect(tree.querySelector('[data-testid="business-tree-component-comp-1"]')?.textContent).toContain('1 个构件');
+    expect(tree.querySelector('[data-testid="business-tree-construct-construct-1"]')).toBeFalsy();
+
+    tree.querySelector<HTMLButtonElement>('[data-testid="business-tree-component-comp-1"]')?.click();
+    fixture.detectChanges();
+    expect(tree.querySelector('[data-testid="business-tree-children-comp-1"]')).toBeTruthy();
     expect(tree.querySelector('[data-testid="business-tree-construct-construct-1"]')?.textContent).toContain('订单构件');
+    expect(tree.querySelector('[data-testid="business-tree-entity-entity-1"]')).toBeFalsy();
+
+    tree.querySelector<HTMLButtonElement>('[data-testid="business-tree-construct-construct-1"]')?.click();
+    fixture.detectChanges();
+    expect(tree.querySelector('[data-testid="business-tree-leaves-construct-1"]')).toBeTruthy();
     expect(tree.querySelector('[data-testid="business-tree-entity-entity-1"]')?.textContent).toContain('订单');
     expect(tree.querySelector('[data-testid="business-tree-task-task-1"]')?.textContent).toContain('查询订单');
     expect(tree.querySelector('.business-tree-tag')?.textContent).toContain('核心组件');

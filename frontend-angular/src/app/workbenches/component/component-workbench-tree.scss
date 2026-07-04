@@ -1,20 +1,16 @@
 .business-tree-view { display: flex; flex-direction: column; gap: 10px; background: #f8fafc; overflow: hidden; }
-.business-tree-title { display: flex; justify-content: space-between; gap: 12px; flex-shrink: 0; border: 1px solid #dbeafe; border-radius: 9px; background: #fff; padding: 10px 12px; }
-.business-tree-title strong { display: block; color: #0f172a; font-size: 15px; }
-.business-tree-title span, .business-tree-node small { color: #64748b; font-size: 12px; }
-.business-tree-root, .business-tree-tag, .business-tree-group > header span { border: 1px solid #dbeafe; border-radius: 999px; background: #fff; font-size: 11px; font-weight: 850; padding: 2px 8px; white-space: nowrap; }
-.business-tree-root { background: #eff6ff; color: #1d4ed8 !important; padding: 5px 10px; }
+.business-tree-node small { color: #64748b; font-size: 12px; }
+.business-tree-tag, .business-tree-group > header span { border: 1px solid #dbeafe; border-radius: 999px; background: #fff; font-size: 11px; font-weight: 850; padding: 2px 8px; white-space: nowrap; }
 .business-tree-canvas { flex: 1; min-height: 0; overflow: auto; padding-bottom: 10px; }
-.business-tree-group { min-width: 1060px; margin-bottom: 12px; border: 1px solid #fed7aa; border-radius: 10px; background: #fffaf2; overflow: hidden; }
+.business-tree-group { margin-bottom: 12px; border: 1px solid #fed7aa; border-radius: 10px; background: #fffaf2; overflow: hidden; }
 .business-tree-group.is-generic { border-color: #bbf7d0; background: #f7fdf9; }
 .business-tree-group > header { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(148,163,184,.22); padding: 8px 12px; }
 .business-tree-group > header strong { color: #9a3412; font-size: 14px; }
 .business-tree-group.is-generic > header strong, .business-tree-tag.is-generic, .business-tree-tag.task { color: #15803d; }
-.business-tree-row { display: grid; grid-template-columns: 260px 280px 260px 300px; align-items: start; gap: 18px; padding: 12px; }
-.business-tree-row + .business-tree-row { border-top: 1px solid rgba(148,163,184,.22); }
-.business-tree-column, .business-tree-stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: relative; }
-.business-tree-column:not(:last-child)::after { content: '>'; position: absolute; right: -15px; top: 18px; color: #94a3b8; font-weight: 900; }
-.business-tree-node { display: grid; gap: 4px; width: 100%; min-height: 52px; border: 1px solid #dbeafe; border-left-width: 4px; border-radius: 8px; background: #fff; color: #0f172a; cursor: pointer; font: inherit; padding: 8px 10px; text-align: left; box-shadow: 0 3px 10px rgba(15,23,42,.04); }
+.business-tree-map { display: grid; grid-template-columns: repeat(4, minmax(260px, 1fr)); align-items: start; gap: 10px; padding: 12px; }
+.business-tree-branch { min-width: 0; }
+.business-tree-branch.is-open { grid-column: 1 / -1; }
+.business-tree-node { position: relative; display: grid; gap: 4px; width: 100%; min-height: 50px; border: 1px solid #dbeafe; border-left-width: 4px; border-radius: 8px; background: #fff; color: #0f172a; cursor: pointer; font: inherit; padding: 8px 38px 8px 10px; text-align: left; box-shadow: 0 3px 10px rgba(15,23,42,.04); }
 .business-tree-node:hover { box-shadow: 0 6px 16px rgba(15,23,42,.08); }
 .business-tree-node strong { overflow: hidden; font-size: 13px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
 .business-tree-node--component { border-color: #fdba74; border-left-color: #f97316; background: #fff7ed; }
@@ -23,4 +19,10 @@
 .business-tree-node--entity { border-color: #bfdbfe; border-left-color: #2563eb; background: #f8fbff; }
 .business-tree-node--task { border-color: #bbf7d0; border-left-color: #16a34a; background: #f7fdf9; }
 .business-tree-tag { justify-self: start; color: #c2410c; font-size: 10px; }
-.business-tree-empty { min-height: 42px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 12px; padding: 12px; }
+.business-tree-fold { position: absolute; right: 10px; top: 50%; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid #bfdbfe; border-radius: 999px; background: #fff; color: #2563eb; font-weight: 900; transform: translateY(-50%); }
+.business-tree-children { display: grid; gap: 8px; margin: 10px 0 2px 24px; padding-left: 12px; border-left: 2px solid #bae6fd; }
+.business-tree-construct-line { display: grid; grid-template-columns: minmax(250px, 320px) minmax(420px, 1fr); gap: 12px; align-items: start; }
+.business-tree-construct-line:not(.is-open) { grid-template-columns: minmax(250px, 360px); }
+.business-tree-leaves { display: grid; grid-template-columns: repeat(2, minmax(210px, 1fr)); gap: 8px; }
+.business-tree-leaf-group { display: grid; align-content: start; gap: 8px; }
+.business-tree-empty { min-height: 40px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #94a3b8; font-size: 12px; padding: 11px; }

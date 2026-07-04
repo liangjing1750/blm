@@ -318,13 +318,6 @@
   <!-- 业务构件New：按人的功能树思路向右展开，节点是具体元素，类型只作为标签附着在节点上。 -->
   @if (activeTab() === 'businessConstructNew') {
     <div class="comp-tab-body business-tree-view" data-testid="business-construct-tree-view">
-      <header class="business-tree-title">
-        <div>
-          <strong>业务组件功能树</strong>
-          <span>从组件到构件，再到实体与任务，按固定深度向右阅读。</span>
-        </div>
-        <span class="business-tree-root">业务组件</span>
-      </header>
       <div class="business-tree-canvas">
         @for (group of groupedTreeComponents(); track group.kind) {
           <section class="business-tree-group" [class.is-generic]="group.kind === 'generic'">
@@ -332,56 +325,58 @@
               <strong>{{ group.title }}</strong>
               <span>{{ group.components.length }} 个组件</span>
             </header>
-            @for (comp of group.components; track uid(comp)) {
-              <div class="business-tree-row">
-                <div class="business-tree-column business-tree-column--component">
-                  <button class="business-tree-node business-tree-node--component" [class.is-generic]="group.kind === 'generic'" [attr.data-testid]="'business-tree-component-' + uid(comp)" type="button">
+            <div class="business-tree-map">
+              @for (comp of group.components; track uid(comp)) {
+                <article class="business-tree-branch" [class.is-open]="isTreeComponentExpanded(comp)">
+                  <button class="business-tree-node business-tree-node--component" [class.is-generic]="group.kind === 'generic'" [attr.data-testid]="'business-tree-component-' + uid(comp)" type="button" (click)="toggleTreeComponent(comp)">
                     <span class="business-tree-tag" [class.is-generic]="group.kind === 'generic'">{{ group.title }}</span>
                     <strong>{{ comp.name || uid(comp) }}</strong>
-                    <small>{{ constructsFor(comp).length }} 个构件</small>
+                    <small>{{ treeComponentSummary(comp) }}</small>
+                    <span class="business-tree-fold">{{ isTreeComponentExpanded(comp) ? '−' : '+' }}</span>
                   </button>
-                </div>
-                <div class="business-tree-column business-tree-column--construct">
-                  @for (construct of constructsFor(comp); track uid(construct)) {
-                    <button class="business-tree-node business-tree-node--construct" [attr.data-testid]="'business-tree-construct-' + uid(construct)" type="button" (click)="openBusinessConstruct(construct)">
-                      <strong>{{ construct.name || uid(construct) }}</strong>
-                      <small>{{ entitiesFor(construct).length }} 个实体 · {{ taskDefsFor(construct).length }} 个任务</small>
-                    </button>
-                  } @empty {
-                    <div class="business-tree-empty">暂无构件</div>
-                  }
-                </div>
-                <div class="business-tree-column business-tree-column--entity">
-                  @for (construct of constructsFor(comp); track uid(construct)) {
-                    <div class="business-tree-stack" [attr.data-parent]="uid(construct)">
-                      @for (entity of entitiesFor(construct); track uid(entity)) {
-                        <button class="business-tree-node business-tree-node--entity" [attr.data-testid]="'business-tree-entity-' + uid(entity)" type="button" (click)="openEntityFromTree(entity, construct)">
-                          <strong>{{ entity.name || uid(entity) }}</strong>
-                          <small>{{ fieldCount(entity) }} 个字段</small>
-                        </button>
+                  @if (isTreeComponentExpanded(comp)) {
+                    <div class="business-tree-children" [attr.data-testid]="'business-tree-children-' + uid(comp)">
+                      @for (construct of constructsFor(comp); track uid(construct)) {
+                        <section class="business-tree-construct-line" [class.is-open]="isTreeConstructExpanded(construct)">
+                          <button class="business-tree-node business-tree-node--construct" [attr.data-testid]="'business-tree-construct-' + uid(construct)" type="button" (click)="toggleTreeConstruct(construct, $event)">
+                            <strong>{{ construct.name || uid(construct) }}</strong>
+                            <small>{{ entitiesFor(construct).length }} 个实体 · {{ taskDefsFor(construct).length }} 个任务</small>
+                            <span class="business-tree-fold">{{ isTreeConstructExpanded(construct) ? '−' : '+' }}</span>
+                          </button>
+                          @if (isTreeConstructExpanded(construct)) {
+                            <div class="business-tree-leaves" [attr.data-testid]="'business-tree-leaves-' + uid(construct)">
+                              <div class="business-tree-leaf-group">
+                                @for (entity of entitiesFor(construct); track uid(entity)) {
+                                  <button class="business-tree-node business-tree-node--entity" [attr.data-testid]="'business-tree-entity-' + uid(entity)" type="button" (click)="openEntityFromTree(entity, construct)">
+                                    <strong>{{ entity.name || uid(entity) }}</strong>
+                                    <small>{{ fieldCount(entity) }} 个字段</small>
+                                  </button>
+                                } @empty {
+                                  <div class="business-tree-empty">暂无实体</div>
+                                }
+                              </div>
+                              <div class="business-tree-leaf-group">
+                                @for (task of taskDefsFor(construct); track uid(task)) {
+                                  <button class="business-tree-node business-tree-node--task" [attr.data-testid]="'business-tree-task-' + uid(task)" type="button" (click)="openTaskFromTree(task, construct)">
+                                    <span class="business-tree-tag task">{{ task.type || 'Query' }}</span>
+                                    <strong>{{ task.name || uid(task) }}</strong>
+                                    <small>{{ taskNodeCount(task) }} 个节点引用</small>
+                                  </button>
+                                } @empty {
+                                  <div class="business-tree-empty">暂无任务</div>
+                                }
+                              </div>
+                            </div>
+                          }
+                        </section>
                       } @empty {
-                        <div class="business-tree-empty">暂无实体</div>
+                        <div class="business-tree-empty">暂无构件</div>
                       }
                     </div>
                   }
-                </div>
-                <div class="business-tree-column business-tree-column--task">
-                  @for (construct of constructsFor(comp); track uid(construct)) {
-                    <div class="business-tree-stack" [attr.data-parent]="uid(construct)">
-                      @for (task of taskDefsFor(construct); track uid(task)) {
-                        <button class="business-tree-node business-tree-node--task" [attr.data-testid]="'business-tree-task-' + uid(task)" type="button" (click)="openTaskFromTree(task, construct)">
-                          <span class="business-tree-tag task">{{ task.type || 'Query' }}</span>
-                          <strong>{{ task.name || uid(task) }}</strong>
-                          <small>{{ taskNodeCount(task) }} 个节点引用</small>
-                        </button>
-                      } @empty {
-                        <div class="business-tree-empty">暂无任务</div>
-                      }
-                    </div>
-                  }
-                </div>
-              </div>
-            }
+                </article>
+              }
+            </div>
           </section>
         } @empty {
           <div class="business-empty-state">
