@@ -74,6 +74,11 @@
       </div>
     </div>
 
+    <div class="toolbar-history-actions" aria-label="文档编辑历史">
+      <button class="btn btn-ghost toolbar-icon-btn" type="button" data-testid="toolbar-undo-button" [disabled]="!canUndoDocumentEdit()" title="撤销 Ctrl+Z" (click)="undoDocumentEdit()">↶ 撤销</button>
+      <button class="btn btn-ghost toolbar-icon-btn" type="button" data-testid="toolbar-redo-button" [disabled]="!canRedoDocumentEdit()" title="重做 Ctrl+Y / Ctrl+Shift+Z" (click)="redoDocumentEdit()">↷ 重做</button>
+    </div>
+
     <button class="btn btn-primary" type="button" id="btn-save" data-testid="toolbar-sync-button" [disabled]="busy()" (click)="syncNow()">立即同步</button>
 
     <div class="tbar-dd">
@@ -648,7 +653,12 @@
 @if (locatorMenu(); as menu) {
   <div class="locator-menu" data-testid="locator-menu" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
     @for (action of menu.actions; track action.id) {
-      <button type="button" [attr.data-testid]="action.testId" (click)="copyLocatorAction(action)">{{ action.label }}</button>
+      <button type="button" [attr.data-testid]="action.testId" (click)="copyLocatorAction(action)">
+        <span>{{ action.label }}</span>
+        @if (action.shortcut) {
+          <kbd class="locator-menu-shortcut" data-testid="locator-menu-shortcut">{{ action.shortcut }}</kbd>
+        }
+      </button>
     }
   </div>
 }

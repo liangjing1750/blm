@@ -8,7 +8,17 @@ import { CollaborationService } from '../core/collaboration/collaboration.servic
 import { LocalCollabDraftService } from '../core/collaboration/local-collab-draft.service';
 import { DocumentPropertiesForm, applyDocumentProperties, readDocumentProperties, validateDocumentProperties } from '../core/document/document-properties';
 import { DocumentStore } from '../core/document/document-store';
-import { RuntimeConfirmEventDetail, confirmRuntimeAction, getAngularRuntimeState, replaceRuntimeDocument, switchAngularMainTab } from '../core/runtime/angular-runtime';
+import {
+  RuntimeConfirmEventDetail,
+  canRedoAngularRuntimeDocument,
+  canUndoAngularRuntimeDocument,
+  confirmRuntimeAction,
+  getAngularRuntimeState,
+  redoAngularRuntimeDocument,
+  replaceRuntimeDocument,
+  switchAngularMainTab,
+  undoAngularRuntimeDocument,
+} from '../core/runtime/angular-runtime';
 import { HistoryDialogComponent, HistoryDialogTab } from '../core/shell/history/history-dialog.component';
 import { ShellLayoutQuery } from '../core/shell/layout/shell-layout-query';
 import { ShellNotificationComponent, ShellNotificationKind } from '../core/shell/notification/shell-notification.component';
@@ -55,7 +65,9 @@ interface ConfirmDialogState {
 interface LocatorAction {
   id: string;
   label: string;
-  params: Record<string, string>;
+  params?: Record<string, string>;
+  command?: 'mind-toggle-selected' | 'mind-collapse-all' | 'mind-expand-all' | 'mind-reset-zoom';
+  shortcut?: string;
   testId: string;
 }
 
@@ -233,12 +245,12 @@ export class ShellComponent implements OnInit, OnDestroy {
     const target = event.target as HTMLElement | null;
     const anchor = target?.closest?.('#tab-content, #sidebar-content, .file-name, .collab-status');
     if (!anchor || !this.runtime.currentFile) return;
-    const actions = this.locatorActions();
+    const actions = this.locatorActions(target);
     if (!actions.length) return;
     event.preventDefault();
     this.activeDropdown.set('');
     this.collabUsersOpen.set(false);
-    const width = 210;
+    const width = 248;
     const height = Math.max(48, actions.length * 36 + 12);
     this.locatorMenu.set({
       x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 12)),
@@ -254,6 +266,16 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   protected handleShortcut(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      this.undoDocumentEdit();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'y' || (event.shiftKey && event.key.toLowerCase() === 'z'))) {
+      event.preventDefault();
+      this.redoDocumentEdit();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void this.syncNow();
@@ -375,6 +397,26 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.hasRemoteUnsynced() ? '\u8fdc\u7aef\u5df2\u6709\u5176\u4ed6\u4eba\u63d0\u4ea4\uff0c\u70b9\u51fb\u7acb\u5373\u540c\u6b65\u62c9\u53d6\u5e76\u5408\u5e76\u3002' : '',
       this.hasLocalUnsubmitted() ? '\u672c\u5730\u4fee\u6539\u5c1a\u672a\u63d0\u4ea4\u5230\u670d\u52a1\u7aef\u3002' : '',
     ].filter(Boolean).join('\n');
+  }
+
+  protected canUndoDocumentEdit(): boolean {
+    this.shellVersion();
+    return !this.runtime.readOnly && canUndoAngularRuntimeDocument();
+  }
+
+  protected canRedoDocumentEdit(): boolean {
+    this.shellVersion();
+    return !this.runtime.readOnly && canRedoAngularRuntimeDocument();
+  }
+
+  protected undoDocumentEdit(): void {
+    if (!this.canUndoDocumentEdit()) return;
+    if (undoAngularRuntimeDocument()) this.showToast('已撤销上一步修改', 'success');
+  }
+
+  protected redoDocumentEdit(): void {
+    if (!this.canRedoDocumentEdit()) return;
+    if (redoAngularRuntimeDocument()) this.showToast('已重做上一步修改', 'success');
   }
 
 
@@ -594,9 +636,14 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.historyTab.set(tab);
   }
 
-  protected locatorActions(): LocatorAction[] {
+  protected locatorActions(target?: HTMLElement | null): LocatorAction[] {
     if (!this.runtime.currentFile) return [];
     const mainTab = String(this.runtime.ui['mainTab'] || 'panoramaWorkbench');
+    const componentTab = String(this.runtime.ui['componentWorkbenchTab'] || '').trim();
+    const inBusinessMindMap = Boolean(target?.closest?.('[data-testid="business-construct-tree-view"]'));
+    if (inBusinessMindMap || (mainTab === 'constructWorkbench' && componentTab === 'businessComponent')) {
+      return this.businessConstructMindMapActions();
+    }
     const processView = String(this.runtime.ui['procDiagramMode'] || '').trim() === 'linear' ? 'summary' : 'swimlane';
     const actions: LocatorAction[] = [{
       id: 'view',
@@ -645,10 +692,60 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   protected async copyLocatorAction(action: LocatorAction): Promise<void> {
+    if (action.command) {
+      this.runLocatorCommand(action.command);
+      this.activeDropdown.set('');
+      this.locatorMenu.set(null);
+      return;
+    }
+    if (!action.params) return;
     const copied = await this.copyLocatorUrl(this.buildLocatorUrl(action.params));
     this.activeDropdown.set('');
     this.locatorMenu.set(null);
     this.showToast(copied ? `已复制${action.label.replace(/^复制/, '')}` : '链接复制失败，请手动复制', copied ? 'success' : 'error');
+  }
+
+  private businessConstructMindMapActions(): LocatorAction[] {
+    return [
+      {
+        id: 'business-mindmap-link',
+        label: '复制地图链接',
+        params: { tab: 'component', view: 'businessComponent' },
+        testId: 'context-copy-business-mindmap-link',
+      },
+      {
+        id: 'business-mindmap-toggle-selected',
+        label: '折叠/展开选中节点',
+        command: 'mind-toggle-selected',
+        shortcut: 'Space',
+        testId: 'context-toggle-business-mindmap-selected',
+      },
+      {
+        id: 'business-mindmap-collapse-all',
+        label: '全部折叠',
+        command: 'mind-collapse-all',
+        shortcut: 'Ctrl+-',
+        testId: 'context-collapse-business-mindmap',
+      },
+      {
+        id: 'business-mindmap-expand-all',
+        label: '全部展开',
+        command: 'mind-expand-all',
+        shortcut: 'Ctrl+=',
+        testId: 'context-expand-business-mindmap',
+      },
+      {
+        id: 'business-mindmap-reset-zoom',
+        label: '重置缩放',
+        command: 'mind-reset-zoom',
+        shortcut: 'Ctrl+0',
+        testId: 'context-reset-business-mindmap',
+      },
+    ];
+  }
+
+  private runLocatorCommand(command: NonNullable<LocatorAction['command']>): void {
+    window.dispatchEvent(new CustomEvent('blm-business-mindmap-command', { detail: { command } }));
   }
 
   protected async openVersionReadOnly(row: any): Promise<void> {

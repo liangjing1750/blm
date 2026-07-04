@@ -6,7 +6,7 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { listExportGraphs } from './core/export/graph-export-registry';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
-import { getAngularRuntimeState } from './core/runtime/angular-runtime';
+import { clearAngularRuntimeUndoHistory, getAngularRuntimeState, markAngularRuntimeModified } from './core/runtime/angular-runtime';
 import { ShellComponent } from './shell/shell.component';
 import { ProcessEditorWorkbenchComponent } from './workbenches/process/editor/process-editor-workbench.component';
 import { ProcessFlowWorkbenchComponent } from './workbenches/process/flow/process-flow-workbench.component';
@@ -29,6 +29,7 @@ describe('App', () => {
     runtime.collab.pendingSnapshot = false;
     runtime.collab.draftBaseSeqOverride = undefined;
     runtime.collab.recoveryMode = false;
+    clearAngularRuntimeUndoHistory();
 
     await TestBed.configureTestingModule({
       imports: [App, ShellComponent, ProcessEditorWorkbenchComponent, ProcessFlowWorkbenchComponent, ProcessStageWorkbenchComponent],
@@ -3446,6 +3447,51 @@ describe('App', () => {
     expect(task.businessRules[0].content).toContain('规则描述');
   });
 
+  it('should expose document undo and redo from the toolbar', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    clearAngularRuntimeUndoHistory();
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const undoButton = () => compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-undo-button"]')!;
+    const redoButton = () => compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-redo-button"]')!;
+
+    expect(undoButton().disabled).toBe(true);
+    expect(redoButton().disabled).toBe(true);
+
+    runtime.doc.meta.domain = 'Agent edited';
+    markAngularRuntimeModified();
+    fixture.detectChanges();
+
+    expect(undoButton().disabled).toBe(false);
+    undoButton().click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.meta.domain).toBe('Agent');
+    expect(undoButton().disabled).toBe(true);
+    expect(redoButton().disabled).toBe(false);
+
+    redoButton().click();
+    fixture.detectChanges();
+    expect(runtime.doc.meta.domain).toBe('Agent edited');
+  });
+
   it('should keep form and rule controls read-only until node editing is opened', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
@@ -5542,6 +5588,53 @@ describe('App', () => {
     expect(copied).toContain('task=node-submit');
     expect(copied).toContain('view=swimlane');
     expect(compiled.querySelector('[data-testid="locator-menu"]')).toBeFalsy();
+  });
+
+  it('should show business construct mind map actions in the locator menu', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'constructWorkbench';
+    runtime.ui['componentWorkbenchTab'] = 'businessComponent';
+    runtime.ui['procId'] = 'proc-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [{ uid: 'comp-1', name: '订单组件', kind: 'core' }],
+      businessConstructs: [{ uid: 'construct-1', name: '订单构件', businessComponentUid: 'comp-1' }],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    runtime.ui['mainTab'] = 'constructWorkbench';
+    runtime.ui['componentWorkbenchTab'] = 'businessComponent';
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const contextTarget = compiled.querySelector<HTMLElement>('[data-testid="business-construct-tree-view"]')
+      || compiled.querySelector<HTMLElement>('#tab-content');
+    contextTarget?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 320,
+      clientY: 180,
+    }));
+    fixture.detectChanges();
+
+    const menu = compiled.querySelector<HTMLElement>('[data-testid="locator-menu"]')!;
+    expect(menu.textContent).toContain('复制地图链接');
+    expect(menu.textContent).toContain('全部折叠');
+    expect(menu.textContent).toContain('全部展开');
+    expect(menu.textContent).not.toContain('复制当前流程链接');
+    expect(menu.textContent).not.toContain('复制当前节点链接');
+    expect(menu.querySelector('[data-testid="locator-menu-shortcut"]')?.textContent).toContain('Space');
+    expect(menu.querySelector('[data-testid="locator-menu-shortcut"]')?.classList.contains('locator-menu-shortcut')).toBe(true);
   });
 
   it('should open a startup locator and restore process node state', async () => {

@@ -49,6 +49,22 @@ interface AngularNavigationSnapshot {
 }
 
 const ANGULAR_NAV_HISTORY_LIMIT = 30;
+const ANGULAR_UNDO_HISTORY_LIMIT = 50;
+
+interface AngularDocumentHistory {
+  undo: any[];
+  redo: any[];
+  baseline: any;
+}
+
+// 模块意图：为所有经由 markAngularRuntimeModified 的工作台提供统一的内存级撤销栈。
+// 关键流程：修改发生后把上一份 baseline 入 undo，撤销/重做时替换完整文档并继续走本地草稿标记。
+// 边界细节：历史只保留最近 50 步，打开或替换文档会重置；这里不持久化操作记录，避免和协同 baseSeq 混在一起。
+const documentHistory: AngularDocumentHistory = {
+  undo: [],
+  redo: [],
+  baseline: null,
+};
 
 // 模块意图：提供 Angular 内部的工作壳状态源，替代旧全局运行时的隐式状态。
 // 关键流程：DocumentStore、菜单壳层和过渡适配器共享这里的状态；状态变化统一派发轻量刷新事件。
@@ -93,16 +109,89 @@ export function replaceRuntimeDocument(document: any, fileName = ''): void {
   runtimeState.doc = normalizeDocument(document || {});
   runtimeState.currentFile = fileName;
   runtimeState.modified = false;
+  resetAngularRuntimeUndoBaseline();
   emitRuntimeRefresh();
 }
 
 export function markAngularRuntimeModified(): void {
+  recordAngularRuntimeUndoBoundary();
   runtimeState.modified = true;
   if (runtimeState.currentFile && !runtimeState.readOnly) {
     runtimeState.collab.pendingSnapshot = true;
     window.dispatchEvent(new CustomEvent('blm-runtime-local-change'));
   }
   emitRuntimeRefresh();
+}
+
+export function canUndoAngularRuntimeDocument(): boolean {
+  return documentHistory.undo.length > 0;
+}
+
+export function canRedoAngularRuntimeDocument(): boolean {
+  return documentHistory.redo.length > 0;
+}
+
+export function undoAngularRuntimeDocument(): boolean {
+  const previous = documentHistory.undo.pop();
+  if (!previous) return false;
+  documentHistory.redo.push(cloneRuntimeDocument(runtimeState.doc));
+  runtimeState.doc = normalizeDocument(previous);
+  documentHistory.baseline = cloneRuntimeDocument(runtimeState.doc);
+  markRuntimeDocumentChangedByHistory();
+  return true;
+}
+
+export function redoAngularRuntimeDocument(): boolean {
+  const next = documentHistory.redo.pop();
+  if (!next) return false;
+  documentHistory.undo.push(cloneRuntimeDocument(runtimeState.doc));
+  trimAngularRuntimeHistory(documentHistory.undo);
+  runtimeState.doc = normalizeDocument(next);
+  documentHistory.baseline = cloneRuntimeDocument(runtimeState.doc);
+  markRuntimeDocumentChangedByHistory();
+  return true;
+}
+
+export function clearAngularRuntimeUndoHistory(): void {
+  documentHistory.undo = [];
+  documentHistory.redo = [];
+  resetAngularRuntimeUndoBaseline();
+}
+
+function resetAngularRuntimeUndoBaseline(): void {
+  documentHistory.baseline = cloneRuntimeDocument(runtimeState.doc);
+}
+
+function recordAngularRuntimeUndoBoundary(): void {
+  if (!documentHistory.baseline) resetAngularRuntimeUndoBaseline();
+  if (areRuntimeDocumentsEqual(documentHistory.baseline, runtimeState.doc)) return;
+  documentHistory.undo.push(cloneRuntimeDocument(documentHistory.baseline));
+  trimAngularRuntimeHistory(documentHistory.undo);
+  documentHistory.redo = [];
+  resetAngularRuntimeUndoBaseline();
+}
+
+function markRuntimeDocumentChangedByHistory(): void {
+  runtimeState.modified = true;
+  if (runtimeState.currentFile && !runtimeState.readOnly) {
+    runtimeState.collab.pendingSnapshot = true;
+    window.dispatchEvent(new CustomEvent('blm-runtime-local-change'));
+  }
+  emitRuntimeRefresh();
+}
+
+function trimAngularRuntimeHistory(history: any[]): void {
+  if (history.length > ANGULAR_UNDO_HISTORY_LIMIT) {
+    history.splice(0, history.length - ANGULAR_UNDO_HISTORY_LIMIT);
+  }
+}
+
+function cloneRuntimeDocument(document: any): any {
+  return JSON.parse(JSON.stringify(document || {}));
+}
+
+function areRuntimeDocumentsEqual(left: any, right: any): boolean {
+  return JSON.stringify(left || {}) === JSON.stringify(right || {});
 }
 
 export function switchAngularMainTab(tabId: string): void {

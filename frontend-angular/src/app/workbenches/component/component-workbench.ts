@@ -5,7 +5,7 @@ import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-wo
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
 
-type ComponentTab = 'businessComponent' | 'businessConstruct' | 'businessConstructNew' | 'taskDef' | 'entity';
+type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
 
 interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; note?: string; entityUids?: string[]; taskDefinitionUids?: string[]; constructUids?: string[]; }
 interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; businessComponentId?: string; businessComponent?: string; }
@@ -21,9 +21,16 @@ interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: strin
 })
 export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   private readonly onRefresh = () => this.version.update((v) => v + 1);
+  private readonly onMindMapCommand = (event: Event) => this.handleMindMapCommand(event as CustomEvent<{ command?: string }>);
   private readonly runtime = getAngularRuntimeState();
-  ngOnInit(): void { window.addEventListener('blm-workbench-refresh', this.onRefresh); }
-  ngOnDestroy(): void { window.removeEventListener('blm-workbench-refresh', this.onRefresh); }
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+    window.addEventListener('blm-business-mindmap-command', this.onMindMapCommand);
+  }
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+    window.removeEventListener('blm-business-mindmap-command', this.onMindMapCommand);
+  }
 
   protected readonly version = signal(0);
   protected readonly activeTab = signal<ComponentTab>(this.restoreActiveTab());
@@ -118,6 +125,14 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected resetMindMapZoom(): void {
     this.mindMapZoom.set(0.8);
   }
+  private handleMindMapCommand(event: CustomEvent<{ command?: string }>): void {
+    if (this.activeTab() !== 'businessComponent') return;
+    const command = event.detail?.command;
+    if (command === 'mind-toggle-selected') this.toggleSelectedMindNode();
+    if (command === 'mind-collapse-all') this.collapseAllMindNodes();
+    if (command === 'mind-expand-all') this.expandAllMindNodes();
+    if (command === 'mind-reset-zoom') this.resetMindMapZoom();
+  }
   protected onMindMapWheel(event: WheelEvent): void {
     if (!event.ctrlKey) return;
     event.preventDefault();
@@ -136,6 +151,26 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return selected?.type === type && selected.id === id;
   }
   protected onMindMapKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key === '-') {
+      event.preventDefault();
+      this.collapseAllMindNodes();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && (event.key === '=' || event.key === '+')) {
+      event.preventDefault();
+      this.expandAllMindNodes();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === '0') {
+      event.preventDefault();
+      this.resetMindMapZoom();
+      return;
+    }
+    if (event.key === ' ') {
+      event.preventDefault();
+      this.toggleSelectedMindNode();
+      return;
+    }
     if (!this.canEdit()) return;
     const menu = this.mindChildMenu();
     if (menu && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
@@ -146,11 +181,6 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();
       this.moveMindSelection(event.key);
-      return;
-    }
-    if (event.key === ' ') {
-      event.preventDefault();
-      this.toggleSelectedMindNode();
       return;
     }
     if (event.key !== 'Enter' && event.key !== 'Tab' && event.key.toLowerCase() !== 't') return;
@@ -495,6 +525,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     };
     doc.businessComponents.push(component);
     this.expandedComp.set(this.uid(component));
+    this.focusMindNode('component', this.uid(component), true);
     this.touch();
   }
   protected updateComponentInline(comp: LegacyComp, key: 'name' | 'kind' | 'note', value: string): void {
@@ -920,7 +951,8 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   private restoreActiveTab(): ComponentTab {
     const saved = String(this.runtime.ui['componentWorkbenchTab'] || '').trim();
     if (saved === 'component' || saved === 'service' || saved === 'orchestration') return 'businessComponent';
-    return ['businessComponent', 'businessConstruct', 'businessConstructNew', 'taskDef', 'entity'].includes(saved)
+    if (saved === 'businessConstructNew') return 'businessComponent';
+    return ['businessComponent', 'businessConstruct', 'taskDef', 'entity'].includes(saved)
       ? saved as ComponentTab
       : 'businessComponent';
   }

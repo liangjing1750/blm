@@ -2,9 +2,8 @@
   <div class="proc-view-toolbar">
     <div class="proc-view-toolbar-main">
       <div class="view-toggle-group">
-        <button class="vtb" [class.active]="activeTab()==='businessComponent'" (click)="switchTab('businessComponent')">业务组件</button>
+        <button class="vtb" data-testid="component-businesscomponent-tab" [class.active]="activeTab()==='businessComponent'" (click)="switchTab('businessComponent')">业务组件</button>
         <button class="vtb" data-testid="component-businessconstruct-tab" [class.active]="activeTab()==='businessConstruct'" (click)="switchTab('businessConstruct')">业务构件</button>
-        <button class="vtb" data-testid="component-businessconstruct-new-tab" [class.active]="activeTab()==='businessConstructNew'" (click)="switchTab('businessConstructNew')">业务构件New</button>
         <button class="vtb" data-testid="component-taskdef-tab" [class.active]="activeTab()==='taskDef'" (click)="switchTab('taskDef')">任务定义</button>
         <button class="vtb" [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
       </div>
@@ -17,7 +16,7 @@
   </div>
 
   <!-- 业务组件：只看组件与构件分组，实体和任务明细留到构件详情页。 -->
-  @if (activeTab() === 'businessComponent') {
+  @if (false && activeTab() === 'businessComponent') {
     <div class="comp-tab-body business-component-view" data-testid="business-component-view">
       <div class="business-component-toolbar">
         @if (canEdit()) {
@@ -315,15 +314,15 @@
     </div>
   }
 
-  <!-- 业务构件New：按人的功能树思路向右展开，节点是具体元素，类型只作为标签附着在节点上。 -->
-  @if (activeTab() === 'businessConstructNew') {
+  <!-- 业务组件地图：按人的功能树思路向右展开，节点是具体元素，类型只作为标签附着在节点上。 -->
+  @if (activeTab() === 'businessComponent') {
     <div class="comp-tab-body business-tree-view" data-testid="business-construct-tree-view">
-      <header class="business-mindmap-toolbar">
+      <header class="business-mindmap-toolbar" data-testid="business-mindmap-toolbar">
         <div>
-          <strong>业务组件功能图</strong>
+          <strong>业务组件地图</strong>
           <span>Enter 新增同级，Tab 新增子级，T 新增任务，双击重命名，Ctrl+滚轮缩放；拖拽构件、实体、任务可调整归属。</span>
         </div>
-        <div class="business-mindmap-tools">
+        <div class="business-mindmap-tools" data-testid="business-mindmap-tools">
           <span data-testid="business-mindmap-zoom">{{ mindMapZoomPercent() }}%</span>
           <button class="business-tree-action" data-testid="mind-collapse-all" type="button" (click)="collapseAllMindNodes()">全部折叠</button>
           <button class="business-tree-action" data-testid="mind-expand-all" type="button" (click)="expandAllMindNodes()">全部展开</button>
@@ -331,8 +330,7 @@
         </div>
       </header>
       <div class="business-mindmap-canvas" data-testid="business-mindmap-canvas" tabindex="0" (wheel)="onMindMapWheel($event)" (keydown)="onMindMapKeydown($event)">
-        <div class="business-mindmap-stage" [style.transform]="'scale(' + mindMapZoom() + ')'">
-          <div class="mind-root">业务组件</div>
+        <div class="business-mindmap-stage has-rootless-map" [style.transform]="'scale(' + mindMapZoom() + ')'">
           <div class="mind-groups">
             @for (group of groupedTreeComponents(); track group.kind) {
               <section class="mind-group" [class.is-generic]="group.kind === 'generic'">
@@ -358,7 +356,7 @@
                       @if (!isMindComponentCollapsed(comp)) {
                       @for (construct of constructsFor(comp); track uid(construct)) {
                         <section class="mind-construct">
-                          <button class="mind-node mind-node--construct" [class.is-selected]="isMindNodeSelected('construct', uid(construct))" [attr.data-testid]="'mind-node-construct-' + uid(construct)" type="button" draggable="true" (click)="selectMindNode('construct', uid(construct), $event)" (dblclick)="startMindRename('construct', uid(construct), $event)" (dragstart)="startMindDrag('construct', uid(construct), $event)" (dragover)="$event.preventDefault()" (drop)="dropMindNode('construct', uid(construct), $event)">
+                          <button class="mind-node mind-node--construct" [class.is-selected]="isMindNodeSelected('construct', uid(construct))" [attr.data-testid]="'mind-node-construct-' + uid(construct)" type="button" draggable="true" (click)="openBusinessConstruct(construct)" (dblclick)="startMindRename('construct', uid(construct), $event)" (dragstart)="startMindDrag('construct', uid(construct), $event)" (dragover)="$event.preventDefault()" (drop)="dropMindNode('construct', uid(construct), $event)">
                             @if (isMindNodeEditing('construct', uid(construct))) {
                               <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="construct.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('construct', uid(construct), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
                               <span class="mind-input-label">{{ construct.name || uid(construct) }}</span>
@@ -421,7 +419,10 @@
             } @empty {
               <div class="business-empty-state">
                 <strong>暂无业务组件</strong>
-                <span>功能树需要先有具体组件、构件、实体或任务。</span>
+                <span>先创建第一个业务组件，再继续添加构件、实体和任务。</span>
+                @if (canEdit()) {
+                  <button class="btn btn-primary btn-sm" data-testid="mind-create-first-component" type="button" (click)="addComponentInline()">创建第一个业务组件</button>
+                }
               </div>
             }
           </div>

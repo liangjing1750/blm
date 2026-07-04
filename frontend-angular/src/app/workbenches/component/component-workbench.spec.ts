@@ -50,18 +50,16 @@ describe('ComponentWorkbenchComponent', () => {
 
   it('splits the component workspace into business component and construct views', () => {
     const tabs = Array.from(host.querySelectorAll('.proc-view-toolbar .view-toggle-group .vtb')).map((tab) => tab.textContent?.trim());
-    expect(tabs).toEqual(['业务组件', '业务构件', '业务构件New', '任务定义', '实体定义']);
-    expect(host.textContent).not.toContain('组件构件');
-    expect(host.querySelector('[data-testid="business-component-view"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="business-component-card"]')?.textContent).toContain('订单组件');
-    expect(host.querySelector('[data-testid="business-construct-entry"]')?.textContent).toContain('订单构件');
-    expect(host.querySelector('[data-testid="business-construct-entry"]')?.textContent).toContain('1 个实体');
-    expect(host.querySelector('[data-testid="business-construct-entry"]')?.textContent).toContain('1 个任务');
-    expect(host.querySelector('[data-testid="business-component-view"]')?.textContent).not.toContain('查询订单');
+    expect(tabs).toEqual(['业务组件', '业务构件', '任务定义', '实体定义']);
+    expect(host.textContent).not.toContain('业务构件New');
+    expect(host.querySelector('[data-testid="business-construct-tree-view"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="business-mindmap-toolbar"]')?.textContent).toContain('业务组件地图');
+    expect(host.querySelector('[data-testid="mind-node-component-comp-1"]')?.textContent).toContain('订单组件');
+    expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')?.textContent).toContain('订单构件');
   });
 
   it('opens construct detail from component overview and keeps context without a return button', () => {
-    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-entry"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
     fixture.detectChanges();
 
     expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessConstruct');
@@ -76,7 +74,7 @@ describe('ComponentWorkbenchComponent', () => {
   });
 
   it('renders a rightward business construct tree with element nodes and drills into definitions', () => {
-    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
     fixture.detectChanges();
 
     const tree = host.querySelector<HTMLElement>('[data-testid="business-construct-tree-view"]')!;
@@ -92,20 +90,7 @@ describe('ComponentWorkbenchComponent', () => {
 
     tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
     fixture.detectChanges();
-    expect(tree.querySelector('[data-testid="business-tree-leaves-construct-1"]')).toBeTruthy();
-    expect(tree.querySelector('[data-testid="mind-node-entity-entity-1"]')?.textContent).toContain('订单');
-    expect(tree.querySelector('[data-testid="mind-node-task-task-1"]')?.textContent).toContain('查询订单');
-    expect(tree.querySelector('.business-tree-tag')?.textContent).toContain('核心组件');
-
-    tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-entity-entity-1"]')?.click();
-    fixture.detectChanges();
-    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('entity');
-
-    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
-    fixture.detectChanges();
-    host.querySelector<HTMLButtonElement>('[data-testid="mind-node-task-task-1"]')?.click();
-    fixture.detectChanges();
-    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('taskDef');
+    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessConstruct');
     expect(getAngularRuntimeState().ui['componentWorkbenchConstructId']).toBe('construct-1');
   });
 
@@ -115,7 +100,7 @@ describe('ComponentWorkbenchComponent', () => {
     runtime.doc.businessConstructs.push({ uid: 'construct-3', name: '支付构件', businessComponentUid: 'comp-2' });
 
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
-    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
     fixture.detectChanges();
 
     const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
@@ -123,7 +108,7 @@ describe('ComponentWorkbenchComponent', () => {
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     fixture.detectChanges();
 
-    expect(runtime.ui['componentWorkbenchTab']).toBe('businessConstructNew');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessComponent');
     expect(runtime.doc.businessConstructs.some((construct: any) => construct.name === '新构件' && construct.businessComponentUid === 'comp-1')).toBe(true);
     expect(host.querySelector('[data-testid="business-tree-add-construct-comp-1"]')).toBeFalsy();
     expect(host.querySelector('.mind-edit-strip')).toBeFalsy();
@@ -157,7 +142,7 @@ describe('ComponentWorkbenchComponent', () => {
     runtime.doc.businessComponents.push({ uid: 'comp-2', name: '支付组件', kind: 'generic' });
 
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
-    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
     fixture.detectChanges();
 
     const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
@@ -170,12 +155,14 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
     expect(host.querySelector('[data-testid="business-mindmap-zoom"]')?.textContent).toContain('90%');
 
-    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-1"]')?.click();
     fixture.detectChanges();
-    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     fixture.detectChanges();
     expect(runtime.doc.businessConstructs.some((construct: any) => construct.name === '新构件' && construct.businessComponentUid === 'comp-1')).toBe(true);
 
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     fixture.detectChanges();
     expect(host.querySelector('[data-testid="mind-child-menu"]')?.textContent?.trim()).toBe('实体任务');
@@ -191,7 +178,9 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('[data-testid="mind-child-menu"]')).toBeFalsy();
     expect(host.querySelector('[data-testid="mind-node-name-editor"]')).toBeTruthy();
 
-    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-1"]')?.click();
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     fixture.detectChanges();
@@ -219,7 +208,7 @@ describe('ComponentWorkbenchComponent', () => {
 
   it('collapses individual and all mind map branches without losing the global skeleton', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
-    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-new-tab"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
     fixture.detectChanges();
 
     const canvas = host.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
@@ -247,6 +236,23 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
     expect(host.querySelector('[data-testid="mind-node-component-comp-1"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')).toBeFalsy();
+  });
+
+  it('keeps the business component map compact without a fixed root node and separates node types visually', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
+    fixture.detectChanges();
+
+    const tree = host.querySelector<HTMLElement>('[data-testid="business-construct-tree-view"]')!;
+    const toolbar = tree.querySelector<HTMLElement>('[data-testid="business-mindmap-toolbar"]')!;
+    const tools = tree.querySelector<HTMLElement>('[data-testid="business-mindmap-tools"]')!;
+
+    expect(toolbar.textContent).toContain('业务组件地图');
+    expect(tree.querySelector('[data-testid="mind-root"]')).toBeFalsy();
+    expect(tree.querySelector('.business-mindmap-stage')?.classList.contains('has-rootless-map')).toBe(true);
+    expect(tools.querySelectorAll('button').length).toBeLessThanOrEqual(3);
+    expect(tree.querySelector('[data-testid="mind-node-construct-construct-1"]')?.classList.contains('mind-node--construct')).toBe(true);
+    expect(tree.querySelector('[data-testid="mind-node-entity-entity-1"]')?.classList.contains('mind-node--entity')).toBe(true);
+    expect(tree.querySelector('[data-testid="mind-node-task-task-1"]')?.classList.contains('mind-node--task')).toBe(true);
   });
 
   it('keeps construct header fixed while entity and task lists scroll independently', () => {
@@ -331,33 +337,29 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('.taskdef-cards')?.textContent).toContain('查询订单');
   });
 
-  it('edits component properties in the card and creates constructs by opening the construct view', () => {
+  it('creates the first business component from an empty map and edits it inline', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.businessComponents = [];
+    runtime.doc.businessConstructs = [];
+    fixture.destroy();
+    fixture = TestBed.createComponent(ComponentWorkbenchComponent);
+    fixture.detectChanges();
+    host = fixture.nativeElement as HTMLElement;
+
     expect(host.querySelector('.proc-view-toolbar .view-toggle-group .vtb.active')?.textContent).toContain('业务组件');
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();
 
-    host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="mind-create-first-component"]')?.click();
     fixture.detectChanges();
-    expect(host.querySelector('[data-testid="component-drawer"]')).toBeFalsy();
-    expect(getAngularRuntimeState().doc.businessComponents).toHaveLength(2);
+    expect(runtime.doc.businessComponents).toHaveLength(1);
+    expect(host.querySelector('[data-testid="mind-node-component-' + runtime.doc.businessComponents[0].uid + '"]')).toBeTruthy();
 
-    const nameInput = host.querySelector<HTMLInputElement>('[data-testid="business-component-name-input"]')!;
+    const nameInput = host.querySelector<HTMLInputElement>('[data-testid="mind-node-name-editor"]')!;
     nameInput.value = '订单履约组件';
     nameInput.dispatchEvent(new Event('input'));
     fixture.detectChanges();
-    expect(getAngularRuntimeState().doc.businessComponents[0].name).toBe('订单履约组件');
-
-    const kindButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="business-component-kind-toggle"] button'));
-    kindButtons.find((button) => button.textContent?.includes('通用组件'))?.click();
-    fixture.detectChanges();
-    expect(getAngularRuntimeState().doc.businessComponents[0].kind).toBe('generic');
-
-    host.querySelector<HTMLButtonElement>('[data-testid="business-construct-add"]')?.click();
-    fixture.detectChanges();
-
-    expect(host.querySelector('[data-testid="construct-drawer"]')).toBeFalsy();
-    expect(getAngularRuntimeState().ui['componentWorkbenchTab']).toBe('businessConstruct');
-    expect(getAngularRuntimeState().doc.businessConstructs.some((construct: any) => construct.name === '新构件')).toBe(true);
+    expect(runtime.doc.businessComponents[0].name).toBe('订单履约组件');
   });
 
   it('confirms before deleting a business component', () => {
@@ -369,7 +371,7 @@ describe('ComponentWorkbenchComponent', () => {
     });
     window.addEventListener('blm-runtime-confirm', confirmSpy);
 
-    host.querySelector<HTMLButtonElement>('.comp-grid-edit.danger')?.click();
+    (fixture.componentInstance as any).deleteComp(getAngularRuntimeState().doc.businessComponents[0]);
     fixture.detectChanges();
 
     expect(confirmSpy).toHaveBeenCalled();
@@ -377,27 +379,19 @@ describe('ComponentWorkbenchComponent', () => {
     window.removeEventListener('blm-runtime-confirm', confirmSpy);
   });
 
-  it('moves ungrouped constructs into and out of a component from the component card', () => {
+  it('moves ungrouped constructs into a component from the map', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.businessComponents.push({ uid: 'comp-2', name: '支付组件', kind: 'generic' });
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();
 
-    expect(host.querySelector('[data-testid="business-component-imports"]')?.textContent).toContain('未分组构件');
-    host.querySelector<HTMLButtonElement>('[data-testid="construct-attach-button"]')?.click();
+    host.querySelector<HTMLElement>('[data-testid="mind-node-construct-construct-1"]')!.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-2"]')!.dispatchEvent(new Event('drop', { bubbles: true }));
     fixture.detectChanges();
 
-    const runtime = getAngularRuntimeState();
-    const moved = runtime.doc.businessConstructs.find((item: any) => item.uid === 'construct-2');
-    expect(moved.businessComponentUid).toBe('comp-1');
-    expect(runtime.doc.businessComponents[0].constructUids).toContain('construct-2');
-    expect(host.querySelector('[data-testid="business-component-imports"]')).toBeFalsy();
-
-    const detachButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="construct-detach-button"]'));
-    detachButtons.find((button) => button.closest('.comp-grid-construct-wrap')?.textContent?.includes('未分组构件'))?.click();
-    fixture.detectChanges();
-
-    expect(moved.businessComponentUid).toBe('');
-    expect(runtime.doc.businessComponents[0].constructUids || []).not.toContain('construct-2');
-    expect(host.querySelector('[data-testid="business-component-imports"]')?.textContent).toContain('未分组构件');
+    const moved = runtime.doc.businessConstructs.find((item: any) => item.uid === 'construct-1');
+    expect(moved.businessComponentUid).toBe('comp-2');
+    expect(runtime.doc.businessComponents[1].constructUids).toContain('construct-1');
   });
 
   it('keeps task definition editing readable and all add buttons mutate the model', () => {
@@ -504,8 +498,7 @@ describe('ComponentWorkbenchComponent', () => {
 
   it('keeps component workspace read-only until the editor is opened', () => {
     expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('打开编辑');
-    expect(host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')).toBeFalsy();
-    expect(host.querySelector<HTMLButtonElement>('.comp-grid-edit')).toBeFalsy();
+    expect(host.querySelector<HTMLInputElement>('[data-testid="mind-node-name-editor"]')).toBeFalsy();
 
     const beforeComponents = getAngularRuntimeState().doc.businessComponents.length;
     (fixture.componentInstance as any).openCompDrawer();
@@ -520,8 +513,9 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
 
     expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('关闭编辑');
-    expect(host.querySelector<HTMLButtonElement>('[data-testid="business-component-add"]')).toBeTruthy();
-    expect(host.querySelector<HTMLButtonElement>('.comp-grid-edit')).toBeTruthy();
+    host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-1"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLInputElement>('[data-testid="mind-node-name-editor"]')).toBeTruthy();
   });
 
   it('keeps the entity relation diagram shell scrollable in both directions', () => {
@@ -1179,7 +1173,7 @@ describe('ComponentWorkbenchComponent', () => {
       fields: [{ uid: 'field-1', name: '状态', is_status: true, status_role: 'primary', state_values: '草稿/审核中/已完成' }],
       state_transitions: [{ from: '草稿', to: '审核中', action: '提交', field_name: '状态' }],
     }];
-    host.querySelectorAll<HTMLButtonElement>('.vtb')[4]?.click();
+    host.querySelectorAll<HTMLButtonElement>('.vtb')[3]?.click();
     fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="entity-design-switch-state"]')?.click();
     fixture.detectChanges();
