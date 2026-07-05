@@ -3,7 +3,11 @@
   left: 0;
   right: 0;
   border-bottom: 1px solid #dbeafe;
-  background: linear-gradient(90deg, #f8fafc 0 116px, #fff 116px);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--lane-color, #2563eb) 18%, #f8fafc) 0 116px,
+    color-mix(in srgb, var(--lane-color, #2563eb) 7%, #fff) 116px
+  );
 }
 
 .flow-lane-title {
@@ -16,6 +20,7 @@
   align-items: center;
   justify-content: center;
   border-right: 1px solid #94a3b8;
+  background: color-mix(in srgb, var(--lane-color, #2563eb) 14%, #fff);
   color: var(--lane-color, #0f172a);
   font-size: 14px;
   font-weight: 800;
@@ -136,7 +141,8 @@
   padding: 7px 10px;
   border: 1px solid color-mix(in srgb, var(--lane-color, #2563eb) 42%, #bfdbfe);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--lane-color, #2563eb) 10%, #eff6ff);
+  background: color-mix(in srgb, var(--lane-color, #2563eb) 16%, #eff6ff);
+  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--lane-color, #2563eb) 78%, #1e40af);
   text-align: center;
 
   &.is-editing {
@@ -185,8 +191,12 @@
   white-space: nowrap;
 }
 
+.flow-node strong {
+  color: color-mix(in srgb, var(--lane-color, #2563eb) 82%, #0f172a);
+}
+
 .flow-node small {
-  color: #64748b;
+  color: color-mix(in srgb, var(--lane-color, #2563eb) 66%, #475569);
   font-size: 12px;
   font-weight: 600;
 }
@@ -203,10 +213,10 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: color-mix(in srgb, var(--lane-color, #2563eb) 10%, #fff);
+  border: 1px solid color-mix(in srgb, var(--lane-color, #2563eb) 34%, #cbd5e1);
   border-radius: 4px;
-  color: #475569;
+  color: color-mix(in srgb, var(--lane-color, #2563eb) 72%, #334155);
   font-size: 10px;
   font-weight: 600;
   padding: 1px 5px;
@@ -260,16 +270,16 @@
 
 .flow-terminal {
   display: inline-flex;
-  width: auto;
+  width: 50px;
   height: auto;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 3px;
   border: 0;
   background: transparent;
   color: #0f172a;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .flow-terminal:not(.is-end) {

@@ -917,10 +917,6 @@ export class ShellComponent implements OnInit, OnDestroy {
       url.searchParams.set('plugin', 'blm-agent-plugin');
       url.searchParams.set('source', 'blm');
       url.searchParams.set('handoffId', handoffId);
-      url.searchParams.set('userId', String(payload.user?.id || 'anonymous'));
-      url.searchParams.set('userName', String(payload.user?.name || 'agent'));
-      url.searchParams.set('documentId', String(payload.documentId || ''));
-      url.searchParams.set('route', String(payload.currentRoute || ''));
       window.open(url.toString(), '_blank', 'noopener');
     });
   }

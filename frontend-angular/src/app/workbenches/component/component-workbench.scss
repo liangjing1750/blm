@@ -99,19 +99,11 @@
 .taskdef-capability-address { display: block; overflow: hidden; margin: 0 10px 8px; border-radius: 6px; background: #f8fafc; color: #64748b; font-size: 11px; padding: 4px 7px; text-overflow: ellipsis; white-space: nowrap; }
 .taskdef-card-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 0 10px 9px; }
 
-.taskdef-head { display: grid; grid-template-columns: auto minmax(180px, 1.2fr) minmax(120px, .8fr) minmax(120px, .8fr) minmax(260px, 1fr) auto auto auto; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; }
-.taskdef-head:hover { background: #f8fafc; }
 .taskdef-arrow { color: #cbd5e1; font-size: 12px; transition: transform .15s; flex-shrink: 0; }
 .taskdef-arrow.exp { transform: rotate(180deg); }
-.taskdef-head strong { min-width: 0; overflow: hidden; color: #1e293b; font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-.taskdef-head code { min-width: 0; overflow: hidden; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 11px; padding: 2px 7px; text-overflow: ellipsis; white-space: nowrap; }
-.taskdef-addr { min-width: 0; overflow: hidden; color: #94a3b8; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .taskdef-type { border-radius: 4px; font-size: 10px; font-weight: 700; padding: 2px 7px; flex-shrink: 0; }
 .taskdef-type.query { background: #dbeafe; color: #1d4ed8; }
 .taskdef-type.service { background: #dcfce7; color: #166534; }
-.taskdef-meta { display: inline-flex; min-width: 0; flex-wrap: wrap; gap: 5px; color: #64748b; font-size: 11px; }
-.taskdef-meta span { overflow: hidden; max-width: 150px; border: 1px solid #dbe5f0; border-radius: 999px; background: #f8fafc; padding: 2px 7px; text-overflow: ellipsis; white-space: nowrap; }
-.taskdef-meta span.warn { border-color: #fde68a; background: #fffbeb; color: #92400e; }
 .taskdef-detail { border-top: 1px solid #f1f5f9; padding: 10px 14px; }
 .taskdef-empty-detail { border: 1px dashed #cbd5e1; border-radius: 7px; background: #f8fafc; color: #64748b; font-size: 12px; padding: 10px 12px; }
 .taskdef-detail table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
@@ -127,12 +119,7 @@
 .taskdef-edit-section { border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; padding: 10px; }
 .taskdef-edit-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .taskdef-edit-section-head strong { color: #1e293b; font-size: 13px; }
-.taskdef-edit-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.taskdef-edit-row input, .taskdef-edit-row select, .taskdef-edit-body textarea { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 13px; }
-.taskdef-edit-row input { flex: 1; min-width: 120px; }
-.taskdef-edit-row select { min-width: 100px; }
 .taskdef-edit-name { font-weight: 700; }
-.taskdef-edit-target { max-width: 200px; }
 .taskdef-edit-params table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
 .taskdef-edit-params th { font-size: 10px; color: #94a3b8; font-weight: 600; padding: 3px 4px; text-align: left; }
 .taskdef-edit-params td { padding: 2px 3px; }
@@ -141,6 +128,38 @@
 .td-cb { text-align: center; width: 36px; }
 .td-cb input { width: auto; }
 .taskdef-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.taskdef-editor-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(15, 23, 42, .36); }
+.taskdef-editor-dialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 81;
+  display: flex;
+  width: min(920px, calc(100vw - 48px));
+  max-height: calc(100vh - 72px);
+  transform: translate(-50%, -50%);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, .24);
+}
+.taskdef-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
+.taskdef-editor-head > div:first-child { display: flex; align-items: center; gap: 10px; }
+.taskdef-editor-head strong { color: #0f172a; font-size: 18px; font-weight: 900; }
+.taskdef-editor-head span { border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 800; padding: 4px 10px; }
+.taskdef-editor-head-actions { display: flex; align-items: center; gap: 8px; }
+.taskdef-editor-param-strip { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #dbe5f0; background: #f8fafc; color: #475569; font-size: 13px; font-weight: 800; }
+.taskdef-editor-param-strip span { padding: 6px 20px; }
+.taskdef-editor-param-strip span:first-child { background: #ede9fe; }
+.taskdef-editor-body { overflow: auto; padding: 18px 20px; background: #fff; }
+.taskdef-edit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.taskdef-edit-grid label { display: flex; min-width: 0; flex-direction: column; gap: 6px; color: #64748b; font-size: 13px; font-weight: 700; }
+.taskdef-edit-grid input, .taskdef-edit-grid select { width: 100%; border: 1px solid #dbe5f0; border-radius: 7px; padding: 9px 10px; color: #0f172a; font: inherit; font-size: 14px; font-weight: 500; }
+.taskdef-editor-dialog .taskdef-edit-params table { min-width: 100%; }
+.taskdef-editor-dialog .taskdef-edit-note-section { padding: 0; border: 0; }
+.construct-asset-name-input { min-width: 0; font-weight: 800; }
 .comp-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 0 4px; font-size: 12px; color: #64748b; flex-shrink: 0; }
 .comp-pagination button { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 12px; padding: 4px 10px; }
 .comp-pagination button:disabled { opacity: .4; cursor: default; }

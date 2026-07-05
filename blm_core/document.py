@@ -124,6 +124,160 @@ def _ensure_uid(item: dict, *, prefix: str = "item") -> str:
     return uid
 
 
+def _stable_child_uid(prefix: str, parent_uid: str, used: set[str]) -> str:
+    base = f"{prefix}-{parent_uid}" if parent_uid else _deterministic_uid(prefix, "legacy")
+    uid = base
+    suffix = 2
+    while uid in used:
+        uid = f"{base}-{suffix}"
+        suffix += 1
+    return uid
+
+
+def _append_unique_text(values: list, value: object) -> None:
+    text = str(value or "").strip()
+    if text and text not in values:
+        values.append(text)
+
+
+def _legacy_task_definition_uid(value: object) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if not isinstance(value, dict):
+        return ""
+    return str(
+        value.get("taskDefinitionUid")
+        or value.get("taskDefinitionId")
+        or value.get("taskDefUid")
+        or value.get("taskDefId")
+        or value.get("uid")
+        or value.get("id")
+        or ""
+    ).strip()
+
+
+def _legacy_node_task_definition_uids(node: dict) -> list[str]:
+    # 模块意图：旧版把任务编排挂在流程节点上；新版应用工作台以接口为编排主体。
+    # 这里只抽取“任务定义引用”，后续统一生成应用接口，保证旧浏览器或旧快照写入后端也能被规范化。
+    task_uids: list[str] = []
+    for field in ("taskDefinitionUids", "taskDefinitionIds"):
+        values = node.get(field)
+        if isinstance(values, list):
+            for value in values:
+                _append_unique_text(task_uids, value)
+    for field in ("orchestrationTasks", "tasks", "taskDefinitions"):
+        values = node.get(field)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            _append_unique_text(task_uids, _legacy_task_definition_uid(value))
+    return task_uids
+
+
+def _normalize_application_services_from_legacy_nodes(doc: dict) -> None:
+    # 关键流程：所有写入入口最终都会进入 canonical_document，因此迁移必须幂等。
+    # 已存在 nodeRefs/serviceUids 时只补齐节点关联，不重复创建服务或服务组。
+    service_groups = doc.setdefault("serviceGroups", [])
+    services = doc.setdefault("services", [])
+    if not isinstance(service_groups, list):
+        service_groups = []
+        doc["serviceGroups"] = service_groups
+    if not isinstance(services, list):
+        services = []
+        doc["services"] = services
+
+    task_names = {
+        str(task.get("uid", "")).strip(): str(task.get("name", "")).strip()
+        for task in doc.get("taskDefinitions", [])
+        if isinstance(task, dict) and str(task.get("uid", "")).strip()
+    }
+    service_group_uids = {
+        str(group.get("uid", "")).strip()
+        for group in service_groups
+        if isinstance(group, dict) and str(group.get("uid", "")).strip()
+    }
+    service_uids = {
+        str(service.get("uid", "")).strip()
+        for service in services
+        if isinstance(service, dict) and str(service.get("uid", "")).strip()
+    }
+
+    service_by_node_uid: dict[str, dict] = {}
+    for service in services:
+        if not isinstance(service, dict):
+            continue
+        service_uid = str(service.get("uid", "")).strip()
+        node_refs = service.get("nodeRefs") if isinstance(service.get("nodeRefs"), list) else []
+        for node_uid in node_refs:
+            node_uid_text = str(node_uid or "").strip()
+            if node_uid_text and service_uid:
+                service_by_node_uid.setdefault(node_uid_text, service)
+
+    for process in doc.get("processes", []):
+        if not isinstance(process, dict):
+            continue
+        process_uid = str(process.get("uid", "")).strip()
+        process_name = str(process.get("name", "")).strip() or DEFAULT_PROCESS_NAME
+        group_uid = f"service-group-{process_uid}" if process_uid else _stable_child_uid("service-group", process_name, service_group_uids)
+
+        for node in process.get("nodes", []) if isinstance(process.get("nodes"), list) else []:
+            if not isinstance(node, dict):
+                continue
+            node_uid = str(node.get("uid", "")).strip()
+            task_definition_uids = _legacy_node_task_definition_uids(node)
+            if not node_uid or not task_definition_uids:
+                continue
+            node_service_uids = node.get("serviceUids") if isinstance(node.get("serviceUids"), list) else []
+            node["serviceUids"] = [str(uid).strip() for uid in node_service_uids if str(uid).strip()]
+
+            existing_service = service_by_node_uid.get(node_uid)
+            if existing_service:
+                _append_unique_text(node["serviceUids"], existing_service.get("uid"))
+                continue
+
+            if group_uid not in service_group_uids:
+                service_groups.append(
+                    {
+                        "uid": group_uid,
+                        "name": f"{process_name}应用服务",
+                        "desc": "由流程节点任务编排迁移生成",
+                    }
+                )
+                service_group_uids.add(group_uid)
+
+            node_name = str(node.get("name", "")).strip() or "流程节点"
+            service_uid = _stable_child_uid("service", node_uid, service_uids)
+            steps = []
+            for index, task_uid in enumerate(task_definition_uids, start=1):
+                steps.append(
+                    {
+                        "uid": _deterministic_uid("service-step", service_uid, task_uid, index),
+                        "name": task_names.get(task_uid) or f"步骤{index}",
+                        "stepAlias": f"step{index}",
+                        "taskDefinitionUid": task_uid,
+                        "inputMapping": [],
+                        "outputMapping": [],
+                    }
+                )
+            service = {
+                "uid": service_uid,
+                "name": f"{node_name}应用接口",
+                "serviceGroupUid": group_uid,
+                "method": "POST",
+                "path": "",
+                "desc": "由流程节点任务编排迁移生成",
+                "taskDefinitionUids": task_definition_uids,
+                "nodeRefs": [node_uid],
+                "requestParams": [],
+                "responseParams": [],
+                "orchestration": {"variables": [], "steps": steps, "returnMapping": []},
+            }
+            services.append(service)
+            service_uids.add(service_uid)
+            service_by_node_uid[node_uid] = service
+            _append_unique_text(node["serviceUids"], service_uid)
+
+
 
 def canonicalize_model_references(document: dict | None) -> dict:
     doc = deepcopy(document or {})
@@ -1211,6 +1365,31 @@ def _normalize_node_forms(node: dict) -> None:
     node["forms"] = normalized_forms
 
 
+def _normalize_prototype_files(owner: dict, fallback_prefix: str) -> None:
+    normalized_prototypes = []
+    prototype_sources = owner.get("prototypeFiles", [])
+    if not isinstance(prototype_sources, list):
+        prototype_sources = []
+    for prototype_index, prototype in enumerate(prototype_sources, start=1):
+        normalized = prototype if isinstance(prototype, dict) else {"name": str(prototype or "").strip()}
+        _ensure_uid(normalized, prefix=fallback_prefix)
+        normalized_versions, current_version = _normalize_prototype_versions(normalized, prototype_index)
+        normalized_prototypes.append(
+            {
+                "uid": normalized["uid"],
+                "name": str(normalized.get("name", "")).strip() or current_version["name"],
+                "versionUid": current_version["uid"],
+                "content": current_version["content"],
+                "contentType": current_version["contentType"],
+                "contentEncoding": current_version["contentEncoding"],
+                "size": current_version["size"],
+                "uploadedAt": current_version["uploadedAt"],
+                "versions": normalized_versions,
+            }
+        )
+    owner["prototypeFiles"] = normalized_prototypes
+
+
 def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
     roles_by_uid = {role["uid"]: role for role in roles}
     roles_by_name = {role["name"]: role for role in roles}
@@ -1225,28 +1404,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
         process.setdefault("flowGroup", "")
         process["stageId"] = str(process.get("stageId") or process.get("stageUid") or process.pop("stage_id", "") or "").strip()
         process["stagePos"] = _normalize_graph_offset(process.get("stagePos", process.pop("stage_pos", {})))
-        normalized_prototypes = []
-        prototype_sources = process.get("prototypeFiles", [])
-        if not isinstance(prototype_sources, list):
-            prototype_sources = []
-        for prototype_index, prototype in enumerate(prototype_sources, start=1):
-            normalized = prototype if isinstance(prototype, dict) else {"name": str(prototype or "").strip()}
-            _ensure_uid(normalized, prefix="proto")
-            normalized_versions, current_version = _normalize_prototype_versions(normalized, prototype_index)
-            normalized_prototypes.append(
-                {
-                    "uid": normalized["uid"],
-                    "name": str(normalized.get("name", "")).strip() or current_version["name"],
-                    "versionUid": current_version["uid"],
-                    "content": current_version["content"],
-                    "contentType": current_version["contentType"],
-                    "contentEncoding": current_version["contentEncoding"],
-                    "size": current_version["size"],
-                    "uploadedAt": current_version["uploadedAt"],
-                    "versions": normalized_versions,
-                }
-            )
-        process["prototypeFiles"] = normalized_prototypes
+        _normalize_prototype_files(process, "proto")
         legacy_nodes = process.pop("tasks", None)
         if "nodes" not in process:
             process["nodes"] = legacy_nodes or []
@@ -1255,6 +1413,7 @@ def _normalize_processes(processes: list[dict], roles: list[dict]) -> None:
 
         for node_index, node in enumerate(process["nodes"], start=1):
             _ensure_uid(node, prefix="node")
+            _normalize_prototype_files(node, "node-proto")
             _pop_legacy_business_component_fields(node)
             node.setdefault("name", "")
             node_roles: list[dict] = []
@@ -1519,6 +1678,8 @@ def migrate_document(document: dict | None) -> dict:
     doc.setdefault("businessComponents", [])
     doc.setdefault("businessConstructs", [])
     doc.setdefault("taskDefinitions", [])
+    doc.setdefault("serviceGroups", [])
+    doc.setdefault("services", [])
 
     normalized_roles: list[dict] = []
     roles_by_uid: dict[str, dict] = {}
@@ -1586,6 +1747,56 @@ def migrate_document(document: dict | None) -> dict:
         task_definition["constructId"] = str(task_definition.get("constructId", "")).strip()
         task_definition["constructName"] = str(task_definition.get("constructName", "")).strip()
         task_definition["entityIds"] = list(task_definition.get("entityIds", [])) if isinstance(task_definition.get("entityIds"), list) else []
+
+    for group_index, service_group in enumerate(doc.get("serviceGroups", []), start=1):
+        if not isinstance(service_group, dict):
+            continue
+        _ensure_uid(service_group, prefix="service-group")
+        service_group["name"] = str(service_group.get("name") or f"应用服务{group_index}").strip()
+        service_group["desc"] = str(service_group.get("desc", "")).strip()
+
+    for service_index, service in enumerate(doc.get("services", []), start=1):
+        if not isinstance(service, dict):
+            continue
+        _ensure_uid(service, prefix="service")
+        service["name"] = str(service.get("name") or f"应用接口{service_index}").strip()
+        service["serviceGroupUid"] = str(service.get("serviceGroupUid") or service.get("serviceGroupId") or "").strip()
+        service["method"] = str(service.get("method", "POST") or "POST").strip().upper()
+        service["path"] = str(service.get("path", "")).strip()
+        service["desc"] = str(service.get("desc", "")).strip()
+        service["taskDefinitionUids"] = [
+            str(uid).strip()
+            for uid in service.get("taskDefinitionUids", service.get("taskDefinitionIds", []))
+            if str(uid).strip()
+        ] if isinstance(service.get("taskDefinitionUids", service.get("taskDefinitionIds", [])), list) else []
+        service["nodeRefs"] = [
+            str(uid).strip()
+            for uid in service.get("nodeRefs", [])
+            if str(uid).strip()
+        ] if isinstance(service.get("nodeRefs"), list) else []
+        service["requestParams"] = normalize_task_parameters(service.get("requestParams", service.get("inputs", [])))
+        service["responseParams"] = normalize_task_parameters(service.get("responseParams", service.get("outputs", [])))
+        orchestration = service.get("orchestration") if isinstance(service.get("orchestration"), dict) else {}
+        steps = orchestration.get("steps", service.get("steps", []))
+        normalized_steps = []
+        for step_index, step in enumerate(steps if isinstance(steps, list) else [], start=1):
+            if not isinstance(step, dict):
+                continue
+            _ensure_uid(step, prefix="service-step")
+            task_uid = str(step.get("taskDefinitionUid") or step.get("taskDefinitionId") or "").strip()
+            step["taskDefinitionUid"] = task_uid
+            step["name"] = str(step.get("name", "")).strip()
+            step["stepAlias"] = str(step.get("stepAlias") or f"step{step_index}").strip()
+            step["inputMapping"] = list(step.get("inputMapping", [])) if isinstance(step.get("inputMapping"), list) else []
+            step["outputMapping"] = list(step.get("outputMapping", [])) if isinstance(step.get("outputMapping"), list) else []
+            normalized_steps.append(step)
+        service["orchestration"] = {
+            "variables": list(orchestration.get("variables", [])) if isinstance(orchestration.get("variables"), list) else [],
+            "steps": normalized_steps,
+            "returnMapping": list(orchestration.get("returnMapping", [])) if isinstance(orchestration.get("returnMapping"), list) else [],
+        }
+
+    _normalize_application_services_from_legacy_nodes(doc)
 
     doc["meta"] = meta
     return doc

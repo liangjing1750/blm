@@ -191,10 +191,10 @@ describe('App', () => {
     expect(opened.searchParams.get('plugin')).toBe('blm-agent-plugin');
     expect(opened.searchParams.get('source')).toBe('blm');
     expect(opened.searchParams.get('handoffId')).toBe('handoff-test-1');
-    expect(opened.searchParams.get('userId')).toBe('user-ai-1');
-    expect(opened.searchParams.get('userName')).toBe('AI 用户');
-    expect(opened.searchParams.get('documentId')).toBe('agent.json');
-    expect(opened.searchParams.get('route')).toBe('/process?doc=agent.json&tab=process&proc=proc-inbound&task=node-submit');
+    expect(opened.searchParams.has('userId')).toBe(false);
+    expect(opened.searchParams.has('userName')).toBe(false);
+    expect(opened.searchParams.has('documentId')).toBe(false);
+    expect(opened.searchParams.has('route')).toBe(false);
   });
 
   it('should open a custom create-document dialog without browser prompt', () => {
@@ -413,6 +413,42 @@ describe('App', () => {
     expect(runtime.ui['mainTab']).toBe('constructWorkbench');
     expect(runtime.ui['componentWorkbenchTab']).toBe('component');
     expect(compiled.querySelector('[data-testid="component-workbench-angular-shell"]')).toBeTruthy();
+  });
+
+  it('should keep panorama editing open while switching third-level tabs', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'panorama-editing.json';
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.doc = {
+      meta: { domain: 'Panorama Editing' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: { columns: [], lanes: [], cells: [] },
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-roles"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.textContent).toContain('退出编辑');
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-subtab-terms"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLButtonElement>('[data-testid="panorama-editor-open"]')?.textContent).toContain('退出编辑');
   });
 
   it('should keep role creation compact and sync role edits with Ctrl+S', async () => {
@@ -3507,11 +3543,13 @@ describe('App', () => {
       processes: [{
         uid: 'process-inbound',
         name: '入库预约流程',
+        prototypeFiles: [{ uid: 'process-proto', name: '流程附件.html', versionUid: 'process-proto-v1', versions: [] }],
         nodes: [{
           uid: 'node-submit',
           name: '客户提交入库预约',
           roleIds: [],
-          userSteps: [],
+          prototypeFiles: [{ uid: 'node-proto', name: '节点附件.html', versionUid: 'node-proto-v1', versions: [] }],
+          userSteps: [{ uid: 'step-1', type: '查询', name: '检查表单', note: '<ol><li>检查不通过</li></ol>' }],
           forms: [{
             uid: 'form-1',
             name: '预约表单',
@@ -3539,8 +3577,18 @@ describe('App', () => {
 
     expect(compiled.querySelector<HTMLInputElement>('[data-testid="task-form-name"]')?.disabled).toBe(true);
     expect(compiled.querySelector<HTMLTextAreaElement>('[data-testid="task-form-field-note"]')?.readOnly).toBe(true);
+    expect(compiled.querySelector<HTMLTextAreaElement>('[data-testid="task-form-field-note"]')?.rows).toBe(1);
+    expect(compiled.querySelector<HTMLElement>('[data-testid="process-step-note-editor"]')?.getAttribute('contenteditable')).toBe('false');
     expect(compiled.querySelector<HTMLTextAreaElement>('.node-rule-name-textarea')?.readOnly).toBe(true);
     expect(compiled.querySelector<HTMLElement>('[data-testid="process-rule-content-editor"]')?.getAttribute('contenteditable')).toBe('false');
+
+    const attachmentTab = Array.from(compiled.querySelectorAll<HTMLButtonElement>('.node-material-tabs button'))
+      .find((button) => button.textContent?.includes('附件'));
+    expect(attachmentTab?.textContent).toContain('1');
+    attachmentTab?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="proc-prototype-list"]')?.textContent).toContain('节点附件.html');
+    expect(compiled.querySelector('[data-testid="proc-prototype-list"]')?.textContent).not.toContain('流程附件.html');
   });
 
   it('should ask with a centered custom dialog before copying entity fields into a form section', async () => {
@@ -3987,6 +4035,109 @@ describe('App', () => {
     expect(runtime.ui['mainTab']).toBe('panoramaWorkbench');
     expect(locationSpy).toHaveBeenCalledWith('/panorama');
     expect(compiled.querySelector('[data-testid="panorama-subtabs"]')).toBeTruthy();
+  });
+
+  it('keeps process workbench editing open when switching third-level views', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procView'] = 'flow';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-1', name: '仓库' }],
+      stages: [{ uid: 'stage-1', name: '入库' }],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-1',
+          name: '入库流程',
+          nodes: [{ uid: 'task-1', name: '提交入库预约', roleUids: ['role-1'] }],
+          edges: [],
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      services: [],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/process');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="tab-processWorkbench"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="process-switch-card"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="flow-editor-open"]')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="flow-editor-hide"]')).toBeTruthy();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="process-switch-node"]')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="editor-editing-hide"]')).toBeTruthy();
+  });
+
+  it('deletes the current flow through a custom confirm dialog in edit mode', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procView'] = 'flow';
+    runtime.ui['procId'] = 'proc-1';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '入库' }],
+      stageFlowRefs: [{ uid: 'ref-1', stageUid: 'stage-1', processUid: 'proc-1' }],
+      stageFlowLinks: [{ uid: 'link-1', fromRefUid: 'ref-1', toRefUid: 'ref-1' }],
+      processes: [
+        { uid: 'proc-1', name: '入库流程', nodes: [{ uid: 'task-1', name: '提交入库预约' }], edges: [] },
+        { uid: 'proc-2', name: '出库流程', nodes: [] },
+      ],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      services: [],
+      terms: [],
+      rules: [],
+    };
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/process');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="process-switch-card"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="flow-editor-open"]')?.click();
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('[data-testid="flow-delete-process"]')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="runtime-confirm-dialog"]')?.textContent).toContain('入库流程');
+    compiled.querySelector<HTMLButtonElement>('[data-testid="runtime-confirm-submit"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(runtime.doc.processes.map((process: any) => process.uid)).toEqual(['proc-2']);
+    expect(runtime.doc.stageFlowRefs).toEqual([]);
+    expect(runtime.doc.stageFlowLinks).toEqual([]);
+    expect(runtime.ui['procId']).toBe('proc-2');
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it('should restore the last secondary tab when returning to a workbench', async () => {
@@ -5181,6 +5332,59 @@ describe('App', () => {
     expect((runtime.doc.processes[0].nodes[0] as any).roleIds).toContain('role-b');
   });
 
+  it('should show one role picker for a shared flow node and keep role colors stable', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'proc-shared';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [
+        { uid: 'role-warehouse', id: 'role-warehouse', name: '仓库' },
+        { uid: 'role-customer', id: 'role-customer', name: '客户' },
+        { uid: 'role-auditor', id: 'role-auditor', name: '品种负责人' },
+      ],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-shared',
+          name: '入库预约',
+          nodes: [{ uid: 'node-submit', name: '新增入库预约', roleIds: ['role-customer', 'role-warehouse'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+          flow: { edges: [] },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const addButtons = compiled.querySelectorAll<HTMLButtonElement>('.flow-node-role-add');
+    expect(addButtons.length).toBe(2);
+    addButtons[0].click();
+    fixture.detectChanges();
+    expect(compiled.querySelectorAll('[data-testid="process-flow-node-role-picker"]').length).toBe(1);
+
+    const component = fixture.componentInstance as any;
+    expect(component.laneColor('仓库')).toBe('#2563eb');
+    expect(component.laneColor('客户')).toBe('#d97706');
+    const canvasNodes = component.flowNodes(runtime.doc.processes[0]) as any[];
+    const startNode = canvasNodes.find((node: any) => node.kind === 'start');
+    const firstTaskNode = canvasNodes.find((node: any) => node.kind === 'task');
+    expect(firstTaskNode.x - (startNode.x + startNode.width)).toBeGreaterThanOrEqual(35);
+    const warehouseLane = Array.from(compiled.querySelectorAll<HTMLElement>('.flow-lane'))
+      .find((lane) => lane.textContent?.includes('仓库'))!;
+    const warehouseNode = Array.from(compiled.querySelectorAll<HTMLElement>('[data-testid="process-flow-node"]'))
+      .find((node) => node.getAttribute('data-role') === '仓库')!;
+    expect(warehouseLane.style.getPropertyValue('--lane-color')).toBe('#2563eb');
+    expect(warehouseNode.style.getPropertyValue('--lane-color')).toBe('#2563eb');
+  });
+
   it('should center all process flow side tool icons in the icon column', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
@@ -5457,8 +5661,7 @@ describe('App', () => {
     const startEdge = component.flowEdges(process).find((edge: any) => edge.baseId === 'edge-start');
 
     expect(start.width).toBeGreaterThan(18);
-    expect(start.x + start.width).toBeGreaterThanOrEqual(firstTask.x - 2);
-    expect(start.x + start.width).toBeLessThanOrEqual(firstTask.x + 2);
+    expect(firstTask.x - (start.x + start.width)).toBeGreaterThanOrEqual(35);
     expect(startEdge.d).toContain(`M ${Math.round(start.x + start.width)}`);
     expect(end.x).toBeGreaterThan(reviewTask.x + reviewTask.width);
   });

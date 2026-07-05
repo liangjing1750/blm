@@ -795,6 +795,7 @@ class WorkspaceStorage(DocumentFileStore):
         export_attachments: list[dict] = []
         for process_index, process in enumerate(bundle_manifest.get("processes", []), start=1):
             process_uid = str(process.get("uid", "")).strip() or f"process-{process_index}"
+            process_id = str(process.get("id", "")).strip() or process_uid
             process_name = str(process.get("name", "")).strip()
             prototype_refs: list[dict] = []
             prototype_sources = process.get("prototypeFiles", [])
@@ -868,6 +869,7 @@ class WorkspaceStorage(DocumentFileStore):
                         "name": str((package_attachment or {}).get("name", "")).strip() or str(normalized.get("name", "")).strip() or export_versions[-1]["name"],
                         "ownerType": "process",
                         "ownerUid": process_uid,
+                        "ownerId": process_id,
                         "ownerName": process_name,
                         "versions": export_versions,
                     }
@@ -882,6 +884,98 @@ class WorkspaceStorage(DocumentFileStore):
                     }
                 )
             process["prototypeFiles"] = prototype_refs
+            for node_index, node in enumerate(process.get("nodes", []) if isinstance(process.get("nodes", []), list) else [], start=1):
+                node_uid = str(node.get("uid", "") or node.get("id", "")).strip() or f"node-{process_index}-{node_index}"
+                node_id = str(node.get("id", "") or node.get("uid", "")).strip() or node_uid
+                node_name = str(node.get("name", "")).strip()
+                node_refs: list[dict] = []
+                node_sources = node.get("prototypeFiles", [])
+                if not isinstance(node_sources, list):
+                    node_sources = []
+                for prototype_index, prototype in enumerate(node_sources, start=1):
+                    normalized = prototype if isinstance(prototype, dict) else {"name": str(prototype or "").strip()}
+                    attachment_uid = str(normalized.get("uid", "")).strip() or f"node-attachment-{process_index}-{node_index}-{prototype_index}"
+                    package_attachment = package_attachments_by_uid.get(attachment_uid)
+                    versions_source = package_attachment.get("versions", []) if package_attachment else normalized.get("versions", [])
+                    if not isinstance(versions_source, list) or not versions_source:
+                        versions_source = [
+                            {
+                                "uid": str(normalized.get("versionUid", "")).strip() or f"{attachment_uid}-v1",
+                                "number": 1,
+                                "name": str(normalized.get("name", "")).strip() or f"节点附件{prototype_index}.html",
+                                "content": str(normalized.get("content", "")),
+                                "contentType": str(normalized.get("contentType", "text/html")).strip() or "text/html",
+                                "contentEncoding": str(normalized.get("contentEncoding", "")).strip(),
+                                "size": int(normalized.get("size") or 0),
+                                "uploadedAt": str(normalized.get("uploadedAt", "")).strip(),
+                            }
+                        ]
+                    export_versions: list[dict] = []
+                    for version_index, version in enumerate(versions_source, start=1):
+                        raw_version = version if isinstance(version, dict) else {"content": str(version or "")}
+                        version_uid = str(raw_version.get("uid", "")).strip() or f"{attachment_uid}-v{version_index}"
+                        try:
+                            version_number = int(raw_version.get("number") or version_index)
+                        except (TypeError, ValueError):
+                            version_number = version_index
+                        if version_number < 1:
+                            version_number = version_index
+                        version_name = str(raw_version.get("name", "")).strip() or str(normalized.get("name", "")).strip() or f"节点附件{prototype_index}.html"
+                        content_type = str(raw_version.get("contentType", "text/html")).strip() or "text/html"
+                        content_encoding = str(raw_version.get("contentEncoding", "")).strip()
+                        payload = (
+                            self._load_attachment_bytes(package_document_uid, raw_version, package_dir)
+                            if package_attachment and package_document_uid
+                            else self._decode_attachment_content(raw_version.get("content", ""), content_encoding)
+                        )
+                        stored_relative_path = str(raw_version.get("path", "")).strip()
+                        relative_path = Path(EXPORT_ATTACHMENTS_DIR_NAME) / (
+                            Path(stored_relative_path)
+                            if stored_relative_path
+                            else self._attachment_version_relative_path(
+                                attachment_uid,
+                                version_number,
+                                version_name,
+                                content_type,
+                                owner_type="node",
+                                owner_uid=node_uid,
+                                owner_name=node_name,
+                            )
+                        )
+                        packaged_files.append((relative_path, payload))
+                        export_versions.append(
+                            {
+                                "uid": version_uid,
+                                "number": version_number,
+                                "name": version_name,
+                                "contentType": content_type,
+                                "contentEncoding": "base64" if content_encoding == "base64" else "",
+                                "size": int(raw_version.get("size") or len(payload)),
+                                "uploadedAt": str(raw_version.get("uploadedAt", "")).strip(),
+                                "path": relative_path.as_posix(),
+                            }
+                        )
+                    export_attachments.append(
+                        {
+                            "uid": attachment_uid,
+                            "name": str((package_attachment or {}).get("name", "")).strip() or str(normalized.get("name", "")).strip() or export_versions[-1]["name"],
+                            "ownerType": "node",
+                            "ownerUid": node_uid,
+                            "ownerId": node_id,
+                            "ownerName": node_name,
+                            "versions": export_versions,
+                        }
+                    )
+                    current_version_uid = str(normalized.get("versionUid", "")).strip() or export_versions[-1]["uid"]
+                    if not any(version["uid"] == current_version_uid for version in export_versions):
+                        current_version_uid = export_versions[-1]["uid"]
+                    node_refs.append(
+                        {
+                            "uid": attachment_uid,
+                            "versionUid": current_version_uid,
+                        }
+                    )
+                node["prototypeFiles"] = node_refs
         packaged_files.append(
             (
                 Path(PACKAGE_MANIFEST_NAME),
@@ -918,21 +1012,22 @@ class WorkspaceStorage(DocumentFileStore):
         markdown = self.exporter.export(frozen_document)
         attachments: list[DocxAttachment] = []
         for process in frozen_document.get("processes", []):
-            prototype_sources = process.get("prototypeFiles", [])
-            if not isinstance(prototype_sources, list):
-                continue
-            for prototype in prototype_sources:
-                if not isinstance(prototype, dict):
+            for owner in [process, *(process.get("nodes", []) if isinstance(process.get("nodes", []), list) else [])]:
+                prototype_sources = owner.get("prototypeFiles", [])
+                if not isinstance(prototype_sources, list):
                     continue
-                attachment_uid = str(prototype.get("uid", "")).strip()
-                version_uid = str(prototype.get("versionUid", "")).strip()
-                if not attachment_uid or not version_uid:
-                    continue
-                try:
-                    filename, content_type, payload = self.load_attachment_payload(safe_name, attachment_uid, version_uid)
-                except FileNotFoundError:
-                    continue
-                attachments.append(DocxAttachment(name=filename, content_type=content_type, payload=payload))
+                for prototype in prototype_sources:
+                    if not isinstance(prototype, dict):
+                        continue
+                    attachment_uid = str(prototype.get("uid", "")).strip()
+                    version_uid = str(prototype.get("versionUid", "")).strip()
+                    if not attachment_uid or not version_uid:
+                        continue
+                    try:
+                        filename, content_type, payload = self.load_attachment_payload(safe_name, attachment_uid, version_uid)
+                    except FileNotFoundError:
+                        continue
+                    attachments.append(DocxAttachment(name=filename, content_type=content_type, payload=payload))
         return (
             f"{safe_name}.docx",
             build_docx_from_preview_markdown(
@@ -1034,16 +1129,23 @@ class WorkspaceStorage(DocumentFileStore):
         version_name: str,
         content_type: str,
         *,
+        owner_type: str = "process",
+        owner_uid: str = "",
+        owner_name: str = "",
         process_uid: str = "",
         process_name: str = "",
     ) -> Path:
         safe_attachment_uid = self._safe_path_component(attachment_uid, "attachment")
-        safe_process_uid = self._safe_path_component(process_uid or "process", "process")
-        process_label = str(process_name or "").strip()
-        safe_process_name = self._safe_path_component(process_label, "") if process_label else ""
-        safe_process_dir = safe_process_uid if not safe_process_name else f"{safe_process_uid}__{safe_process_name}"
+        normalized_owner_type = str(owner_type or "process").strip() or "process"
+        owner_dir = "nodes" if normalized_owner_type == "node" else "processes"
+        resolved_owner_uid = owner_uid or process_uid or normalized_owner_type
+        resolved_owner_name = owner_name or process_name
+        safe_owner_uid = self._safe_path_component(resolved_owner_uid, normalized_owner_type)
+        owner_label = str(resolved_owner_name or "").strip()
+        safe_owner_name = self._safe_path_component(owner_label, "") if owner_label else ""
+        safe_owner_dir = safe_owner_uid if not safe_owner_name else f"{safe_owner_uid}__{safe_owner_name}"
         safe_name = self._build_attachment_filename(version_name, content_type)
-        return Path("processes") / safe_process_dir / safe_attachment_uid / f"v{max(int(version_number or 1), 1)}__{safe_name}"
+        return Path(owner_dir) / safe_owner_dir / safe_attachment_uid / f"v{max(int(version_number or 1), 1)}__{safe_name}"
 
     def _attachment_version_path(self, document_uid: str, relative_path: str | Path, package_dir: Path | None = None) -> Path:
         root = self._attachment_root_for_doc(document_uid, package_dir)
@@ -1088,8 +1190,9 @@ class WorkspaceStorage(DocumentFileStore):
                     version_number,
                     version_name,
                     content_type,
-                    process_uid=str(attachment.get("ownerUid", "")).strip(),
-                    process_name=str(attachment.get("ownerName", "")).strip(),
+                    owner_type=str(attachment.get("ownerType", "")).strip() or "process",
+                    owner_uid=str(attachment.get("ownerUid", "") or attachment.get("ownerId", "")).strip(),
+                    owner_name=str(attachment.get("ownerName", "")).strip(),
                 ).as_posix()
                 normalized_versions.append(
                     {
@@ -1111,7 +1214,8 @@ class WorkspaceStorage(DocumentFileStore):
                 "uid": attachment_uid,
                 "name": attachment_name,
                 "ownerType": str(attachment.get("ownerType", "")).strip() or "process",
-                "ownerUid": str(attachment.get("ownerUid", "")).strip(),
+                "ownerUid": str(attachment.get("ownerUid", "") or attachment.get("ownerId", "")).strip(),
+                "ownerId": str(attachment.get("ownerId", "") or attachment.get("ownerUid", "")).strip(),
                 "ownerName": str(attachment.get("ownerName", "")).strip(),
                 "versions": normalized_versions,
             }
@@ -1129,7 +1233,8 @@ class WorkspaceStorage(DocumentFileStore):
                     "uid": attachment_uid,
                     "name": str(attachment.get("name", "")).strip(),
                     "ownerType": str(attachment.get("ownerType", "")).strip() or "process",
-                    "ownerUid": str(attachment.get("ownerUid", "")).strip(),
+                    "ownerUid": str(attachment.get("ownerUid", "") or attachment.get("ownerId", "")).strip(),
+                    "ownerId": str(attachment.get("ownerId", "") or attachment.get("ownerUid", "")).strip(),
                     "ownerName": str(attachment.get("ownerName", "")).strip(),
                     "versions": [
                         {
@@ -1158,6 +1263,10 @@ class WorkspaceStorage(DocumentFileStore):
         *,
         package_dir: Path | None = None,
         source_package_dir: Path | None = None,
+        owner_type: str = "process",
+        owner_uid: str = "",
+        owner_id: str = "",
+        owner_name: str = "",
         process_uid: str = "",
         process_name: str = "",
         attachment_index: int,
@@ -1279,8 +1388,9 @@ class WorkspaceStorage(DocumentFileStore):
                     version_number,
                     version_name,
                     content_type,
-                    process_uid=process_uid,
-                    process_name=process_name,
+                    owner_type=owner_type,
+                    owner_uid=owner_uid or process_uid,
+                    owner_name=owner_name or process_name,
                 ).as_posix()
             )
             absolute_path = self._attachment_version_path(document_uid, relative_path, package_dir)
@@ -1324,9 +1434,10 @@ class WorkspaceStorage(DocumentFileStore):
         return {
             "uid": attachment_uid,
             "name": attachment_name,
-            "ownerType": "process",
-            "ownerUid": process_uid,
-            "ownerName": process_name,
+            "ownerType": owner_type or "process",
+            "ownerUid": owner_uid or process_uid,
+            "ownerId": owner_id or owner_uid or process_uid,
+            "ownerName": owner_name or process_name,
             "versions": stored_versions,
         }, current_version_uid
 
@@ -1768,6 +1879,7 @@ class WorkspaceStorage(DocumentFileStore):
         fallback_uploaded_at = self._format_uploaded_at()
         for process_index, process in enumerate(manifest_document.get("processes", []), start=1):
             process_uid = str(process.get("uid", "")).strip() or f"process-{process_index}"
+            process_id = str(process.get("id", "")).strip() or process_uid
             process_name = str(process.get("name", "")).strip()
             prototype_refs: list[dict] = []
             prototype_sources = process.get("prototypeFiles", [])
@@ -1780,6 +1892,10 @@ class WorkspaceStorage(DocumentFileStore):
                     normalized,
                     package_dir=package_dir,
                     source_package_dir=source_package_dir,
+                    owner_type="process",
+                    owner_uid=process_uid,
+                    owner_id=process_id,
+                    owner_name=process_name,
                     process_uid=process_uid,
                     process_name=process_name,
                     attachment_index=(process_index * 1000) + prototype_index,
@@ -1794,6 +1910,37 @@ class WorkspaceStorage(DocumentFileStore):
                     }
                 )
             process["prototypeFiles"] = prototype_refs
+            for node_index, node in enumerate(process.get("nodes", []) if isinstance(process.get("nodes", []), list) else [], start=1):
+                node_uid = str(node.get("uid", "") or node.get("id", "")).strip() or f"node-{process_index}-{node_index}"
+                node_id = str(node.get("id", "") or node.get("uid", "")).strip() or node_uid
+                node_name = str(node.get("name", "")).strip()
+                node_refs: list[dict] = []
+                node_sources = node.get("prototypeFiles", [])
+                if not isinstance(node_sources, list):
+                    node_sources = []
+                for prototype_index, prototype in enumerate(node_sources, start=1):
+                    normalized = prototype if isinstance(prototype, dict) else {"name": str(prototype or "").strip()}
+                    stored_attachment, current_version_uid = self._store_attachment_entry(
+                        document_uid,
+                        normalized,
+                        package_dir=package_dir,
+                        source_package_dir=source_package_dir,
+                        owner_type="node",
+                        owner_uid=node_uid,
+                        owner_id=node_id,
+                        owner_name=node_name,
+                        attachment_index=(process_index * 100000) + (node_index * 1000) + prototype_index,
+                        existing_attachment=existing_attachments_by_uid.get(str(normalized.get("uid", "")).strip()),
+                        fallback_uploaded_at=fallback_uploaded_at,
+                    )
+                    attachments_by_uid[stored_attachment["uid"]] = stored_attachment
+                    node_refs.append(
+                        {
+                            "uid": stored_attachment["uid"],
+                            "versionUid": current_version_uid,
+                        }
+                    )
+                node["prototypeFiles"] = node_refs
         package_dir.mkdir(parents=True, exist_ok=True)
         self._manifest_path(package_dir).parent.mkdir(parents=True, exist_ok=True)
         self._manifest_path(package_dir).write_text(
@@ -1874,6 +2021,45 @@ class WorkspaceStorage(DocumentFileStore):
                     }
                 )
             process["prototypeFiles"] = prototype_entries
+            for node_index, node in enumerate(process.get("nodes", []) if isinstance(process.get("nodes", []), list) else [], start=1):
+                node_entries: list[dict] = []
+                node_sources = node.get("prototypeFiles", [])
+                if not isinstance(node_sources, list):
+                    node_sources = []
+                for prototype_index, prototype in enumerate(node_sources, start=1):
+                    normalized = prototype if isinstance(prototype, dict) else {"name": str(prototype or "").strip()}
+                    attachment_uid = str(normalized.get("uid", "")).strip()
+                    version_uid = str(normalized.get("versionUid", "")).strip()
+                    attachment_meta = attachments_by_uid.get(attachment_uid)
+                    if attachment_uid and version_uid and attachment_meta:
+                        node_entries.append(self._build_loaded_attachment_entry(attachment_meta, version_uid, document_uid, package_dir))
+                        continue
+
+                    prototype_name = str(normalized.get("name", "")).strip() or f"节点附件{prototype_index}.html"
+                    content_type = str(normalized.get("contentType", "text/html")).strip() or "text/html"
+                    content = str(normalized.get("content", ""))
+                    version_uid = version_uid or f"{attachment_uid or f'node-proto-{node_index}-{prototype_index}'}-v1"
+                    node_entries.append(
+                        {
+                            "uid": attachment_uid or str(normalized.get("uid", "")).strip() or f"node-proto-{node_index}-{prototype_index}",
+                            "name": prototype_name,
+                            "versionUid": version_uid,
+                            "content": content,
+                            "contentType": content_type,
+                            "uploadedAt": str(normalized.get("uploadedAt", "")).strip(),
+                            "versions": [
+                                {
+                                    "uid": version_uid,
+                                    "number": 1,
+                                    "name": prototype_name,
+                                    "content": content,
+                                    "contentType": content_type,
+                                    "uploadedAt": str(normalized.get("uploadedAt", "")).strip(),
+                                }
+                            ],
+                        }
+                    )
+                node["prototypeFiles"] = node_entries
         return canonical_document(document)
 
     def _resolve_relative_path(self, base_dir: Path, relative_path: str) -> Path | None:

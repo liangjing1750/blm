@@ -89,7 +89,7 @@
                   @if (editing) { <span class="flow-gateway-edit-icon" (pointerdown)="$event.stopPropagation()" (click)="startNodeNameEdit(node, $event)" title="\u4fee\u6539\u540d\u79f0">&#x270e;</span> }
                 </div>
               } @else {
-                <div class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" [class.is-editing]="editing" data-testid="process-flow-node" [attr.data-base-id]="node.baseId" [style.left.px]="node.x" [style.top.px]="node.y"
+                <div class="flow-node" [style.--lane-color]="laneColor(node.role)" [class.active]="selectedElementId() === node.baseId" [class.connecting]="connectingFromId() === node.baseId" [class.is-editing]="editing" data-testid="process-flow-node" [attr.data-base-id]="node.baseId" [attr.data-role]="node.role" [style.left.px]="node.x" [style.top.px]="node.y"
                   (pointerdown)="startNodeDrag($event, node)"
                   (pointerup)="endNodeDrag($event, node)"
                   (dblclick)="startNodeNameEdit(node, $event)"
@@ -106,7 +106,7 @@
                   @if (editing) {
                     <div class="flow-node-role-tags">
                       @for (roleName of nodeRoleNames(node); track roleName) {
-                        <span class="flow-node-role-tag">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="\u79fb\u9664\u89d2\u8272">&#x00d7;</button></span>
+                        <span class="flow-node-role-tag" [style.--lane-color]="laneColor(roleName)">{{ roleName }}<button class="flow-node-role-remove" (click)="removeNodeRole(node, roleName, $event)" title="\u79fb\u9664\u89d2\u8272">&#x00d7;</button></span>
                       }
                       <button class="flow-node-role-add" (click)="openNodeRolePicker(node, $event)" title="\u6dfb\u52a0\u89d2\u8272">+ &#x89d2;&#x8272;</button>
                       @if (isCardRolePickerOpen(node) && node.task) {

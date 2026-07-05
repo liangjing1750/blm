@@ -555,6 +555,13 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.setSelectedConstruct(construct);
     this.switchTab('entity');
   }
+  protected openEntityFromConstruct(entity: LegacyEntity, construct: LegacyConstruct): void {
+    this.setSelectedConstruct(construct);
+    this.runtime.ui['componentWorkbenchReturnTab'] = 'businessConstruct';
+    this.runtime.ui['entityId'] = this.uid(entity);
+    this.runtime.ui['entityView'] = this.runtime.ui['entityView'] || 'relation';
+    this.switchTab('entity');
+  }
   protected openEntityFromTree(entity: LegacyEntity, construct: LegacyConstruct): void {
     this.setSelectedConstruct(construct);
     this.runtime.ui['componentWorkbenchReturnTab'] = 'businessComponent';
@@ -564,7 +571,9 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected openTaskFromTree(task: LegacyTaskDef, construct: LegacyConstruct): void {
     this.openTaskDefinitionsForConstruct(construct);
+    this.runtime.ui['taskDefinitionId'] = this.uid(task);
     this.taskDefKeyword.set(task.name || this.uid(task));
+    this.expandedTaskIds.set(new Set([this.uid(task)]));
   }
   protected updateConstructInline(construct: LegacyConstruct, key: 'name' | 'note' | 'businessComponentUid', value: string): void {
     if (!this.canEdit()) return;
@@ -985,6 +994,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected addParam(arr: TaskParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); }
   protected removeParam(arr: TaskParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); }
   protected isEditingTask(td: LegacyTaskDef): boolean { return this.editingTaskId() === this.uid(td) || (!td.uid && this.editingTaskId() === ''); }
+  protected editingTask(): LegacyTaskDef | null {
+    const id = this.editingTaskId();
+    if (!this.canEdit()) return null;
+    return this.taskDefs().find((task) => this.isEditingTask(task)) || null;
+  }
 
   // ─── Utils ────────────────────────────────────────
   protected uid(item: any): string { return String(item?.uid || item?.id || item?.name || '').trim(); }

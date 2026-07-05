@@ -394,10 +394,8 @@ describe('ComponentWorkbenchComponent', () => {
     expect(movedEntity.businessConstructUid).toBe('construct-1');
     expect(movedTask.constructUid).toBe('construct-1');
 
-    const entityDetach = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="business-construct-entity-detach"]'))
-      .find((button) => button.closest('.construct-asset-row')?.textContent?.includes('未分组实体'));
-    const taskDetach = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="business-construct-task-detach"]'))
-      .find((button) => button.closest('.construct-asset-row')?.textContent?.includes('未分组任务'));
+    const entityDetach = host.querySelector<HTMLButtonElement>('[data-testid="business-construct-entity-row-entity-2"] [data-testid="business-construct-entity-detach"]');
+    const taskDetach = host.querySelector<HTMLButtonElement>('[data-testid="business-construct-task-row-task-2"] [data-testid="business-construct-task-detach"]');
     entityDetach?.click();
     taskDetach?.click();
     fixture.detectChanges();
@@ -419,6 +417,40 @@ describe('ComponentWorkbenchComponent', () => {
     expect(constructSelect.getAttribute('data-selected-construct')).toBe('construct-1');
     expect(host.querySelector('[data-testid="taskdef-service-map"]')?.textContent).toContain('查询订单');
     expect(host.querySelector('[data-testid="taskdef-construct-group-construct-1"]')?.textContent).toContain('订单构件');
+  });
+
+  it('edits asset names inline and opens the exact entity or task from construct detail', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-tab"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
+
+    const entityName = host.querySelector<HTMLInputElement>('[data-testid="business-construct-entity-name-entity-1"]')!;
+    entityName.value = '订单实体改名';
+    entityName.dispatchEvent(new Event('input'));
+    const taskName = host.querySelector<HTMLInputElement>('[data-testid="business-construct-task-name-task-1"]')!;
+    taskName.value = '查询订单改名';
+    taskName.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    const runtime = getAngularRuntimeState();
+    expect(runtime.doc.entities.find((entity: any) => entity.uid === 'entity-1').name).toBe('订单实体改名');
+    expect(runtime.doc.taskDefinitions.find((task: any) => task.uid === 'task-1').name).toBe('查询订单改名');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLElement>('[data-testid="business-construct-entity-row-entity-1"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['componentWorkbenchTab']).toBe('entity');
+    expect(runtime.ui['entityId']).toBe('entity-1');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businessconstruct-tab"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLElement>('[data-testid="business-construct-task-row-task-1"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['componentWorkbenchTab']).toBe('taskDef');
+    expect(runtime.ui['taskDefinitionId']).toBe('task-1');
+    expect(host.querySelector('[data-testid="taskdef-card-task-1"] .taskdef-detail')).toBeTruthy();
   });
 
   it('creates the first business component from an empty map and edits it inline', () => {
@@ -478,7 +510,7 @@ describe('ComponentWorkbenchComponent', () => {
     expect(runtime.doc.businessComponents[1].constructUids).toContain('construct-1');
   });
 
-  it('keeps task definition editing readable and all add buttons mutate the model', () => {
+  it('opens a labeled task definition editor dialog and all add buttons mutate the model', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
@@ -487,7 +519,11 @@ describe('ComponentWorkbenchComponent', () => {
     Array.from(host.querySelectorAll<HTMLButtonElement>('.comp-toolbar button')).find((button) => button.textContent?.includes('新建任务'))?.click();
     fixture.detectChanges();
 
-    expect(host.querySelector('.taskdef-edit-layout')).toBeTruthy();
+    expect(host.querySelector('[data-testid="taskdef-editor-dialog"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="taskdef-editor-dialog"]')?.textContent).toContain('任务名称');
+    expect(host.querySelector('[data-testid="taskdef-editor-dialog"]')?.textContent).toContain('任务类型');
+    expect(host.querySelector('[data-testid="taskdef-editor-dialog"]')?.textContent).toContain('所属业务组件');
+    expect(host.querySelector('[data-testid="taskdef-editor-dialog"]')?.textContent).toContain('所属业务构件');
     expect(host.querySelector('.taskdef-edit-basics')).toBeTruthy();
     expect(host.querySelector('[data-testid="taskdef-edit-component"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="taskdef-edit-construct"]')).toBeTruthy();
@@ -636,6 +672,41 @@ describe('ComponentWorkbenchComponent', () => {
     host.querySelector<HTMLElement>('[data-testid="mind-node-component-comp-1"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     fixture.detectChanges();
     expect(host.querySelector<HTMLInputElement>('[data-testid="mind-node-name-editor"]')).toBeTruthy();
+  });
+
+  it('keeps component editing open while switching third-level tabs', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('关闭编辑');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('关闭编辑');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-entity-tab"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.textContent).toContain('关闭编辑');
+    expect(host.querySelector('.entity-board')?.classList.contains('is-editing')).toBe(true);
+  });
+
+  it('resets relation layout by writing legacy default positions back to entities', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.entities = [
+      { uid: 'entity-1', name: '璁㈠崟', fields: [], businessConstructUid: 'construct-1', pos: { x: 900, y: 700 } },
+      { uid: 'entity-2', name: '璁㈠崟鏄庣粏', fields: [], businessConstructUid: 'construct-1', pos: { x: 1200, y: 900 } },
+    ];
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-entity-tab"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="entity-design-reset-layout"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.entities.map((entity: any) => entity.pos)).toEqual([
+      { x: 60, y: 112 },
+      { x: 60, y: 220 },
+    ]);
+    expect(runtime.modified).toBe(true);
   });
 
   it('keeps the entity relation diagram shell scrollable in both directions', () => {

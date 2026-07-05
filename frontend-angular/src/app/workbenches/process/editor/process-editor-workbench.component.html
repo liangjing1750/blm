@@ -187,6 +187,7 @@
                       placeholder="步骤详细描述"
                       testIdPrefix="process-step-note"
                       [value]="step.note || ''"
+                      [readonly]="!editing"
                       (valueChange)="setUserStepNote(step, $event)"
                     ></app-rich-text-editor>
                   } @else {
@@ -205,7 +206,7 @@
             </div>
             <div class="node-material-tabs">
               <button type="button" [class.active]="materialTab() === 'forms'" (click)="materialTab.set('forms')">表单 {{ forms(task).length }}</button>
-              <button type="button" [class.active]="materialTab() === 'attachments'" (click)="materialTab.set('attachments')">附件 {{ prototypeCount(process) }}</button>
+              <button type="button" [class.active]="materialTab() === 'attachments'" (click)="materialTab.set('attachments')">附件 {{ nodePrototypeCount(task) }}</button>
             </div>
             @if (materialTab() === 'forms') {
               <div class="node-form-list" data-testid="process-form-section">
@@ -284,7 +285,7 @@
                                           }
                                         </select>
                                       </td>
-                                      <td><textarea class="auto-resize task-form-field-note" rows="2" data-testid="task-form-field-note" [readonly]="!editing" [ngModel]="field.note || ''" (input)="autoGrow($any($event.target)); setFormField(field, 'note', $any($event.target).value)" placeholder="校验规则 / 展示说明"></textarea></td>
+                                      <td><textarea class="auto-resize task-form-field-note" rows="1" data-testid="task-form-field-note" [readonly]="!editing" [ngModel]="field.note || ''" (input)="autoGrow($any($event.target)); setFormField(field, 'note', $any($event.target).value)" placeholder="校验规则 / 展示说明"></textarea></td>
                                       <td class="task-form-action-cell">
                                         <div class="step-actions task-form-inline-actions">
                                           <button class="step-action" type="button" title="插入字段" [disabled]="!editing" (click)="addFormField(section, field)">+</button>
@@ -329,11 +330,11 @@
               <div class="node-attachment-panel" data-testid="process-prototype-section">
                 <div class="node-section-head node-sub-section-head">
                   <div><h4>附件</h4></div>
-                  <span class="node-count-pill">{{ prototypeCount(process) }} 项</span>
+                  <span class="node-count-pill">{{ nodePrototypeCount(task) }} 项</span>
                 </div>
-                @if (prototypeFiles(process).length) {
+                @if (nodePrototypeFiles(task).length) {
                   <div class="prototype-file-list node-prototype-file-list" data-testid="proc-prototype-list">
-                    @for (file of prototypeFiles(process); track prototypeFileId(file)) {
+                    @for (file of nodePrototypeFiles(task); track prototypeFileId(file)) {
                       <article class="prototype-file-item node-prototype-file-item" data-testid="proc-prototype-item">
                         <div class="prototype-file-meta">
                           <strong class="prototype-file-name">{{ file.name || '未命名附件' }}</strong>
@@ -341,14 +342,14 @@
                           <span class="prototype-file-kind">{{ prototypeKind(file) }}</span>
                         </div>
                         <div class="prototype-file-actions">
-                          <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-toggle" (click)="togglePrototypeVersions(process, file)">展开版本</button>
+                          <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-toggle" (click)="toggleNodePrototypeVersions(task, file)">展开版本</button>
                           @if (canPreviewPrototype(file)) {
-                            <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-open" (click)="openPrototype(process, file)">查看</button>
+                            <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-open" (click)="openNodePrototype(task, file)">查看</button>
                           }
-                          <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-download" (click)="downloadPrototype(process, file)">下载</button>
-                          <button class="btn btn-ghost-sm prototype-file-remove" type="button" data-testid="proc-prototype-remove" (click)="removePrototype(process, file)">删除</button>
+                          <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-download" (click)="downloadNodePrototype(task, file)">下载</button>
+                          <button class="btn btn-ghost-sm prototype-file-remove" type="button" data-testid="proc-prototype-remove" (click)="removeNodePrototype(task, file)">删除</button>
                         </div>
-                        @if (isPrototypeExpanded(process, file) && file.versions?.length) {
+                        @if (isNodePrototypeExpanded(task, file) && file.versions?.length) {
                           <div class="prototype-version-list" data-testid="proc-prototype-version-list">
                             @for (version of file.versions || []; track version.uid || version.name || $index) {
                               <div class="prototype-version-item" data-testid="proc-prototype-version-item">
@@ -358,9 +359,9 @@
                                 </div>
                                 <div class="prototype-version-actions">
                                   @if (canPreviewPrototype(file, version)) {
-                                    <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-open" (click)="openPrototype(process, file, version.uid || '')">查看</button>
+                                    <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-open" (click)="openNodePrototype(task, file, version.uid || '')">查看</button>
                                   }
-                                  <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-download" (click)="downloadPrototype(process, file, version.uid || '')">下载</button>
+                                  <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-download" (click)="downloadNodePrototype(task, file, version.uid || '')">下载</button>
                                 </div>
                               </div>
                             }
@@ -371,10 +372,10 @@
                   </div>
                 }
                 <div class="prototype-upload-row node-material-upload" data-testid="proc-prototype-upload">
-                  <input type="file" [id]="prototypeInputId(process)" data-testid="proc-prototype-input" multiple />
-                  <button class="btn btn-outline btn-sm" type="button" data-testid="proc-prototype-upload-button" (click)="uploadPrototypeFiles(process)">上传附件</button>
+                  <input type="file" [id]="nodePrototypeInputId(task)" data-testid="proc-prototype-input" [disabled]="!editing" multiple />
+                  <button class="btn btn-outline btn-sm" type="button" data-testid="proc-prototype-upload-button" [disabled]="!editing" (click)="uploadNodePrototypeFiles(task)">上传附件</button>
                 </div>
-                @if (!prototypeFiles(process).length) {
+                @if (!nodePrototypeFiles(task).length) {
                   <p class="node-empty">上传后的流程原型、图片、PDF 或文档会在这里形成附件卡片。</p>
                 }
               </div>

@@ -13,7 +13,7 @@ import { ProcessEditorWorkbenchComponent } from '../editor/process-editor-workbe
 import { ProcessFlowWorkbenchComponent } from '../flow/process-flow-workbench.component';
 import { ProcessStageWorkbenchComponent } from '../stage/process-stage-workbench.component';
 import { ValueDomainWorkbenchComponent } from '../value-domain/value-domain-workbench.component';
-import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../../core/runtime/angular-runtime';
 import {
   ProcessShellView,
   ProcessWorkbenchShellLegacyAdapter,
@@ -257,12 +257,12 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
 
   protected stageEditing(): boolean {
     this.version();
-    return this.adapter.stageEditing();
+    return this.processEditing();
   }
 
   protected valueDomainEditing(): boolean {
     this.version();
-    return this.valueDomainWorkbench?.isEditingFromShell() || false;
+    return this.processEditing();
   }
 
   protected openStage(): void {
@@ -317,25 +317,64 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     this.refresh();
   }
 
+  protected async deleteCurrentFlow(): Promise<void> {
+    const process = this.currentProcess();
+    const processId = this.processId(process);
+    if (!process || !processId) return;
+    const confirmed = await confirmRuntimeAction(`确认删除流程“${process.name || processId}”吗？相关阶段引用和阶段连线也会一并移除。`, {
+      title: '删除流程',
+      confirmLabel: '删除',
+    });
+    if (!confirmed) return;
+
+    const runtime = getAngularRuntimeState() as any;
+    const doc = runtime.doc || {};
+    const keys = new Set([process.id, process.uid, processId].filter(Boolean).map(String));
+    const refId = (ref: any) => String(ref?.uid || ref?.id || ref?.refUid || ref?.refId || '');
+    const removedRefIds = new Set((doc.stageFlowRefs || [])
+      .filter((ref: any) => keys.has(String(ref.processUid || '')) || keys.has(String(ref.processId || '')))
+      .map(refId)
+      .filter(Boolean));
+
+    doc.processes = (doc.processes || []).filter((item: any) => !keys.has(String(item.id || '')) && !keys.has(String(item.uid || '')));
+    doc.stageFlowRefs = (doc.stageFlowRefs || []).filter((ref: any) => !removedRefIds.has(refId(ref)));
+    doc.stageFlowLinks = (doc.stageFlowLinks || []).filter((link: any) => (
+      !removedRefIds.has(String(link.fromRefUid || link.fromRefId || ''))
+      && !removedRefIds.has(String(link.toRefUid || link.toRefId || ''))
+    ));
+
+    const next = doc.processes?.[0] || null;
+    runtime.ui['procId'] = next ? this.processId(next) : null;
+    runtime.ui['taskId'] = null;
+    markAngularRuntimeModified();
+    this.refresh();
+  }
+
+  protected processEditing = signal(false);
   protected flowEditing = signal(false);
   protected editorEditing = signal(false);
 
   protected setStageEditing(editing: boolean): void {
-    this.adapter.setStageEditing(editing);
-    this.refresh();
+    this.setProcessEditing(editing);
   }
 
   protected setFlowEditing(editing: boolean): void {
-    this.flowEditing.set(editing);
-    this.refresh();
+    this.setProcessEditing(editing);
   }
 
   protected setEditorEditing(editing: boolean): void {
-    this.editorEditing.set(editing);
-    this.refresh();
+    this.setProcessEditing(editing);
   }
 
   protected setValueDomainEditing(editing: boolean): void {
+    this.setProcessEditing(editing);
+  }
+
+  private setProcessEditing(editing: boolean): void {
+    this.processEditing.set(editing);
+    this.flowEditing.set(editing);
+    this.editorEditing.set(editing);
+    getAngularRuntimeState().ui['stageEditorCollapsed'] = !editing;
     this.valueDomainWorkbench?.setEditingFromShell(editing);
     this.refresh();
   }

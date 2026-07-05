@@ -488,7 +488,11 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
 
   protected resetLayout(): void {
     if (!this.canEditRelation() && !this.canEditState()) return;
-    for (const entity of this.entities()) delete entity.pos;
+    const defaultPositions = this.computeDefaultEntityPositions();
+    for (const entity of this.entities()) {
+      const entityId = this.entityId(entity);
+      entity.pos = defaultPositions.get(entityId) || { x: this.entityPad + this.componentPadX + this.groupPadX, y: this.entityPad + this.componentHeaderHeight + this.componentPadY + this.groupHeaderHeight + this.groupPadY };
+    }
     this.selectedEntityIds.set(new Set());
     this.changed();
   }
@@ -1371,6 +1375,38 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     if (groupCount <= 4) return 2;
     if (groupCount <= 9) return 3;
     return 4;
+  }
+
+  private computeDefaultEntityPositions(): Map<string, { x: number; y: number }> {
+    // 模块意图：复刻旧版 resetEfLayout -> _efComputeDefaultPos 的纯数据布局，
+    // 重置时直接把默认位置写回模型，保证草稿、协作和再次打开时布局一致。
+    const positions = new Map<string, { x: number; y: number }>();
+    const groups = this.sortEntityGroups().map((group) => ({ ...group, layout: this.measureGroup(group.entities) }));
+    if (!groups.length) return positions;
+    const gridCols = this.groupGridColumns(groups.length);
+    const cellWidth = Math.max(...groups.map((group) => group.layout.width), this.nodeWidth + this.groupPadX * 2);
+    const cellHeight = Math.max(...groups.map((group) => group.layout.height), this.nodeHeight + this.groupHeaderHeight + this.groupPadY * 2);
+    groups.forEach((group, groupIndex) => {
+      const colOffsets = group.layout.colWidths.reduce((acc: number[], width, index) => {
+        acc.push(index === 0 ? 0 : acc[index - 1] + group.layout.colWidths[index - 1] + this.entityGapX);
+        return acc;
+      }, []);
+      const rawRow = Math.floor(groupIndex / gridCols);
+      const rawCol = groupIndex % gridCols;
+      const itemsInRow = Math.min(gridCols, groups.length - rawRow * gridCols);
+      const layoutCol = rawRow % 2 === 0 ? rawCol : (itemsInRow - 1 - rawCol);
+      const baseX = this.entityPad + this.componentPadX + layoutCol * (cellWidth + this.groupGapX);
+      const baseY = this.entityPad + this.componentHeaderHeight + this.componentPadY + rawRow * (cellHeight + this.groupGapY);
+      group.entities.forEach((entity, entityIndex) => {
+        const col = entityIndex % group.layout.colCount;
+        const row = Math.floor(entityIndex / group.layout.colCount);
+        positions.set(this.entityId(entity), {
+          x: baseX + this.groupPadX + (colOffsets[col] || 0),
+          y: baseY + this.groupHeaderHeight + this.groupPadY + row * (this.nodeHeight + this.entityGapY),
+        });
+      });
+    });
+    return positions;
   }
 
   private computeGroupFrames(nodes: EntityNodeLayout[]): EntityFrame[] {

@@ -109,6 +109,7 @@ export interface LegacyProcessNode {
   entity_ops?: LegacyEntityOp[];
   orchestrationTasks?: LegacyTaskDefinition[];
   businessRules?: Array<LegacyBusinessRule | string>;
+  prototypeFiles?: LegacyPrototypeFile[];
 }
 
 export interface LegacyRole {
@@ -164,6 +165,9 @@ export interface LegacyPrototypeFile {
   versionUid?: string;
   versions?: LegacyPrototypeVersion[];
   contentType?: string;
+  content?: string;
+  contentEncoding?: string;
+  size?: number;
 }
 
 interface LegacyState {
@@ -273,6 +277,9 @@ export interface ProcessEditorLegacyAdapter {
   downloadPrototype(processId: string, prototypeUid: string, versionUid?: string): void;
   removePrototype(processId: string, prototypeUid: string): void;
   uploadPrototypeFiles(processId: string, inputId: string): void;
+  nodePrototypeFiles(task: LegacyProcessNode | null | undefined): LegacyPrototypeFile[];
+  removeNodePrototype(task: LegacyProcessNode, prototypeUid: string): void;
+  uploadNodePrototypeFiles(task: LegacyProcessNode, inputId: string): void;
 }
 
 export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = getAngularRuntimeState() as LegacyWindow): ProcessEditorLegacyAdapter {
@@ -493,6 +500,61 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     uploadPrototypeFiles(processId, inputId) {
       legacyWindow.addProcessPrototypeFiles?.(processId, inputId);
       dirty();
+    },
+    nodePrototypeFiles(task) {
+      return (Array.isArray(task?.prototypeFiles) ? task.prototypeFiles : []) as LegacyPrototypeFile[];
+    },
+    removeNodePrototype(task, prototypeUid) {
+      const targetUid = String(prototypeUid || '').trim();
+      task.prototypeFiles = (Array.isArray(task.prototypeFiles) ? task.prototypeFiles : []).filter((file) => String(file.uid || file.id || '') !== targetUid);
+      dirty();
+    },
+    uploadNodePrototypeFiles(task, inputId) {
+      const input = globalThis.document.getElementById(inputId) as HTMLInputElement | null;
+      const files = Array.from(input?.files || []);
+      if (!files.length) return;
+      task.prototypeFiles ||= [];
+      let remaining = files.length;
+      const finishOne = () => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          if (input) input.value = '';
+          dirty();
+        }
+      };
+      for (const file of files) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const raw = String(reader.result || '');
+          const [, base64Content = ''] = raw.split(',', 2);
+          const now = new Date().toLocaleString();
+          const uid = `node-proto-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const versionUid = `${uid}-v1`;
+          task.prototypeFiles?.push({
+            uid,
+            id: uid,
+            name: file.name,
+            versionUid,
+            contentType: file.type || 'application/octet-stream',
+            versions: [{
+              uid: versionUid,
+              number: 1,
+              name: file.name,
+              contentType: file.type || 'application/octet-stream',
+              uploadedAt: now,
+            }],
+            ...(base64Content ? {
+              contentType: file.type || 'application/octet-stream',
+              contentEncoding: 'base64',
+              content: base64Content,
+              size: file.size,
+            } as Partial<LegacyPrototypeFile> : {}),
+          } as LegacyPrototypeFile);
+          finishOne();
+        };
+        reader.onerror = finishOne;
+        reader.readAsDataURL(file);
+      }
     },
     flowNodeOptions(process, side) {
       const options = tasks(process).map((task, index) => ({ id: taskId(task), label: task.name || `节点${index + 1}` }));

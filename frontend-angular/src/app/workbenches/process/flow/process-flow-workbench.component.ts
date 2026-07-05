@@ -148,11 +148,11 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly terminalWidth = 50;
   protected readonly terminalHeight = 18;
   // 对齐旧版 process.js 布局常量：firstNodeX=180, colW=180, startX=130
-  protected readonly graphStartX = 130;
+  protected readonly graphStartX = 90;
   protected readonly graphNodeStartX = 180;
   protected readonly columnGap = 180;
   private readonly snapThreshold = 6;
-  private readonly lanePalette = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#16a34a'];
+  private readonly lanePalette = ['#2563eb', '#d97706', '#059669', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#65a30d', '#c026d3', '#ea580c'];
 
   @Input() editing = true;
   @Input() exportGraphId = '';
@@ -340,7 +340,13 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected isCardRolePickerOpen(node: any): boolean {
-    return this.cardRolePickerNodeId() === String(node.baseId || node.id || '');
+    return this.cardRolePickerNodeId() === String(node.baseId || node.id || '') && this.isPrimarySharedRoleNode(node);
+  }
+
+  protected isPrimarySharedRoleNode(node: any): boolean {
+    if (!node?.task || !node.shared) return true;
+    const primaryRoleName = this.taskRoleIds(node.task).map((roleId: string) => this.roleName(roleId) || roleId).filter(Boolean)[0] || '\u672a\u5206\u914d\u89d2\u8272';
+    return node.role === primaryRoleName;
   }
 
   protected closeCardRolePicker(event?: Event): void {
@@ -471,8 +477,14 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   protected laneColor(laneName: string): string {
     // 模块意图：角色颜色只服务于流程图识别，不写入文档模型，避免引入新的持久化字段。
-    const names = this.currentProcess() ? this.lanes(this.currentProcess()!).map((lane) => lane.name) : [];
-    const index = Math.max(0, names.indexOf(laneName || ''));
+    const name = String(laneName || '').trim();
+    const globalRoleNames = this.roles().map((role) => String(role.name || this.roleId(role) || '').trim()).filter(Boolean);
+    let index = globalRoleNames.indexOf(name);
+    if (index < 0) {
+      const current = this.currentProcess();
+      const localLaneNames = current ? this.lanes(current).map((lane) => lane.name) : [name];
+      index = Math.max(0, localLaneNames.indexOf(name));
+    }
     return this.lanePalette[index % this.lanePalette.length];
   }
 
@@ -1132,7 +1144,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   private clampNodePosition(process: LegacyProcess, nodeId: string, x: number, y: number, width: number, height: number, roleName: string): { x: number; y: number } {
     // Module intent: every rendered element must stay inside the swimlane canvas; snapping may align, but it may not push nodes outside the diagram.
-    const minX = nodeId === 'START' ? this.laneTitleWidth + 18 : this.laneTitleWidth + 24;
+    const minX = nodeId === 'START' ? this.laneTitleWidth + 8 : this.laneTitleWidth + 24;
     const maxX = Math.max(minX, this.canvasWidth(process) - width - 24);
     const laneBottom = this.lanes(process).length * this.laneHeight;
     let minY = 0;

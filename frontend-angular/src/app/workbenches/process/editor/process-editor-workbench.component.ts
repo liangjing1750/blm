@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, HostListener, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, HostListener, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../../shared/rich-text/rich-text-editor.component';
@@ -92,9 +92,10 @@ interface PendingEntityFieldCopy {
     './node-view-v5-form.scss',
   ],
 })
-export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
+export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   @Input() editing = true;
+  private autoResizeScheduled = false;
 
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {
@@ -107,6 +108,17 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.autoResizeScheduled) return;
+    this.autoResizeScheduled = true;
+    queueMicrotask(() => {
+      this.autoResizeScheduled = false;
+      for (const textarea of document.querySelectorAll<HTMLTextAreaElement>('app-process-editor-workbench textarea.auto-resize')) {
+        this.autoGrow(textarea);
+      }
+    });
   }
   // 模块意图：流程编辑器先承接旧版抽屉编辑能力，后续再把流程图算法从 legacy 中完整迁出。
   protected readonly version = signal(0);
@@ -442,6 +454,47 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  protected nodePrototypeInputId(task: LegacyProcessNode): string {
+    return `node-prototype-input-${this.taskId(task).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  }
+
+  protected nodePrototypeCount(task: LegacyProcessNode): number {
+    this.version();
+    return this.adapter.nodePrototypeFiles(task).length;
+  }
+
+  protected nodePrototypeFiles(task: LegacyProcessNode): LegacyPrototypeFile[] {
+    this.version();
+    return this.adapter.nodePrototypeFiles(task);
+  }
+
+  protected isNodePrototypeExpanded(task: LegacyProcessNode, file: LegacyPrototypeFile): boolean {
+    return this.adapter.isPrototypeExpanded(this.taskId(task), this.prototypeFileId(file));
+  }
+
+  protected toggleNodePrototypeVersions(task: LegacyProcessNode, file: LegacyPrototypeFile): void {
+    this.adapter.togglePrototypeVersions(this.taskId(task), this.prototypeFileId(file));
+    this.refresh();
+  }
+
+  protected openNodePrototype(task: LegacyProcessNode, file: LegacyPrototypeFile, versionUid = ''): void {
+    this.adapter.openPrototype(this.taskId(task), this.prototypeFileId(file), versionUid);
+  }
+
+  protected downloadNodePrototype(task: LegacyProcessNode, file: LegacyPrototypeFile, versionUid = ''): void {
+    this.adapter.downloadPrototype(this.taskId(task), this.prototypeFileId(file), versionUid);
+  }
+
+  protected removeNodePrototype(task: LegacyProcessNode, file: LegacyPrototypeFile): void {
+    this.adapter.removeNodePrototype(task, this.prototypeFileId(file));
+    this.refresh();
+  }
+
+  protected uploadNodePrototypeFiles(task: LegacyProcessNode): void {
+    this.adapter.uploadNodePrototypeFiles(task, this.nodePrototypeInputId(task));
+    this.refresh();
+  }
+
   protected roles(): LegacyRole[] {
     this.version();
     return this.adapter.roles();
@@ -479,7 +532,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
     return [
       { id: 'node-role-section', label: '办理角色', count: this.taskRoleIds(task).length, tone: 'role' },
       { id: 'process-user-step-section', label: '办理步骤', count: this.userSteps(task).length, tone: 'step' },
-      { id: 'process-material-section', label: '办理材料', count: this.forms(task).length + (this.currentProcess() ? this.prototypeCount(this.currentProcess() as LegacyProcess) : 0), tone: 'material' },
+      { id: 'process-material-section', label: '办理材料', count: this.forms(task).length + this.nodePrototypeCount(task), tone: 'material' },
       { id: 'process-business-rule-section', label: '办理规则', count: this.businessRules(task).length, tone: 'rule' },
     ];
   }
@@ -868,7 +921,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy {
 
   protected autoGrow(textarea: HTMLTextAreaElement): void {
     textarea.style.height = 'auto';
-    textarea.style.height = `${textarea.scrollHeight}px`;
+    textarea.style.height = `${Math.max(textarea.scrollHeight + 2, 34)}px`;
   }
 
   protected entityName(entityId: string): string {

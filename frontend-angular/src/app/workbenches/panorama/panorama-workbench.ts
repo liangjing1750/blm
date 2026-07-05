@@ -112,7 +112,8 @@ export class PanoramaWorkbench {
 
   protected switchTab(tabId: PanoramaSubtab): void {
     this.activeTab.set(tabId);
-    this.editing.set(false);
+    // 关键流程：编辑态是一次工作台级编辑会话，不跟随三级 tab 自动关闭。
+    // 切换 tab 只收起全景视图的跳转菜单，避免菜单悬浮到不相关子视图。
     this.editMenuOpen.set(false);
   }
 

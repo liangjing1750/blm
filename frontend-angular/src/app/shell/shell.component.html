@@ -96,7 +96,7 @@
         <button class="tbar-dd-item" type="button" data-testid="toolbar-compare-button" (click)="openCompareDialog()">比对</button>
         <button class="tbar-dd-item" type="button" data-testid="toolbar-merge-button" (click)="openMergeDialog()">合并</button>
         <div class="tbar-dd-sep"></div>
-        <button class="tbar-dd-item tbar-dd-primary" type="button" data-testid="toolbar-ai-button" (click)="openAiAssistant()">AI 助手</button>
+        <button class="tbar-dd-item tbar-dd-primary" type="button" data-testid="toolbar-ai-button" (click)="openAiAssistant()">AI 助手（内测）</button>
       </div>
     </div>
 
@@ -221,7 +221,7 @@
       <section *ngSwitchCase="'archive'" class="archive-version-dialog" data-testid="archive-version-dialog">
         <h2>归档版本</h2>
         <p class="archive-version-tip">
-          填写版本说明，建议使用需求版本或评审结论，例如：仓单管理需求评审通过。
+          填写版本说明，建议使用需求版本或评审结论。
         </p>
         <input
           class="modal-search create-name-input"

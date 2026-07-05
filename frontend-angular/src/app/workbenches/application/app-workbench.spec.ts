@@ -75,6 +75,17 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector('.app-workbench')?.classList.contains('editing-open')).toBe(true);
   });
 
+  it('keeps application editing open while switching third-level tabs', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.textContent).toContain('关闭编辑');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.textContent).toContain('关闭编辑');
+    expect(host.querySelector('.app-workbench')?.classList.contains('editing-open')).toBe(true);
+  });
+
   it('renders application services as service group cards and interface summary cards', () => {
     const runtime = getAngularRuntimeState();
     runtime.doc.services[0].requestParams = [{ name: 'orderId', type: 'String', required: true, note: '' }];

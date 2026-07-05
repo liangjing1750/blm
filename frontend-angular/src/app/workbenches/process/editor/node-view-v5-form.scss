@@ -279,10 +279,11 @@
 }
 
 .node-task-form-card .task-form-field-note {
-  min-height: 66px;
+  min-height: 34px;
   resize: vertical;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow: hidden;
 }
 
 .node-task-form-card input:disabled,

@@ -14,6 +14,7 @@
 #toolbar .btn-ghost.active { background: #334155; border-color: #93c5fd; color: #fff; }
 .btn-outline { background: transparent; color: var(--accent); border-color: var(--accent); }
 .btn-outline:hover { background: var(--active-bg); }
+.btn-outline.editor-toggle.active { background: var(--active-bg); color: var(--accent); border-color: var(--accent); font-weight: 700; }
 .btn-sm { padding: 3px 8px; font-size: 12px; }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover { background: #fee2e2; }
@@ -24,4 +25,3 @@
   padding: 3px 6px; border-radius: 4px; font-size: 13px;
 }
 .btn-icon:hover { background: var(--hover); color: var(--text); }
-

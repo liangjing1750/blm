@@ -92,6 +92,99 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(document["roles"][0]["name"], "经办人")
         self.assertEqual(document["processes"][0]["name"], "办理")
 
+    def test_canonical_document_migrates_legacy_node_tasks_to_application_service(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "旧版节点编排"},
+                "processes": [
+                    {
+                        "uid": "process-inbound",
+                        "name": "入库流程",
+                        "nodes": [
+                            {
+                                "uid": "node-submit",
+                                "name": "提交入库预约",
+                                "role_uids": [],
+                                "roles": [],
+                                "userSteps": [],
+                                "entity_ops": [],
+                                "orchestrationTasks": [
+                                    {"uid": "ot-1", "taskDefinitionUid": "task-check", "name": "校验仓库"},
+                                    {"uid": "ot-2", "taskDefinitionUid": "task-save", "name": "保存预约"},
+                                ],
+                                "businessRules": [],
+                                "forms": [],
+                            }
+                        ],
+                    }
+                ],
+                "taskDefinitions": [
+                    {"uid": "task-check", "name": "校验仓库状态"},
+                    {"uid": "task-save", "name": "保存入库预约"},
+                ],
+            }
+        )
+
+        self.assertEqual(document["serviceGroups"][0]["uid"], "service-group-process-inbound")
+        self.assertEqual(document["serviceGroups"][0]["name"], "入库流程应用服务")
+        self.assertEqual(document["services"][0]["uid"], "service-node-submit")
+        self.assertEqual(document["services"][0]["name"], "提交入库预约应用接口")
+        self.assertEqual(document["services"][0]["serviceGroupUid"], "service-group-process-inbound")
+        self.assertEqual(document["services"][0]["nodeRefs"], ["node-submit"])
+        self.assertEqual(document["services"][0]["taskDefinitionUids"], ["task-check", "task-save"])
+        self.assertEqual(
+            [step["taskDefinitionUid"] for step in document["services"][0]["orchestration"]["steps"]],
+            ["task-check", "task-save"],
+        )
+        self.assertEqual(
+            [step["name"] for step in document["services"][0]["orchestration"]["steps"]],
+            ["校验仓库状态", "保存入库预约"],
+        )
+        self.assertEqual(document["processes"][0]["nodes"][0]["serviceUids"], ["service-node-submit"])
+
+    def test_canonical_document_does_not_duplicate_migrated_node_service(self):
+        raw_document = {
+            "meta": {"title": "重复迁移保护"},
+            "processes": [
+                {
+                    "uid": "process-inbound",
+                    "name": "入库流程",
+                    "nodes": [
+                        {
+                            "uid": "node-submit",
+                            "name": "提交入库预约",
+                            "role_uids": [],
+                            "roles": [],
+                            "userSteps": [],
+                            "entity_ops": [],
+                            "orchestrationTasks": [{"taskDefinitionUid": "task-check", "name": "校验仓库"}],
+                            "businessRules": [],
+                            "forms": [],
+                        }
+                    ],
+                }
+            ],
+            "taskDefinitions": [{"uid": "task-check", "name": "校验仓库状态"}],
+        }
+
+        once = canonical_document(raw_document)
+        twice = canonical_document(once)
+
+        self.assertEqual([group["uid"] for group in twice["serviceGroups"]], ["service-group-process-inbound"])
+        self.assertEqual([service["uid"] for service in twice["services"]], ["service-node-submit"])
+        self.assertEqual(twice["processes"][0]["nodes"][0]["serviceUids"], ["service-node-submit"])
+
+    def test_canonical_document_does_not_create_services_without_legacy_node_tasks(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "普通流程"},
+                "processes": [{"uid": "process-empty", "name": "空流程", "nodes": []}],
+            }
+        )
+
+        self.assertEqual(document["serviceGroups"], [])
+        self.assertEqual(document["services"], [])
+
     def test_canonical_document_maps_entity_business_construct_reference_to_uid(self):
         document = canonical_document(
             {
@@ -343,6 +436,39 @@ class DocumentFileStoreTests(unittest.TestCase):
             self.assertIn('"uid": "entity-1"', raw)
             self.assertIn('"role_uids"', raw)
             self.assertIn('"entity_uid"', raw)
+
+    def test_workspace_save_canonicalizes_legacy_node_tasks_to_services(self):
+        document = {
+            "meta": {"title": "旧客户端保存"},
+            "processes": [
+                {
+                    "uid": "process-inbound",
+                    "name": "入库流程",
+                    "nodes": [
+                        {
+                            "uid": "node-submit",
+                            "name": "提交入库预约",
+                            "role_uids": [],
+                            "roles": [],
+                            "userSteps": [],
+                            "entity_ops": [],
+                            "orchestrationTasks": [{"taskDefinitionUid": "task-check", "name": "校验仓库"}],
+                            "businessRules": [],
+                            "forms": [],
+                        }
+                    ],
+                }
+            ],
+            "taskDefinitions": [{"uid": "task-check", "name": "校验仓库状态"}],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir))
+            saved = storage.save("旧客户端保存", document)
+
+            self.assertEqual(saved["serviceGroups"][0]["uid"], "service-group-process-inbound")
+            self.assertEqual(saved["services"][0]["uid"], "service-node-submit")
+            self.assertEqual(saved["processes"][0]["nodes"][0]["serviceUids"], ["service-node-submit"])
 
 
 class WorkspaceRevisionTests(unittest.TestCase):

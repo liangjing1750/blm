@@ -30,10 +30,16 @@ def package_dir(workspace: Path, name: str) -> Path:
 
 
 def manifest_path(workspace: Path, name: str) -> Path:
+    current = package_dir(workspace, name) / "manifest" / "manifest.json"
+    if current.exists():
+        return current
     return package_dir(workspace, name) / "manifest.json"
 
 
 def markdown_path(workspace: Path, name: str) -> Path:
+    current = package_dir(workspace, name) / "manifest" / f"{name}.md"
+    if current.exists():
+        return current
     return package_dir(workspace, name) / f"{name}.md"
 
 
@@ -42,7 +48,9 @@ def attachment_root_path(workspace: Path, document_uid: str, document_name: str 
     if preferred.exists():
         return preferred / "attachments"
     for package in workspace.iterdir():
-        manifest = package / "manifest.json"
+        manifest = package / "manifest" / "manifest.json"
+        if not manifest.is_file():
+            manifest = package / "manifest.json"
         if not manifest.is_file():
             continue
         payload = json.loads(manifest.read_text("utf-8"))
@@ -1055,6 +1063,60 @@ class WorkspaceStorageTests(unittest.TestCase):
             self.assertEqual(payload.decode("utf-8"), "<html><body>borrow</body></html>")
             self.assertEqual(loaded["processes"][0]["prototypeFiles"][0]["versions"][0]["number"], 1)
             self.assertTrue(loaded["processes"][0]["prototypeFiles"][0]["versions"][0]["uploadedAt"])
+
+    def test_save_stores_node_prototypes_as_package_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            storage = WorkspaceStorage(workspace)
+            document = create_empty_document("Loans")
+            document["processes"][0]["nodes"] = [
+                {
+                    "uid": "node-submit",
+                    "id": "N1",
+                    "name": "提交申请",
+                    "prototypeFiles": [
+                        {
+                            "uid": "node-proto-a",
+                            "name": "node-guide.html",
+                            "content": "<html><body>node</body></html>",
+                            "contentType": "text/html",
+                        }
+                    ],
+                }
+            ]
+
+            saved_document = storage.save("Loans", document)
+
+            saved_attachment = saved_document["processes"][0]["nodes"][0]["prototypeFiles"][0]
+            self.assertEqual(saved_attachment.get("content", ""), "")
+            self.assertEqual(saved_attachment["versions"][0].get("content", ""), "")
+            manifest = json.loads(manifest_path(workspace, "Loans").read_text("utf-8"))
+            prototype_entries = manifest["processes"][0]["nodes"][0]["prototypeFiles"]
+            self.assertEqual(len(prototype_entries), 1)
+            self.assertNotIn("content", prototype_entries[0])
+            attachment_index = json.loads(
+                attachment_index_path(workspace, manifest["meta"]["document_uid"]).read_text("utf-8")
+            )
+            node_attachment = attachment_index["attachments"][0]
+            self.assertEqual(node_attachment["name"], "node-guide.html")
+            self.assertEqual(node_attachment["ownerType"], "node")
+            self.assertEqual(node_attachment["ownerId"], "N1")
+            self.assertRegex(
+                node_attachment["versions"][0]["path"],
+                r"^nodes/[^/]+/[^/]+/v1__node-guide\.html$",
+            )
+
+            loaded = storage.load("Loans")
+            loaded_attachment = loaded["processes"][0]["nodes"][0]["prototypeFiles"][0]
+            self.assertEqual(loaded_attachment.get("content", ""), "")
+            filename, content_type, payload = storage.load_attachment_payload(
+                "Loans",
+                node_attachment["uid"],
+                node_attachment["versions"][0]["uid"],
+            )
+            self.assertEqual(filename, "node-guide.html")
+            self.assertEqual(content_type, "text/html")
+            self.assertEqual(payload.decode("utf-8"), "<html><body>node</body></html>")
 
     def test_save_stores_binary_process_attachments(self):
         with tempfile.TemporaryDirectory() as temp_dir:
