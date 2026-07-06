@@ -4,7 +4,7 @@ export interface WorkspaceSummary {
   name: string;
   title?: string;
   space?: string;
-  tags?: string[];
+  tags?: string[] | string;
   author?: string;
   date?: string;
 }

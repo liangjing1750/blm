@@ -123,9 +123,10 @@
 .taskdef-edit-params table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
 .taskdef-edit-params th { font-size: 10px; color: #94a3b8; font-weight: 600; padding: 3px 4px; text-align: left; }
 .taskdef-edit-params td { padding: 2px 3px; }
-.taskdef-edit-params input { width: 100%; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+.taskdef-edit-params input,
+.taskdef-edit-params select { width: 100%; border: 1px solid #dbe5f0; border-radius: 6px; padding: 5px 7px; color: #0f172a; background: #fff; font-size: 12px; }
 .taskdef-edit-params input.short { max-width: 80px; }
-.td-cb { text-align: center; width: 36px; }
+.td-cb { text-align: center; width: 58px; white-space: nowrap; }
 .td-cb input { width: auto; }
 .taskdef-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .taskdef-editor-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(15, 23, 42, .36); }
@@ -150,15 +151,42 @@
 .taskdef-editor-head strong { color: #0f172a; font-size: 18px; font-weight: 900; }
 .taskdef-editor-head span { border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 800; padding: 4px 10px; }
 .taskdef-editor-head-actions { display: flex; align-items: center; gap: 8px; }
-.taskdef-editor-param-strip { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #dbe5f0; background: #f8fafc; color: #475569; font-size: 13px; font-weight: 800; }
-.taskdef-editor-param-strip span { padding: 6px 20px; }
-.taskdef-editor-param-strip span:first-child { background: #ede9fe; }
-.taskdef-editor-body { overflow: auto; padding: 18px 20px; background: #fff; }
+.taskdef-editor-tabs { display: flex; gap: 0; padding: 8px 20px 0; border-bottom: 1px solid #dbe5f0; background: #f8fafc; }
+.taskdef-editor-tabs button { min-width: 118px; border: 1px solid #dbe5f0; border-bottom: 0; border-radius: 8px 8px 0 0; background: #fff; color: #475569; cursor: pointer; font-size: 13px; font-weight: 800; padding: 8px 14px; }
+.taskdef-editor-tabs button + button { margin-left: 6px; }
+.taskdef-editor-tabs button.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+.taskdef-editor-tabs button span { margin-left: 6px; border-radius: 999px; background: rgba(255,255,255,.18); font-size: 11px; padding: 1px 6px; }
+.taskdef-editor-body { min-height: 520px; overflow: auto; padding: 18px 20px; background: #fff; }
 .taskdef-edit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
 .taskdef-edit-grid label { display: flex; min-width: 0; flex-direction: column; gap: 6px; color: #64748b; font-size: 13px; font-weight: 700; }
 .taskdef-edit-grid input, .taskdef-edit-grid select { width: 100%; border: 1px solid #dbe5f0; border-radius: 7px; padding: 9px 10px; color: #0f172a; font: inherit; font-size: 14px; font-weight: 500; }
-.taskdef-editor-dialog .taskdef-edit-params table { min-width: 100%; }
-.taskdef-editor-dialog .taskdef-edit-note-section { padding: 0; border: 0; }
+.taskdef-editor-dialog .taskdef-edit-params table { min-width: 660px; }
+.taskdef-contract-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: #0f172a; font-size: 14px; font-weight: 900; }
+.taskdef-contract-title span { border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; color: #2563eb; font-size: 12px; font-weight: 800; padding: 3px 9px; }
+.taskdef-contract-grid { display: grid; grid-template-columns: repeat(2, minmax(560px, 1fr)); gap: 14px; align-items: start; overflow-x: auto; padding-bottom: 4px; }
+.taskdef-param-table th:nth-child(1), .taskdef-param-table td:nth-child(1) { width: 23%; }
+.taskdef-param-table th:nth-child(2), .taskdef-param-table td:nth-child(2) { width: 15%; }
+.taskdef-param-table th:nth-child(3), .taskdef-param-table td:nth-child(3) { width: 58px; }
+.taskdef-param-table th:nth-child(4), .taskdef-param-table td:nth-child(4) { width: 20%; }
+.taskdef-param-table th:nth-child(5), .taskdef-param-table td:nth-child(5) { width: 24%; }
+.taskdef-param-table th:nth-child(6), .taskdef-param-table td:nth-child(6) { width: 104px; }
+.taskdef-param-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; white-space: nowrap; }
+.taskdef-param-actions .btn-ghost-sm { min-width: 23px; height: 24px; padding: 0 5px; line-height: 1; }
+.taskdef-param-actions .btn-ghost-sm:disabled { opacity: .35; cursor: default; }
+.taskdef-param-children-row td { padding: 0 4px 7px 18px; }
+.taskdef-param-children { border-left: 3px solid #bfdbfe; background: #f8fbff; border-radius: 0 8px 8px 0; margin: 2px 0 4px; padding: 8px 10px; }
+.taskdef-param-children-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; color: #64748b; font-size: 12px; font-weight: 800; }
+.taskdef-param-child-list { display: flex; flex-direction: column; gap: 6px; }
+.taskdef-param-child-row { display: grid; grid-template-columns: minmax(96px, 1.25fr) 92px 58px minmax(96px, 1.15fr) minmax(110px, 1.3fr) 104px; gap: 6px; align-items: center; }
+.taskdef-param-child-row label { display: inline-flex; align-items: center; gap: 4px; color: #64748b; font-size: 12px; white-space: nowrap; }
+.taskdef-param-child-row label input { width: auto; }
+.taskdef-param-empty { border: 1px dashed #cbd5e1; border-radius: 7px; background: #f8fafc; color: #94a3b8; font-size: 13px; padding: 18px; text-align: center; }
+.taskdef-param-empty.compact { padding: 8px; font-size: 12px; }
+.taskdef-implementation-section { min-height: 480px; display: flex; flex-direction: column; gap: 14px; }
+.taskdef-implementation-grid { grid-template-columns: 220px minmax(0, 1fr); }
+.taskdef-design-editor { flex: 1; display: flex; flex-direction: column; min-height: 340px; }
+.taskdef-design-editor ::ng-deep .node-rich-editor { flex: 1; display: flex; flex-direction: column; }
+.taskdef-design-editor ::ng-deep .node-rich-content { flex: 1; min-height: 260px; }
 .construct-asset-name-input { min-width: 0; font-weight: 800; }
 .comp-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 0 4px; font-size: 12px; color: #64748b; flex-shrink: 0; }
 .comp-pagination button { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 12px; padding: 4px 10px; }

@@ -148,8 +148,8 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly terminalWidth = 50;
   protected readonly terminalHeight = 18;
   // 对齐旧版 process.js 布局常量：firstNodeX=180, colW=180, startX=130
-  protected readonly graphStartX = 90;
-  protected readonly graphNodeStartX = 180;
+  protected readonly graphStartX = 118;
+  protected readonly graphNodeStartX = 208;
   protected readonly columnGap = 180;
   private readonly snapThreshold = 6;
   private readonly lanePalette = ['#2563eb', '#d97706', '#059669', '#7c3aed', '#dc2626', '#0891b2', '#4f46e5', '#65a30d', '#c026d3', '#ea580c'];
@@ -295,6 +295,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   // 模块意图：流程图卡片只承载轻量属性编辑，避免再弹出遮挡拖拽/连线的节点编辑窗。
   protected startNodeNameEdit(node: any, event: MouseEvent): void {
     event.stopPropagation();
+    if (!this.editing) return;
     const nodeId = String(node.baseId || node.id || '');
     this.selectedElementId.set(nodeId);
     this.editingNodeNameId.set(nodeId);
@@ -726,6 +727,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   protected openEdgeLabelEditor(edgeId: string, event?: Event): void {
     event?.stopPropagation();
+    if (!this.editing) return;
     this.selectedElementId.set(edgeId);
     this.editingEdgeLabelId.set(edgeId);
     window.setTimeout(() => {
@@ -814,10 +816,12 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected startConnect(nodeId: string): void {
+    if (!this.editing) return;
     this.connectingFromId.set(nodeId);
   }
 
   protected finishConnect(targetNodeId: string): void {
+    if (!this.editing) return;
     const source = this.connectingFromId();
     if (!source || source === targetNodeId) return;
     const process = this.currentProcess();
@@ -833,6 +837,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected startConnectFromAnchor(event: MouseEvent, nodeId: string): void {
     event.preventDefault();
     event.stopPropagation();
+    if (!this.editing) return;
     this.connectingFromId.set(nodeId);
     this.selectedElementId.set(nodeId);
   }
@@ -992,8 +997,9 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     // 边界细节：卡片内按钮、输入框和角色下拉不应启动拖拽，否则编辑名称/角色会误移动节点。
     const element = target as HTMLElement | null;
     if (!element) return false;
+    if (element.closest('input,select,textarea,label,.flow-node-role-picker,.flow-node-edit-icon,.flow-gateway-edit-icon,.flow-gateway-label')) return true;
     if (element.closest('.flow-terminal,.flow-gateway')) return false;
-    return Boolean(element.closest('button,input,select,textarea,label,.flow-node-role-picker,.flow-node-edit-icon,.flow-gateway-edit-icon'));
+    return Boolean(element.closest('button'));
   }
 
   protected onLaneDrop(event: DragEvent, lane: FlowLane): void {

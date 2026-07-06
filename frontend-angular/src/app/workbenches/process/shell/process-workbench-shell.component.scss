@@ -1,10 +1,12 @@
 :host {
   display: block;
+  width: 100%;
   min-width: 0;
 }
 
 // 模块意图：沿用 legacy 二级 tab 的视觉协议，只把结构所有权迁入 Angular 壳层。
 .process-shell {
+  width: 100%;
   min-width: 0;
 }
 

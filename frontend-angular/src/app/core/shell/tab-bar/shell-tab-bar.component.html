@@ -1,4 +1,4 @@
-<div class="tab-btn-group" data-testid="angular-shell-tab-bar">
+﻿<div class="tab-btn-group" data-testid="angular-shell-tab-bar">
   <button
     *ngFor="let tab of tabs"
     class="tab-btn"
@@ -11,14 +11,36 @@
     {{ tab.label }}
   </button>
 </div>
-<button
-  *ngIf="showBackAction"
-  class="tab-btn tab-back-btn"
-  data-testid="nav-back-button"
-  type="button"
-  [title]="backTitle()"
-  [disabled]="!canGoBack()"
-  (click)="goBack()"
->
-  ← 返回
-</button>
+<div class="tab-action-group">
+  <button
+    class="tab-btn tab-history-btn"
+    data-testid="workbench-undo-button"
+    type="button"
+    title="撤销 Ctrl+Z"
+    [disabled]="!canUndoDocumentEdit()"
+    (click)="undoDocumentEdit()"
+  >
+    ↶ 撤销
+  </button>
+  <button
+    class="tab-btn tab-history-btn"
+    data-testid="workbench-redo-button"
+    type="button"
+    title="重做 Ctrl+Y / Ctrl+Shift+Z"
+    [disabled]="!canRedoDocumentEdit()"
+    (click)="redoDocumentEdit()"
+  >
+    ↷ 重做
+  </button>
+  <button
+    *ngIf="showBackAction"
+    class="tab-btn tab-back-btn"
+    data-testid="nav-back-button"
+    type="button"
+    [title]="backTitle()"
+    [disabled]="!canGoBack()"
+    (click)="goBack()"
+  >
+    ← 返回
+  </button>
+</div>

@@ -12,7 +12,7 @@ const UNASSIGNED_CONSTRUCT_ID = '__unassigned_construct__';
 interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; note?: string; entityUids?: string[]; taskDefinitionUids?: string[]; constructUids?: string[]; }
 interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; businessComponentId?: string; businessComponent?: string; }
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructId?: string; businessConstructUids?: string[]; constructUid?: string; constructId?: string; }
-interface TaskParam { name: string; type: string; required: boolean; note: string; }
+interface TaskParam { uid?: string; name: string; type: string; required: boolean; code?: string; description?: string; example?: string; note: string; children?: TaskParam[]; }
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; businessComponentUid?: string; }
 
 @Component({
@@ -21,6 +21,19 @@ interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: strin
   styleUrls: ['./component-workbench.scss', './component-workbench-tree.scss'],
 })
 export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
+  protected readonly taskParamTypeOptions = [
+    { value: '', label: '类型' },
+    { value: 'String', label: '字符' },
+    { value: 'Number', label: '数值' },
+    { value: 'Money', label: '金额' },
+    { value: 'Date', label: '日期' },
+    { value: 'DateTime', label: '日期时间' },
+    { value: 'Boolean', label: '布尔' },
+    { value: 'Enum', label: '枚举' },
+    { value: 'Text', label: '长文本' },
+    { value: 'ID', label: '标识ID' },
+    { value: 'list', label: '列表' },
+  ];
   private readonly onRefresh = () => this.version.update((v) => v + 1);
   private readonly onMindMapCommand = (event: Event) => this.handleMindMapCommand(event as CustomEvent<{ command?: string }>);
   private readonly runtime = getAngularRuntimeState();
@@ -162,6 +175,22 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected isMindNodeSelected(type: 'component' | 'construct' | 'entity' | 'task', id: string): boolean {
     const selected = this.selectedMindNode();
     return selected?.type === type && selected.id === id;
+  }
+  protected isMindComponentRelated(comp: LegacyComp): boolean {
+    const selected = this.selectedMindNode();
+    if (!selected) return false;
+    const compId = this.uid(comp);
+    if (selected.type === 'component') return selected.id === compId;
+    if (selected.type !== 'construct') return false;
+    return this.constructsFor(comp).some((construct) => this.uid(construct) === selected.id);
+  }
+  protected isMindConstructRelated(construct: LegacyConstruct): boolean {
+    const selected = this.selectedMindNode();
+    if (!selected) return false;
+    const constructId = this.uid(construct);
+    if (selected.type === 'construct') return selected.id === constructId;
+    if (selected.type !== 'component') return false;
+    return this.constructsFor({ uid: selected.id }).some((item) => this.uid(item) === constructId);
   }
   protected onMindMapKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key === '-') {
@@ -938,7 +967,12 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     for (const p of this.doc().processes || []) for (const n of p.nodes || p.tasks || []) if (n.taskDefinitionUid === (td.uid || td.id)) nodes.push({ uid: n.uid || n.id, name: n.name || '节点', pname: p.name || '' });
     return nodes;
   }
+  protected taskDefCardName(td: LegacyTaskDef): string {
+    const name = String(td.name || this.uid(td) || '').trim();
+    return name.length > 15 ? `${name.slice(0, 15)}…` : name;
+  }
   protected editingTaskId = signal('');
+  protected readonly taskDefEditorTab = signal<'basic' | 'contract' | 'implementation'>('basic');
   protected expandedTaskIds = signal(new Set<string>());
   protected toggleTaskExpand(id: string): void {
     this.expandedTaskIds.update((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -946,7 +980,12 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected isTaskExpanded(id: string): boolean { return this.expandedTaskIds().has(id); }
   protected startEditInline(td?: LegacyTaskDef): void {
     if (!this.canEdit()) return;
-    if (td) { this.editingTaskId.set(this.uid(td)); return; }
+    this.taskDefEditorTab.set('basic');
+    if (td) {
+      this.normalizeTaskImplementationStatus(td);
+      this.editingTaskId.set(this.uid(td));
+      return;
+    }
     // 新建
     const selectedConstructId = this.taskDefConstructId();
     const selectedConstruct = this.constructs().find((construct) => this.uid(construct) === selectedConstructId);
@@ -955,7 +994,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
       name: '',
       type: 'Query',
       querySourceKind: '',
-      target: '',
+      target: '未实现',
       address: '',
       note: '',
       constructUid: selectedConstructId,
@@ -970,6 +1009,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected saveInlineEdit(td: LegacyTaskDef): void {
     if (!this.canEdit()) return;
     td.parameters ||= { inputs: [], outputs: [] };
+    this.normalizeTaskImplementationStatus(td);
     this.editingTaskId.set('');
     this.touch();
   }
@@ -991,13 +1031,129 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     this.doc().taskDefinitions = this.taskDefs().filter((t) => (t.uid || t.id) !== (td.uid || td.id));
     this.touch();
   }
-  protected addParam(arr: TaskParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); }
-  protected removeParam(arr: TaskParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); }
+  protected addParam(arr: TaskParam[]): void {
+    if (!this.canEdit()) return;
+    arr.push(this.createTaskParam());
+    this.touch();
+  }
+
+  protected insertParam(arr: TaskParam[], idx: number): void {
+    if (!this.canEdit()) return;
+    arr.splice(idx + 1, 0, this.createTaskParam());
+    this.touch();
+  }
+
+  protected removeParam(arr: TaskParam[], idx: number): void {
+    if (!this.canEdit()) return;
+    arr.splice(idx, 1);
+    this.touch();
+  }
+
+  protected moveParam(arr: TaskParam[], idx: number, direction: -1 | 1): void {
+    if (!this.canEdit()) return;
+    const target = idx + direction;
+    if (target < 0 || target >= arr.length) return;
+    const [item] = arr.splice(idx, 1);
+    arr.splice(target, 0, item);
+    this.touch();
+  }
+
+  protected addParamChild(parent: TaskParam): void {
+    if (!this.canEdit()) return;
+    parent.children ||= [];
+    parent.children.push(this.createTaskParam('child'));
+    this.touch();
+  }
+
+  protected insertParamChild(parent: TaskParam, idx: number): void {
+    if (!this.canEdit()) return;
+    parent.children ||= [];
+    parent.children.splice(idx + 1, 0, this.createTaskParam('child'));
+    this.touch();
+  }
+
+  protected removeParamChild(parent: TaskParam, idx: number): void {
+    if (!this.canEdit() || !parent.children) return;
+    parent.children.splice(idx, 1);
+    this.touch();
+  }
+
+  protected moveParamChild(parent: TaskParam, idx: number, direction: -1 | 1): void {
+    if (!this.canEdit() || !parent.children) return;
+    const target = idx + direction;
+    if (target < 0 || target >= parent.children.length) return;
+    const [item] = parent.children.splice(idx, 1);
+    parent.children.splice(target, 0, item);
+    this.touch();
+  }
+
+  protected setParamType(param: TaskParam, value: string): void {
+    if (!this.canEdit()) return;
+    param.type = value;
+    if (value !== 'list') param.children = [];
+    else param.children ||= [];
+    this.touch();
+  }
+
+  protected taskParamCode(param: TaskParam): string {
+    return String(param.code ?? param.description ?? '').trim();
+  }
+
+  protected setTaskParamCode(param: TaskParam, value: string): void {
+    if (!this.canEdit()) return;
+    param.code = value;
+    param.description = value;
+    this.touch();
+  }
+
+  protected taskParamNote(param: TaskParam): string {
+    return String(param.note ?? param.example ?? '').trim();
+  }
+
+  protected setTaskParamNote(param: TaskParam, value: string): void {
+    if (!this.canEdit()) return;
+    param.note = value;
+    param.example = value;
+    this.touch();
+  }
+
+  private createTaskParam(prefix = 'param'): TaskParam {
+    return {
+      uid: `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      name: '',
+      type: '',
+      required: false,
+      code: '',
+      description: '',
+      example: '',
+      note: '',
+      children: [],
+    };
+  }
   protected isEditingTask(td: LegacyTaskDef): boolean { return this.editingTaskId() === this.uid(td) || (!td.uid && this.editingTaskId() === ''); }
   protected editingTask(): LegacyTaskDef | null {
     const id = this.editingTaskId();
     if (!this.canEdit()) return null;
     return this.taskDefs().find((task) => this.isEditingTask(task)) || null;
+  }
+
+  protected taskImplementationStatus(td: LegacyTaskDef): 'pending' | 'implemented' {
+    return String(td.target || '').trim() === '已实现' || (String(td.target || '').trim() && String(td.target || '').trim() !== '未实现') || String(td.address || '').trim()
+      ? 'implemented'
+      : 'pending';
+  }
+
+  protected setTaskImplementationStatus(td: LegacyTaskDef, status: string): void {
+    if (!this.canEdit()) return;
+    td.target = status === 'implemented' ? '已实现' : '未实现';
+    this.touch();
+  }
+
+  private normalizeTaskImplementationStatus(td: LegacyTaskDef): void {
+    const target = String(td.target || '').trim();
+    if (target && target !== '未实现' && target !== '已实现') td.target = '已实现';
+    else if (!target && String(td.address || '').trim()) td.target = '已实现';
+    else if (!target) td.target = '未实现';
   }
 
   // ─── Utils ────────────────────────────────────────

@@ -1,5 +1,12 @@
 import { CommonModule, Location } from '@angular/common';
 import { ChangeDetectorRef, Component, EventEmitter, HostListener, Input, Output, computed, signal } from '@angular/core';
+import {
+  canRedoAngularRuntimeDocument,
+  canUndoAngularRuntimeDocument,
+  getAngularRuntimeState,
+  redoAngularRuntimeDocument,
+  undoAngularRuntimeDocument,
+} from '../../runtime/angular-runtime';
 import { routePathFromWorkbenchId } from '../routing/main-workbench-route';
 import { ShellTabBarAdapter, createShellTabBarLegacyAdapter } from './shell-tab-bar-legacy-adapter';
 
@@ -25,6 +32,14 @@ export class ShellTabBarComponent {
   protected readonly canGoBack = computed(() => {
     this.version();
     return this.adapter.canGoBack();
+  });
+  protected readonly canUndoDocumentEdit = computed(() => {
+    this.version();
+    return !getAngularRuntimeState().readOnly && canUndoAngularRuntimeDocument();
+  });
+  protected readonly canRedoDocumentEdit = computed(() => {
+    this.version();
+    return !getAngularRuntimeState().readOnly && canRedoAngularRuntimeDocument();
   });
   protected readonly backTitle = computed(() => {
     this.version();
@@ -53,6 +68,16 @@ export class ShellTabBarComponent {
     const targetTab = this.adapter.goBack();
     if (targetTab) this.location.go(routePathFromWorkbenchId(targetTab));
     this.version.update((value) => value + 1);
+  }
+
+  protected undoDocumentEdit(): void {
+    if (!this.canUndoDocumentEdit()) return;
+    if (undoAngularRuntimeDocument()) this.version.update((value) => value + 1);
+  }
+
+  protected redoDocumentEdit(): void {
+    if (!this.canRedoDocumentEdit()) return;
+    if (redoAngularRuntimeDocument()) this.version.update((value) => value + 1);
   }
 
   @HostListener('window:blm-shell-tabbar-refresh')

@@ -82,8 +82,17 @@ export class OpenDocumentQuery {
     return value || DEFAULT_WORKSPACE_SPACE;
   }
 
-  normalizeTags(tags: string[] | undefined): string[] {
-    return Array.isArray(tags) ? tags.map((tag) => String(tag || '').trim()).filter(Boolean) : [];
+  normalizeTags(tags: string[] | string | undefined): string[] {
+    if (Array.isArray(tags)) {
+      return tags.map((tag) => String(tag || '').trim()).filter(Boolean);
+    }
+    if (typeof tags === 'string') {
+      return tags
+        .split(/[,，、]/)
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+    }
+    return [];
   }
 
   private compareWorkspaceSpaceNames(left: string, right: string): number {

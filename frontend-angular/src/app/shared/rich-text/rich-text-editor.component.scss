@@ -102,8 +102,8 @@
 
 :host ::ng-deep .node-rich-content ul,
 :host ::ng-deep .node-rich-content ol {
-  margin: 7px 0 7px 28px;
-  padding-left: 22px;
+  margin: 6px 0 6px 10px;
+  padding-left: 12px;
 }
 
 :host ::ng-deep .node-rich-content ul {
@@ -131,8 +131,8 @@
 }
 
 :host ::ng-deep .node-rich-content li {
-  margin: 4px 0;
-  padding-left: 2px;
+  margin: 3px 0;
+  padding-left: 1px;
 }
 
 :host ::ng-deep .node-rich-content li::marker {

@@ -1,5 +1,6 @@
 /* Process flow workbench migrated global styles. */
 .process-flow-view {
+  width: 100%;
   min-width: 0;
   padding: 10px 14px 16px;
 }
@@ -52,6 +53,25 @@
   position: relative;
   display: block;
   min-width: 0;
+}
+
+.process-flow-edit-shortcut {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.process-flow-edit-shortcut strong {
+  color: #1d4ed8;
+  font-weight: 900;
 }
 
 .attachment-add-button {

@@ -6,8 +6,15 @@
 .business-mindmap-toolbar span { color: #64748b; font-size: 12px; }
 .business-mindmap-tools { display: flex; align-items: center; gap: 8px; }
 .business-mindmap-tools > span { border: 1px solid #bfdbfe; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 850; padding: 4px 8px; }
-.business-mindmap-canvas { flex: 1; min-height: 0; overflow: auto; outline: none; border: 1px solid #dbeafe; border-radius: 10px; background: linear-gradient(#fff, #f8fbff); padding: 14px; }
+.business-mindmap-canvas { position: relative; flex: 1; min-height: 0; overflow: auto; outline: none; border: 1px solid #dbeafe; border-radius: 10px; background: linear-gradient(#fff, #f8fbff); padding: 14px; }
 .business-mindmap-canvas:focus { box-shadow: inset 0 0 0 2px rgba(59,130,246,.18); }
+.business-mindmap-legend { position: sticky; z-index: 8; top: 10px; right: 10px; float: right; display: grid; gap: 6px; width: 76px; border: 1px solid #dbeafe; border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: 0 10px 26px rgba(15,23,42,.10); padding: 8px; }
+.business-mindmap-legend span { display: grid; grid-template-columns: 10px 1fr; align-items: center; gap: 6px; color: #334155; font-size: 12px; font-weight: 850; }
+.business-mindmap-legend span::before { content: ""; width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(15,23,42,.08); }
+.business-mindmap-legend .legend-component::before { background: #f97316; }
+.business-mindmap-legend .legend-construct::before { background: #0891b2; }
+.business-mindmap-legend .legend-entity::before { background: #4f46e5; }
+.business-mindmap-legend .legend-task::before { background: #16a34a; }
 .business-mindmap-stage { display: inline-flex; align-items: flex-start; gap: 18px; min-width: max-content; transform-origin: top left; }
 .business-mindmap-stage.has-rootless-map { gap: 0; }
 .mind-root { position: sticky; left: 0; display: grid; place-items: center; min-width: 118px; min-height: 44px; border: 2px solid #2563eb; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 14px; font-weight: 900; box-shadow: 0 8px 22px rgba(37,99,235,.10); }
@@ -17,16 +24,22 @@
 .mind-group > header { display: flex; align-items: center; gap: 8px; color: #9a3412; font-size: 13px; font-weight: 900; }
 .mind-group.is-generic > header { color: #15803d; }
 .mind-group > header span { border: 1px solid #dbeafe; border-radius: 999px; background: #fff; color: #64748b; font-size: 11px; padding: 2px 8px; }
-.mind-row { display: grid; grid-template-columns: 230px minmax(620px, 1fr); gap: 18px; align-items: start; }
-.mind-branch { position: relative; display: grid; gap: 8px; }
-.mind-branch::before, .mind-construct::before, .mind-leaves::before { content: ""; position: absolute; left: -18px; top: 22px; width: 18px; border-top: 2px solid #cbd5e1; }
-.mind-construct { position: relative; display: grid; grid-template-columns: 260px minmax(360px, 1fr); gap: 16px; align-items: start; }
+.mind-row { position: relative; display: grid; grid-template-columns: 230px minmax(620px, 1fr); gap: 22px; align-items: start; border-radius: 14px; padding: 2px; }
+.mind-row.is-related { outline: 2px dashed rgba(37,99,235,.34); outline-offset: 6px; background: rgba(239,246,255,.34); }
+.mind-branch { position: relative; display: grid; gap: 8px; padding-left: 6px; }
+.mind-branch::before { content: ""; position: absolute; left: -24px; top: 22px; width: 30px; border-top: 2px solid #94a3b8; }
+.mind-branch::after { content: ""; position: absolute; left: 5px; top: 22px; bottom: 22px; border-left: 2px solid #cbd5e1; }
+.mind-construct::before { content: ""; position: absolute; left: -1px; top: 22px; width: 14px; border-top: 2px solid #cbd5e1; transform: translateX(-100%); }
+.mind-leaves::before { content: ""; position: absolute; left: -20px; top: 22px; width: 20px; border-top: 2px solid #cbd5e1; }
+.mind-construct { position: relative; display: grid; grid-template-columns: 260px minmax(360px, 1fr); gap: 16px; align-items: start; border-radius: 12px; padding: 2px 0 2px 10px; }
+.mind-construct.is-related { background: rgba(224,242,254,.42); outline: 1px dashed rgba(8,145,178,.35); outline-offset: 4px; }
 .mind-edit-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 2px; }
 .mind-leaves { position: relative; display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 8px; }
 .mind-leaves > div { display: grid; align-content: start; gap: 6px; }
 .mind-node { position: relative; display: grid; gap: 3px; min-height: 42px; width: 100%; border: 1px solid #dbeafe; border-left-width: 4px; border-radius: 8px; background: #fff; color: #0f172a; cursor: pointer; font: inherit; padding: 7px 10px; text-align: left; box-shadow: 0 3px 10px rgba(15,23,42,.04); }
 .mind-node:hover { box-shadow: 0 7px 18px rgba(15,23,42,.08); transform: translateY(-1px); }
 .mind-node.is-selected { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.16), 0 8px 20px rgba(37,99,235,.10); }
+.mind-node.is-related { box-shadow: 0 0 0 2px rgba(37,99,235,.12), 0 7px 18px rgba(15,23,42,.08); }
 .mind-node strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 900; line-height: 1.28; white-space: normal; }
 .mind-name-input { min-width: 0; width: 100%; border: 1px solid #93c5fd; border-radius: 6px; background: rgba(255,255,255,.92); color: #0f172a; font: inherit; font-size: 13px; font-weight: 900; padding: 3px 6px; outline: none; }
 .mind-name-input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.12); }
@@ -40,7 +53,7 @@
 .mind-node--component { border-color: #fdba74; border-left-color: #f97316; background: #fff7ed; }
 .mind-node--component.is-generic { border-color: #86efac; border-left-color: #16a34a; background: #f0fdf4; }
 .mind-node--construct { border-color: #67e8f9; border-left-color: #0891b2; background: #ecfeff; }
-.mind-node--entity { border-color: #fcd34d; border-left-color: #d97706; background: #fffbeb; }
+.mind-node--entity { border-color: #c7d2fe; border-left-color: #4f46e5; background: #f5f7ff; }
 .mind-node--task { border-color: #bbf7d0; border-left-color: #16a34a; background: #f7fdf9; }
 .mind-add { justify-self: start; border: 1px dashed #93c5fd; border-radius: 8px; background: #fff; color: #2563eb; cursor: pointer; font-size: 12px; font-weight: 850; padding: 5px 10px; }
 .business-tree-node small { color: #64748b; font-size: 12px; }

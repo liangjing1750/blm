@@ -25,12 +25,16 @@ interface VariableOption { value: string; label: string; }
 export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   private readonly onRefresh = () => this.version.update((v) => v + 1);
   private readonly runtime = getAngularRuntimeState();
-  ngOnInit(): void { window.addEventListener('blm-workbench-refresh', this.onRefresh); }
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+    if (this.activeTab() === 'orchestration') this.ensureOrchestrationInterfaceSelection();
+  }
   ngOnDestroy(): void { window.removeEventListener('blm-workbench-refresh', this.onRefresh); }
 
   protected readonly version = signal(0);
   protected readonly activeTab = signal<AppTab>(this.restoreActiveTab());
   protected readonly svcKeyword = signal('');
+  protected readonly orchServiceGroupUid = signal('__all__');
   protected readonly orchSvcId = signal('');
   protected readonly selectedServiceGroupUid = signal('__all__');
   protected readonly selectedServiceId = signal('');
@@ -38,6 +42,14 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly editorOpen = signal(false);
   protected readonly serviceDrawerId = signal('');
   protected readonly serviceGroupDrawer = signal<Partial<LegacyServiceGroup> | null>(null);
+  protected readonly serviceParamViews = signal<Record<'requestParams' | 'responseParams', 'list' | 'json'>>({
+    requestParams: 'list',
+    responseParams: 'list',
+  });
+  protected readonly serviceParamJsonDrafts = signal<Record<'requestParams' | 'responseParams', string>>({
+    requestParams: '',
+    responseParams: '',
+  });
 
   protected doc(): any { this.version(); return this.runtime.doc || {}; }
   protected serviceGroups(): LegacyServiceGroup[] { this.doc().serviceGroups ||= []; return this.doc().serviceGroups; }
@@ -46,6 +58,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected switchTab(t: AppTab): void {
     this.runtime.ui['applicationWorkbenchTab'] = t;
     this.activeTab.set(t);
+    if (t === 'orchestration') this.ensureOrchestrationInterfaceSelection();
   }
   protected canEdit(): boolean { return this.editorOpen() && !this.runtime.readOnly; }
   protected toggleEditor(): void {
@@ -261,6 +274,22 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     param.children.push({ name: '', type: 'String', required: false, note: '' });
     this.touch();
   }
+  protected insertParamAfter(params: ServiceParam[], path: number[]): void {
+    if (!this.canEdit()) return;
+    const list = this.paramSiblingList(params, path);
+    const index = path[path.length - 1];
+    list.splice(index + 1, 0, { name: '', type: 'String', required: false, note: '' });
+    this.touch();
+  }
+  protected moveParam(params: ServiceParam[], path: number[], direction: -1 | 1): void {
+    if (!this.canEdit()) return;
+    const list = this.paramSiblingList(params, path);
+    const index = path[path.length - 1];
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= list.length) return;
+    [list[index], list[nextIndex]] = [list[nextIndex], list[index]];
+    this.touch();
+  }
   protected removeParamByPath(params: ServiceParam[], path: number[]): void {
     if (!this.canEdit()) return;
     if (path.length === 1) {
@@ -272,6 +301,12 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     parent?.children?.splice(path[path.length - 1], 1);
     this.touch();
   }
+  private paramSiblingList(params: ServiceParam[], path: number[]): ServiceParam[] {
+    if (path.length <= 1) return params;
+    const parent = this.paramAtPath(params, path.slice(0, -1));
+    parent!.children ||= [];
+    return parent!.children;
+  }
   private paramAtPath(params: ServiceParam[], path: number[]): ServiceParam | null {
     let current: ServiceParam | undefined;
     let list = params;
@@ -281,6 +316,48 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       list = current.children || [];
     }
     return current || null;
+  }
+  protected paramView(target: 'requestParams' | 'responseParams'): 'list' | 'json' {
+    return this.serviceParamViews()[target];
+  }
+  protected setParamView(target: 'requestParams' | 'responseParams', view: 'list' | 'json', svc?: LegacyService): void {
+    if (view === 'json' && svc) {
+      this.serviceParamJsonDrafts.update((drafts) => ({ ...drafts, [target]: this.paramsJson(svc, target) }));
+    }
+    this.serviceParamViews.update((views) => ({ ...views, [target]: view }));
+  }
+  protected paramJsonDraft(target: 'requestParams' | 'responseParams'): string {
+    return this.serviceParamJsonDrafts()[target];
+  }
+  protected paramsJson(svc: LegacyService, target: 'requestParams' | 'responseParams'): string {
+    const params = target === 'requestParams' ? this.serviceRequestParams(svc) : this.serviceResponseParams(svc);
+    return JSON.stringify(params, null, 2);
+  }
+  protected updateParamsFromJson(svc: LegacyService, target: 'requestParams' | 'responseParams', raw: string): void {
+    if (!this.canEdit()) return;
+    this.serviceParamJsonDrafts.update((drafts) => ({ ...drafts, [target]: raw }));
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const normalized = parsed
+        .filter((item): item is Partial<ServiceParam> => Boolean(item && typeof item === 'object'))
+        .map((item) => this.normalizeSvcParam(item));
+      if (target === 'requestParams') svc.requestParams = normalized;
+      else svc.responseParams = normalized;
+      this.touch();
+    } catch {
+      // 边界细节：JSON 视图允许用户暂时输入半成品；解析失败时不覆盖原参数。
+    }
+  }
+  private normalizeSvcParam(param: Partial<ServiceParam>): ServiceParam {
+    const children = Array.isArray(param.children) ? param.children.map((child) => this.normalizeSvcParam(child)) : [];
+    return {
+      name: String(param.name || '').trim(),
+      type: String(param.type || 'String').trim() || 'String',
+      required: Boolean(param.required),
+      note: String(param.note || '').trim(),
+      ...(children.length ? { children } : {}),
+    };
   }
   protected serviceRequestParams(svc: LegacyService): ServiceParam[] {
     svc.requestParams ||= svc.inputs || [];
@@ -378,6 +455,24 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   // ─── Tab 2: 应用编排 ──────────────────────────
+  protected orchestrationInterfaces(): LegacyService[] {
+    const groupUid = this.orchServiceGroupUid();
+    return this.services().filter((svc) => {
+      if (groupUid === '__all__') return true;
+      if (groupUid === '__ungrouped__') return !svc.serviceGroupUid;
+      return String(svc.serviceGroupUid || '') === groupUid;
+    });
+  }
+  protected selectOrchestrationServiceGroup(groupUid: string): void {
+    this.orchServiceGroupUid.set(groupUid);
+    const first = this.orchestrationInterfaces()[0];
+    this.selectOrchestrationService(first ? this.uid(first) : '');
+  }
+  protected ensureOrchestrationInterfaceSelection(): void {
+    if (this.orchestrationInterfaces().some((svc) => this.uid(svc) === this.orchSvcId())) return;
+    const first = this.orchestrationInterfaces()[0];
+    if (first) this.selectOrchestrationService(this.uid(first));
+  }
   protected selectOrchestrationService(serviceUid: string): void {
     this.orchSvcId.set(serviceUid);
     const service = this.services().find((candidate) => this.uid(candidate) === serviceUid);

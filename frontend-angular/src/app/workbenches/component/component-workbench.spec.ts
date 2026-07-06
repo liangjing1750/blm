@@ -66,6 +66,17 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('[data-testid="mind-node-construct-construct-1"]')?.textContent).toContain('订单构件');
   });
 
+  it('keeps task definition card names readable up to 15 characters before truncation', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.taskDefinitions[0].name = '甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳';
+    host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+
+    const head = host.querySelector<HTMLElement>('[data-testid="taskdef-head-task-1"] strong');
+    expect(head?.textContent?.trim()).toBe('甲乙丙丁戊己庚辛壬癸子丑寅卯辰…');
+    expect(head?.getAttribute('title')).toBe('甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳');
+  });
+
   it('opens construct detail from component overview and keeps context without a return button', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
     fixture.detectChanges();
@@ -261,6 +272,41 @@ describe('ComponentWorkbenchComponent', () => {
     expect(tree.querySelector('[data-testid="mind-node-construct-construct-1"]')?.classList.contains('mind-node--construct')).toBe(true);
     expect(tree.querySelector('[data-testid="mind-node-entity-entity-1"]')?.classList.contains('mind-node--entity')).toBe(true);
     expect(tree.querySelector('[data-testid="mind-node-task-task-1"]')?.classList.contains('mind-node--task')).toBe(true);
+  });
+
+  it('shows a map legend, highlights aggregate descendants, and keeps branch connectors continuous', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
+    fixture.detectChanges();
+
+    const tree = host.querySelector<HTMLElement>('[data-testid="business-construct-tree-view"]')!;
+    const legend = tree.querySelector<HTMLElement>('[data-testid="business-mindmap-legend"]')!;
+    expect(legend).toBeTruthy();
+    expect(legend.textContent).toContain('组件');
+    expect(legend.textContent).toContain('构件');
+    expect(legend.textContent).toContain('实体');
+    expect(legend.textContent).toContain('任务');
+
+    const component = tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-component-comp-1"]')!;
+    component.click();
+    fixture.detectChanges();
+    const componentRow = component.closest('.mind-row') as HTMLElement;
+    expect(componentRow.classList.contains('is-related')).toBe(true);
+    expect(componentRow.querySelector('[data-testid="mind-node-construct-construct-1"]')?.classList.contains('is-related')).toBe(true);
+    expect(componentRow.querySelector('[data-testid="mind-node-entity-entity-1"]')?.classList.contains('is-related')).toBe(true);
+    expect(componentRow.querySelector('[data-testid="mind-node-task-task-1"]')?.classList.contains('is-related')).toBe(true);
+
+    const styleRules = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from((sheet as CSSStyleSheet).cssRules || []))
+      .map((rule) => rule.cssText)
+      .join('\n');
+    expect(styleRules).toContain('.mind-branch');
+    expect(styleRules).toContain('::after');
+    expect(styleRules).toContain('left: -24px');
+
+    const construct = tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')!;
+    construct.click();
+    fixture.detectChanges();
+    expect((construct.closest('.mind-construct') as HTMLElement).classList.contains('is-related')).toBe(true);
   });
 
   it('shows unclassified component and construct for unowned entities and tasks', () => {
@@ -527,9 +573,13 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('.taskdef-edit-basics')).toBeTruthy();
     expect(host.querySelector('[data-testid="taskdef-edit-component"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="taskdef-edit-construct"]')).toBeTruthy();
-    expect(host.querySelectorAll('.taskdef-edit-params').length).toBe(2);
+    expect(host.querySelectorAll('.taskdef-edit-params').length).toBe(0);
     expect(host.querySelector('[data-testid="taskdef-handover-runtime-kind"]')).toBeFalsy();
     expect(host.querySelector('[data-testid="taskdef-handover-target"]')).toBeFalsy();
+
+    host.querySelectorAll<HTMLButtonElement>('.taskdef-editor-tabs button')[1]?.click();
+    fixture.detectChanges();
+    expect(host.querySelectorAll('.taskdef-edit-params').length).toBe(2);
 
     host.querySelectorAll<HTMLButtonElement>('.taskdef-edit-section-head button').forEach((button) => button.click());
     fixture.detectChanges();
@@ -538,6 +588,52 @@ describe('ComponentWorkbenchComponent', () => {
     expect(draft.parameters.inputs).toHaveLength(1);
     expect(draft.parameters.outputs).toHaveLength(1);
     expect(draft.technicalHandover).toBeUndefined();
+
+    host.querySelectorAll<HTMLButtonElement>('.taskdef-editor-tabs button')[2]?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLSelectElement>('.taskdef-edit-target')?.textContent).toContain('未实现');
+    expect(host.querySelector('[data-testid="taskdef-note-editor"]')).toBeTruthy();
+  });
+
+  it('edits task parameter contracts with legacy row actions and list children', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.taskDefinitions[0].parameters.inputs = [
+      { name: '平面图名称', type: 'String', required: true, code: 'imageName', note: '说明/示例' },
+    ];
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="taskdef-edit-task-1"]')?.click();
+    fixture.detectChanges();
+    host.querySelectorAll<HTMLButtonElement>('.taskdef-editor-tabs button')[1]?.click();
+    fixture.detectChanges();
+
+    const dialog = host.querySelector<HTMLElement>('[data-testid="taskdef-editor-dialog"]')!;
+    expect(dialog.textContent).toContain('任务参数：查询订单');
+    expect(dialog.textContent).toContain('中文名称');
+    expect(dialog.textContent).toContain('英文名称');
+    expect(dialog.querySelectorAll('[data-testid="taskdef-param-insert"]').length).toBeGreaterThan(0);
+    expect(dialog.querySelectorAll('[data-testid="taskdef-param-move-up"]').length).toBeGreaterThan(0);
+    expect(dialog.querySelectorAll('[data-testid="taskdef-param-move-down"]').length).toBeGreaterThan(0);
+    expect(dialog.querySelectorAll('[data-testid="taskdef-param-remove"]').length).toBeGreaterThan(0);
+    expect(dialog.textContent).not.toContain('保存');
+    expect(dialog.textContent).not.toContain('取消');
+
+    const typeSelect = dialog.querySelector<HTMLSelectElement>('[data-testid="taskdef-param-type-inputs-0"]')!;
+    expect(Array.from(typeSelect.options).map((option) => option.textContent?.trim())).toContain('列表');
+    typeSelect.value = 'list';
+    typeSelect.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(dialog.textContent).toContain('子字段');
+    dialog.querySelector<HTMLButtonElement>('[data-testid="taskdef-param-add-child-inputs-0"]')?.click();
+    fixture.detectChanges();
+
+    const draft = runtime.doc.taskDefinitions[0].parameters.inputs[0];
+    expect(draft.type).toBe('list');
+    expect(draft.children).toHaveLength(1);
   });
 
   it('renders task definitions as a construct grouped service capability map', () => {
@@ -587,6 +683,8 @@ describe('ComponentWorkbenchComponent', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
     fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="taskdef-edit-task-1"]')?.click();
+    fixture.detectChanges();
+    host.querySelectorAll<HTMLButtonElement>('.taskdef-editor-tabs button')[2]?.click();
     fixture.detectChanges();
     const editor = host.querySelector<HTMLElement>('[data-testid="taskdef-note-editor"]')!;
     editor.innerHTML = '<ul><li><strong>新的任务详情</strong></li></ul>';

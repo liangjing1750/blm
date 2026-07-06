@@ -6,7 +6,7 @@ import { App } from './app';
 import { routes } from './app.routes';
 import { listExportGraphs } from './core/export/graph-export-registry';
 import { WORKBENCH_MIGRATION_STATUS } from './core/migration/workbench-migration-status';
-import { clearAngularRuntimeUndoHistory, getAngularRuntimeState, markAngularRuntimeModified } from './core/runtime/angular-runtime';
+import { clearAngularRuntimeUndoHistory, getAngularRuntimeState, markAngularRuntimeModified, replaceRuntimeDocument } from './core/runtime/angular-runtime';
 import { ShellComponent } from './shell/shell.component';
 import { ProcessEditorWorkbenchComponent } from './workbenches/process/editor/process-editor-workbench.component';
 import { ProcessFlowWorkbenchComponent } from './workbenches/process/flow/process-flow-workbench.component';
@@ -2682,11 +2682,13 @@ describe('App', () => {
 
     expect(compiled.querySelector('[data-testid="taskdef-handover-runtime-kind"]')).toBeFalsy();
     expect(compiled.querySelector('[data-testid="taskdef-handover-target"]')).toBeFalsy();
-    const inputs = Array.from(compiled.querySelectorAll<HTMLInputElement>('.taskdef-edit-basics input'));
-    const target = inputs.find((input) => input.classList.contains('taskdef-edit-target'))!;
-    const address = inputs.find((input) => input.placeholder.includes('/api/'))!;
-    target.value = 'GET /query/inbound-reservations';
-    target.dispatchEvent(new Event('input', { bubbles: true }));
+    compiled.querySelectorAll<HTMLButtonElement>('.taskdef-editor-tabs button')[2]?.click();
+    fixture.detectChanges();
+
+    const target = compiled.querySelector<HTMLSelectElement>('.taskdef-edit-target')!;
+    const address = compiled.querySelector<HTMLInputElement>('.taskdef-implementation-grid input')!;
+    target.value = 'implemented';
+    target.dispatchEvent(new Event('change', { bubbles: true }));
     address.value = '/query/inbound-reservations';
     address.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
@@ -2694,7 +2696,7 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="taskdef-save-task-save"]')?.click();
     fixture.detectChanges();
 
-    expect(runtime.doc.taskDefinitions[0].target).toBe('GET /query/inbound-reservations');
+    expect(runtime.doc.taskDefinitions[0].target).toBe('已实现');
     expect(runtime.doc.taskDefinitions[0].address).toBe('/query/inbound-reservations');
     expect(runtime.doc.taskDefinitions[0].technicalHandover).toBeUndefined();
     expect(runtime.modified).toBe(true);
@@ -3485,7 +3487,7 @@ describe('App', () => {
     expect(task.businessRules[0].content).toContain('规则描述');
   });
 
-  it('should expose document undo and redo from the toolbar', () => {
+  it('should expose document undo and redo beside workbench back action instead of the primary toolbar', () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.doc = {
@@ -3507,8 +3509,15 @@ describe('App', () => {
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
 
-    const undoButton = () => compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-undo-button"]')!;
-    const redoButton = () => compiled.querySelector<HTMLButtonElement>('[data-testid="toolbar-redo-button"]')!;
+    expect(compiled.querySelector('[data-testid="toolbar-undo-button"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="toolbar-redo-button"]')).toBeFalsy();
+
+    const backButton = compiled.querySelector<HTMLElement>('[data-testid="nav-back-button"]')!;
+    const undoButton = () => compiled.querySelector<HTMLButtonElement>('[data-testid="workbench-undo-button"]')!;
+    const redoButton = () => compiled.querySelector<HTMLButtonElement>('[data-testid="workbench-redo-button"]')!;
+
+    expect(undoButton().parentElement).toBe(backButton.parentElement);
+    expect(redoButton().parentElement).toBe(backButton.parentElement);
 
     expect(undoButton().disabled).toBe(true);
     expect(redoButton().disabled).toBe(true);
@@ -3528,6 +3537,61 @@ describe('App', () => {
     redoButton().click();
     fixture.detectChanges();
     expect(runtime.doc.meta.domain).toBe('Agent edited');
+  });
+
+  it('should use a vertical node content navigator that works in read-only mode', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '仓库' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库流程',
+        nodes: [
+          {
+            uid: 'node-submit',
+            name: '新增移垛申请',
+            roleIds: ['role-a'],
+            userSteps: [{ id: 'step-1', type: '点击', name: '提交申请' }],
+            forms: [],
+            entity_ops: [],
+            orchestrationTasks: [],
+            businessRules: [{ id: 'rule-1', title: '规则', content: '规则内容' }],
+          },
+          { uid: 'node-review', name: '审核移垛申请', roleIds: [], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] },
+        ],
+      }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.componentInstance.editing = false;
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const nav = compiled.querySelector<HTMLElement>('[data-testid="process-node-section-nav"]')!;
+    const drawer = compiled.querySelector<HTMLElement>('[data-testid="process-editor-drawer"]')!;
+    const activeNode = compiled.querySelector<HTMLElement>('[data-testid="process-editor-node"].active')!;
+    const materialButton = Array.from(compiled.querySelectorAll<HTMLButtonElement>('[data-testid="process-node-section-nav"] .node-progress-step'))
+      .find((button) => button.textContent?.includes('办理材料'))!;
+
+    expect(nav).toBeTruthy();
+    expect(drawer.parentElement?.classList.contains('node-editor-work-area')).toBe(true);
+    expect(getComputedStyle(nav).gridAutoFlow).not.toBe('column');
+    expect(getComputedStyle(activeNode).backgroundColor).not.toBe('rgb(239, 246, 255)');
+
+    materialButton.click();
+    fixture.detectChanges();
+    expect((fixture.componentInstance as any).activeNodeSection()).toBe('process-material-section');
   });
 
   it('should keep form and rule controls read-only until node editing is opened', async () => {
@@ -3591,7 +3655,7 @@ describe('App', () => {
     expect(compiled.querySelector('[data-testid="proc-prototype-list"]')?.textContent).not.toContain('流程附件.html');
   });
 
-  it('should ask with a centered custom dialog before copying entity fields into a form section', async () => {
+  it('should hide legacy entity binding on form sections without deleting old data', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.ui['procId'] = 'process-inbound';
@@ -3609,7 +3673,7 @@ describe('App', () => {
           name: '客户提交入库预约',
           roleIds: [],
           userSteps: [],
-          forms: [{ uid: 'form-1', name: '预约表单', sections: [{ uid: 'sec-1', name: '基本信息', fields: [] }] }],
+          forms: [{ uid: 'form-1', name: '预约表单', sections: [{ uid: 'sec-1', name: '基本信息', entity_id: 'entity-1', fields: [] }] }],
           entity_ops: [],
           orchestrationTasks: [],
           businessRules: [],
@@ -3628,19 +3692,80 @@ describe('App', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
-    const select = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-section-entity"]')!;
-    select.value = 'entity-1';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    fixture.detectChanges();
 
-    expect(compiled.querySelector('[data-testid="task-form-copy-entity-dialog"]')).toBeTruthy();
-    expect(compiled.querySelector('[data-testid="task-form-copy-fields"]')?.textContent).toContain('复制实体字段');
-    expect(compiled.querySelector('[data-testid="task-form-skip-fields"]')?.textContent).toContain('不复制实体字段');
+    expect(compiled.querySelector('[data-testid="task-form-section-entity"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="task-form-copy-entity-dialog"]')).toBeFalsy();
+    expect(runtime.doc.processes[0].nodes[0].forms[0].sections[0].entity_id).toBe('entity-1');
     expect(runtime.doc.processes[0].nodes[0].forms[0].sections[0].fields).toHaveLength(0);
+  });
 
-    compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-copy-fields"]')?.click();
+  it('should bind interface requirements at form-section level instead of form level', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库预约流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '客户提交入库预约',
+          roleIds: [],
+          userSteps: [],
+          forms: [{
+            uid: 'form-1',
+            name: '预约表单',
+            serviceUid: 'legacy-form-service',
+            sections: [
+              { uid: 'sec-1', name: '筛选条件', serviceUid: 'service-query', fields: [] },
+              { uid: 'sec-2', name: '提交信息', fields: [] },
+            ],
+          }],
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [],
+        }],
+      }],
+      services: [
+        { uid: 'service-query', name: '查询预约列表', method: 'GET', path: '/reservations', nodeRefs: ['node-submit'] },
+        { uid: 'service-submit', name: '提交预约', method: 'POST', path: '/reservations/submit', nodeRefs: ['node-submit'] },
+      ],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.componentRef.setInput('editing', true);
     fixture.detectChanges();
-    expect(runtime.doc.processes[0].nodes[0].forms[0].sections[0].fields).toHaveLength(2);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('[data-testid="task-form-service"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="task-form-service-summary"]')).toBeFalsy();
+    const sectionSelects = compiled.querySelectorAll<HTMLSelectElement>('[data-testid="task-form-section-service"]');
+    expect(sectionSelects).toHaveLength(2);
+    expect(sectionSelects[0].value).toBe('service-query');
+    expect(Array.from(sectionSelects[1].options).map((option) => option.value)).toContain('service-submit');
+
+    sectionSelects[1].value = 'service-submit';
+    sectionSelects[1].dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    const form = runtime.doc.processes[0].nodes[0].forms[0];
+    expect(form.serviceUid).toBe('legacy-form-service');
+    expect(form.sections[1].serviceUid).toBe('service-submit');
+    expect(form.sections[1].serviceId).toBe('service-submit');
+    expect(form.sections[1].serviceName).toBe('提交预约');
   });
 
   it('should keep form copy as a title-row icon and confirm before deleting a form', async () => {
@@ -3765,6 +3890,117 @@ describe('App', () => {
     expect(nextProcessSelect.value).toBe('proc-outbound');
     expect(runtime.ui['procId']).toBe('proc-outbound');
     expect(runtime.ui['taskId']).toBe('task-out');
+  });
+
+  it('should not rescan every node textarea on unchanged change detection', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-heavy';
+    runtime.ui['taskId'] = 'node-heavy';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-heavy',
+        name: '仓库查库监管',
+        nodes: [{
+          uid: 'node-heavy',
+          name: '查询仓库库存',
+          roleIds: [],
+          userSteps: Array.from({ length: 12 }, (_, index) => ({ uid: `step-${index}`, type: '查询', name: `办理步骤 ${index}`, note: '<ol><li>说明</li></ol>' })),
+          forms: Array.from({ length: 8 }, (_, formIndex) => ({
+            uid: `form-${formIndex}`,
+            name: `查库表单 ${formIndex}`,
+            sections: [{
+              uid: `section-${formIndex}`,
+              name: '基本信息',
+              fields: Array.from({ length: 10 }, (_, fieldIndex) => ({
+                uid: `field-${formIndex}-${fieldIndex}`,
+                name: `字段 ${fieldIndex}`,
+                type: 'Text',
+                note: `字段说明 ${fieldIndex}`,
+              })),
+            }],
+          })),
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: Array.from({ length: 8 }, (_, index) => ({ uid: `rule-${index}`, name: `规则 ${index}`, content: '<ul><li>规则说明</li></ul>' })),
+        }],
+      }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const querySpy = vi.spyOn(document, 'querySelectorAll');
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    querySpy.mockClear();
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(querySpy).not.toHaveBeenCalledWith('app-process-editor-workbench textarea.auto-resize');
+    querySpy.mockRestore();
+  });
+
+  it('should normalize heavy node forms once per view version instead of on every template read', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-heavy';
+    runtime.ui['taskId'] = 'node-heavy';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-heavy',
+        name: '仓库查库监管',
+        nodes: [{
+          uid: 'node-heavy',
+          name: '查询仓库库存',
+          roleIds: [],
+          userSteps: [],
+          forms: Array.from({ length: 6 }, (_, formIndex) => ({
+            uid: `form-${formIndex}`,
+            name: `查库表单 ${formIndex}`,
+            fields: Array.from({ length: 8 }, (_, fieldIndex) => ({
+              uid: `field-${formIndex}-${fieldIndex}`,
+              name: `字段 ${fieldIndex}`,
+              type: 'Text',
+              note: `字段说明 ${fieldIndex}`,
+            })),
+          })),
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [],
+        }],
+      }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    const normalizeSpy = vi.spyOn(fixture.componentInstance as any, 'normalizeForm');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    normalizeSpy.mockClear();
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(normalizeSpy).not.toHaveBeenCalled();
   });
 
   it('should render one shared process node per role while keeping one task in the document', async () => {
@@ -3892,7 +4128,7 @@ describe('App', () => {
     expect(section?.textContent).not.toContain('InboundReservationService.submit');
   });
 
-  it('should restore process node entity operations and form entity bindings', async () => {
+  it('should restore process node entity operations and bind forms to interface requirements', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';
     runtime.ui['mainTab'] = 'processWorkbench';
@@ -3910,6 +4146,7 @@ describe('App', () => {
         nodes: [{
           uid: 'node-submit',
           name: '客户提交',
+          serviceUids: ['service-submit'],
           userSteps: [],
           entity_ops: [{ entity_uid: 'entity-reservation', ops: ['R'] }],
           forms: [{
@@ -3936,10 +4173,17 @@ describe('App', () => {
       businessComponents: [],
       businessConstructs: [],
       taskDefinitions: [],
-      services: [],
+      services: [{
+        uid: 'service-submit',
+        name: '提交入库预约应用接口',
+        method: 'POST',
+        path: '/inbound-reservations/submit',
+        nodeRefs: ['node-submit'],
+      }],
       terms: [],
       rules: [],
     };
+    replaceRuntimeDocument(runtime.doc, runtime.currentFile);
 
     const fixture = TestBed.createComponent(ShellComponent);
     fixture.detectChanges();
@@ -3970,22 +4214,27 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="process-entity-op-add"]')?.click();
     fixture.detectChanges();
     expect(runtime.doc.processes[0].nodes[0].entity_ops.some((item: any) => item.entity_uid === 'entity-warehouse')).toBe(true);
+    expect(runtime.doc.services.map((service: any) => service.uid)).toContain('service-submit');
 
-    const formEntitySelect = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-entity"]')!;
-    formEntitySelect.value = 'entity-reservation';
-    formEntitySelect.dispatchEvent(new Event('change', { bubbles: true }));
-    fixture.detectChanges();
-    compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-copy-fields"]')?.click();
+    expect(compiled.querySelector('[data-testid="task-form-service"]')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="task-form-section-entity"]')).toBeFalsy();
+    const formSectionServiceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-section-service"]')!;
+    expect(Array.from(formSectionServiceSelect.options).map((option) => option.value)).toContain('service-submit');
+    formSectionServiceSelect.value = 'service-submit';
+    formSectionServiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
 
     const form = runtime.doc.processes[0].nodes[0].forms[0];
-    expect(form.entity_id).toBe('entity-reservation');
-    expect(form.sections[0].entity_id).toBe('entity-reservation');
-    expect(form.sections[0].fields.map((field: any) => field.name)).toContain('预约编号');
-    expect(compiled.querySelector('[data-testid="task-form-entity-summary"]')?.textContent).toContain('入库预约');
-    const mappedFieldSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-entity-field"]');
-    expect(mappedFieldSelect?.disabled).toBe(false);
-    expect(Array.from(mappedFieldSelect?.options || []).map((option) => option.value)).toContain('预约编号');
+    expect(form.serviceUid || '').toBe('');
+    expect(form.serviceId || '').toBe('');
+    expect(form.entity_id || '').toBe('');
+    expect(form.sections[0].serviceUid).toBe('service-submit');
+    expect(form.sections[0].serviceId).toBe('service-submit');
+    expect(form.sections[0].serviceName).toBe('提交入库预约应用接口');
+    expect(form.sections[0].entity_id || '').toBe('');
+    expect(compiled.querySelector('[data-testid="task-form-section-service-summary"]')?.textContent).toContain('/inbound-reservations/submit');
+    expect(compiled.querySelector('[data-testid="task-form-entity"]')).toBeNull();
+    expect(compiled.querySelector('[data-testid="task-form-entity-field"]')).toBeFalsy();
   });
 
   it('should switch main workbench without router navigation so collaboration stays mounted', async () => {
@@ -4107,7 +4356,13 @@ describe('App', () => {
       businessComponents: [],
       businessConstructs: [],
       taskDefinitions: [],
-      services: [],
+      services: [{
+        uid: 'service-submit',
+        name: '提交入库预约应用接口',
+        method: 'POST',
+        path: '/inbound-reservations/submit',
+        nodeRefs: ['node-submit'],
+      }],
       terms: [],
       rules: [],
     };
@@ -5002,6 +5257,44 @@ describe('App', () => {
     expect(compiled.querySelectorAll('[data-testid="trash-doc-card"]')).toHaveLength(1);
   });
 
+  it('should normalize legacy string tags in the open document dialog', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/files/meta')) {
+        return new Response(JSON.stringify([
+          { name: 'agent.json', title: 'Agent', space: 'Agent', tags: '正式版, Test' },
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/trash')) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/load/agent.json')) {
+        return new Response(JSON.stringify({ document: { meta: { domain: 'Agent' }, processes: [] } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="no-document-open-button"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('[data-testid="open-document-dialog"]')).toBeTruthy();
+    expect(compiled.querySelector('[data-testid="open-space-tab"]')?.textContent).toContain('Agent');
+    expect(Array.from(compiled.querySelectorAll('.file-list-tags em')).map((item) => item.textContent?.trim())).toEqual(['正式版', 'Test']);
+
+    compiled.querySelector<HTMLElement>('[data-testid="workspace-doc-card"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="app-toast"]')?.textContent ?? '').not.toContain('map is not a function');
+  });
+
   it('should not show a blocking success toast after opening a document', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -5750,6 +6043,145 @@ describe('App', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('should keep terminal gateway and edge labels read-only before opening edit mode', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '仓库' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-readonly',
+          name: '查看态流程',
+          nodes: [{ uid: 'node-submit', name: '新增移垛申请', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+          flow: {
+            nodes: [{ id: 'gateway-check', uid: 'gateway-check', kind: 'gateway', title: '是否为期货仓单' }],
+            edges: [{ id: 'edge-check', uid: 'edge-check', from: 'node-submit', to: 'gateway-check', label: '现货' }],
+          },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-readonly';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.componentInstance.editing = false;
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const component = fixture.componentInstance as any;
+    const process = runtime.doc.processes[0] as any;
+    const gateway = compiled.querySelector<HTMLElement>('[data-testid="process-flow-gateway"]')!;
+    const edgePath = compiled.querySelector<SVGPathElement>('.flow-edge-hit')!;
+    const terminal = compiled.querySelector<HTMLElement>('[data-testid="process-flow-terminal"]')!;
+
+    gateway.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    edgePath.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    component.startNodeDrag({ clientX: 10, clientY: 10, button: 0, preventDefault: vi.fn(), target: terminal, currentTarget: terminal }, component.flowNodes(process)[0]);
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('.flow-gateway-name-input')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="process-flow-edge-label-input"]')).toBeFalsy();
+    expect(component.dragState()).toBeNull();
+  });
+
+  it('should let the process flow view stretch to the full workbench when sidebar is collapsed', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procView'] = 'flow';
+    runtime.ui['sidebarCollapsed'] = true;
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '仓库' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'proc-wide', name: '宽度流程', nodes: [] }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-wide';
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/process');
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const sidebar = compiled.querySelector<HTMLElement>('#sidebar')!;
+    const flowView = compiled.querySelector<HTMLElement>('.process-flow-view')!;
+    const styleRules = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from((sheet as CSSStyleSheet).cssRules || []))
+      .map((rule) => rule.cssText)
+      .join('\n');
+
+    expect(sidebar.style.width).toBe('0px');
+    expect(flowView).toBeTruthy();
+    expect(styleRules).toContain('.process-flow-view');
+    expect(styleRules).toContain('width: 100%');
+  });
+
+  it('should show flow edit shortcut hint and edit gateway name from the wrapped label', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '仓库' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-gateway-name',
+          name: '网关命名流程',
+          nodes: [{ uid: 'node-submit', name: '新增移垛申请', roleIds: ['role-a'], userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+          flow: {
+            nodes: [{ id: 'gateway-check', uid: 'gateway-check', kind: 'gateway', title: '是否为期货仓单结束' }],
+            edges: [
+              { id: 'edge-start', uid: 'edge-start', from: 'START', to: 'node-submit' },
+              { id: 'edge-check', uid: 'edge-check', from: 'node-submit', to: 'gateway-check', label: '现货' },
+            ],
+          },
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+    runtime.ui['procId'] = 'proc-gateway-name';
+
+    const fixture = TestBed.createComponent(ProcessFlowWorkbenchComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const component = fixture.componentInstance as any;
+    const process = runtime.doc.processes[0] as any;
+    const label = compiled.querySelector<HTMLElement>('[data-testid="process-flow-gateway-label"]')!;
+
+    expect(compiled.querySelector('[data-testid="process-flow-edit-shortcut"]')?.textContent).toContain('双击');
+    expect(getComputedStyle(label).whiteSpace).toBe('normal');
+    expect(component.flowNodes(process).find((node: any) => node.kind === 'start').x).toBeGreaterThan(100);
+
+    label.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    fixture.detectChanges();
+    const input = compiled.querySelector<HTMLInputElement>('.flow-gateway-name-input')!;
+    expect(input).toBeTruthy();
+    expect(getComputedStyle(input).width).not.toBe('62px');
+    input.value = '重新判断仓单类型';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(process.flow.nodes[0].title).toBe('重新判断仓单类型');
   });
 
   it('should copy a locator link for the current process node', async () => {

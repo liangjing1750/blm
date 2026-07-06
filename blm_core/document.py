@@ -13,6 +13,32 @@ DEFAULT_ROLE_NAME = "新角色"
 DEFAULT_STAGE_NAME = "业务阶段"
 SCHEMA_VERSION = 4
 
+TOP_LEVEL_LIST_FIELDS = (
+    "roles",
+    "language",
+    "stages",
+    "stageLinks",
+    "stageFlowRefs",
+    "stageFlowLinks",
+    "processes",
+    "entities",
+    "relations",
+    "rules",
+    "businessComponents",
+    "businessConstructs",
+    "taskDefinitions",
+    "serviceGroups",
+    "services",
+    "forms",
+)
+
+
+def _ensure_top_level_lists(doc: dict) -> None:
+    # 模块意图：后端是所有客户端写入的最后防线，不能假设历史文档或旧前端提交的集合字段一定还是数组。
+    for field in TOP_LEVEL_LIST_FIELDS:
+        if not isinstance(doc.get(field), list):
+            doc[field] = []
+
 STEP_TYPE_ALIASES = {
     "validate": "Check",
     "check": "Check",
@@ -912,6 +938,31 @@ def normalize_task_parameters(value) -> dict:
     }
 
 
+def normalize_service_parameters(value) -> list[dict]:
+    # 模块意图：应用接口的请求/响应参数是数组；任务定义参数才是 inputs/outputs 契约对象。
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict] = []
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, dict):
+            continue
+        param = dict(item)
+        _ensure_uid(param, prefix="service-param")
+        param["name"] = str(param.get("name", "")).strip()
+        param["type"] = str(param.get("type") or "String").strip()
+        param["required"] = bool(param.get("required", False))
+        param["description"] = str(param.get("description", param.get("note", ""))).strip()
+        children = normalize_service_parameters(param.get("children"))
+        if children:
+            param["children"] = children
+        else:
+            param.pop("children", None)
+        if not param["name"] and not param["description"]:
+            param["name"] = f"参数{index}"
+        normalized.append(param)
+    return normalized
+
+
 def normalize_field_type(field_type: str) -> str:
     if not field_type:
         return "string"
@@ -1675,11 +1726,7 @@ def migrate_document(document: dict | None) -> dict:
             doc[current_field] = doc.pop(legacy_field)
         else:
             doc.pop(legacy_field, None)
-    doc.setdefault("businessComponents", [])
-    doc.setdefault("businessConstructs", [])
-    doc.setdefault("taskDefinitions", [])
-    doc.setdefault("serviceGroups", [])
-    doc.setdefault("services", [])
+    _ensure_top_level_lists(doc)
 
     normalized_roles: list[dict] = []
     roles_by_uid: dict[str, dict] = {}
@@ -1774,8 +1821,8 @@ def migrate_document(document: dict | None) -> dict:
             for uid in service.get("nodeRefs", [])
             if str(uid).strip()
         ] if isinstance(service.get("nodeRefs"), list) else []
-        service["requestParams"] = normalize_task_parameters(service.get("requestParams", service.get("inputs", [])))
-        service["responseParams"] = normalize_task_parameters(service.get("responseParams", service.get("outputs", [])))
+        service["requestParams"] = normalize_service_parameters(service.get("requestParams", service.get("inputs", [])))
+        service["responseParams"] = normalize_service_parameters(service.get("responseParams", service.get("outputs", [])))
         orchestration = service.get("orchestration") if isinstance(service.get("orchestration"), dict) else {}
         steps = orchestration.get("steps", service.get("steps", []))
         normalized_steps = []

@@ -37,6 +37,9 @@ export interface LegacyTaskFormSection {
   uid?: string;
   name?: string;
   note?: string;
+  serviceUid?: string;
+  serviceId?: string;
+  serviceName?: string;
   entity_id?: string;
   entityId?: string;
   fields?: LegacyFormField[];
@@ -48,6 +51,9 @@ export interface LegacyTaskForm {
   name?: string;
   note?: string;
   purpose?: string;
+  serviceUid?: string;
+  serviceId?: string;
+  serviceName?: string;
   entity_id?: string;
   entityId?: string;
   fields?: LegacyFormField[];

@@ -185,6 +185,50 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(document["serviceGroups"], [])
         self.assertEqual(document["services"], [])
 
+    def test_canonical_document_normalizes_malformed_application_service_collections(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "Malformed services"},
+                "processes": [],
+                "serviceGroups": "bad",
+                "services": "bad",
+            }
+        )
+
+        self.assertEqual(document["serviceGroups"], [])
+        self.assertEqual(document["services"], [])
+
+    def test_canonical_document_normalizes_malformed_application_service_fields(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "Malformed service fields"},
+                "processes": [],
+                "serviceGroups": [{"uid": "sg-1", "name": "服务组"}],
+                "services": [
+                    {
+                        "uid": "svc-1",
+                        "name": "接口",
+                        "taskDefinitionUids": "bad",
+                        "nodeRefs": "bad",
+                        "requestParams": "bad",
+                        "responseParams": "bad",
+                        "orchestration": {
+                            "variables": "bad",
+                            "steps": "bad",
+                            "returnMapping": "bad",
+                        },
+                    }
+                ],
+            }
+        )
+
+        service = document["services"][0]
+        self.assertEqual(service["taskDefinitionUids"], [])
+        self.assertEqual(service["nodeRefs"], [])
+        self.assertEqual(service["requestParams"], [])
+        self.assertEqual(service["responseParams"], [])
+        self.assertEqual(service["orchestration"], {"variables": [], "steps": [], "returnMapping": []})
+
     def test_canonical_document_maps_entity_business_construct_reference_to_uid(self):
         document = canonical_document(
             {

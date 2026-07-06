@@ -342,28 +342,32 @@
   opacity: .25;
 }
 
-.flow-gateway span {
+.flow-gateway-label {
   position: absolute;
   left: 50%;
   top: 22px;
   display: block;
-  max-width: 90px;
-  max-height: 28px;
+  width: max-content;
+  max-width: 96px;
   transform: translateX(-50%);
-  overflow: hidden;
-  white-space: nowrap;
+  white-space: normal;
   line-height: 1.25;
-  text-overflow: ellipsis;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-size: 11px;
 }
 
 .flow-gateway-name-input {
-  width: 62px;
-  height: 24px;
-  padding: 0 4px;
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  z-index: 8;
+  width: 128px;
+  min-height: 28px;
+  transform: translateX(-50%);
+  padding: 3px 6px;
   border: 1px solid #93c5fd;
-  border-radius: 5px;
+  border-radius: 6px;
   background: #fff;
   color: #0f172a;
   font-size: 11px;

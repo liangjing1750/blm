@@ -74,11 +74,6 @@
       </div>
     </div>
 
-    <div class="toolbar-history-actions" aria-label="文档编辑历史">
-      <button class="btn btn-ghost toolbar-icon-btn" type="button" data-testid="toolbar-undo-button" [disabled]="!canUndoDocumentEdit()" title="撤销 Ctrl+Z" (click)="undoDocumentEdit()">↶ 撤销</button>
-      <button class="btn btn-ghost toolbar-icon-btn" type="button" data-testid="toolbar-redo-button" [disabled]="!canRedoDocumentEdit()" title="重做 Ctrl+Y / Ctrl+Shift+Z" (click)="redoDocumentEdit()">↷ 重做</button>
-    </div>
-
     <button class="btn btn-primary" type="button" id="btn-save" data-testid="toolbar-sync-button" [disabled]="busy()" (click)="syncNow()">立即同步</button>
 
     <div class="tbar-dd">
@@ -282,8 +277,8 @@
                 <span class="workspace-doc-title">{{ file.title || file.name }}</span>
                 <span class="workspace-doc-name">{{ file.name }}</span>
                 <span class="workspace-doc-meta">{{ file.author ? '作者 ' + file.author : '未填写作者' }}{{ file.date ? ' · ' + file.date : '' }}</span>
-                <span class="file-list-tags" *ngIf="file.tags?.length; else noWorkspaceTags">
-                  <em *ngFor="let tag of file.tags?.slice(0, 5)">{{ tag }}</em>
+                <span class="file-list-tags" *ngIf="workspaceFileTags(file).length; else noWorkspaceTags">
+                  <em *ngFor="let tag of workspaceFileTags(file).slice(0, 5)">{{ tag }}</em>
                 </span>
                 <ng-template #noWorkspaceTags>
                   <span class="workspace-doc-no-tags">无标签</span>

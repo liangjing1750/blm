@@ -96,6 +96,9 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   @Input() editing = true;
   private autoResizeScheduled = false;
+  private autoResizeVersion = -1;
+  private readonly normalizedFormVersions = new WeakMap<LegacyTaskForm, number>();
+  private readonly taskFormsCache = new WeakMap<LegacyProcessNode, { version: number; forms: LegacyTaskForm[] }>();
 
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {
@@ -111,7 +114,10 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   ngAfterViewChecked(): void {
+    const currentVersion = this.version();
+    if (this.autoResizeVersion === currentVersion) return;
     if (this.autoResizeScheduled) return;
+    this.autoResizeVersion = currentVersion;
     this.autoResizeScheduled = true;
     queueMicrotask(() => {
       this.autoResizeScheduled = false;
@@ -236,9 +242,76 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     return String(service?.uid || service?.id || service?.name || '').trim();
   }
 
+  protected formServiceOptions(task: LegacyProcessNode): ProcessApplicationService[] {
+    const linkedServices = this.applicationServicesForTask(task);
+    return linkedServices.length ? linkedServices : this.applicationServices();
+  }
+
+  protected formServiceId(form: LegacyTaskForm): string {
+    return String(form.serviceUid || form.serviceId || '').trim();
+  }
+
+  protected formSectionServiceId(section: LegacyTaskFormSection): string {
+    return String(section.serviceUid || section.serviceId || '').trim();
+  }
+
+  protected formServiceSummary(form: LegacyTaskForm, task: LegacyProcessNode): string {
+    const service = this.formService(form, task);
+    if (!service) return '未关联接口需求';
+    const method = String(service.method || '').trim().toUpperCase();
+    const path = String(service.path || '').trim();
+    return [method, path].filter(Boolean).join(' ') || service.name || this.serviceId(service);
+  }
+
+  protected formSectionServiceSummary(section: LegacyTaskFormSection, task: LegacyProcessNode): string {
+    const service = this.formSectionService(section, task);
+    if (!service) return '未关联接口需求';
+    const method = String(service.method || '').trim().toUpperCase();
+    const path = String(service.path || '').trim();
+    return [method, path].filter(Boolean).join(' ') || service.name || this.serviceId(service);
+  }
+
+  protected setFormService(form: LegacyTaskForm, task: LegacyProcessNode, value: string): void {
+    if (!this.editing) return;
+    const service = this.formServiceOptions(task).find((item) => this.serviceId(item) === value);
+    form.serviceUid = value;
+    form.serviceId = value;
+    form.serviceName = service?.name || '';
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected setFormSectionService(section: LegacyTaskFormSection, task: LegacyProcessNode, value: string): void {
+    if (!this.editing) return;
+    const service = this.formServiceOptions(task).find((item) => this.serviceId(item) === value);
+    section.serviceUid = value;
+    section.serviceId = value;
+    section.serviceName = service?.name || '';
+    this.adapter.touch();
+    this.refresh();
+  }
+
   private applicationServices(): ProcessApplicationService[] {
     const doc = getAngularRuntimeState().doc as { services?: ProcessApplicationService[] } | null | undefined;
     return Array.isArray(doc?.services) ? doc.services : [];
+  }
+
+  private formService(form: LegacyTaskForm, task: LegacyProcessNode): ProcessApplicationService | null {
+    const explicitId = this.formServiceId(form);
+    const options = this.formServiceOptions(task);
+    if (explicitId) {
+      return options.find((service) => this.serviceId(service) === explicitId) || this.applicationServices().find((service) => this.serviceId(service) === explicitId) || null;
+    }
+    return null;
+  }
+
+  private formSectionService(section: LegacyTaskFormSection, task: LegacyProcessNode): ProcessApplicationService | null {
+    const explicitId = this.formSectionServiceId(section);
+    const options = this.formServiceOptions(task);
+    if (explicitId) {
+      return options.find((service) => this.serviceId(service) === explicitId) || this.applicationServices().find((service) => this.serviceId(service) === explicitId) || null;
+    }
+    return null;
   }
 
   private referenceKeys(values: Array<string | undefined>): string[] {
@@ -688,11 +761,15 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected forms(task: LegacyProcessNode): LegacyTaskForm[] {
+    const currentVersion = this.version();
+    const cached = this.taskFormsCache.get(task);
+    if (cached?.version === currentVersion) return cached.forms;
     task.forms ||= [];
-    // 模块意图：节点视图负责把旧版扁平表单升级为“表单-分组-字段”的维护界面。
-    // 关键流程：读取表单时统一规范化，后续模板和操作方法只面对稳定结构。
-    // 边界细节：仍同步回 form.fields，保证尚未迁移的统计和导出逻辑不失效。
-    task.forms.forEach((form, index) => this.normalizeForm(form, index));
+    // 模块意图：节点视图负责把旧版扁平表单升级为“表单-分组-字段”的维护界面，同时避免大流程在普通滚动/点击中重复升级。
+    // 关键流程：读取表单时按视图版本统一规范化；写操作会调用 refresh() 推进 version，从而自然失效缓存。
+    // 边界细节：仍同步回 form.fields，保证尚未迁移的统计和导出逻辑不失效；返回原数组引用，避免破坏双向绑定。
+    task.forms.forEach((form, index) => this.normalizeFormForCurrentVersion(form, index, currentVersion));
+    this.taskFormsCache.set(task, { version: currentVersion, forms: task.forms });
     return task.forms;
   }
 
@@ -701,7 +778,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected sections(form: LegacyTaskForm): LegacyTaskFormSection[] {
-    this.normalizeForm(form, 0);
+    this.normalizeFormForCurrentVersion(form, 0, this.version());
     return form.sections || [];
   }
 
@@ -1110,12 +1187,14 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     if (!this.editing) return;
     task.forms ||= [];
     const id = this.nextLocalId('F', task.forms);
+    const defaultService = this.formServiceOptions(task)[0] || null;
+    const defaultServiceId = this.serviceId(defaultService);
     task.forms.push({
       id,
       uid: id,
       name: `表单${task.forms.length + 1}`,
       purpose: '',
-      sections: [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: '', fields: [] }],
+      sections: [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', serviceUid: defaultServiceId, serviceId: defaultServiceId, serviceName: defaultService?.name || '', entity_id: '', fields: [] }],
     });
     this.adapter.touch();
     this.refresh();
@@ -1286,7 +1365,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     if (!this.editing) return;
     const sections = this.sections(form);
     const id = this.nextLocalId('SEC', sections);
-    const section: LegacyTaskFormSection = { id, uid: id, name: `分组${sections.length + 1}`, note: '', entity_id: '', fields: [] };
+    const section: LegacyTaskFormSection = { id, uid: id, name: `分组${sections.length + 1}`, note: '', serviceUid: '', serviceId: '', entity_id: '', fields: [] };
     const index = afterSection ? sections.indexOf(afterSection) : -1;
     sections.splice(index >= 0 ? index + 1 : sections.length, 0, section);
     this.adapter.touch();
@@ -1511,6 +1590,15 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     }, 1800);
   }
 
+  private normalizeFormForCurrentVersion(form: LegacyTaskForm, index: number, version: number): void {
+    // 模块意图：把旧表单兼容逻辑收束到版本边界，避免模板多次读取时反复写同一份表单结构。
+    // 关键流程：同一个 form 在同一个 version 内只运行一次 normalizeForm；任何模型写入都会 refresh 并进入下一版本。
+    // 边界细节：WeakMap 不持有文档生命周期之外的引用，切换文档或节点后不会阻止旧对象释放。
+    if (this.normalizedFormVersions.get(form) === version) return;
+    this.normalizeForm(form, index);
+    this.normalizedFormVersions.set(form, version);
+  }
+
   private normalizeForm(form: LegacyTaskForm, index: number): void {
     // 模块意图：兼容旧文档中的 flat fields，同时支撑新版分组编辑。
     // 关键流程：缺少 sections 或新版分组尚未承接字段时，创建/复用默认分组，把既有 fields 原样挂进去。
@@ -1518,6 +1606,9 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     const legacyFields = Array.isArray(form.fields) ? form.fields : [];
     form.id ||= form.uid || `F${index + 1}`;
     form.uid ||= form.id;
+    const serviceId = String(form.serviceUid || form.serviceId || '').trim();
+    form.serviceUid = serviceId;
+    form.serviceId = serviceId;
     if (!Array.isArray(form.sections)) {
       form.sections = [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', entity_id: form.entity_id || form.entityId || '', fields: legacyFields }];
     }
@@ -1533,6 +1624,9 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
       section.uid ||= section.id;
       section.name ||= `分组${sectionIndex + 1}`;
       section.note ||= '';
+      const sectionServiceId = String(section.serviceUid || section.serviceId || '').trim();
+      section.serviceUid = sectionServiceId;
+      section.serviceId = sectionServiceId;
       section.entity_id = String(section.entity_id || section.entityId || form.entity_id || form.entityId || '').trim();
       section.fields ||= [];
       section.fields.forEach((field, fieldIndex) => {

@@ -211,7 +211,8 @@
   grid-template-columns: minmax(180px, 1fr) auto;
 }
 
-.task-form-entity-summary {
+.task-form-entity-summary,
+.task-form-service-summary {
   display: inline-flex;
   min-height: 28px;
   align-items: center;

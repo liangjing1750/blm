@@ -92,6 +92,9 @@ export interface EntityOperation {
 export interface ProcessForm {
   uid: string;
   name: string;
+  serviceUid?: string;
+  serviceId?: string;
+  serviceName?: string;
   entity_uid?: string;
   entity_id?: string;
 }
@@ -154,11 +157,16 @@ export interface TaskDefinition {
 }
 
 export interface TaskParameter {
+  uid?: string;
   name: string;
   type: string;
   required?: boolean;
+  code?: string;
+  description?: string;
+  example?: string;
   note?: string;
   desc?: string;
+  children?: TaskParameter[];
 }
 
 export interface TaskParameterBag {

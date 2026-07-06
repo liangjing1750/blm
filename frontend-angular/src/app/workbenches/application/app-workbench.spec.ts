@@ -14,13 +14,27 @@ describe('ApplicationWorkbenchComponent', () => {
     runtime.ui['applicationWorkbenchTab'] = 'service';
     runtime.doc = {
       meta: { domain: 'Application Workbench Test' },
-      serviceGroups: [{ uid: 'service-group-1', name: '订单服务', desc: '' }],
+      serviceGroups: [
+        { uid: 'service-group-1', name: '订单服务', desc: '' },
+        { uid: 'service-group-2', name: '库存服务', desc: '' },
+      ],
       services: [{
         uid: 'svc-1',
         name: '提交订单',
         serviceGroupUid: 'service-group-1',
         method: 'POST',
         path: '/orders',
+        desc: '',
+        requestParams: [],
+        responseParams: [],
+        parameterMappings: [],
+        nodeRefs: [],
+      }, {
+        uid: 'svc-2',
+        name: '查询库存',
+        serviceGroupUid: 'service-group-2',
+        method: 'GET',
+        path: '/stock',
         desc: '',
         requestParams: [],
         responseParams: [],
@@ -116,6 +130,13 @@ describe('ApplicationWorkbenchComponent', () => {
   });
 
   it('shows interface details in read-only mode when editing is closed', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services[0].requestParams = [
+      { name: 'orderId', type: 'String', required: true, note: 'order id note' },
+    ];
+    runtime.doc.services[0].responseParams = [
+      { name: 'result', type: 'Object', required: false, note: 'result note' },
+    ];
     host.querySelector<HTMLElement>('[data-testid="interface-card-svc-1"]')?.click();
     fixture.detectChanges();
 
@@ -124,8 +145,23 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(detail?.textContent).toContain('/orders');
     expect(detail?.textContent).toContain('请求参数');
     expect(detail?.textContent).toContain('响应参数');
+    expect(detail?.textContent).toContain('orderId');
+    expect(detail?.textContent).toContain('String');
+    expect(detail?.textContent).toContain('必填');
+    expect(detail?.textContent).toContain('order id note');
+    expect(detail?.querySelectorAll('.app-param-table th')).toHaveLength(8);
     expect(host.querySelector('[data-testid="service-interface-drawer"]')).toBeFalsy();
     expect(detail?.querySelector('input')).toBeFalsy();
+  });
+
+  it('keeps application service columns as independent scroll regions', () => {
+    const nav = host.querySelector<HTMLElement>('[data-testid="service-group-rail"]');
+    const list = host.querySelector<HTMLElement>('[data-testid="application-interface-list"]');
+    const detail = host.querySelector<HTMLElement>('[data-testid="application-interface-detail"]');
+
+    expect(getComputedStyle(nav!).overflowY).toBe('auto');
+    expect(getComputedStyle(list!).overflowY).toBe('auto');
+    expect(getComputedStyle(detail!).overflowY).toBe('auto');
   });
 
   it('keeps application service mutations read-only until the editor is opened', () => {
@@ -155,6 +191,93 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-service-group-1"]')).toBeTruthy();
   });
 
+  it('centers the interface editor and keeps backdrop clicks from closing it', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    const overlay = host.querySelector<HTMLElement>('[data-testid="service-interface-drawer"]');
+    expect(overlay).toBeTruthy();
+    expect(overlay?.classList.contains('app-service-modal-overlay')).toBe(true);
+    expect(getComputedStyle(overlay!).justifyContent).toBe('center');
+
+    overlay?.click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="service-interface-drawer"]')).toBeTruthy();
+  });
+
+  it('uses a compact auto-save interface editor with header delete and no footer save actions', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    const drawer = host.querySelector<HTMLElement>('[data-testid="service-interface-drawer"]')!;
+    expect(drawer.querySelector('[data-testid="service-save-svc-1"]')).toBeFalsy();
+    expect(drawer.querySelector('.drawer-actions')).toBeFalsy();
+    expect(drawer.querySelector('[data-testid="interface-delete-svc-1"]')).toBeTruthy();
+    expect(drawer.querySelector('.drawer-head [data-testid="interface-delete-svc-1"]')).toBeTruthy();
+    expect(drawer.querySelector<HTMLSelectElement>('[data-testid="interface-method-svc-1"]')?.classList.contains('svc-method-select')).toBe(true);
+    expect(drawer.querySelector<HTMLInputElement>('[data-testid="interface-name-svc-1"]')?.classList.contains('svc-edit-name')).toBe(true);
+    expect(drawer.querySelector<HTMLInputElement>('[data-testid="interface-path-svc-1"]')?.classList.contains('svc-edit-path')).toBe(true);
+    const note = drawer.querySelector<HTMLTextAreaElement>('[data-testid="interface-desc-svc-1"]')!;
+    expect(note.rows).toBe(1);
+    expect(note.classList.contains('svc-edit-note--compact')).toBe(true);
+  });
+
+  it('switches interface parameters between list and json views', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services[0].requestParams = [{ name: 'orderId', type: 'String', required: true, note: 'order id' }];
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="service-request-param-name-0"]')).toBeTruthy();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-param-json-view-requestParams"]')?.click();
+    fixture.detectChanges();
+
+    const json = host.querySelector<HTMLTextAreaElement>('[data-testid="service-param-json-requestParams"]');
+    expect(json).toBeTruthy();
+    expect(json?.value).toContain('orderId');
+    expect(host.querySelector('[data-testid="service-request-param-name-0"]')).toBeFalsy();
+
+    json!.value = '[{"name":"customerId","type":"String","required":false,"note":"customer"}]';
+    json!.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(runtime.doc.services[0].requestParams[0].name).toBe('customerId');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="service-param-list-view-requestParams"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLInputElement>('[data-testid="service-request-param-name-0"]')?.value).toBe('customerId');
+  });
+
+  it('offers add move up move down and delete actions for interface parameters', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services[0].requestParams = [
+      { name: 'first', type: 'String', required: false, note: '' },
+      { name: 'second', type: 'String', required: false, note: '' },
+    ];
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="service-request-param-add-0"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="service-request-param-up-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="service-request-param-down-0"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="service-request-param-delete-0"]')).toBeTruthy();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="service-request-param-up-1"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.doc.services[0].requestParams.map((param: any) => param.name)).toEqual(['second', 'first']);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="service-request-param-add-0"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.doc.services[0].requestParams).toHaveLength(3);
+  });
+
   it('uses task definition parameters as orchestration mapping targets', () => {
     const runtime = getAngularRuntimeState();
     runtime.ui['applicationWorkbenchTab'] = 'orchestration';
@@ -177,6 +300,27 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(targetOptions).toContain('orderId');
     expect(targetOptions).not.toContain('manualOnlyParam');
     expect(host.querySelector('[data-testid="required-param-warning-step-1-orderId"]')?.textContent).toContain('必填未映射');
+  });
+
+  it('cascades orchestration interface selection by application service and labels steps as tasks', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="application-orchestration-tab"]')?.click();
+    fixture.detectChanges();
+
+    const groupSelect = host.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-group-select"]');
+    const interfaceSelect = host.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-select"]');
+    expect(groupSelect).toBeTruthy();
+    expect(host.querySelector('.orch-toolbar')?.textContent).toContain('应用服务');
+    expect(host.querySelector('.orch-toolbar')?.textContent).toContain('应用接口');
+
+    groupSelect!.value = 'service-group-2';
+    groupSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    const cascadedInterfaceSelect = host.querySelector<HTMLSelectElement>('[data-testid="orchestration-service-select"]');
+    expect(cascadedInterfaceSelect?.value).toBe('svc-2');
+    expect(Array.from(cascadedInterfaceSelect!.options).map((option) => option.value)).toEqual(['svc-2']);
+    expect(host.querySelector('[data-testid="orchestration-step-list"]')?.textContent).toContain('编排任务');
+    expect(host.querySelector('[data-testid="orchestration-step-list"]')?.textContent).not.toContain('编排步骤');
   });
 
   it('warns before reordering steps and clears mappings whose source is no longer in context', async () => {

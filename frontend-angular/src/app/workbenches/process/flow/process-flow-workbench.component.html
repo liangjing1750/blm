@@ -31,6 +31,11 @@
           <input type="text" data-testid="process-flow-outcome-input" [readonly]="!editing" [ngModel]="process.outcome || ''" (ngModelChange)="setProcessField('outcome', $event)" />
         </label>
       </header>
+      @if (editing) {
+        <div class="process-flow-edit-shortcut" data-testid="process-flow-edit-shortcut">
+          <strong>双击</strong>可以修改节点、网关和连线的描述
+        </div>
+      }
 
       <section class="process-flow-body">
         @if (editing) {
@@ -84,7 +89,7 @@
                   @if (editing && isEditingNodeName(node) && node.gateway) {
                     <input class="flow-gateway-name-input" [id]="nodeNameInputId(node)" type="text" [ngModel]="editableNodeName(node)" (ngModelChange)="setEditableNodeName(node, $event)" (keydown)="handleNodeNameKeydown($event)" (blur)="finishNodeNameEdit($event)" (click)="$event.stopPropagation()" />
                   } @else {
-                    <span>{{ node.name }}</span>
+                    <span class="flow-gateway-label" data-testid="process-flow-gateway-label" title="双击修改网关名称" (dblclick)="startNodeNameEdit(node, $event)">{{ node.name }}</span>
                   }
                   @if (editing) { <span class="flow-gateway-edit-icon" (pointerdown)="$event.stopPropagation()" (click)="startNodeNameEdit(node, $event)" title="\u4fee\u6539\u540d\u79f0">&#x270e;</span> }
                 </div>
@@ -129,7 +134,7 @@
                   }
                 </div>
               }
-              @if (selectedElementId() === node.baseId || selectedElementId() === node.id) {
+              @if (editing && (selectedElementId() === node.baseId || selectedElementId() === node.id)) {
                 <div class="flow-connect-box" [style.left.px]="node.x - 2" [style.top.px]="node.y - 2" [style.width.px]="node.width + 4" [style.height.px]="node.height + 4" (click)="$event.stopPropagation()">
                   @for (anchor of connectAnchors(node); track anchor.id) {
                     <button type="button" class="connect-anchor" [class]="anchor.side" [style.left.px]="anchor.x - node.x" [style.top.px]="anchor.y - node.y" (pointerdown)="startConnectFromAnchor($event, node.baseId)" (click)="startConnectFromAnchor($event, node.baseId)">+</button>

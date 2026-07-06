@@ -60,12 +60,31 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
+.node-progress-guide--vertical {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+  padding: 10px 6px;
+  border: 1px solid #d7e4f3;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, .03);
+}
+
 .node-progress-track {
   height: 4px;
   margin: 0 22px 8px;
   overflow: hidden;
   border-radius: 999px;
   background: #e8eef6;
+}
+
+.node-progress-guide--vertical .node-progress-track {
+  width: 4px;
+  height: 100%;
+  min-height: 180px;
+  margin: 2px auto;
 }
 
 .node-progress-track span {
@@ -75,10 +94,20 @@
   background: linear-gradient(90deg, #3b82f6, #22c55e);
 }
 
+.node-progress-guide--vertical .node-progress-track span {
+  width: 100%;
+  background: linear-gradient(180deg, #3b82f6, #22c55e);
+}
+
 .node-progress-steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.node-progress-guide--vertical .node-progress-steps {
+  grid-template-columns: 1fr;
+  align-content: start;
 }
 
 .node-progress-step {
@@ -96,6 +125,19 @@
   text-align: left;
 }
 
+.node-progress-guide--vertical .node-progress-step {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  min-height: 88px;
+  padding: 7px 4px;
+  text-align: center;
+}
+
+.node-progress-guide--vertical .node-progress-step em {
+  grid-column: auto;
+  justify-self: center;
+}
+
 .node-progress-step span,
 .node-progress-step em {
   display: inline-grid;
@@ -111,10 +153,17 @@
 }
 
 .node-progress-step b {
-  overflow: hidden;
+  overflow: visible;
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.05;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.node-progress-guide--vertical .node-progress-step b {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0;
 }
 
 .node-progress-step.done {
@@ -265,7 +314,7 @@
 
 .node-task-form-card .task-form-card-head {
   display: grid;
-  grid-template-columns: 40px minmax(220px, 1fr) auto auto auto;
+  grid-template-columns: 40px minmax(220px, 1fr) minmax(220px, 0.8fr) auto auto auto auto;
   gap: 6px;
   align-items: center;
 }

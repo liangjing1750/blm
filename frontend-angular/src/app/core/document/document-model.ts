@@ -32,6 +32,10 @@ const EMPTY_ARRAY_FIELDS = [
   'rules',
 ] as const;
 
+function asArray<T = any>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export function identityOf(item: { uid?: string; id?: string } | null | undefined): string {
   return String(item?.uid || item?.id || '').trim();
 }
@@ -182,11 +186,13 @@ function legacyNodeTaskDefinitionUids(node: Process['nodes'][number]): string[] 
   const nodeLike = node as Process['nodes'][number] & {
     tasks?: Array<string | { taskDefinitionUid?: string; taskDefUid?: string; uid?: string; id?: string }>;
     taskDefinitions?: Array<string | { uid?: string; id?: string }>;
+    orchestrationTasks?: Array<string | { taskDefinitionUid?: string; taskDefinitionId?: string; taskDefUid?: string; uid?: string; id?: string }>;
   };
   return uniqueStrings([
     ...(node.taskDefinitionUids || []),
     ...(nodeLike.tasks || []).map((task) => typeof task === 'string' ? task : task.taskDefinitionUid || task.taskDefUid || task.uid || task.id || ''),
     ...(nodeLike.taskDefinitions || []).map((task) => typeof task === 'string' ? task : task.uid || task.id || ''),
+    ...(nodeLike.orchestrationTasks || []).map((task) => typeof task === 'string' ? task : task.taskDefinitionUid || task.taskDefinitionId || task.taskDefUid || task.uid || task.id || ''),
   ]);
 }
 
@@ -245,28 +251,39 @@ function normalizeTaskParameters(parameters: TaskDefinition['parameters'] | Task
   if (Array.isArray(parameters)) {
     return { inputs: normalizeParameters(parameters), outputs: [] };
   }
+  const bag = parameters && typeof parameters === 'object' ? parameters : {};
   return {
-    inputs: normalizeParameters(parameters?.inputs || []),
-    outputs: normalizeParameters(parameters?.outputs || []),
+    inputs: normalizeParameters(asArray((bag as TaskParameterBag).inputs)),
+    outputs: normalizeParameters(asArray((bag as TaskParameterBag).outputs)),
   };
 }
 
 function normalizeParameters(parameters: TaskParameter[] | null | undefined): TaskParameter[] {
-  return (parameters || [])
-    .map((parameter) => ({
-      ...parameter,
-      name: String(parameter.name || '').trim(),
-      type: String(parameter.type || 'String').trim(),
-      required: Boolean(parameter.required),
-      note: parameter.note ?? parameter.desc,
-    }))
+  return asArray(parameters)
+    .filter((parameter): parameter is TaskParameter => Boolean(parameter && typeof parameter === 'object'))
+    .map((parameter) => {
+      const children = normalizeParameters(asArray(parameter.children));
+      const code = String(parameter.code ?? parameter.description ?? '').trim();
+      const note = parameter.note ?? parameter.example ?? parameter.desc ?? '';
+      return {
+        ...parameter,
+        name: String(parameter.name || '').trim(),
+        type: String(parameter.type || 'String').trim(),
+        required: Boolean(parameter.required),
+        ...(code ? { code, description: code } : {}),
+        note,
+        ...(parameter.example !== undefined ? { example: String(parameter.example || '') } : {}),
+        ...(children.length ? { children } : {}),
+      };
+    })
     .filter((parameter) => parameter.name);
 }
 
 function normalizeServiceParameters(parameters: ServiceParameter[] | null | undefined): ServiceParameter[] {
-  return (parameters || [])
+  return asArray(parameters)
+    .filter((parameter): parameter is ServiceParameter => Boolean(parameter && typeof parameter === 'object'))
     .map((parameter) => {
-      const children = normalizeServiceParameters(parameter.children || []);
+      const children = normalizeServiceParameters(asArray(parameter.children));
       return {
         ...parameter,
         name: String(parameter.name || '').trim(),
@@ -281,9 +298,9 @@ function normalizeServiceParameters(parameters: ServiceParameter[] | null | unde
 
 function normalizeService(document: BlmDocument, service: ApplicationService, index: number): ApplicationService {
   const uid = identityOf(service) || `service-${index + 1}`;
-  const legacyInputs = (service as unknown as { inputs?: ServiceParameter[] }).inputs || [];
-  const legacyOutputs = (service as unknown as { outputs?: ServiceParameter[] }).outputs || [];
-  const taskDefinitionUids = uniqueStrings(service.taskDefinitionUids || legacyStepTaskUids(service));
+  const legacyInputs = asArray((service as unknown as { inputs?: ServiceParameter[] }).inputs);
+  const legacyOutputs = asArray((service as unknown as { outputs?: ServiceParameter[] }).outputs);
+  const taskDefinitionUids = uniqueStrings(asArray(service.taskDefinitionUids).concat(legacyStepTaskUids(service)));
   const orchestration = normalizeServiceOrchestration(document, uid, service);
   const normalizedTaskDefinitionUids = taskDefinitionUids.length
     ? taskDefinitionUids
@@ -297,9 +314,9 @@ function normalizeService(document: BlmDocument, service: ApplicationService, in
     path: String(service.path || '').trim(),
     desc: String(service.desc || '').trim(),
     taskDefinitionUids: normalizedTaskDefinitionUids,
-    nodeRefs: uniqueStrings(service.nodeRefs || []),
-    requestParams: normalizeServiceParameters(service.requestParams || legacyInputs),
-    responseParams: normalizeServiceParameters(service.responseParams || legacyOutputs),
+    nodeRefs: uniqueStrings(asArray(service.nodeRefs)),
+    requestParams: normalizeServiceParameters(asArray(service.requestParams).length ? asArray(service.requestParams) : legacyInputs),
+    responseParams: normalizeServiceParameters(asArray(service.responseParams).length ? asArray(service.responseParams) : legacyOutputs),
     orchestration,
   };
   return normalized;
@@ -310,15 +327,17 @@ function normalizeServiceOrchestration(
   serviceUid: string,
   service: ApplicationService,
 ): ServiceOrchestration {
-  const existing = service.orchestration;
+  const existing = service.orchestration && typeof service.orchestration === 'object' ? service.orchestration : undefined;
   const legacySteps = legacyStepTaskUids(service).map((taskDefinitionUid, index) => legacyTaskStep(document, serviceUid, taskDefinitionUid, index));
-  const steps = existing?.steps?.length
-    ? existing.steps.map((step, index) => normalizeOrchestrationStep(document, serviceUid, step, index))
+  const existingSteps = asArray(existing?.steps)
+    .filter((step): step is OrchestrationStep => Boolean(step && typeof step === 'object'));
+  const steps = existingSteps.length
+    ? existingSteps.map((step, index) => normalizeOrchestrationStep(document, serviceUid, step, index))
     : legacySteps;
   return {
-    variables: existing?.variables || [],
+    variables: asArray(existing?.variables),
     steps,
-    returnMapping: existing?.returnMapping || [],
+    returnMapping: asArray(existing?.returnMapping),
   };
 }
 
@@ -335,16 +354,16 @@ function normalizeOrchestrationStep(
     name: String(step.name || task?.name || `步骤${index + 1}`).trim(),
     stepAlias: String(step.stepAlias || `step${index + 1}`).trim(),
     taskDefinitionUid,
-    inputMapping: step.inputMapping || [],
-    outputMapping: step.outputMapping || [],
+    inputMapping: asArray(step.inputMapping),
+    outputMapping: asArray(step.outputMapping),
   };
 }
 
 function legacyStepTaskUids(service: ApplicationService): string[] {
-  const legacySteps = (service as unknown as { steps?: Array<{ taskDefUid?: string; taskDefinitionUid?: string }> }).steps || [];
+  const legacySteps = asArray((service as unknown as { steps?: Array<{ taskDefUid?: string; taskDefinitionUid?: string }> }).steps);
   return uniqueStrings([
-    ...(service.taskDefinitionUids || []),
-    ...legacySteps.map((step) => step.taskDefinitionUid || step.taskDefUid || ''),
+    ...asArray(service.taskDefinitionUids),
+    ...legacySteps.map((step) => step && typeof step === 'object' ? step.taskDefinitionUid || step.taskDefUid || '' : ''),
   ]);
 }
 

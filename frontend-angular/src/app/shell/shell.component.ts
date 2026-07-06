@@ -1568,6 +1568,10 @@ export class ShellComponent implements OnInit, OnDestroy {
     return this.openDocumentQuery.pageItems(this.filteredWorkspaceFiles(), this.workspacePage());
   }
 
+  protected workspaceFileTags(file: WorkspaceSummary): string[] {
+    return this.openDocumentQuery.normalizeTags(file.tags);
+  }
+
   protected workspaceTotalPages(): number {
     return this.openDocumentQuery.totalPages(this.filteredWorkspaceFiles().length);
   }
@@ -1602,7 +1606,7 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   private async refreshWorkspaceFiles(): Promise<void> {
     const summaries = await this.api.fileSummaries().catch(() => []);
-    this.workspaceFiles.set(summaries);
+    this.workspaceFiles.set(this.normalizeWorkspaceSummaries(summaries));
   }
 
   private async refreshOpenDialogData(): Promise<void> {
@@ -1610,13 +1614,22 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.api.fileSummaries().catch(() => []),
       this.api.trash().catch(() => []),
     ]);
-    this.workspaceFiles.set(summaries);
-    this.trashEntries.set(trashEntries);
-    this.syncSelectedTrashIds(trashEntries);
+    const safeTrashEntries = Array.isArray(trashEntries) ? trashEntries : [];
+    this.workspaceFiles.set(this.normalizeWorkspaceSummaries(summaries));
+    this.trashEntries.set(safeTrashEntries);
+    this.syncSelectedTrashIds(safeTrashEntries);
     this.ensureActiveOpenSpace();
     this.ensureActiveOpenTag();
     this.workspacePage.set(this.openDocumentQuery.clampPage(this.workspacePage(), this.workspaceTotalPages()));
     this.trashPage.set(this.openDocumentQuery.clampPage(this.trashPage(), this.trashTotalPages()));
+  }
+
+  private normalizeWorkspaceSummaries(summaries: unknown): WorkspaceSummary[] {
+    if (!Array.isArray(summaries)) return [];
+    return summaries.map((summary) => ({
+      ...summary,
+      tags: this.openDocumentQuery.normalizeTags(summary.tags),
+    }));
   }
 
   private ensureActiveOpenSpace(): void {

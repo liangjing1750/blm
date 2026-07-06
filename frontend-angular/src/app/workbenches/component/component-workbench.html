@@ -170,6 +170,12 @@
         </div>
       </header>
       <div class="business-mindmap-canvas" data-testid="business-mindmap-canvas" tabindex="0" (wheel)="onMindMapWheel($event)" (keydown)="onMindMapKeydown($event)">
+        <aside class="business-mindmap-legend" data-testid="business-mindmap-legend" aria-label="业务组件地图图例">
+          <span class="legend-component">组件</span>
+          <span class="legend-construct">构件</span>
+          <span class="legend-entity">实体</span>
+          <span class="legend-task">任务</span>
+        </aside>
         <div class="business-mindmap-stage has-rootless-map" [style.transform]="'scale(' + mindMapZoom() + ')'">
           <div class="mind-groups">
             @for (group of groupedTreeComponents(); track group.kind) {
@@ -179,7 +185,7 @@
                   <span>{{ group.components.length }} 个组件</span>
                 </header>
                 @for (comp of group.components; track uid(comp)) {
-                  <article class="mind-row">
+                  <article class="mind-row" [class.is-related]="isMindComponentRelated(comp)">
                     <button class="mind-node mind-node--component" [class.is-generic]="group.kind === 'generic'" [class.is-selected]="isMindNodeSelected('component', uid(comp))" [attr.data-testid]="'mind-node-component-' + uid(comp)" type="button" draggable="true" (click)="selectMindNode('component', uid(comp), $event)" (dblclick)="startMindRename('component', uid(comp), $event)" (dragstart)="startMindDrag('component', uid(comp), $event)" (dragover)="$event.preventDefault()" (drop)="dropMindNode('component', uid(comp), $event)">
                       <span class="business-tree-tag" [class.is-generic]="group.kind === 'generic'">{{ group.title }}</span>
                       @if (isMindNodeEditing('component', uid(comp))) {
@@ -195,8 +201,8 @@
                     <div class="mind-branch">
                       @if (!isMindComponentCollapsed(comp)) {
                       @for (construct of constructsFor(comp); track uid(construct)) {
-                        <section class="mind-construct">
-                          <button class="mind-node mind-node--construct" [class.is-selected]="isMindNodeSelected('construct', uid(construct))" [attr.data-testid]="'mind-node-construct-' + uid(construct)" type="button" draggable="true" (click)="openBusinessConstruct(construct)" (dblclick)="startMindRename('construct', uid(construct), $event)" (dragstart)="startMindDrag('construct', uid(construct), $event)" (dragover)="$event.preventDefault()" (drop)="dropMindNode('construct', uid(construct), $event)">
+                        <section class="mind-construct" [class.is-related]="isMindConstructRelated(construct)">
+                          <button class="mind-node mind-node--construct" [class.is-selected]="isMindNodeSelected('construct', uid(construct))" [class.is-related]="isMindConstructRelated(construct)" [attr.data-testid]="'mind-node-construct-' + uid(construct)" type="button" draggable="true" (click)="openBusinessConstruct(construct)" (dblclick)="startMindRename('construct', uid(construct), $event)" (dragstart)="startMindDrag('construct', uid(construct), $event)" (dragover)="$event.preventDefault()" (drop)="dropMindNode('construct', uid(construct), $event)">
                             @if (isMindNodeEditing('construct', uid(construct))) {
                               <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="construct.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('construct', uid(construct), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
                               <span class="mind-input-label">{{ construct.name || uid(construct) }}</span>
@@ -218,7 +224,7 @@
                           <div class="mind-leaves" [attr.data-testid]="'business-tree-leaves-' + uid(construct)">
                             <div>
                               @for (entity of entitiesFor(construct); track uid(entity)) {
-                                <button class="mind-node mind-node--entity" [class.is-selected]="isMindNodeSelected('entity', uid(entity))" [attr.data-testid]="'mind-node-entity-' + uid(entity)" type="button" draggable="true" (click)="canEdit() ? selectMindNode('entity', uid(entity), $event) : openEntityFromTree(entity, construct)" (dblclick)="startMindRename('entity', uid(entity), $event)" (dragstart)="startMindDrag('entity', uid(entity), $event)">
+                                <button class="mind-node mind-node--entity" [class.is-selected]="isMindNodeSelected('entity', uid(entity))" [class.is-related]="isMindConstructRelated(construct)" [attr.data-testid]="'mind-node-entity-' + uid(entity)" type="button" draggable="true" (click)="canEdit() ? selectMindNode('entity', uid(entity), $event) : openEntityFromTree(entity, construct)" (dblclick)="startMindRename('entity', uid(entity), $event)" (dragstart)="startMindDrag('entity', uid(entity), $event)">
                                   @if (isMindNodeEditing('entity', uid(entity))) {
                                     <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="entity.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('entity', uid(entity), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
                                   } @else {
@@ -232,7 +238,7 @@
                             </div>
                             <div>
                               @for (task of taskDefsFor(construct); track uid(task)) {
-                                <button class="mind-node mind-node--task" [class.is-selected]="isMindNodeSelected('task', uid(task))" [attr.data-testid]="'mind-node-task-' + uid(task)" type="button" draggable="true" (click)="canEdit() ? selectMindNode('task', uid(task), $event) : openTaskFromTree(task, construct)" (dblclick)="startMindRename('task', uid(task), $event)" (dragstart)="startMindDrag('task', uid(task), $event)">
+                                <button class="mind-node mind-node--task" [class.is-selected]="isMindNodeSelected('task', uid(task))" [class.is-related]="isMindConstructRelated(construct)" [attr.data-testid]="'mind-node-task-' + uid(task)" type="button" draggable="true" (click)="canEdit() ? selectMindNode('task', uid(task), $event) : openTaskFromTree(task, construct)" (dblclick)="startMindRename('task', uid(task), $event)" (dragstart)="startMindDrag('task', uid(task), $event)">
                                   <span class="business-tree-tag task">{{ task.type || 'Query' }}</span>
                                   @if (isMindNodeEditing('task', uid(task))) {
                                     <input class="mind-name-input" data-testid="mind-node-name-editor" [value]="task.name || ''" (click)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()" (input)="updateMindNodeName('task', uid(task), $any($event.target).value)" (blur)="finishMindRename($event)" (keydown.enter)="finishMindRename($event)">
@@ -304,7 +310,7 @@
                 <article class="taskdef-card taskdef-capability-card" [class.editing]="isEditingTask(td)" [attr.data-testid]="'taskdef-card-' + uid(td)" (click)="toggleTaskExpand(uid(td))">
                     <div class="taskdef-capability-head" [attr.data-testid]="'taskdef-head-' + uid(td)">
                       <span class="taskdef-type" [class.query]="td.type !== 'Service'" [class.service]="td.type === 'Service'">{{ td.type === 'Service' ? 'Service' : 'Query' }}</span>
-                      <strong>{{ td.name || uid(td) }}</strong>
+                      <strong [title]="td.name || uid(td)">{{ taskDefCardName(td) }}</strong>
                       @if (td.target) { <code>{{ td.target }}</code> }
                       <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
                     </div>
@@ -362,68 +368,140 @@
               <button class="drawer-close" type="button" aria-label="关闭" (click)="cancelInlineEdit(td)">×</button>
             </div>
           </header>
-          <div class="taskdef-editor-param-strip">
-            <span>入参 {{ (td.parameters?.inputs || []).length }}</span>
-            <span>出参 {{ (td.parameters?.outputs || []).length }}</span>
-          </div>
+          <nav class="taskdef-editor-tabs" aria-label="任务定义编辑分区">
+            <button type="button" [class.active]="taskDefEditorTab() === 'basic'" (click)="taskDefEditorTab.set('basic')">基础信息</button>
+            <button type="button" [class.active]="taskDefEditorTab() === 'contract'" (click)="taskDefEditorTab.set('contract')">参数契约 <span>{{ (td.parameters?.inputs || []).length }}+{{ (td.parameters?.outputs || []).length }}</span></button>
+            <button type="button" [class.active]="taskDefEditorTab() === 'implementation'" (click)="taskDefEditorTab.set('implementation')">技术实现</button>
+          </nav>
           <div class="taskdef-edit-body taskdef-edit-layout taskdef-editor-body">
-            <section class="taskdef-edit-section taskdef-edit-basics">
-              <div class="taskdef-edit-section-head"><strong>基础信息</strong></div>
-              <div class="taskdef-edit-grid">
-                <label>任务名称<input [(ngModel)]="td.name" placeholder="任务名称" class="taskdef-edit-name" /></label>
-                <label>任务类型
-                  <select [(ngModel)]="td.type">
-                    <option value="Query">Query</option>
-                    <option value="Command">Command</option>
-                    <option value="Validate">Validate</option>
-                    <option value="Calculate">Calculate</option>
-                    <option value="Notify">Notify</option>
-                    <option value="StateChange">StateChange</option>
-                    <option value="Event">Event</option>
-                    <option value="Service">Service</option>
-                  </select>
-                </label>
-                <label>实现标识<input [(ngModel)]="td.target" placeholder="实现标识" class="taskdef-edit-target" /></label>
-                <label>地址<input [(ngModel)]="td.address" placeholder="地址 /api/..." /></label>
-                <label>所属业务组件
-                  <select data-testid="taskdef-edit-component" [ngModel]="taskDefEditComponentId(td)" (ngModelChange)="selectTaskDefEditComponent(td, $event)">
-                    <option value="">未归属组件</option>
-                    @for(c of components(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
-                  </select>
-                </label>
-                <label>所属业务构件
-                  <select data-testid="taskdef-edit-construct" [ngModel]="td.constructUid || ''" (ngModelChange)="selectTaskDefEditConstruct(td, $event)">
-                    <option value="">未归属构件</option>
-                    @for(c of constructsForTaskEdit(td); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
-                  </select>
-                </label>
-              </div>
-            </section>
-            @if (td.parameters; as p) {
-              <section class="taskdef-edit-section taskdef-edit-params">
-                <div class="taskdef-edit-section-head">
-                  <strong>输入参数</strong>
-                  <button class="btn-ghost-sm" type="button" (click)="addParam(p.inputs || [])">+ 参数</button>
+            @if (taskDefEditorTab() === 'basic') {
+              <section class="taskdef-edit-section taskdef-edit-basics">
+                <div class="taskdef-edit-section-head"><strong>基础信息</strong><span>定义任务在业务构件中的归属和基本类型。</span></div>
+                <div class="taskdef-edit-grid">
+                  <label>任务名称<input [(ngModel)]="td.name" placeholder="任务名称" class="taskdef-edit-name" /></label>
+                  <label>任务类型
+                    <select [(ngModel)]="td.type">
+                      <option value="Query">Query</option>
+                      <option value="Command">Command</option>
+                      <option value="Validate">Validate</option>
+                      <option value="Calculate">Calculate</option>
+                      <option value="Notify">Notify</option>
+                      <option value="StateChange">StateChange</option>
+                      <option value="Event">Event</option>
+                      <option value="Service">Service</option>
+                    </select>
+                  </label>
+                  <label>所属业务组件
+                    <select data-testid="taskdef-edit-component" [ngModel]="taskDefEditComponentId(td)" (ngModelChange)="selectTaskDefEditComponent(td, $event)">
+                      <option value="">未归属组件</option>
+                      @for(c of components(); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
+                    </select>
+                  </label>
+                  <label>所属业务构件
+                    <select data-testid="taskdef-edit-construct" [ngModel]="td.constructUid || ''" (ngModelChange)="selectTaskDefEditConstruct(td, $event)">
+                      <option value="">未归属构件</option>
+                      @for(c of constructsForTaskEdit(td); track uid(c)){<option [value]="uid(c)">{{c.name}}</option>}
+                    </select>
+                  </label>
                 </div>
-                @if ((p.inputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                <tbody>@for(param of p.inputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" type="button" (click)="removeParam(p.inputs||[], $index)">×</button></td></tr>}</tbody></table> }
-              </section>
-              <section class="taskdef-edit-section taskdef-edit-params">
-                <div class="taskdef-edit-section-head">
-                  <strong>输出参数</strong>
-                  <button class="btn-ghost-sm" type="button" (click)="addParam(p.outputs || [])">+ 参数</button>
-                </div>
-                @if ((p.outputs||[]).length) { <table><thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
-                <tbody>@for(param of p.outputs||[]; track $index){<tr><td><input [(ngModel)]="param.name" placeholder="参数名"/></td><td><input [(ngModel)]="param.type" placeholder="String" class="short"/></td><td class="td-cb"><input type="checkbox" [(ngModel)]="param.required"/></td><td><input [(ngModel)]="param.note" placeholder="说明"/></td><td><button class="btn-ghost-sm danger" type="button" (click)="removeParam(p.outputs||[], $index)">×</button></td></tr>}</tbody></table> }
               </section>
             }
-            <section class="taskdef-edit-section taskdef-edit-note-section">
-              <app-rich-text-editor class="taskdef-rich-text" label="详细设计" placeholder="描述任务用途、输入输出口径、边界条件或处理说明" testIdPrefix="taskdef-note" [value]="td.note || ''" (valueChange)="td.note = $event"></app-rich-text-editor>
-            </section>
-            <div class="taskdef-actions">
-              <button class="btn btn-primary btn-sm" [attr.data-testid]="'taskdef-save-' + uid(td)" type="button" (click)="saveInlineEdit(td)">保存</button>
-              <button class="btn btn-outline btn-sm" type="button" (click)="cancelInlineEdit(td)">取消</button>
-            </div>
+            @if (taskDefEditorTab() === 'contract' && td.parameters; as p) {
+              <div class="taskdef-contract-title">
+                <strong>任务参数：{{ td.name || uid(td) || '未命名任务' }}</strong>
+                <span>入参 {{ (p.inputs || []).length }} · 出参 {{ (p.outputs || []).length }}</span>
+              </div>
+              <div class="taskdef-contract-grid">
+                <ng-container *ngTemplateOutlet="taskParamPanel; context: { title: '输入参数', empty: '暂无输入参数', kind: 'inputs', rows: p.inputs || [] }"></ng-container>
+                <ng-container *ngTemplateOutlet="taskParamPanel; context: { title: '输出参数', empty: '暂无输出参数', kind: 'outputs', rows: p.outputs || [] }"></ng-container>
+              </div>
+              <ng-template #taskParamPanel let-title="title" let-empty="empty" let-kind="kind" let-rows="rows">
+                <section class="taskdef-edit-section taskdef-edit-params">
+                  <div class="taskdef-edit-section-head">
+                    <strong>{{ title }}</strong>
+                    <button class="btn-ghost-sm" type="button" (click)="addParam(rows)">+ 参数</button>
+                  </div>
+                  @if (rows.length) {
+                    <table class="taskdef-param-table">
+                      <thead><tr><th>中文名称</th><th>类型</th><th>必填</th><th>英文名称</th><th>说明/示例</th><th></th></tr></thead>
+                      <tbody>
+                        @for(param of rows; track param.uid || $index){
+                          <tr>
+                            <td><input [(ngModel)]="param.name" placeholder="中文名称"/></td>
+                            <td>
+                              <select [attr.data-testid]="'taskdef-param-type-' + kind + '-' + $index" [ngModel]="param.type || ''" (ngModelChange)="setParamType(param, $event)">
+                                @for(option of taskParamTypeOptions; track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                              </select>
+                            </td>
+                            <td class="td-cb"><label><input type="checkbox" [(ngModel)]="param.required"/> 必填</label></td>
+                            <td><input [ngModel]="taskParamCode(param)" (ngModelChange)="setTaskParamCode(param, $event)" placeholder="英文名称"/></td>
+                            <td><input [ngModel]="taskParamNote(param)" (ngModelChange)="setTaskParamNote(param, $event)" placeholder="说明/示例"/></td>
+                            <td class="taskdef-param-actions">
+                              <button data-testid="taskdef-param-insert" class="btn-ghost-sm" type="button" title="在下方增加" (click)="insertParam(rows, $index)">+</button>
+                              <button data-testid="taskdef-param-move-up" class="btn-ghost-sm" type="button" title="上移" [disabled]="$index === 0" (click)="moveParam(rows, $index, -1)">↑</button>
+                              <button data-testid="taskdef-param-move-down" class="btn-ghost-sm" type="button" title="下移" [disabled]="$index >= rows.length - 1" (click)="moveParam(rows, $index, 1)">↓</button>
+                              <button data-testid="taskdef-param-remove" class="btn-ghost-sm danger" type="button" title="删除" (click)="removeParam(rows, $index)">×</button>
+                            </td>
+                          </tr>
+                          @if (param.type === 'list') {
+                            <tr class="taskdef-param-children-row">
+                              <td colspan="6">
+                                <div class="taskdef-param-children">
+                                  <div class="taskdef-param-children-head">
+                                    <span>子字段（{{ (param.children || []).length }}）</span>
+                                    <button class="btn-ghost-sm" [attr.data-testid]="'taskdef-param-add-child-' + kind + '-' + $index" type="button" (click)="addParamChild(param)">+ 子字段</button>
+                                  </div>
+                                  @if ((param.children || []).length) {
+                                    <div class="taskdef-param-child-list">
+                                      @for(child of param.children || []; track child.uid || $index) {
+                                        <div class="taskdef-param-child-row">
+                                          <input [(ngModel)]="child.name" placeholder="中文名称"/>
+                                          <select [ngModel]="child.type || ''" (ngModelChange)="setParamType(child, $event)">
+                                            @for(option of taskParamTypeOptions; track option.value) { @if (option.value !== 'list') { <option [value]="option.value">{{ option.label }}</option> } }
+                                          </select>
+                                          <label><input type="checkbox" [(ngModel)]="child.required"/> 必填</label>
+                                          <input [ngModel]="taskParamCode(child)" (ngModelChange)="setTaskParamCode(child, $event)" placeholder="英文名称"/>
+                                          <input [ngModel]="taskParamNote(child)" (ngModelChange)="setTaskParamNote(child, $event)" placeholder="说明/示例"/>
+                                          <span class="taskdef-param-actions">
+                                            <button class="btn-ghost-sm" type="button" title="在下方增加" (click)="insertParamChild(param, $index)">+</button>
+                                            <button class="btn-ghost-sm" type="button" title="上移" [disabled]="$index === 0" (click)="moveParamChild(param, $index, -1)">↑</button>
+                                            <button class="btn-ghost-sm" type="button" title="下移" [disabled]="$index >= (param.children || []).length - 1" (click)="moveParamChild(param, $index, 1)">↓</button>
+                                            <button class="btn-ghost-sm danger" type="button" title="删除" (click)="removeParamChild(param, $index)">×</button>
+                                          </span>
+                                        </div>
+                                      }
+                                    </div>
+                                  } @else {
+                                    <div class="taskdef-param-empty compact">暂未定义子字段。</div>
+                                  }
+                                </div>
+                              </td>
+                            </tr>
+                          }
+                        }
+                      </tbody>
+                    </table>
+                  } @else {
+                    <div class="taskdef-param-empty">{{ empty }}</div>
+                  }
+                </section>
+              </ng-template>
+            }
+            @if (taskDefEditorTab() === 'implementation') {
+              <section class="taskdef-edit-section taskdef-implementation-section">
+                <div class="taskdef-edit-section-head"><strong>技术实现</strong><span>记录实现状态、调用地址和详细设计。</span></div>
+                <div class="taskdef-edit-grid taskdef-implementation-grid">
+                  <label>实现标识
+                    <select class="taskdef-edit-target" [ngModel]="taskImplementationStatus(td)" (ngModelChange)="setTaskImplementationStatus(td, $event)">
+                      <option value="pending">未实现</option>
+                      <option value="implemented">已实现</option>
+                    </select>
+                  </label>
+                  <label>任务地址<input [(ngModel)]="td.address" placeholder="地址 /api/... 或 planTaskHandler.xxx" /></label>
+                </div>
+                <app-rich-text-editor class="taskdef-rich-text taskdef-design-editor" label="任务详细设计" placeholder="描述任务用途、输入输出口径、边界条件、异常处理或处理说明" testIdPrefix="taskdef-note" [value]="td.note || ''" (valueChange)="td.note = $event"></app-rich-text-editor>
+              </section>
+            }
           </div>
         </section>
       }

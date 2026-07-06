@@ -43,8 +43,9 @@
         </div>
       </header>
 
-      <div class="node-progress-guide" data-testid="process-node-progress-guide">
-        <div class="node-progress-track"><span [style.width.%]="nodeCompletion(task)"></span></div>
+      <div class="node-editor-work-area">
+      <nav class="node-progress-guide node-progress-guide--vertical" data-testid="process-node-section-nav" aria-label="节点办理内容导航">
+        <div class="node-progress-track"><span [style.height.%]="nodeCompletion(task)"></span></div>
         <div class="node-progress-steps">
               @for (item of anchorItems(task); track item.id; let index = $index) {
                 <button
@@ -61,7 +62,7 @@
                 </button>
               }
             </div>
-          </div>
+          </nav>
 
         <section class="node-editor-main" data-testid="process-editor-drawer">
         <div class="node-editor-scroll node-editor-scroll--body">
@@ -220,13 +221,6 @@
                     <div class="task-form-card-head">
                       <span class="task-form-index">F{{ formIndex + 1 }}</span>
                       <input type="text" data-testid="task-form-name" [disabled]="!editing" [ngModel]="form.name || ''" (ngModelChange)="setFormName(task, form, $event)" placeholder="表单名称，如：仓库管理列表" />
-                      <select class="task-form-entity-select" data-testid="task-form-entity" [disabled]="!editing" [ngModel]="formEntityId(form)" (ngModelChange)="setFormEntity(form, $event)">
-                        <option value="">不绑定实体</option>
-                        @for (entity of entities(); track entityId(entity)) {
-                          <option [value]="entityId(entity)">{{ entity.name || entityId(entity) }}</option>
-                        }
-                      </select>
-                      <span class="task-form-entity-summary" data-testid="task-form-entity-summary">{{ formEntitySummary(form) }}</span>
                       <span class="task-form-field-count">{{ formFieldCount(form) }} 字段</span>
                       <button class="step-action task-form-icon-action" type="button" data-testid="task-form-duplicate" aria-label="复制表单" title="复制表单" [disabled]="!editing" (click)="toggleFormCopyMenu(form, $event)">
                         <span aria-hidden="true">⧉</span>
@@ -247,12 +241,13 @@
                           <div class="task-form-section-head">
                             <input data-testid="task-form-section-name" type="text" [disabled]="!editing" [ngModel]="section.name || ''" (ngModelChange)="setFormSection(section, 'name', $event)" placeholder="分组名称" />
                             <input data-testid="task-form-section-note" type="text" [disabled]="!editing" [ngModel]="section.note || ''" (ngModelChange)="setFormSection(section, 'note', $event)" placeholder="分组说明" />
-                            <select data-testid="task-form-section-entity" [disabled]="!editing" [ngModel]="sectionEntityId(form, section)" (ngModelChange)="setFormSectionEntity(form, section, $event)">
-                              <option value="">不绑定实体</option>
-                              @for (entity of entities(); track entityId(entity)) {
-                                <option [value]="entityId(entity)">{{ entity.name || entityId(entity) }}</option>
+                            <select data-testid="task-form-section-service" [disabled]="!editing" [ngModel]="formSectionServiceId(section)" (ngModelChange)="setFormSectionService(section, task, $event)">
+                              <option value="">未关联接口需求</option>
+                              @for (service of formServiceOptions(task); track serviceId(service)) {
+                                <option [value]="serviceId(service)">{{ service.name || serviceId(service) }}</option>
                               }
                             </select>
+                            <span class="task-form-section-service-summary" data-testid="task-form-section-service-summary">{{ formSectionServiceSummary(section, task) }}</span>
                             <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-field-add" [disabled]="!editing" (click)="addFormField(section)">+ 字段</button>
                             <div class="step-actions task-form-inline-actions">
                               <button class="step-action" type="button" data-testid="task-form-section-add-after" title="插入分组" [disabled]="!editing" (click)="addFormSection(form, section)">+</button>
@@ -264,7 +259,7 @@
                           @if ((section.fields || []).length) {
                             <div class="task-form-field-table-wrap">
                               <table class="task-form-field-table">
-                                <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>实体字段</th><th>说明</th><th></th></tr></thead>
+                                <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
                                 <tbody>
                                   @for (field of section.fields || []; track field.id || field.uid || $index; let fieldIndex = $index) {
                                     <tr class="task-form-field-row" data-testid="process-form-field-row">
@@ -277,14 +272,6 @@
                                         </select>
                                       </td>
                                       <td class="task-form-required-cell"><input type="checkbox" data-testid="task-form-field-required" [disabled]="!editing" [checked]="field.required" (change)="setFormFieldRequired(field, $any($event.target).checked)" /></td>
-                                      <td>
-                                        <select data-testid="task-form-entity-field" [disabled]="!editing || !canMapEntityField(form, section)" [ngModel]="field.entity_field || ''" (ngModelChange)="setFormField(field, 'entity_field', $event)">
-                                          <option value="">{{ canMapEntityField(form, section) ? entityFieldEmptyLabel : '先绑定实体' }}</option>
-                                          @for (entityField of entityFieldsForSection(form, section); track entityField.name) {
-                                            <option [value]="entityField.name || ''">{{ entityField.name }}</option>
-                                          }
-                                        </select>
-                                      </td>
                                       <td><textarea class="auto-resize task-form-field-note" rows="1" data-testid="task-form-field-note" [readonly]="!editing" [ngModel]="field.note || ''" (input)="autoGrow($any($event.target)); setFormField(field, 'note', $any($event.target).value)" placeholder="校验规则 / 展示说明"></textarea></td>
                                       <td class="task-form-action-cell">
                                         <div class="step-actions task-form-inline-actions">
@@ -481,6 +468,7 @@
           </details>
         </div>
       </section>
+      </div>
     </div>
   } @else {
     <div class="node-workbench-empty" data-testid="process-editor-workbench">
