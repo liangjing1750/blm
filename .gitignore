@@ -3,6 +3,7 @@
 .vscode/
 .claude/
 .codex/
+.easy-agent/
 
 # Sensitive local data. Never push this directory.
 /ignore/
@@ -14,6 +15,7 @@ node_modules/
 playwright-report/
 test-results/
 .tmp/
+tmp
 tools/e2e/artifacts/value-domain-oracle/*
 !tools/e2e/artifacts/value-domain-oracle/README.md
 __pycache__/
