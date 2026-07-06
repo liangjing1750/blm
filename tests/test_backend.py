@@ -292,6 +292,60 @@ class MigrateDocumentTests(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual([field["uid"] for field in result], ["f1", "f2"])
 
+    def test_canonical_document_dedups_duplicate_form_section_fields(self):
+        """canonical_document cleans duplicated form fields inside node form sections."""
+        document = {
+            "meta": {"title": "Dedup Form Fields"},
+            "roles": [],
+            "stages": [],
+            "stageFlowRefs": [],
+            "stageFlowLinks": [],
+            "entities": [],
+            "businessComponents": [],
+            "businessConstructs": [],
+            "taskDefinitions": [],
+            "processes": [
+                {
+                    "uid": "process-1",
+                    "name": "入库",
+                    "nodes": [
+                        {
+                            "uid": "node-1",
+                            "name": "新增入库预约",
+                            "businessRules": [],
+                            "userSteps": [],
+                            "orchestrationTasks": [],
+                            "forms": [
+                                {
+                                    "uid": "form-1",
+                                    "name": "预约表单",
+                                    "sections": [
+                                        {
+                                            "uid": "section-1",
+                                            "name": "基本信息",
+                                            "fields": [
+                                                {"uid": "field-1", "name": "仓库代码"},
+                                                {"uid": "field-1", "name": "仓库代码"},
+                                                {"uid": "field-2", "name": "预约日期"},
+                                                {"uid": "field-2", "name": "预约日期"},
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                    "prototypeFiles": [],
+                    "flow": {"nodes": [], "edges": []},
+                }
+            ],
+        }
+
+        result = canonical_document(document)["processes"][0]["nodes"][0]["forms"][0]["sections"][0]["fields"]
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual([field["uid"] for field in result], ["field-1", "field-2"])
+
     def test_canonical_document_normalizes_task_parameters(self):
         document = {
             "meta": {"title": "Task Params"},

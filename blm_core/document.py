@@ -640,13 +640,13 @@ def _dedup_by_uid(items):
     result = []
     for item in items:
         if not isinstance(item, dict):
-            result.append(item)
+            result.append(_dedup_nested_lists(item))
             continue
         uid = str(item.get("uid", "")).strip()
         if not uid or uid not in seen:
             if uid:
                 seen.add(uid)
-            result.append(item)
+            result.append(_dedup_nested_lists(item))
     return result
 
 
