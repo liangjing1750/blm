@@ -14,9 +14,41 @@
 .tab-action-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.tab-history-btn {
-  padding-inline: 12px;
+.tab-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 68px;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid #d7e1ee;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.tab-action-btn:hover:not(:disabled) {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+  color: #2563eb;
+}
+
+.tab-action-btn:disabled {
+  border-color: #e5edf6;
+  background: #f8fafc;
+  color: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.tab-back-btn {
+  margin: 0 0 0 2px;
 }

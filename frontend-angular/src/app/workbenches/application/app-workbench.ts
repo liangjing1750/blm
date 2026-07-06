@@ -34,13 +34,13 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly version = signal(0);
   protected readonly activeTab = signal<AppTab>(this.restoreActiveTab());
   protected readonly svcKeyword = signal('');
-  protected readonly orchServiceGroupUid = signal('__all__');
-  protected readonly orchSvcId = signal('');
-  protected readonly selectedServiceGroupUid = signal('__all__');
+  protected readonly orchServiceGroupUid = signal(String(this.runtime.ui['applicationOrchestrationServiceGroupUid'] || '__all__'));
+  protected readonly orchSvcId = signal(String(this.runtime.ui['applicationOrchestrationServiceUid'] || ''));
+  protected readonly selectedServiceGroupUid = signal(String(this.runtime.ui['applicationServiceGroupUid'] || '__all__'));
   protected readonly selectedServiceId = signal(String(this.runtime.ui['applicationServiceUid'] || this.runtime.ui['applicationServiceId'] || ''));
   protected readonly interfacePage = signal(1);
   protected readonly interfacePageSize = 8;
-  protected readonly selectedStepUid = signal('');
+  protected readonly selectedStepUid = signal(String(this.runtime.ui['applicationOrchestrationStepUid'] || ''));
   protected readonly editorOpen = signal(false);
   protected readonly serviceDrawerId = signal('');
   protected readonly serviceGroupDrawer = signal<Partial<LegacyServiceGroup> | null>(null);
@@ -143,6 +143,9 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected selectServiceGroup(groupUid: string): void {
     this.selectedServiceGroupUid.set(groupUid);
     this.selectedServiceId.set('');
+    this.runtime.ui['applicationServiceGroupUid'] = groupUid;
+    this.runtime.ui['applicationServiceUid'] = '';
+    this.runtime.ui['applicationServiceId'] = '';
     this.interfacePage.set(1);
   }
 
@@ -163,7 +166,10 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
 
   protected selectService(svc: LegacyService): void {
     this.ensureServiceShape(svc);
-    this.selectedServiceId.set(this.uid(svc));
+    const serviceUid = this.uid(svc);
+    this.selectedServiceId.set(serviceUid);
+    this.runtime.ui['applicationServiceUid'] = serviceUid;
+    this.runtime.ui['applicationServiceId'] = serviceUid;
   }
 
   protected orderedSteps(svc: LegacyService): OrchestrationStep[] { return this.orchestrationSteps(svc); }
@@ -592,6 +598,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected selectOrchestrationServiceGroup(groupUid: string): void {
     this.orchServiceGroupUid.set(groupUid);
+    this.runtime.ui['applicationOrchestrationServiceGroupUid'] = groupUid;
     const first = this.orchestrationInterfaces()[0];
     this.selectOrchestrationService(first ? this.uid(first) : '');
   }
@@ -602,14 +609,20 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected selectOrchestrationService(serviceUid: string): void {
     this.orchSvcId.set(serviceUid);
+    this.runtime.ui['applicationOrchestrationServiceUid'] = serviceUid;
     const service = this.services().find((candidate) => this.uid(candidate) === serviceUid);
-    this.selectedStepUid.set(service ? this.orchestrationSteps(service)[0]?.uid || '' : '');
+    const stepUid = service ? this.orchestrationSteps(service)[0]?.uid || '' : '';
+    this.selectedStepUid.set(stepUid);
+    this.runtime.ui['applicationOrchestrationStepUid'] = stepUid;
   }
   protected selectedStep(svc: LegacyService): OrchestrationStep | null {
     const steps = this.orchestrationSteps(svc);
     return steps.find((step) => step.uid === this.selectedStepUid()) || steps[0] || null;
   }
-  protected selectStep(step: OrchestrationStep): void { this.selectedStepUid.set(step.uid); }
+  protected selectStep(step: OrchestrationStep): void {
+    this.selectedStepUid.set(step.uid);
+    this.runtime.ui['applicationOrchestrationStepUid'] = step.uid;
+  }
   protected addStep(svc: LegacyService, tid: string): void {
     if (!this.canEdit()) return;
     const steps = this.orchestrationSteps(svc);

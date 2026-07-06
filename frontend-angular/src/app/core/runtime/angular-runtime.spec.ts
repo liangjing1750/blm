@@ -9,6 +9,7 @@ import {
   markAngularRuntimeModified,
   redoAngularRuntimeDocument,
   replaceRuntimeDocument,
+  switchAngularMainTab,
   undoAngularRuntimeDocument,
 } from './angular-runtime';
 
@@ -96,5 +97,48 @@ describe('angular runtime undo history', () => {
     expect(runtime.ui['mainTab']).toBe('constructWorkbench');
     expect(runtime.ui['componentWorkbenchTab']).toBe('businessComponent');
     expect(runtime.ui['componentWorkbenchReturnTab']).toBe('');
+  });
+
+  it('restores construct workbench tab and selection when returning from another workbench', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'constructWorkbench';
+    runtime.ui['componentWorkbenchTab'] = 'businessConstruct';
+    runtime.ui['componentWorkbenchConstructId'] = 'construct-1';
+    runtime.ui['taskDefinitionId'] = 'task-1';
+
+    switchAngularMainTab('applicationWorkbench');
+    runtime.ui['componentWorkbenchTab'] = 'businessComponent';
+    runtime.ui['componentWorkbenchConstructId'] = '';
+    runtime.ui['taskDefinitionId'] = '';
+
+    expect(canGoBackAngularNavigation()).toBe(true);
+    expect(goBackAngularNavigation()).toBe('constructWorkbench');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessConstruct');
+    expect(runtime.ui['componentWorkbenchConstructId']).toBe('construct-1');
+    expect(runtime.ui['taskDefinitionId']).toBe('task-1');
+  });
+
+  it('restores application workbench tab and interface selection when returning from another workbench', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.ui['applicationWorkbenchTab'] = 'orchestration';
+    runtime.ui['applicationServiceGroupUid'] = 'group-1';
+    runtime.ui['applicationServiceUid'] = 'service-1';
+    runtime.ui['applicationOrchestrationServiceUid'] = 'service-2';
+    runtime.ui['applicationOrchestrationStepUid'] = 'step-1';
+
+    switchAngularMainTab('constructWorkbench');
+    runtime.ui['applicationWorkbenchTab'] = 'service';
+    runtime.ui['applicationServiceGroupUid'] = '__all__';
+    runtime.ui['applicationServiceUid'] = '';
+    runtime.ui['applicationOrchestrationServiceUid'] = '';
+    runtime.ui['applicationOrchestrationStepUid'] = '';
+
+    expect(goBackAngularNavigation()).toBe('applicationWorkbench');
+    expect(runtime.ui['applicationWorkbenchTab']).toBe('orchestration');
+    expect(runtime.ui['applicationServiceGroupUid']).toBe('group-1');
+    expect(runtime.ui['applicationServiceUid']).toBe('service-1');
+    expect(runtime.ui['applicationOrchestrationServiceUid']).toBe('service-2');
+    expect(runtime.ui['applicationOrchestrationStepUid']).toBe('step-1');
   });
 });

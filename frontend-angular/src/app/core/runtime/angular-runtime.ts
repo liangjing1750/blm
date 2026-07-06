@@ -5,6 +5,7 @@ export type MainWorkbenchId =
   | 'panoramaWorkbench'
   | 'processWorkbench'
   | 'constructWorkbench'
+  | 'applicationWorkbench'
   | 'orchestrationWorkbench'
   | 'entity'
   | 'knowledge'
@@ -43,6 +44,7 @@ export interface AngularRuntimeState {
 
 interface AngularNavigationSnapshot {
   mainTab: string;
+  ui?: Record<string, string | number | boolean | null>;
   procId?: string;
   taskId?: string | null;
   entityId?: string;
@@ -50,6 +52,25 @@ interface AngularNavigationSnapshot {
 
 const ANGULAR_NAV_HISTORY_LIMIT = 30;
 const ANGULAR_UNDO_HISTORY_LIMIT = 50;
+const ANGULAR_NAVIGATION_UI_KEY_PATTERN = /^(process|component|application|orchestration|entity|taskDefinition)[A-Za-z0-9]*(Tab|View|Id|Uid)$/;
+const ANGULAR_NAVIGATION_UI_KEYS = new Set([
+  'procId',
+  'taskId',
+  'entityId',
+  'processWorkbenchView',
+  'processWorkbenchTab',
+  'componentWorkbenchTab',
+  'componentWorkbenchReturnTab',
+  'componentWorkbenchConstructId',
+  'taskDefinitionId',
+  'applicationWorkbenchTab',
+  'applicationServiceGroupUid',
+  'applicationServiceUid',
+  'applicationServiceId',
+  'applicationOrchestrationServiceGroupUid',
+  'applicationOrchestrationServiceUid',
+  'applicationOrchestrationStepUid',
+]);
 
 interface AngularDocumentHistory {
   undo: any[];
@@ -310,10 +331,7 @@ export function goBackAngularNavigation(): string | null {
     previous = history.pop();
   }
   if (!previous) return null;
-  runtimeState.ui['mainTab'] = normalizeMainWorkbenchId(previous.mainTab);
-  runtimeState.ui['procId'] = previous.procId || '';
-  runtimeState.ui['taskId'] = previous.taskId || null;
-  runtimeState.ui['entityId'] = previous.entityId || '';
+  restoreAngularNavigationSnapshot(previous);
   emitRuntimeRefresh();
   return runtimeState.ui['mainTab'];
 }
@@ -339,10 +357,44 @@ function recordAngularNavigationSnapshot(): void {
 function captureAngularNavigationSnapshot(): AngularNavigationSnapshot {
   return {
     mainTab: normalizeMainWorkbenchId(runtimeState.ui['mainTab']),
+    ui: captureAngularNavigationUi(),
     procId: String(runtimeState.ui['procId'] || '').trim(),
     taskId: runtimeState.ui['taskId'] ? String(runtimeState.ui['taskId']).trim() : null,
     entityId: String(runtimeState.ui['entityId'] || '').trim(),
   };
+}
+
+function captureAngularNavigationUi(): Record<string, string | number | boolean | null> {
+  const captured: Record<string, string | number | boolean | null> = {};
+  for (const key of Object.keys(runtimeState.ui).sort()) {
+    if (!isAngularNavigationUiKey(key)) continue;
+    const value = runtimeState.ui[key];
+    if (value == null || ['string', 'number', 'boolean'].includes(typeof value)) {
+      captured[key] = value == null ? null : value;
+    }
+  }
+  return captured;
+}
+
+function restoreAngularNavigationSnapshot(snapshot: AngularNavigationSnapshot): void {
+  runtimeState.ui['mainTab'] = normalizeMainWorkbenchId(snapshot.mainTab);
+  for (const key of Object.keys(runtimeState.ui)) {
+    if (isAngularNavigationUiKey(key)) delete runtimeState.ui[key];
+  }
+  if (snapshot.ui) {
+    for (const [key, value] of Object.entries(snapshot.ui)) {
+      if (isAngularNavigationUiKey(key)) runtimeState.ui[key] = value;
+    }
+    return;
+  }
+  runtimeState.ui['procId'] = snapshot.procId || '';
+  runtimeState.ui['taskId'] = snapshot.taskId || null;
+  runtimeState.ui['entityId'] = snapshot.entityId || '';
+}
+
+function isAngularNavigationUiKey(key: string): boolean {
+  if (key === 'mainTab' || key === 'navHistory') return false;
+  return ANGULAR_NAVIGATION_UI_KEYS.has(key) || ANGULAR_NAVIGATION_UI_KEY_PATTERN.test(key);
 }
 
 function pushAngularNavigationSnapshot(snapshot: AngularNavigationSnapshot): void {
@@ -365,5 +417,6 @@ function areAngularNavigationSnapshotsEqual(left: AngularNavigationSnapshot, rig
   return String(left.mainTab || '') === String(right.mainTab || '')
     && String(left.procId || '') === String(right.procId || '')
     && String(left.taskId || '') === String(right.taskId || '')
-    && String(left.entityId || '') === String(right.entityId || '');
+    && String(left.entityId || '') === String(right.entityId || '')
+    && JSON.stringify(left.ui || {}) === JSON.stringify(right.ui || {});
 }
