@@ -131,6 +131,21 @@
   position: relative;
 }
 
+.node-task-form-card .task-form-field-count {
+  min-width: 66px;
+  padding: 0 8px;
+  justify-content: center;
+}
+
+.task-form-collapse-toggle {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .node-task-form-card .task-form-icon-action {
   display: inline-grid;
   place-items: center;
@@ -146,17 +161,51 @@
 }
 
 .node-task-form-card .task-form-section-card {
-  padding: 7px;
+  padding: 0 7px 7px;
   border: 1px solid #dbeafe;
   border-radius: 8px;
   background: #fff;
+  overflow: hidden;
+}
+
+.node-task-form-card .task-form-section-card:has(.task-form-service-menu) {
+  overflow: visible;
 }
 
 .node-task-form-card .task-form-section-head {
   display: grid;
-  grid-template-columns: minmax(104px, .55fr) minmax(180px, 1fr) minmax(180px, .8fr) minmax(92px, auto) 32px auto auto;
+  grid-template-columns: 38px minmax(86px, .42fr) minmax(120px, .56fr) minmax(190px, 1fr) 32px auto auto auto;
   gap: 6px;
   align-items: center;
+  margin: 0 -7px 7px;
+  padding: 7px;
+  border-bottom: 1px solid rgba(148, 163, 184, .22);
+  background: #eff6ff;
+}
+
+.task-form-section-badge {
+  display: inline-grid;
+  height: 30px;
+  min-width: 30px;
+  place-items: center;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.task-form-section-head--tone-2 {
+  background: #f0fdf4;
+}
+
+.task-form-section-head--tone-3 {
+  background: #fffbeb;
+}
+
+.task-form-section-head--tone-4 {
+  background: #f5f3ff;
 }
 
 .node-form-model-actions {
@@ -242,6 +291,10 @@
   text-overflow: ellipsis;
 }
 
+.task-form-section-service-summary--compact {
+  display: none;
+}
+
 .task-form-service-jump {
   display: inline-grid;
   width: 30px;
@@ -259,6 +312,142 @@
 .task-form-service-jump:disabled {
   opacity: .45;
   cursor: default;
+}
+
+.task-form-service-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.task-form-service-select {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid #d7e4f3;
+  border-radius: 7px;
+  padding: 0 8px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-form-service-select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-form-service-menu {
+  position: absolute;
+  z-index: 260;
+  top: 34px;
+  left: 0;
+  display: grid;
+  width: min(480px, calc(100vw - 220px));
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .18);
+}
+
+.task-form-service-menu-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.task-form-service-menu-head button,
+.task-form-service-groups button {
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-form-service-menu-head button.active,
+.task-form-service-groups button.active {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.task-form-service-menu-body {
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr);
+  min-height: 160px;
+}
+
+.task-form-service-groups,
+.task-form-service-options {
+  max-height: 330px;
+  overflow-y: auto;
+}
+
+.task-form-service-groups {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 8px;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.task-form-service-groups button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.task-form-service-options {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 8px;
+}
+
+.task-form-service-options label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 18px;
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.task-form-service-options strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-form-service-options input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.task-form-service-jump--inline {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 13px;
 }
 
 .node-task-form-card .task-form-field-table-wrap {
@@ -290,11 +479,9 @@
 .node-task-form-card .task-form-field-table th:nth-child(3),
 .node-task-form-card .task-form-field-table td:nth-child(3) { width: 7%; text-align: center; }
 .node-task-form-card .task-form-field-table th:nth-child(4),
-.node-task-form-card .task-form-field-table td:nth-child(4) { width: 18%; }
+.node-task-form-card .task-form-field-table td:nth-child(4) { width: 42%; }
 .node-task-form-card .task-form-field-table th:nth-child(5),
-.node-task-form-card .task-form-field-table td:nth-child(5) { width: 22%; }
-.node-task-form-card .task-form-field-table th:nth-child(6),
-.node-task-form-card .task-form-field-table td:nth-child(6) { width: 10%; }
+.node-task-form-card .task-form-field-table td:nth-child(5) { width: 14%; }
 
 .node-task-form-card th {
   color: #64748b;
@@ -315,11 +502,17 @@
 }
 
 .node-task-form-card .task-form-field-note {
-  min-height: 34px;
+  min-height: 32px;
   resize: vertical;
-  line-height: 1.45;
+  line-height: 20px;
+  padding-top: 5px;
+  padding-bottom: 5px;
   white-space: pre-wrap;
   overflow: hidden;
+}
+
+.node-task-form-card .task-form-action-cell .step-actions {
+  justify-content: flex-end;
 }
 
 .node-task-form-card input:disabled,

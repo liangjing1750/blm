@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewChecked, Component, ElementRef, HostListener, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy } from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, HostListener, Input, QueryList, ViewChildren, signal, OnInit, OnDestroy, WritableSignal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../../shared/rich-text/rich-text-editor.component';
@@ -59,10 +59,24 @@ interface ProcessApplicationService {
   id?: string;
   uid?: string;
   name?: string;
+  serviceGroupUid?: string;
   method?: string;
   path?: string;
   desc?: string;
   nodeRefs?: string[];
+}
+
+interface ProcessApplicationServiceGroup {
+  id?: string;
+  uid?: string;
+  name?: string;
+  desc?: string;
+}
+
+interface SectionServicePickerState {
+  key: string;
+  activeGroupUid: string;
+  selectedOnly: boolean;
 }
 
 interface PendingEntityFieldCopy {
@@ -136,6 +150,9 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected readonly roleCollapsed = signal(true);
   protected readonly materialTab = signal<'forms' | 'attachments'>('forms');
   protected readonly moreOpen = signal(false);
+  protected readonly collapsedForms = signal<ReadonlySet<string>>(new Set());
+  protected readonly collapsedFormSections = signal<ReadonlySet<string>>(new Set());
+  protected readonly sectionServicePicker = signal<SectionServicePickerState | null>(null);
   protected readonly formCopyMenuId = signal('');
   protected readonly formNotice = signal('');
   protected readonly renameNodeTarget = signal<LegacyProcessNode | null>(null);
@@ -252,7 +269,17 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected formSectionServiceId(section: LegacyTaskFormSection): string {
-    return String(section.serviceUid || section.serviceId || '').trim();
+    return this.formSectionServiceIds(section)[0] || '';
+  }
+
+  protected formSectionServiceIds(section: LegacyTaskFormSection): string[] {
+    const raw = [
+      ...(Array.isArray(section.serviceUids) ? section.serviceUids : []),
+      ...(Array.isArray(section.serviceIds) ? section.serviceIds : []),
+      section.serviceUid,
+      section.serviceId,
+    ];
+    return Array.from(new Set(raw.map((item) => String(item || '').trim()).filter(Boolean)));
   }
 
   protected formServiceSummary(form: LegacyTaskForm, task: LegacyProcessNode): string {
@@ -283,15 +310,92 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected setFormSectionService(section: LegacyTaskFormSection, task: LegacyProcessNode, value: string): void {
     if (!this.editing) return;
     const service = this.formServiceOptions(task).find((item) => this.serviceId(item) === value);
-    section.serviceUid = value;
-    section.serviceId = value;
+    this.writeFormSectionServiceIds(section, value ? [value] : [], task);
     section.serviceName = service?.name || '';
     this.adapter.touch();
     this.refresh();
   }
 
-  protected jumpToApplicationService(section: LegacyTaskFormSection): void {
-    const serviceUid = this.formSectionServiceId(section);
+  protected selectedFormSectionServices(section: LegacyTaskFormSection, task: LegacyProcessNode): ProcessApplicationService[] {
+    const selected = new Set(this.formSectionServiceIds(section));
+    return this.formServiceOptions(task).filter((service) => selected.has(this.serviceId(service)));
+  }
+
+  protected formSectionServiceLabel(section: LegacyTaskFormSection, task: LegacyProcessNode): string {
+    const selected = this.selectedFormSectionServices(section, task);
+    if (!selected.length) return '未关联接口需求';
+    if (selected.length === 1) return selected[0].name || this.serviceId(selected[0]);
+    return `${selected[0].name || this.serviceId(selected[0])} 等 ${selected.length} 个接口`;
+  }
+
+  protected sectionServicePickerKey(form: LegacyTaskForm, section: LegacyTaskFormSection): string {
+    return this.formSectionCollapseKey(form, section);
+  }
+
+  protected isSectionServicePickerOpen(form: LegacyTaskForm, section: LegacyTaskFormSection): boolean {
+    return this.sectionServicePicker()?.key === this.sectionServicePickerKey(form, section);
+  }
+
+  protected toggleSectionServicePicker(form: LegacyTaskForm, section: LegacyTaskFormSection, task: LegacyProcessNode): void {
+    const key = this.sectionServicePickerKey(form, section);
+    if (this.sectionServicePicker()?.key === key) {
+      this.sectionServicePicker.set(null);
+      return;
+    }
+    this.sectionServicePicker.set({ key, activeGroupUid: this.initialSectionServiceGroupUid(section, task), selectedOnly: false });
+  }
+
+  protected closeSectionServicePicker(): void {
+    this.sectionServicePicker.set(null);
+  }
+
+  protected setSectionServicePickerGroup(groupUid: string): void {
+    const state = this.sectionServicePicker();
+    if (state) this.sectionServicePicker.set({ ...state, activeGroupUid: groupUid });
+  }
+
+  protected toggleSectionServicePickerSelectedOnly(): void {
+    const state = this.sectionServicePicker();
+    if (state) this.sectionServicePicker.set({ ...state, selectedOnly: !state.selectedOnly });
+  }
+
+  protected formServiceGroups(task: LegacyProcessNode): ProcessApplicationServiceGroup[] {
+    const groupMap = new Map<string, ProcessApplicationServiceGroup>();
+    this.applicationServiceGroups().forEach((group) => {
+      const uid = this.serviceGroupId(group);
+      if (uid) groupMap.set(uid, group);
+    });
+    this.formServiceOptions(task).forEach((service) => {
+      const uid = String(service.serviceGroupUid || '').trim() || '__ungrouped';
+      if (!groupMap.has(uid)) groupMap.set(uid, { uid, name: uid === '__ungrouped' ? '未分组接口' : uid });
+    });
+    return Array.from(groupMap.values()).filter((group) => this.formServicesForGroup(task, this.serviceGroupId(group), false, null).length);
+  }
+
+  protected formServicesForGroup(task: LegacyProcessNode, groupUid: string, selectedOnly: boolean, section: LegacyTaskFormSection | null): ProcessApplicationService[] {
+    const selected = section ? new Set(this.formSectionServiceIds(section)) : null;
+    return this.formServiceOptions(task)
+      .filter((service) => (String(service.serviceGroupUid || '').trim() || '__ungrouped') === groupUid)
+      .filter((service) => !selectedOnly || selected?.has(this.serviceId(service)))
+      .sort((left, right) => String(left.name || this.serviceId(left)).localeCompare(String(right.name || this.serviceId(right)), 'zh-Hans-CN'));
+  }
+
+  protected isFormSectionServiceSelected(section: LegacyTaskFormSection, service: ProcessApplicationService): boolean {
+    return this.formSectionServiceIds(section).includes(this.serviceId(service));
+  }
+
+  protected toggleFormSectionService(section: LegacyTaskFormSection, task: LegacyProcessNode, service: ProcessApplicationService, checked: boolean): void {
+    if (!this.editing) return;
+    const serviceUid = this.serviceId(service);
+    const selected = new Set(this.formSectionServiceIds(section));
+    checked ? selected.add(serviceUid) : selected.delete(serviceUid);
+    this.writeFormSectionServiceIds(section, Array.from(selected), task);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected jumpToApplicationService(serviceOrUid: ProcessApplicationService | string): void {
+    const serviceUid = typeof serviceOrUid === 'string' ? serviceOrUid : this.serviceId(serviceOrUid);
     if (!serviceUid) return;
     const runtime = getAngularRuntimeState();
     runtime.ui['mainTab'] = 'applicationWorkbench';
@@ -305,6 +409,15 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   private applicationServices(): ProcessApplicationService[] {
     const doc = getAngularRuntimeState().doc as { services?: ProcessApplicationService[] } | null | undefined;
     return Array.isArray(doc?.services) ? doc.services : [];
+  }
+
+  private applicationServiceGroups(): ProcessApplicationServiceGroup[] {
+    const doc = getAngularRuntimeState().doc as { serviceGroups?: ProcessApplicationServiceGroup[] } | null | undefined;
+    return Array.isArray(doc?.serviceGroups) ? doc.serviceGroups : [];
+  }
+
+  protected serviceGroupId(group: ProcessApplicationServiceGroup | null | undefined): string {
+    return String(group?.uid || group?.id || '').trim();
   }
 
   private formService(form: LegacyTaskForm, task: LegacyProcessNode): ProcessApplicationService | null {
@@ -323,6 +436,22 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
       return options.find((service) => this.serviceId(service) === explicitId) || this.applicationServices().find((service) => this.serviceId(service) === explicitId) || null;
     }
     return null;
+  }
+
+  private initialSectionServiceGroupUid(section: LegacyTaskFormSection, task: LegacyProcessNode): string {
+    const selected = this.selectedFormSectionServices(section, task)[0];
+    if (selected) return String(selected.serviceGroupUid || '').trim() || '__ungrouped';
+    return this.serviceGroupId(this.formServiceGroups(task)[0]) || '__ungrouped';
+  }
+
+  private writeFormSectionServiceIds(section: LegacyTaskFormSection, serviceUids: string[], task: LegacyProcessNode): void {
+    const normalized = Array.from(new Set(serviceUids.map((item) => String(item || '').trim()).filter(Boolean)));
+    section.serviceUids = normalized;
+    section.serviceIds = normalized;
+    section.serviceUid = normalized[0] || '';
+    section.serviceId = normalized[0] || '';
+    const first = this.formServiceOptions(task).find((service) => this.serviceId(service) === section.serviceUid);
+    section.serviceName = first?.name || '';
   }
 
   private referenceKeys(values: Array<string | undefined>): string[] {
@@ -636,6 +765,18 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     return this.roles().filter((role) => selected.has(this.roleId(role)) || selected.has(String(role.uid || '')) || selected.has(role.name || ''));
   }
 
+  protected isTaskRoleSelected(task: LegacyProcessNode, role: LegacyRole): boolean {
+    const selected = new Set(this.taskRoleIds(task));
+    return this.roleAliases(role).some((alias) => selected.has(alias));
+  }
+
+  protected toggleTaskRole(task: LegacyProcessNode, role: LegacyRole, checked: boolean): void {
+    const aliases = new Set(this.roleAliases(role));
+    const next = this.taskRoleIds(task).filter((roleId) => !aliases.has(roleId));
+    if (checked) next.push(this.roleId(role) || String(role.uid || role.name || ''));
+    this.setTaskRoleIds(task, Array.from(new Set(next.filter(Boolean))));
+  }
+
   protected selectedRoleLabels(task: LegacyProcessNode): string[] {
     return this.taskRoleIds(task).map((roleId) => this.displayRoleName(roleId) || roleId).filter(Boolean);
   }
@@ -649,6 +790,11 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     target?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  protected openMoreNodeSection(): void {
+    this.moreOpen.set(true);
+    queueMicrotask(() => this.scrollToNodeSection('process-more-section'));
+  }
+
   protected setTaskRoleIds(task: LegacyProcessNode, roleIds: string[]): void {
     this.adapter.setTaskRoleIds(task, roleIds);
     this.refresh();
@@ -656,6 +802,37 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected finishRoleSelection(): void {
     this.roleCollapsed.set(true);
+  }
+
+  protected isFormCollapsed(form: LegacyTaskForm): boolean {
+    return this.collapsedForms().has(this.formKey(form));
+  }
+
+  protected toggleFormCollapsed(form: LegacyTaskForm): void {
+    this.toggleCollapsedKey(this.collapsedForms, this.formKey(form));
+  }
+
+  protected isFormSectionCollapsed(form: LegacyTaskForm, section: LegacyTaskFormSection): boolean {
+    return this.collapsedFormSections().has(this.formSectionCollapseKey(form, section));
+  }
+
+  protected toggleFormSectionCollapsed(form: LegacyTaskForm, section: LegacyTaskFormSection): void {
+    this.toggleCollapsedKey(this.collapsedFormSections, this.formSectionCollapseKey(form, section));
+  }
+
+  private roleAliases(role: LegacyRole): string[] {
+    return [this.roleId(role), String(role.uid || ''), String(role.name || '')].map((item) => item.trim()).filter(Boolean);
+  }
+
+  private formSectionCollapseKey(form: LegacyTaskForm, section: LegacyTaskFormSection): string {
+    return `${this.formKey(form)}::${String(section.id || section.uid || section.name || '')}`;
+  }
+
+  private toggleCollapsedKey(target: WritableSignal<ReadonlySet<string>>, key: string): void {
+    if (!key) return;
+    const next = new Set(target());
+    next.has(key) ? next.delete(key) : next.add(key);
+    target.set(next);
   }
 
   protected stepKey(step: LegacyUserStep, index: number): string {
@@ -1635,9 +1812,11 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
       section.uid ||= section.id;
       section.name ||= `分组${sectionIndex + 1}`;
       section.note ||= '';
-      const sectionServiceId = String(section.serviceUid || section.serviceId || '').trim();
-      section.serviceUid = sectionServiceId;
-      section.serviceId = sectionServiceId;
+      const sectionServiceIds = this.formSectionServiceIds(section);
+      section.serviceUids = sectionServiceIds;
+      section.serviceIds = sectionServiceIds;
+      section.serviceUid = sectionServiceIds[0] || '';
+      section.serviceId = sectionServiceIds[0] || '';
       section.entity_id = String(section.entity_id || section.entityId || form.entity_id || form.entityId || '').trim();
       section.fields ||= [];
       section.fields.forEach((field, fieldIndex) => {

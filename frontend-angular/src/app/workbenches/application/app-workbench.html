@@ -16,7 +16,7 @@
   @if (activeTab() === 'service') {
     <div class="comp-tab-body app-service-board">
       <div class="comp-toolbar app-service-toolbar">
-        <input type="search" placeholder="搜索服务 / 接口 / 路径" [ngModel]="svcKeyword()" (ngModelChange)="svcKeyword.set($event)" />
+        <input type="search" placeholder="搜索服务 / 接口 / 路径" [ngModel]="svcKeyword()" (ngModelChange)="setServiceKeyword($event)" />
         @if (canEdit()) {
           <button class="btn btn-outline btn-sm" type="button" data-testid="service-group-new" (click)="createServiceGroup()">+ 新建服务</button>
           <button class="btn btn-primary btn-sm" type="button" data-testid="service-interface-new" (click)="createService()">+ 新建接口</button>
@@ -28,14 +28,14 @@
           <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()==='__all__'" (click)="selectServiceGroup('__all__')">
             <span>全部服务</span><strong>{{ services().length }}</strong>
           </button>
-          @for (group of serviceGroups(); track uid(group)) {
+          <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()==='__ungrouped__'" data-testid="service-group-card-ungrouped" (click)="selectServiceGroup('__ungrouped__')">
+            <span>未分组接口</span><strong>{{ serviceGroupCount(null) }}</strong>
+          </button>
+          @for (group of visibleServiceGroups(); track uid(group)) {
             <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()===uid(group)" [attr.data-testid]="'service-group-card-' + uid(group)" (click)="selectServiceGroup(uid(group))">
               <span>{{ group.name }}</span><strong>{{ serviceGroupCount(group) }}</strong>
             </button>
           }
-          <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()==='__ungrouped__'" data-testid="service-group-card-ungrouped" (click)="selectServiceGroup('__ungrouped__')">
-            <span>未分组接口</span><strong>{{ serviceGroupCount(null) }}</strong>
-          </button>
           @if (canEdit() && selectedServiceGroup(); as group) {
             <div class="app-service-nav-actions">
               <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-edit-' + uid(group)" (click)="openServiceGroupDrawer(group)">编辑服务</button>
@@ -49,7 +49,7 @@
         </aside>
 
         <section class="app-interface-list" data-testid="application-interface-list">
-          @for (svc of filteredServices(); track uid(svc)) {
+          @for (svc of pagedServices(); track uid(svc)) {
             <article class="svc-card app-interface-row" [class.active]="selectedService()?.uid === svc.uid" [attr.data-testid]="'interface-card-' + uid(svc)" (click)="selectService(svc)">
               <span class="svc-method-tag" [class.GET]="svc.method==='GET'" [class.POST]="svc.method!=='GET'">{{ svc.method || 'POST' }}</span>
               <div>
@@ -70,6 +70,13 @@
               }
             </div>
           }
+          @if (filteredServices().length > interfacePageSize) {
+            <div class="app-interface-pagination" data-testid="application-interface-pagination">
+              <button class="btn-ghost-sm" type="button" data-testid="application-interface-page-prev" [disabled]="currentInterfacePage() <= 1" (click)="setInterfacePage(currentInterfacePage() - 1)">上一页</button>
+              <span>{{ currentInterfacePage() }} / {{ totalInterfacePages() }}</span>
+              <button class="btn-ghost-sm" type="button" data-testid="application-interface-page-next" [disabled]="currentInterfacePage() >= totalInterfacePages()" (click)="setInterfacePage(currentInterfacePage() + 1)">下一页</button>
+            </div>
+          }
         </section>
 
         <aside class="app-service-detail" data-testid="application-interface-detail">
@@ -87,7 +94,16 @@
             <section class="drawer-section">
               <div class="drawer-section-head"><strong>基础信息</strong></div>
               <p class="drawer-read-row"><span>服务分类</span><strong>{{ serviceGroupTitle(serviceGroupFor(svc)) }}</strong></p>
-              <p class="drawer-read-row"><span>关联节点</span><strong>{{ (svc.nodeRefs || []).length }} 个</strong></p>
+              <div class="drawer-read-row drawer-read-row--nodes">
+                <span>关联节点</span>
+                <div class="app-linked-node-list">
+                  @for (node of linkedNodes(svc); track node.nodeUid) {
+                    <button type="button" [attr.data-testid]="'application-linked-node-' + node.nodeUid" (click)="jumpToProcessNode(node)">{{ node.name }}</button>
+                  } @empty {
+                    <strong>暂无关联节点</strong>
+                  }
+                </div>
+              </div>
               <p class="drawer-read-row"><span>说明</span><strong>{{ svc.desc || '暂无说明' }}</strong></p>
             </section>
             <section class="drawer-section">
@@ -442,6 +458,9 @@
         </header>
         <div class="drawer-body">
           <label>服务名称<input [attr.data-testid]="group.uid ? 'service-group-name-' + group.uid : 'service-group-drawer-name'" [(ngModel)]="group.name" placeholder="服务名称" /></label>
+          @if (serviceGroupNameError()) {
+            <p class="drawer-error" data-testid="service-group-name-error">{{ serviceGroupNameError() }}</p>
+          }
           <label>服务说明<input [attr.data-testid]="group.uid ? 'service-group-desc-' + group.uid : 'service-group-drawer-desc'" [(ngModel)]="group.desc" placeholder="服务说明" /></label>
         </div>
         <footer class="drawer-actions">

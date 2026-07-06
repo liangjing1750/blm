@@ -610,6 +610,18 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.proc-view-actions .editor-toggle.active {
+  border-color: #d7e4f3;
+  background: #f8fafc;
+  color: #64748b;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 500;
+}
+.proc-view-actions .editor-toggle.active:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
 .toolbar-help {
   flex: 0 0 auto;
 }

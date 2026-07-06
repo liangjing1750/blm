@@ -39,6 +39,8 @@ export interface LegacyTaskFormSection {
   note?: string;
   serviceUid?: string;
   serviceId?: string;
+  serviceUids?: string[];
+  serviceIds?: string[];
   serviceName?: string;
   entity_id?: string;
   entityId?: string;

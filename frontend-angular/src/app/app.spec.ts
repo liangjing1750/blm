@@ -3621,6 +3621,11 @@ describe('App', () => {
               note: '分组说明',
               serviceUid: 'service-submit',
               fields: [{ uid: 'field-1', name: '仓库', type: 'Text', note: '默认全部' }],
+            }, {
+              uid: 'section-2',
+              name: '提交信息',
+              note: '第二组',
+              fields: [{ uid: 'field-2', name: '备注', type: 'Text', note: '较长说明' }],
             }],
           }],
           entity_ops: [],
@@ -3649,16 +3654,42 @@ describe('App', () => {
     const materialSection = compiled.querySelector<HTMLElement>('[data-testid="process-material-section"]')!;
     const sectionHead = compiled.querySelector<HTMLElement>('[data-testid="task-form-section-card"] .task-form-section-head')!;
     const serviceSummary = compiled.querySelector<HTMLElement>('[data-testid="task-form-section-service-summary"]')!;
-    const serviceJump = compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-section-service-jump"]')!;
+    const groupBadges = compiled.querySelectorAll<HTMLElement>('[data-testid="task-form-section-badge"]');
+    const formCollapse = compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-collapse-toggle"]')!;
+    const sectionCollapse = compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-section-collapse-toggle"]')!;
+    const selectedRole = compiled.querySelector<HTMLElement>('[data-testid="node-selected-role-chip"]');
+    const groupNoteHeader = compiled.querySelector<HTMLElement>('.task-form-field-table th:nth-child(4)')!;
+    const groupActionHeader = compiled.querySelector<HTMLElement>('.task-form-field-table th:nth-child(5)')!;
 
     expect(progressIndex).toBeFalsy();
     expect(getComputedStyle(progressCount).color).toBe('rgb(15, 23, 42)');
+    expect(compiled.querySelector('[data-testid="process-editor-node"] .node-top-node-service-jump')).toBeFalsy();
+    expect(compiled.querySelector('[data-testid="process-task-lite-panel"] .node-fold-btn')?.textContent).toContain('选择角色');
+    expect(selectedRole?.querySelector('.node-selected-role-icon')).toBeTruthy();
     expect(materialSection.textContent).not.toContain('表单模型');
-    expect(serviceSummary.textContent).toContain('/stock/location');
-    expect(serviceSummary.textContent).not.toContain('POST');
-    expect(serviceJump.textContent).toContain('🌐');
+    expect(serviceSummary.textContent?.trim()).toBe('');
+    expect(serviceSummary.classList.contains('task-form-section-service-summary--compact')).toBe(true);
+    expect(formCollapse.textContent).toContain('折叠');
+    expect(sectionCollapse.textContent).toContain('折叠');
+    expect(Array.from(groupBadges).map((badge) => badge.textContent?.trim())).toEqual(['G1', 'G2']);
+    expect(compiled.querySelector('.task-form-section-head--tone-1')).toBeTruthy();
+    expect(compiled.querySelector('.task-form-section-head--tone-2')).toBeTruthy();
+    expect(getComputedStyle(groupNoteHeader).width).toBe('42%');
+    expect(getComputedStyle(groupActionHeader).width).toBe('14%');
     expect(getComputedStyle(sectionHead).gridTemplateColumns.split(' ').length).toBeGreaterThanOrEqual(6);
 
+    compiled.querySelector<HTMLButtonElement>('.node-progress-more')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLDetailsElement>('#process-more-section')?.open).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('.task-form-service-select')?.click();
+    fixture.detectChanges();
+    const serviceOption = compiled.querySelector<HTMLElement>('[data-testid="task-form-section-service-option"]')!;
+    expect(serviceOption.textContent).toContain('修改垛位应用接口');
+    const serviceJump = serviceOption.querySelector<HTMLButtonElement>('[data-testid="task-form-section-service-jump"]')!;
+    expect(serviceJump.textContent).toContain('🌐');
+    expect(serviceJump.getAttribute('title')).toBe('点击跳转至应用接口');
+    expect(serviceJump.getAttribute('aria-label')).toBe('点击跳转至应用接口');
     serviceJump.click();
     fixture.detectChanges();
     expect(runtime.ui['mainTab']).toBe('applicationWorkbench');
@@ -3824,13 +3855,17 @@ describe('App', () => {
 
     expect(compiled.querySelector('[data-testid="task-form-service"]')).toBeFalsy();
     expect(compiled.querySelector('[data-testid="task-form-service-summary"]')).toBeFalsy();
-    const sectionSelects = compiled.querySelectorAll<HTMLSelectElement>('[data-testid="task-form-section-service"]');
-    expect(sectionSelects).toHaveLength(2);
-    expect(sectionSelects[0].value).toBe('service-query');
-    expect(Array.from(sectionSelects[1].options).map((option) => option.value)).toContain('service-submit');
+    const sectionPickers = compiled.querySelectorAll<HTMLElement>('[data-testid="task-form-section-service"]');
+    expect(sectionPickers).toHaveLength(2);
+    expect(sectionPickers[0].textContent).toContain('查询预约列表');
+    expect(sectionPickers[1].textContent).toContain('未关联接口需求');
 
-    sectionSelects[1].value = 'service-submit';
-    sectionSelects[1].dispatchEvent(new Event('change', { bubbles: true }));
+    sectionPickers[1].querySelector<HTMLButtonElement>('.task-form-service-select')?.click();
+    fixture.detectChanges();
+    const serviceChecks = Array.from(compiled.querySelectorAll<HTMLInputElement>('[data-testid="task-form-section-service-menu"] input[type="checkbox"]'));
+    expect(compiled.querySelector('[data-testid="task-form-section-service-menu"]')?.textContent).toContain('提交预约');
+    serviceChecks[1].checked = true;
+    serviceChecks[1].dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
 
     const form = runtime.doc.processes[0].nodes[0].forms[0];
@@ -3838,6 +3873,72 @@ describe('App', () => {
     expect(form.sections[1].serviceUid).toBe('service-submit');
     expect(form.sections[1].serviceId).toBe('service-submit');
     expect(form.sections[1].serviceName).toBe('提交预约');
+    expect(form.sections[1].serviceUids).toEqual(['service-submit']);
+  });
+
+  it('should allow read-only inspection and per-interface jump for form-section bindings', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库预约流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '客户提交入库预约',
+          roleIds: [],
+          userSteps: [],
+          forms: [{
+            uid: 'form-1',
+            name: '预约表单',
+            sections: [{ uid: 'sec-1', name: '筛选条件', serviceUids: ['service-query'], fields: [] }],
+          }],
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [],
+        }],
+      }],
+      serviceGroups: [{ uid: 'group-query', name: '查询服务' }],
+      services: [
+        { uid: 'service-query', serviceGroupUid: 'group-query', name: '查询预约列表', method: 'GET', path: '/reservations', nodeRefs: ['node-submit'] },
+        { uid: 'service-submit', serviceGroupUid: 'group-query', name: '提交预约', method: 'POST', path: '/reservations/submit', nodeRefs: ['node-submit'] },
+      ],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.componentRef.setInput('editing', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('.task-form-service-select')?.click();
+    fixture.detectChanges();
+    const selectedOnly = compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-section-service-selected-only"]');
+    selectedOnly?.click();
+    fixture.detectChanges();
+
+    const menu = compiled.querySelector<HTMLElement>('[data-testid="task-form-section-service-menu"]');
+    expect(menu?.textContent).toContain('查询预约列表');
+    expect(menu?.textContent).not.toContain('提交预约');
+    expect(menu?.textContent).not.toContain('service-query');
+    expect(compiled.querySelector<HTMLInputElement>('[data-testid="task-form-section-service-option"] input[type="checkbox"]')?.disabled).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-section-service-jump"]')?.click();
+    expect(runtime.ui['mainTab']).toBe('applicationWorkbench');
+    expect(runtime.ui['applicationServiceUid']).toBe('service-query');
   });
 
   it('should keep form copy as a title-row icon and confirm before deleting a form', async () => {
@@ -4290,10 +4391,13 @@ describe('App', () => {
 
     expect(compiled.querySelector('[data-testid="task-form-service"]')).toBeFalsy();
     expect(compiled.querySelector('[data-testid="task-form-section-entity"]')).toBeFalsy();
-    const formSectionServiceSelect = compiled.querySelector<HTMLSelectElement>('[data-testid="task-form-section-service"]')!;
-    expect(Array.from(formSectionServiceSelect.options).map((option) => option.value)).toContain('service-submit');
-    formSectionServiceSelect.value = 'service-submit';
-    formSectionServiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    const formSectionServicePicker = compiled.querySelector<HTMLElement>('[data-testid="task-form-section-service"]')!;
+    formSectionServicePicker.querySelector<HTMLButtonElement>('.task-form-service-select')?.click();
+    fixture.detectChanges();
+    const submitServiceCheck = Array.from(compiled.querySelectorAll<HTMLInputElement>('[data-testid="task-form-section-service-menu"] input[type="checkbox"]')).find((input) => input.closest('label')?.textContent?.includes('提交入库预约应用接口'))!;
+    expect(submitServiceCheck).toBeTruthy();
+    submitServiceCheck.checked = true;
+    submitServiceCheck.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
 
     const form = runtime.doc.processes[0].nodes[0].forms[0];
@@ -4303,8 +4407,9 @@ describe('App', () => {
     expect(form.sections[0].serviceUid).toBe('service-submit');
     expect(form.sections[0].serviceId).toBe('service-submit');
     expect(form.sections[0].serviceName).toBe('提交入库预约应用接口');
+    expect(form.sections[0].serviceUids).toEqual(['service-submit']);
     expect(form.sections[0].entity_id || '').toBe('');
-    expect(compiled.querySelector('[data-testid="task-form-section-service-summary"]')?.textContent).toContain('/inbound-reservations/submit');
+    expect(compiled.querySelector('[data-testid="task-form-section-service-summary"]')?.textContent?.trim()).toBe('');
     expect(compiled.querySelector('[data-testid="task-form-entity"]')).toBeNull();
     expect(compiled.querySelector('[data-testid="task-form-entity-field"]')).toBeFalsy();
   });

@@ -35,7 +35,7 @@
                 <span class="node-top-node-index">{{ index + 1 }}</span>
                 <span class="node-top-node-name">{{ node.name || '未命名节点' }}</span>
                 <span class="node-top-node-edit" (click)="startRenameNode(node, $event)" title="修改节点名称">✎</span>
-              &#127760;</button>
+              </button>
             }
           } @empty {
             <span class="node-top-node-empty">暂无节点</span>
@@ -61,6 +61,7 @@
                 </button>
               }
             </div>
+            <button class="node-progress-more" type="button" (click)="openMoreNodeSection()">更多</button>
           </nav>
 
         <section class="node-editor-main" data-testid="process-editor-drawer">
@@ -68,11 +69,11 @@
           <section #nodeSection class="node-editor-card node-basic-card node-editor-card--role" id="node-role-section" data-testid="process-task-lite-panel">
             <div class="node-section-head">
               <div><h4>办理角色</h4><span class="node-count-pill">已选 {{ taskRoleIds(task).length }} 个</span></div>
-              <button class="btn btn-ghost-sm node-fold-btn" type="button" (click)="roleCollapsed.set(!roleCollapsed())">{{ roleCollapsed() ? '选择更多角色' : '完成选择' }} <span>›</span></button>
+              <button class="btn btn-ghost-sm node-fold-btn" type="button" (click)="roleCollapsed.set(!roleCollapsed())">{{ roleCollapsed() ? '选择角色' : '完成选择' }} <span>›</span></button>
             </div>
             <div class="node-selected-chip-row">
               @for (roleName of selectedRoleLabels(task); track roleName) {
-                <span>{{ roleName }}</span>
+                <span data-testid="node-selected-role-chip"><span class="node-selected-role-icon" aria-hidden="true"></span>{{ roleName }}</span>
               } @empty {
                 <span class="is-empty">尚未选择办理角色</span>
               }
@@ -81,7 +82,7 @@
               <div class="node-role-checks node-role-checks--picker" data-testid="process-task-role-select">
                 @for (role of roles(); track roleId(role)) {
                   <label>
-                    <input type="checkbox" [checked]="taskRoleIds(task).includes(roleId(role))" (change)="setTaskRoleIds(task, $any($event.target).checked ? taskRoleIds(task).concat([roleId(role)]) : taskRoleIds(task).filter(id => id !== roleId(role)))" />
+                    <input type="checkbox" [checked]="isTaskRoleSelected(task, role)" (change)="toggleTaskRole(task, role, $any($event.target).checked)" />
                     <span>{{ role.name || roleId(role) }}</span>
                   </label>
                 }
@@ -220,6 +221,7 @@
                       <span class="task-form-index">F{{ formIndex + 1 }}</span>
                       <input type="text" data-testid="task-form-name" [disabled]="!editing" [ngModel]="form.name || ''" (ngModelChange)="setFormName(task, form, $event)" placeholder="表单名称，如：仓库管理列表" />
                       <span class="task-form-field-count">{{ formFieldCount(form) }} 字段</span>
+                      <button class="btn btn-ghost-sm task-form-collapse-toggle" type="button" data-testid="task-form-collapse-toggle" (click)="toggleFormCollapsed(form)">{{ isFormCollapsed(form) ? '展开' : '折叠' }}</button>
                       <button class="step-action task-form-icon-action" type="button" data-testid="task-form-duplicate" aria-label="复制表单" title="复制表单" [disabled]="!editing" (click)="toggleFormCopyMenu(form, $event)">
                         <span aria-hidden="true">⧉</span>
                       </button>
@@ -232,21 +234,54 @@
                       }
                       <button class="step-del task-form-icon-action" type="button" data-testid="task-form-delete" aria-label="删除表单" title="删除表单" [disabled]="!editing" (click)="removeForm(task, form)">×</button>
                     </div>
+                    @if (!isFormCollapsed(form)) {
+
                     <textarea class="task-form-purpose" rows="1" data-testid="task-form-purpose" [readonly]="!editing" [ngModel]="form.purpose || ''" (input)="autoGrow($any($event.target)); setFormPurpose(form, $any($event.target).value)" placeholder="表单用途，如：筛选、列表、新增、详情、输出说明"></textarea>
                     <div class="task-form-sections">
                       @for (section of sections(form); track section.id || section.uid || $index; let sectionIndex = $index) {
                         <div class="task-form-section-card" data-testid="task-form-section-card">
-                          <div class="task-form-section-head">
+                          <div class="task-form-section-head" [ngClass]="'task-form-section-head--tone-' + ((sectionIndex % 4) + 1)">
+                            <span class="task-form-section-badge" data-testid="task-form-section-badge">G{{ sectionIndex + 1 }}</span>
                             <input data-testid="task-form-section-name" type="text" [disabled]="!editing" [ngModel]="section.name || ''" (ngModelChange)="setFormSection(section, 'name', $event)" placeholder="分组名称" />
                             <input data-testid="task-form-section-note" type="text" [disabled]="!editing" [ngModel]="section.note || ''" (ngModelChange)="setFormSection(section, 'note', $event)" placeholder="分组说明" />
-                            <select data-testid="task-form-section-service" [disabled]="!editing" [ngModel]="formSectionServiceId(section)" (ngModelChange)="setFormSectionService(section, task, $event)">
-                              <option value="">未关联接口需求</option>
-                              @for (service of formServiceOptions(task); track serviceId(service)) {
-                                <option [value]="serviceId(service)">{{ service.name || serviceId(service) }}</option>
+                            <div class="task-form-service-picker" data-testid="task-form-section-service">
+                              <button class="task-form-service-select" type="button" (click)="toggleSectionServicePicker(form, section, task)">
+                                <span>{{ formSectionServiceLabel(section, task) }}</span>
+                                <b>›</b>
+                              </button>
+                              @if (isSectionServicePickerOpen(form, section) && sectionServicePicker(); as picker) {
+                                <div class="task-form-service-menu" data-testid="task-form-section-service-menu">
+                                  <div class="task-form-service-menu-head">
+                                    <button type="button" data-testid="task-form-section-service-selected-only" [class.active]="picker.selectedOnly" (click)="toggleSectionServicePickerSelectedOnly()">只看已选</button>
+                                    <button type="button" (click)="closeSectionServicePicker()">关闭</button>
+                                  </div>
+                                  <div class="task-form-service-menu-body">
+                                    <div class="task-form-service-groups">
+                                      @for (group of formServiceGroups(task); track serviceGroupId(group)) {
+                                        <button type="button" [class.active]="picker.activeGroupUid === serviceGroupId(group)" (click)="setSectionServicePickerGroup(serviceGroupId(group))">
+                                          <span>{{ group.name || serviceGroupId(group) }}</span><b>›</b>
+                                        </button>
+                                      }
+                                    </div>
+                                    <div class="task-form-service-options">
+                                      @for (service of formServicesForGroup(task, picker.activeGroupUid, picker.selectedOnly, section); track serviceId(service)) {
+                                        <label data-testid="task-form-section-service-option">
+                                          <span>
+                                            <strong>{{ service.name || serviceId(service) }}</strong>
+                                          </span>
+                                          <button class="task-form-service-jump task-form-service-jump--inline" type="button" data-testid="task-form-section-service-jump" title="点击跳转至应用接口" aria-label="点击跳转至应用接口" (click)="$event.preventDefault(); $event.stopPropagation(); jumpToApplicationService(service)">&#127760;</button>
+                                          <input type="checkbox" [disabled]="!editing" [checked]="isFormSectionServiceSelected(section, service)" (change)="toggleFormSectionService(section, task, service, $any($event.target).checked)" />
+                                        </label>
+                                      } @empty {
+                                        <p>暂无接口</p>
+                                      }
+                                    </div>
+                                  </div>
+                                </div>
                               }
-                            </select>
-                            <span class="task-form-section-service-summary" data-testid="task-form-section-service-summary">{{ formSectionServiceSummary(section, task) }}</span>
-                            <button class="task-form-service-jump" type="button" data-testid="task-form-section-service-jump" title="??????" [disabled]="!formSectionServiceId(section)" (click)="jumpToApplicationService(section)">&#127760;</button>
+                            </div>
+                            <span class="task-form-section-service-summary task-form-section-service-summary--compact" data-testid="task-form-section-service-summary"></span>
+                            <button class="btn btn-ghost-sm task-form-collapse-toggle" type="button" data-testid="task-form-section-collapse-toggle" (click)="toggleFormSectionCollapsed(form, section)">{{ isFormSectionCollapsed(form, section) ? '展开' : '折叠' }}</button>
                             <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-field-add" [disabled]="!editing" (click)="addFormField(section)">+ 字段</button>
                             <div class="step-actions task-form-inline-actions">
                               <button class="step-action" type="button" data-testid="task-form-section-add-after" title="插入分组" [disabled]="!editing" (click)="addFormSection(form, section)">+</button>
@@ -255,7 +290,7 @@
                               <button class="step-del" type="button" data-testid="task-form-section-delete" title="删除分组" [disabled]="!editing || sections(form).length <= 1" (click)="removeFormSection(form, section)">×</button>
                             </div>
                           </div>
-                          @if ((section.fields || []).length) {
+                          @if (!isFormSectionCollapsed(form, section) && (section.fields || []).length) {
                             <div class="task-form-field-table-wrap">
                               <table class="task-form-field-table">
                                 <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
@@ -285,13 +320,14 @@
                                 </tbody>
                               </table>
                             </div>
-                          } @else {
+                          } @else if (!isFormSectionCollapsed(form, section)) {
                             <p class="no-refs task-form-empty">分组 {{ sectionIndex + 1 }} 暂无字段</p>
                           }
                         </div>
                       }
                     </div>
                     <button class="btn btn-ghost-sm task-form-section-add" type="button" data-testid="task-form-section-add" [disabled]="!editing" (click)="addFormSection(form)">+ 添加分组</button>
+                                      }
                   </article>
                 } @empty {
                   <p class="node-empty">暂无表单定义。需要采集或展示数据时再添加。</p>
@@ -408,7 +444,7 @@
             </div>
           </section>
 
-          <details class="node-editor-card node-more-card" [open]="moreOpen()" (toggle)="moreOpen.set($any($event.target).open)">
+          <details #nodeSection class="node-editor-card node-more-card" id="process-more-section" [open]="moreOpen()" (toggle)="moreOpen.set($any($event.target).open)">
             <summary>更多 <span>应用服务、关联实体</span></summary>
             <section class="node-more-section" data-testid="process-application-service-more">
               <div class="node-section-head">

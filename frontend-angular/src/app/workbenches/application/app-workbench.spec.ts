@@ -129,6 +129,68 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector('.svc-params-table')).toBeFalsy();
   });
 
+  it('paginates the interface list by eight items and sorts interfaces by name', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services = Array.from({ length: 12 }, (_, index) => {
+      const name = `Interface ${String(12 - index).padStart(2, '0')}`;
+      return {
+        uid: `svc-page-${index + 1}`,
+        name,
+        serviceGroupUid: 'service-group-1',
+        method: 'POST',
+        path: `/api/${name.toLowerCase().replaceAll(' ', '-')}`,
+        desc: '',
+        requestParams: [],
+        responseParams: [],
+        parameterMappings: [],
+        nodeRefs: [],
+      };
+    });
+    fixture.detectChanges();
+
+    const firstPageNames = Array.from(host.querySelectorAll<HTMLElement>('[data-testid^="interface-card-"] strong'))
+      .map((item) => item.textContent?.trim());
+    expect(firstPageNames).toHaveLength(8);
+    expect(firstPageNames).toEqual([
+      'Interface 01',
+      'Interface 02',
+      'Interface 03',
+      'Interface 04',
+      'Interface 05',
+      'Interface 06',
+      'Interface 07',
+      'Interface 08',
+    ]);
+    expect(host.querySelector('[data-testid="application-interface-pagination"]')?.textContent).toContain('1 / 2');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="application-interface-page-next"]')?.click();
+    fixture.detectChanges();
+
+    const secondPageNames = Array.from(host.querySelectorAll<HTMLElement>('[data-testid^="interface-card-"] strong'))
+      .map((item) => item.textContent?.trim());
+    expect(secondPageNames).toEqual(['Interface 09', 'Interface 10', 'Interface 11', 'Interface 12']);
+  });
+
+  it('keeps ungrouped interfaces pinned above named service groups', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services.push({
+      uid: 'svc-ungrouped',
+      name: '未归属接口',
+      method: 'POST',
+      path: '/ungrouped',
+      desc: '',
+      requestParams: [],
+      responseParams: [],
+      parameterMappings: [],
+      nodeRefs: [],
+    });
+    fixture.detectChanges();
+
+    const navItems = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="service-group-rail"] .app-service-nav-item'))
+      .map((item) => item.textContent?.replace(/\s+/g, ''));
+    expect(navItems.slice(0, 3).join('|')).toContain('全部服务3|未分组接口1|订单服务1');
+  });
+
   it('shows interface details in read-only mode when editing is closed', () => {
     const runtime = getAngularRuntimeState();
     runtime.doc.services[0].requestParams = [
@@ -152,6 +214,25 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(detail?.querySelectorAll('.app-param-table th')).toHaveLength(8);
     expect(host.querySelector('[data-testid="service-interface-drawer"]')).toBeFalsy();
     expect(detail?.querySelector('input')).toBeFalsy();
+  });
+
+  it('shows linked node names in interface details and jumps to the node view', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services[0].nodeRefs = ['node-submit'];
+    runtime.doc.processes = [{ uid: 'process-1', name: '订单流程', nodes: [{ uid: 'node-submit', name: '提交订单节点' }] }];
+    fixture.detectChanges();
+    host.querySelector<HTMLElement>('[data-testid="interface-card-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    const nodeLink = host.querySelector<HTMLButtonElement>('[data-testid="application-linked-node-node-submit"]');
+    expect(nodeLink?.textContent).toContain('提交订单节点');
+
+    nodeLink?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['processWorkbenchTab']).toBe('node');
+    expect(runtime.ui['procId']).toBe('process-1');
+    expect(runtime.ui['taskId']).toBe('node-submit');
   });
 
   it('keeps application service columns as independent scroll regions', () => {
@@ -189,6 +270,23 @@ describe('ApplicationWorkbenchComponent', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="service-group-card-service-group-1"]')?.click();
     fixture.detectChanges();
     expect(host.querySelector<HTMLButtonElement>('[data-testid="service-group-edit-service-group-1"]')).toBeTruthy();
+  });
+
+  it('rejects reserved ungrouped service name when creating a service group', () => {
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-group-new"]')?.click();
+    fixture.detectChanges();
+
+    const name = host.querySelector<HTMLInputElement>('[data-testid="service-group-drawer-name"]')!;
+    name.value = '未分组接口';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-group-drawer-save"]')?.click();
+    fixture.detectChanges();
+
+    expect(getAngularRuntimeState().doc.serviceGroups.map((group: any) => group.name)).not.toContain('未分组接口');
+    expect(host.querySelector('[data-testid="service-group-name-error"]')?.textContent).toContain('未分组接口是系统保留名称');
   });
 
   it('centers the interface editor and keeps backdrop clicks from closing it', () => {

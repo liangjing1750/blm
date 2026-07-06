@@ -38,10 +38,13 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly orchSvcId = signal('');
   protected readonly selectedServiceGroupUid = signal('__all__');
   protected readonly selectedServiceId = signal(String(this.runtime.ui['applicationServiceUid'] || this.runtime.ui['applicationServiceId'] || ''));
+  protected readonly interfacePage = signal(1);
+  protected readonly interfacePageSize = 8;
   protected readonly selectedStepUid = signal('');
   protected readonly editorOpen = signal(false);
   protected readonly serviceDrawerId = signal('');
   protected readonly serviceGroupDrawer = signal<Partial<LegacyServiceGroup> | null>(null);
+  protected readonly serviceGroupNameError = signal('');
   protected readonly serviceParamViews = signal<Record<'requestParams' | 'responseParams', 'list' | 'json'>>({
     requestParams: 'list',
     responseParams: 'list',
@@ -86,7 +89,36 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       const matchesGroup = groupUid === '__all__'
         || (groupUid === '__ungrouped__' ? !s.serviceGroupUid : String(s.serviceGroupUid || '') === groupUid);
       return matchesKeyword && matchesGroup;
-    });
+    }).sort((left, right) => String(left.name || this.uid(left)).localeCompare(String(right.name || this.uid(right)), 'zh-Hans-CN', { numeric: true }));
+  }
+
+  protected visibleServiceGroups(): LegacyServiceGroup[] {
+    return [...this.serviceGroups()].sort((left, right) =>
+      String(left.name || this.uid(left)).localeCompare(String(right.name || this.uid(right)), 'zh-Hans-CN', { numeric: true }),
+    );
+  }
+
+  protected pagedServices(): LegacyService[] {
+    const page = this.currentInterfacePage();
+    const start = (page - 1) * this.interfacePageSize;
+    return this.filteredServices().slice(start, start + this.interfacePageSize);
+  }
+
+  protected totalInterfacePages(): number {
+    return Math.max(1, Math.ceil(this.filteredServices().length / this.interfacePageSize));
+  }
+
+  protected currentInterfacePage(): number {
+    return Math.min(Math.max(1, this.interfacePage()), this.totalInterfacePages());
+  }
+
+  protected setInterfacePage(page: number): void {
+    this.interfacePage.set(Math.min(Math.max(1, page), this.totalInterfacePages()));
+  }
+
+  protected setServiceKeyword(keyword: string): void {
+    this.svcKeyword.set(keyword);
+    this.interfacePage.set(1);
   }
 
   // 模块意图：服务分组只表达接口聚合，不表达部署单元或领域服务边界。
@@ -108,6 +140,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected selectServiceGroup(groupUid: string): void {
     this.selectedServiceGroupUid.set(groupUid);
     this.selectedServiceId.set('');
+    this.interfacePage.set(1);
   }
 
   protected selectedServiceGroup(): LegacyServiceGroup | null {
@@ -146,6 +179,27 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected serviceGroupFor(svc: LegacyService): LegacyServiceGroup | null {
     return this.serviceGroups().find((group) => this.uid(group) === String(svc.serviceGroupUid || '')) || null;
+  }
+
+  protected linkedNodes(svc: LegacyService): Array<{ processUid: string; nodeUid: string; name: string }> {
+    const refs = new Set((svc.nodeRefs || []).map((ref) => String(ref || '').trim()).filter(Boolean));
+    const result: Array<{ processUid: string; nodeUid: string; name: string }> = [];
+    for (const process of this.doc().processes || []) {
+      for (const node of process.nodes || []) {
+        const nodeUid = this.uid(node);
+        if (refs.has(nodeUid)) result.push({ processUid: this.uid(process), nodeUid, name: node.name || nodeUid });
+      }
+    }
+    return result;
+  }
+
+  protected jumpToProcessNode(node: { processUid: string; nodeUid: string }): void {
+    this.runtime.ui['mainTab'] = 'processWorkbench';
+    this.runtime.ui['processWorkbenchTab'] = 'node';
+    this.runtime.ui['procId'] = node.processUid;
+    this.runtime.ui['taskId'] = node.nodeUid;
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    window.dispatchEvent(new CustomEvent('blm-jump-workbench', { detail: { mainTab: 'processWorkbench' } }));
   }
 
   protected serviceDrawer(): LegacyService | null {
@@ -210,15 +264,22 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected openServiceGroupDrawer(group?: LegacyServiceGroup): void {
     if (!this.canEdit()) return;
+    this.serviceGroupNameError.set('');
     this.serviceGroupDrawer.set(group ? { ...group } : { uid: '', name: '', desc: '' });
   }
   protected closeServiceGroupDrawer(): void {
+    this.serviceGroupNameError.set('');
     this.serviceGroupDrawer.set(null);
   }
   protected saveServiceGroupDrawer(): void {
     if (!this.canEdit()) return;
     const draft = this.serviceGroupDrawer();
     if (!draft || !draft.name?.trim()) return;
+    if (draft.name.trim() === '未分组接口') {
+      this.serviceGroupNameError.set('未分组接口是系统保留名称，请换一个服务名称。');
+      return;
+    }
+    this.serviceGroupNameError.set('');
     this.doc().serviceGroups ||= [];
     if (!draft.uid) {
       draft.uid = `service-group-${Date.now()}`;
