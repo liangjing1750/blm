@@ -15,7 +15,7 @@ import {
 
 // 模块意图：所有会修改文档的数据操作集中在这里，Angular 组件只负责展示和事件转发。
 export interface ValueDomainActionsOptions {
-  document: ValueDomainDocument;
+  document: ValueDomainDocument | (() => ValueDomainDocument);
   draftPort: ValueDomainDraftPort;
   nextId?: (prefix: string) => string;
   setActiveStageId?: (stageId: string) => void;
@@ -46,12 +46,17 @@ export interface ValueDomainActions {
 export function createValueDomainActions(options: ValueDomainActionsOptions): ValueDomainActions {
   const nextId = options.nextId ?? createDefaultId;
 
+  // 模块意图：运行时文档可能被打开文档、草稿恢复或协作同步整体替换，action 必须写入当前文档。
+  function documentRef(): ValueDomainDocument {
+    return typeof options.document === 'function' ? options.document() : options.document;
+  }
+
   function model() {
-    return ensureValueDomainModel(options.document, nextId);
+    return ensureValueDomainModel(documentRef(), nextId);
   }
 
   function stages() {
-    return ensureValueDomainStages(options.document);
+    return ensureValueDomainStages(documentRef());
   }
 
   function commit(commitOptions: { sidebar?: boolean } = {}) {
@@ -180,15 +185,16 @@ export function createValueDomainActions(options: ValueDomainActionsOptions): Va
       const stage = stages().find((item) => getValueDomainStageId(item) === stageId);
       if (!stage) return;
       if (!await confirm(`确认删除业务阶段 ${stage.name || stageId} 吗？阶段内流程不会删除，但会变成未设置业务阶段。`, '删除业务阶段')) return;
-      options.document.stages = stages().filter((item) => getValueDomainStageId(item) !== stageId);
-      options.document.stageLinks = (options.document.stageLinks || []).filter((link) => (
+      const doc = documentRef();
+      doc.stages = stages().filter((item) => getValueDomainStageId(item) !== stageId);
+      doc.stageLinks = (doc.stageLinks || []).filter((link) => (
         link.fromStageUid !== stageId && link.toStageUid !== stageId
       ));
-      const removedRefIds = new Set((options.document.stageFlowRefs || [])
+      const removedRefIds = new Set((doc.stageFlowRefs || [])
         .filter((ref) => ref.stageUid === stageId)
         .map((ref) => ref.id));
-      options.document.stageFlowRefs = (options.document.stageFlowRefs || []).filter((ref) => ref.stageUid !== stageId);
-      options.document.stageFlowLinks = (options.document.stageFlowLinks || []).filter((link) => (
+      doc.stageFlowRefs = (doc.stageFlowRefs || []).filter((ref) => ref.stageUid !== stageId);
+      doc.stageFlowLinks = (doc.stageFlowLinks || []).filter((link) => (
         link.stageUid !== stageId && !removedRefIds.has(link.fromRefUid) && !removedRefIds.has(link.toRefUid)
       ));
       options.clearStageLinkFocus?.(stageId);

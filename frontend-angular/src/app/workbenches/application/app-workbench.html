@@ -354,20 +354,42 @@
               }
             </section>
           } @else {
+            <div class="svc-interface-view-switch">
+              <button class="btn-ghost-sm" data-testid="service-interface-form-view" [class.active]="interfaceView()==='form'" type="button" (click)="setInterfaceView('form', svc)">表单视图</button>
+              <button class="btn-ghost-sm" data-testid="service-interface-json-view" [class.active]="interfaceView()==='json'" type="button" (click)="setInterfaceView('json', svc)">JSON 视图</button>
+            </div>
+            @if (interfaceView() === 'json') {
+              <section class="svc-params-section svc-interface-json-section">
+                <div class="svc-params-head"><span>完整接口定义</span></div>
+                <textarea class="svc-param-json svc-interface-json" data-testid="service-interface-json-editor" [value]="serviceInterfaceJsonDraft() || interfaceJson(svc)" (input)="updateInterfaceFromJson(svc, $any($event.target).value)" (change)="updateInterfaceFromJson(svc, $any($event.target).value)"></textarea>
+                @if (serviceInterfaceJsonError()) {
+                  <p class="drawer-error">{{ serviceInterfaceJsonError() }}</p>
+                }
+              </section>
+            } @else {
             <section class="svc-edit-section svc-edit-basics">
               <div class="svc-edit-section-head"><strong>接口基础信息</strong></div>
               <div class="svc-edit-row">
-                <input [attr.data-testid]="'interface-name-' + uid(svc)" [(ngModel)]="svc.name" (ngModelChange)="touch()" placeholder="接口名称" class="svc-edit-name" />
+                <input [attr.data-testid]="'interface-name-' + uid(svc)" [value]="svc.name || ''" (input)="svc.name = $any($event.target).value; touch()" placeholder="接口名称" class="svc-edit-name" />
                 <select [(ngModel)]="svc.serviceGroupUid" (ngModelChange)="touch()" [attr.data-testid]="'service-interface-group-select-' + uid(svc)" class="svc-group-select">
                   <option value="">未分组</option>
                   @for (group of serviceGroups(); track uid(group)) {
                     <option [value]="uid(group)">{{ group.name }}</option>
                   }
                 </select>
-                <select [(ngModel)]="svc.method" (ngModelChange)="touch()" [attr.data-testid]="'interface-method-' + uid(svc)" class="svc-method-select"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
-                <input [attr.data-testid]="'interface-path-' + uid(svc)" [(ngModel)]="svc.path" (ngModelChange)="touch()" placeholder="/api/..." class="svc-edit-path" />
+                <select [(ngModel)]="svc.method" (ngModelChange)="touch()" [attr.data-testid]="'interface-method-' + uid(svc)" class="svc-method-select"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>GET POST</option></select>
+                <input [attr.data-testid]="'interface-path-' + uid(svc)" [(ngModel)]="svc.path" (ngModelChange)="touch()" placeholder="/api/... 或 handler 标识" class="svc-edit-path" />
+              </div>
+              <div class="svc-edit-row svc-edit-row--meta">
+                <input [attr.data-testid]="'interface-actor-' + uid(svc)" [(ngModel)]="svc.actor" (ngModelChange)="touch()" placeholder="使用者，如：管理端" />
+                <select [attr.data-testid]="'interface-kind-' + uid(svc)" [(ngModel)]="svc.kind" (ngModelChange)="touch()"><option value="">接口类型</option><option>查询</option><option>详情</option><option>导出</option><option>流程应用接口</option><option>文件上传</option><option>下拉查询</option></select>
+                <select [attr.data-testid]="'interface-response-kind-' + uid(svc)" [(ngModel)]="svc.responseKind" (ngModelChange)="touch()"><option value="">响应形态</option><option>JSON</option><option>文件流</option><option>FormData</option><option>string[]</option><option>handler</option></select>
               </div>
               <textarea [attr.data-testid]="'interface-desc-' + uid(svc)" [(ngModel)]="svc.desc" (ngModelChange)="touch()" rows="1" placeholder="接口说明" class="svc-edit-note svc-edit-note--compact"></textarea>
+              <div class="svc-edit-raw-grid">
+                <textarea [attr.data-testid]="'interface-raw-request-' + uid(svc)" [(ngModel)]="svc.rawRequest" (ngModelChange)="touch()" rows="3" placeholder="原始入参片段，可保留 PDF 中不规则文本"></textarea>
+                <textarea [attr.data-testid]="'interface-raw-response-' + uid(svc)" [(ngModel)]="svc.rawResponse" (ngModelChange)="touch()" rows="3" placeholder="原始出参片段，如：文件流、string[]"></textarea>
+              </div>
             </section>
 
             <div class="svc-params-section">
@@ -443,6 +465,7 @@
                 </table>
               }
             </div>
+            }
           }
         </div>
       </aside>

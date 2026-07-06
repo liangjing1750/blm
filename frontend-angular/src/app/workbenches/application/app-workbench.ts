@@ -14,7 +14,7 @@ interface ParamMappingV3 { source: string; target: string; note?: string; }
 interface ParamMapping { fromTaskDefUid: string; fromParamName: string; toTaskDefUid: string; toParamName: string; note: string; }
 interface ServiceParam { name: string; type: string; required: boolean; note: string; children?: ServiceParam[]; }
 interface LegacyServiceGroup { uid?: string; id?: string; name?: string; desc?: string; }
-interface LegacyService { uid?: string; name?: string; serviceGroupUid?: string; method?: string; path?: string; desc?: string; requestParams?: ServiceParam[]; responseParams?: ServiceParam[]; inputs?: ServiceParam[]; outputs?: ServiceParam[]; orchestration?: ServiceOrchestration; steps?: OrchStep[]; parameterMappings: ParamMapping[]; nodeRefs: string[]; }
+interface LegacyService { uid?: string; name?: string; serviceGroupUid?: string; method?: string; path?: string; desc?: string; actor?: string; kind?: string; responseKind?: string; rawRequest?: string; rawResponse?: string; requestParams?: ServiceParam[]; responseParams?: ServiceParam[]; inputs?: ServiceParam[]; outputs?: ServiceParam[]; orchestration?: ServiceOrchestration; steps?: OrchStep[]; parameterMappings: ParamMapping[]; nodeRefs: string[]; }
 interface ParamRow { param: ServiceParam; path: number[]; level: number; testPath: string; }
 interface VariableOption { value: string; label: string; }
 
@@ -53,6 +53,9 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     requestParams: '',
     responseParams: '',
   });
+  protected readonly serviceInterfaceView = signal<'form' | 'json'>('form');
+  protected readonly serviceInterfaceJsonDraft = signal('');
+  protected readonly serviceInterfaceJsonError = signal('');
 
   protected doc(): any { this.version(); return this.runtime.doc || {}; }
   protected serviceGroups(): LegacyServiceGroup[] { this.doc().serviceGroups ||= []; return this.doc().serviceGroups; }
@@ -209,6 +212,9 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected openServiceDrawer(svc: LegacyService): void {
     this.ensureServiceShape(svc);
     this.selectService(svc);
+    this.serviceInterfaceView.set('form');
+    this.serviceInterfaceJsonDraft.set('');
+    this.serviceInterfaceJsonError.set('');
     this.serviceDrawerId.set(this.uid(svc));
   }
   protected closeServiceDrawer(): void {
@@ -217,6 +223,9 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       this.doc().services = this.services().filter((service) => service !== svc);
       this.touch();
     }
+    this.serviceInterfaceView.set('form');
+    this.serviceInterfaceJsonDraft.set('');
+    this.serviceInterfaceJsonError.set('');
     this.serviceDrawerId.set('');
   }
   protected startEdit(svc?: LegacyService): void {
@@ -386,6 +395,63 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       this.serviceParamJsonDrafts.update((drafts) => ({ ...drafts, [target]: this.paramsJson(svc, target) }));
     }
     this.serviceParamViews.update((views) => ({ ...views, [target]: view }));
+  }
+  protected interfaceView(): 'form' | 'json' {
+    return this.serviceInterfaceView();
+  }
+  protected setInterfaceView(view: 'form' | 'json', svc: LegacyService): void {
+    if (view === 'json') {
+      this.serviceInterfaceJsonDraft.set(this.interfaceJson(svc));
+      this.serviceInterfaceJsonError.set('');
+    }
+    this.serviceInterfaceView.set(view);
+  }
+  // 模块意图：接口 JSON 视图承载 PDF/Word 中的完整接口契约，避免列表字段覆盖不了非结构化片段。
+  protected interfaceJson(svc: LegacyService): string {
+    return JSON.stringify({
+      name: svc.name || '',
+      actor: svc.actor || '',
+      kind: svc.kind || '',
+      serviceGroupUid: svc.serviceGroupUid || '',
+      method: svc.method || 'POST',
+      path: svc.path || '',
+      responseKind: svc.responseKind || '',
+      desc: svc.desc || '',
+      rawRequest: svc.rawRequest || '',
+      rawResponse: svc.rawResponse || '',
+      requestParams: this.serviceRequestParams(svc),
+      responseParams: this.serviceResponseParams(svc),
+    }, null, 2);
+  }
+  // 关键流程：JSON 合法时立即回写同一个服务对象，继续沿用现有草稿和撤销机制。
+  protected updateInterfaceFromJson(svc: LegacyService, raw: string): void {
+    if (!this.canEdit()) return;
+    this.serviceInterfaceJsonDraft.set(raw);
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+      svc.name = String(parsed.name || '').trim();
+      svc.actor = String(parsed.actor || '').trim();
+      svc.kind = String(parsed.kind || '').trim();
+      svc.serviceGroupUid = String(parsed.serviceGroupUid || '').trim();
+      svc.method = String(parsed.method || 'POST').trim() || 'POST';
+      svc.path = String(parsed.path || '').trim();
+      svc.responseKind = String(parsed.responseKind || '').trim();
+      svc.desc = String(parsed.desc || '').trim();
+      svc.rawRequest = String(parsed.rawRequest || '').trim();
+      svc.rawResponse = String(parsed.rawResponse || '').trim();
+      svc.requestParams = Array.isArray(parsed.requestParams)
+        ? parsed.requestParams.filter((item: unknown): item is Partial<ServiceParam> => Boolean(item && typeof item === 'object')).map((item: Partial<ServiceParam>) => this.normalizeSvcParam(item))
+        : [];
+      svc.responseParams = Array.isArray(parsed.responseParams)
+        ? parsed.responseParams.filter((item: unknown): item is Partial<ServiceParam> => Boolean(item && typeof item === 'object')).map((item: Partial<ServiceParam>) => this.normalizeSvcParam(item))
+        : [];
+      this.serviceInterfaceJsonError.set('');
+      this.touch();
+      this.version.update((value) => value + 1);
+    } catch {
+      this.serviceInterfaceJsonError.set('JSON 格式错误，暂不覆盖接口定义。');
+    }
   }
   protected paramJsonDraft(target: 'requestParams' | 'responseParams'): string {
     return this.serviceParamJsonDrafts()[target];

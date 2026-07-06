@@ -323,12 +323,15 @@ def canonicalize_model_references(document: dict | None) -> dict:
                 continue
             has_name = "name" in item
             name = str(item.get("name", "")).strip() if has_name else f"{fallback_label}{index}"
+            has_semantic_name = bool(_normalize_name_key(name))
             existing_uid = str(item.get("uid", "")).strip()
-            next_uid = existing_uid or _semantic_panorama_uid(prefix, name, index, used, known)
-            if next_uid in used:
+            if has_name and has_semantic_name:
                 next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
-            else:
+            elif existing_uid and existing_uid not in used:
+                next_uid = existing_uid
                 used.add(next_uid)
+            else:
+                next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
             for source_field in ("uid", "id", "key"):
                 source_ref = str(item.get(source_field, "")).strip()
                 if source_ref:
@@ -386,8 +389,10 @@ def canonicalize_model_references(document: dict | None) -> dict:
     else:
         column_map = {}
         lane_map = {}
-    column_map.update(uid_map(panorama.get("columns", []) if isinstance(panorama, dict) else []))
-    lane_map.update(uid_map(panorama.get("lanes", []) if isinstance(panorama, dict) else []))
+    for legacy_key, canonical_uid in uid_map(panorama.get("columns", []) if isinstance(panorama, dict) else []).items():
+        column_map.setdefault(legacy_key, canonical_uid)
+    for legacy_key, canonical_uid in uid_map(panorama.get("lanes", []) if isinstance(panorama, dict) else []).items():
+        lane_map.setdefault(legacy_key, canonical_uid)
     role_map = uid_map(doc.get("roles", []))
     stage_map = uid_map(doc.get("stages", []))
     process_map = uid_map(doc.get("processes", []))
@@ -746,30 +751,79 @@ def _normalize_positive_int(value, fallback: int) -> int:
     return normalized if normalized > 0 else fallback
 
 
-def _normalize_stage_flow_refs(stage_flow_refs: list[dict]) -> list[dict]:
+def _normalize_stage_flow_refs(stage_flow_refs: list[dict], stages: list[dict] | None = None, processes: list[dict] | None = None) -> list[dict]:
+    # 模块意图：stageFlowRefs 是阶段视图和价值流视图的共同索引，后端规范化必须保留前端使用的 uid 字段。
+    stage_by_identity = {
+        str(value).strip(): str(stage.get("uid", "")).strip()
+        for stage in stages or []
+        if isinstance(stage, dict)
+        for value in (stage.get("uid"), stage.get("id"), stage.get("name"))
+        if str(value or "").strip() and str(stage.get("uid", "")).strip()
+    }
+    process_by_identity = {
+        str(value).strip(): str(process.get("uid", "")).strip()
+        for process in processes or []
+        if isinstance(process, dict)
+        for value in (process.get("uid"), process.get("id"), process.get("name"))
+        if str(value or "").strip() and str(process.get("uid", "")).strip()
+    }
     normalized_refs: list[dict] = []
     used_uids: set[str] = set()
-    for ref_index, ref in enumerate(stage_flow_refs or [], start=1):
-        if not isinstance(ref, dict):
-            continue
-        stage_id = str(ref.get("stageId") or ref.get("stageUid") or ref.get("stage_id", "")).strip()
-        process_id = str(ref.get("processId") or ref.get("processUid") or ref.get("process_id", "")).strip()
-        if not stage_id or not process_id:
-            continue
-        ref_uid = str(ref.get("uid", "")).strip() or _deterministic_uid("stage-flow-ref", stage_id, process_id)
+    seen_pairs: set[tuple[str, str]] = set()
+
+    def canonical_stage(value: object) -> str:
+        raw = str(value or "").strip()
+        return stage_by_identity.get(raw, raw)
+
+    def canonical_process(value: object) -> str:
+        raw = str(value or "").strip()
+        return process_by_identity.get(raw, raw)
+
+    def append_ref(ref: dict, fallback_order: int) -> None:
+        stage_uid = canonical_stage(ref.get("stageUid") or ref.get("stageId") or ref.get("stage_id"))
+        process_uid = canonical_process(ref.get("processUid") or ref.get("processId") or ref.get("process_id"))
+        if not stage_uid or not process_uid:
+            return
+        pair = (stage_uid, process_uid)
+        if pair in seen_pairs:
+            return
+        ref_uid = str(ref.get("uid", "")).strip() or _deterministic_uid("stage-flow-ref", stage_uid, process_uid)
         if ref_uid in used_uids:
-            continue
+            ref_uid = _deterministic_uid("stage-flow-ref", stage_uid, process_uid)
         used_uids.add(ref_uid)
+        seen_pairs.add(pair)
         normalized_refs.append(
             {
                 "uid": ref_uid,
                 **({"id": str(ref.get("id", "")).strip()} if str(ref.get("id", "")).strip() else {}),
-                "stageId": stage_id,
-                "processId": process_id,
-                "order": _normalize_positive_int(ref.get("order"), ref_index),
+                "stageUid": stage_uid,
+                "processUid": process_uid,
+                "order": _normalize_positive_int(ref.get("order"), fallback_order),
                 "pos": _normalize_graph_offset(ref.get("pos", {})),
             }
         )
+
+    for ref_index, ref in enumerate(stage_flow_refs or [], start=1):
+        if not isinstance(ref, dict):
+            continue
+        append_ref(ref, ref_index)
+
+    # 关键流程：旧文档和价值流快捷操作常只维护 process.stageUid；这里补齐显示矩阵所需的引用索引。
+    for process in processes or []:
+        if not isinstance(process, dict):
+            continue
+        process_uid = canonical_process(process.get("uid") or process.get("id"))
+        stage_uid = canonical_stage(process.get("stageUid") or process.get("stageId"))
+        if stage_uid and process_uid:
+            append_ref(
+                {
+                    "stageUid": stage_uid,
+                    "processUid": process_uid,
+                    "order": len(normalized_refs) + 1,
+                    "pos": process.get("stagePos", {}),
+                },
+                len(normalized_refs) + 1,
+            )
     return normalized_refs
 
 
@@ -1747,7 +1801,7 @@ def migrate_document(document: dict | None) -> dict:
     _normalize_processes(doc["processes"], doc["roles"])
     _normalize_stages(doc["stages"], doc["processes"])
     doc["stageLinks"] = _normalize_stage_links(doc["stageLinks"])
-    doc["stageFlowRefs"] = _normalize_stage_flow_refs(doc["stageFlowRefs"])
+    doc["stageFlowRefs"] = _normalize_stage_flow_refs(doc["stageFlowRefs"], doc["stages"], doc["processes"])
     doc["stageFlowLinks"] = _normalize_stage_flow_links(doc["stageFlowLinks"])
     _normalize_entities(doc["entities"])
     _normalize_relations(doc["relations"])
@@ -1811,6 +1865,12 @@ def migrate_document(document: dict | None) -> dict:
         service["method"] = str(service.get("method", "POST") or "POST").strip().upper()
         service["path"] = str(service.get("path", "")).strip()
         service["desc"] = str(service.get("desc", "")).strip()
+        for field in ("actor", "kind", "responseKind", "rawRequest", "rawResponse"):
+            value = str(service.get(field, "")).strip()
+            if value:
+                service[field] = value
+            else:
+                service.pop(field, None)
         service["taskDefinitionUids"] = [
             str(uid).strip()
             for uid in service.get("taskDefinitionUids", service.get("taskDefinitionIds", []))

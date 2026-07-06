@@ -34,7 +34,7 @@ export function createValueDomainLegacyAdapter(runtime: unknown = getAngularRunt
   };
 
   const actions = createValueDomainActions({
-    document: getDocument() as ValueDomainDocument,
+    document: getDocument,
     draftPort: createDraftPort(runtimeLike),
     setActiveStageId: (stageId) => {
       ui.stageId = stageId;

@@ -16,6 +16,25 @@ function createHarness(document: ValueDomainDocument = {}) {
   return { actions, document, events };
 }
 
+function createDynamicHarness(document: ValueDomainDocument = {}) {
+  let current = document;
+  let sequence = 0;
+  const actions = createValueDomainActions({
+    document: () => current,
+    draftPort: {
+      markModified: () => undefined,
+      renderSidebar: () => undefined,
+      confirm: async () => true,
+    },
+    nextId: (prefix) => `${prefix}-${++sequence}`,
+  });
+  return {
+    actions,
+    replaceDocument: (next: ValueDomainDocument) => { current = next; },
+    currentDocument: () => current,
+  };
+}
+
 describe('value-domain actions', () => {
   it('adds columns, lanes, stages, and marks draft modified', () => {
     const { actions, document, events } = createHarness();
@@ -147,5 +166,56 @@ describe('value-domain actions', () => {
       panoramaPos: null,
     });
     expect(events).toEqual(['modified', 'sidebar', 'modified']);
+  });
+
+  it('writes to the latest runtime document after the document object is replaced', () => {
+    const first: ValueDomainDocument = {
+      panorama: { columns: [{ uid: 'old-column' }], lanes: [{ uid: 'old-lane' }], cells: [] },
+      stages: [],
+    };
+    const second: ValueDomainDocument = {
+      panorama: { columns: [{ uid: 'new-column' }], lanes: [{ uid: 'new-lane' }], cells: [] },
+      stages: [],
+    };
+    const harness = createDynamicHarness(first);
+
+    harness.replaceDocument(second);
+    harness.actions.addStage('', { name: '新增阶段' });
+
+    expect(first.stages).toEqual([]);
+    expect(harness.currentDocument().stages?.[0]).toMatchObject({
+      name: '新增阶段',
+      panoramaColumnUid: 'new-column',
+      panoramaLaneUid: 'new-lane',
+    });
+  });
+
+  it('writes lane quick actions to the latest runtime document after replacement', async () => {
+    const first: ValueDomainDocument = {
+      panorama: { columns: [{ uid: 'old-column' }], lanes: [{ uid: 'old-lane' }], cells: [] },
+      stages: [],
+    };
+    const second: ValueDomainDocument = {
+      panorama: {
+        columns: [{ uid: 'new-column' }],
+        lanes: [{ uid: 'new-lane' }, { uid: 'new-lane-2' }],
+        cells: [{ laneUid: 'new-lane-2', columnUid: 'new-column', text: 'remove-with-lane' }],
+      },
+      stages: [{ id: 'S1', panoramaLaneUid: 'new-lane-2', panoramaColumnUid: 'new-column' }],
+    };
+    const harness = createDynamicHarness(first);
+
+    harness.replaceDocument(second);
+    harness.actions.addLane('new-lane');
+    harness.actions.setLane('panorama-lane-1', 'name', '新增业务域');
+    harness.actions.moveLane('panorama-lane-1', -1);
+    await harness.actions.removeLane('new-lane-2');
+
+    expect(first.panorama?.lanes?.map((item) => item.uid)).toEqual(['old-lane']);
+    expect(first.panorama?.cells).toEqual([]);
+    expect(second.panorama?.lanes?.map((item) => item.uid)).toEqual(['panorama-lane-1', 'new-lane']);
+    expect(second.panorama?.lanes?.[0].name).toBe('新增业务域');
+    expect(second.panorama?.cells).toEqual([]);
+    expect(second.stages?.[0].panoramaLaneUid).toBe('');
   });
 });

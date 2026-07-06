@@ -82,12 +82,19 @@
 .svc-edit-row input, .svc-edit-row select { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 13px; }
 .svc-edit-row input { min-width: 120px; }
 .svc-edit-row select { min-width: 80px; }
+.svc-edit-row--meta { margin-top: 8px; }
+.svc-edit-row--meta input, .svc-edit-row--meta select { flex: 1 1 0; min-width: 0; }
 .svc-edit-name { flex: 1.4 1 180px; font-weight: 700; }
 .svc-group-select { flex: 1 1 180px; }
 .svc-method-select { flex: 0 0 84px; width: 84px; min-width: 84px !important; }
 .svc-edit-path { flex: 1.3 1 180px; }
 .svc-edit-note { width: 100%; resize: vertical; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 13px; }
 .svc-edit-note--compact { min-height: 34px; max-height: 58px; line-height: 1.45; overflow-y: auto; resize: vertical; }
+.svc-edit-raw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.svc-edit-raw-grid textarea { min-height: 74px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 10px; font: 12px/1.45 Consolas, "Courier New", monospace; resize: vertical; }
+.svc-interface-view-switch { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 10px; }
+.svc-interface-json-section { min-height: 0; }
+.svc-interface-json { min-height: 420px; }
 .drawer-error { margin: -2px 0 8px; color: #dc2626; font-size: 12px; font-weight: 800; }
 
 /* ─── 应用服务抽屉 ─────────────────────── */

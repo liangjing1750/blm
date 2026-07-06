@@ -208,8 +208,8 @@ RULE_APPLIES_TO_COLLECTIONS = (
 )
 
 
-# 位置字段在协作同步中作为普通标量参与合并和冲突检测
-INTERNAL_SCALAR_FIELDS: set[str] = set()
+# 位置字段只影响画布布局，不代表业务语义；合并时自动择一保留，避免拖拽造成无意义冲突。
+INTERNAL_SCALAR_FIELDS: set[str] = {"pos", "stagePos", "panoramaSlot", "panoramaPos", "markerPos"}
 
 
 # Each tuple describes one fallback semantic identity candidate. A tuple with

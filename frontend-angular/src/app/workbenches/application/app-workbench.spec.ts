@@ -351,6 +351,48 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector<HTMLInputElement>('[data-testid="service-request-param-name-0"]')?.value).toBe('customerId');
   });
 
+  it('switches an application interface between form and full json views', () => {
+    const runtime = getAngularRuntimeState();
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="service-interface-json-view"]')?.click();
+    fixture.detectChanges();
+
+    const json = host.querySelector<HTMLTextAreaElement>('[data-testid="service-interface-json-editor"]');
+    expect(json).toBeTruthy();
+    expect(json?.value).toContain('"name":');
+    expect(json?.value).toContain('"requestParams":');
+
+    json!.value = JSON.stringify({
+      name: 'Warehouse export',
+      actor: 'Admin',
+      kind: 'Export',
+      method: 'GET POST',
+      path: '/queryservice/sdrp/whinfo/admin/info-export',
+      responseKind: 'FileStream',
+      rawRequest: '{ whCode: string }',
+      rawResponse: 'file stream',
+      requestParams: [{ name: 'whCode', type: 'String', required: false, note: 'warehouse code' }],
+      responseParams: [],
+    }, null, 2);
+    json!.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.doc.services[0].name).toBe('Warehouse export');
+    expect(runtime.doc.services[0].actor).toBe('Admin');
+    expect(runtime.doc.services[0].kind).toBe('Export');
+    expect(runtime.doc.services[0].method).toBe('GET POST');
+    expect(runtime.doc.services[0].responseKind).toBe('FileStream');
+    expect(runtime.doc.services[0].requestParams[0].name).toBe('whCode');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="service-interface-form-view"]')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLInputElement>('[data-testid="interface-name-svc-1"]')?.value).toBe('Warehouse export');
+  });
+
   it('offers add move up move down and delete actions for interface parameters', () => {
     const runtime = getAngularRuntimeState();
     runtime.doc.services[0].requestParams = [

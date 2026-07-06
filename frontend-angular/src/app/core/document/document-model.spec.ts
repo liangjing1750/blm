@@ -214,6 +214,39 @@ describe('document model algorithms', () => {
     ]);
   });
 
+  it('keeps application interface document fields needed by exported API specs', () => {
+    const document = normalizeDocument({
+      meta: { domain: 'API Spec Model' },
+      serviceGroups: [{ uid: 'group-warehouse', name: 'Warehouse Page', desc: '' }],
+      services: [
+        {
+          uid: 'interface-export',
+          name: 'Warehouse export',
+          serviceGroupUid: 'group-warehouse',
+          actor: 'Admin',
+          kind: 'Export',
+          method: 'GET POST',
+          path: '/queryservice/sdrp/whinfo/admin/info-export',
+          responseKind: 'FileStream',
+          rawRequest: '{ whCode: string }',
+          rawResponse: 'file stream',
+          desc: 'Export warehouse data',
+          requestParams: [{ name: 'whCode', type: 'String', required: false, note: 'warehouse code' }],
+          responseParams: [],
+        },
+      ],
+    } as unknown as Partial<BlmDocument>);
+
+    expect(document.services[0]).toMatchObject({
+      actor: 'Admin',
+      kind: 'Export',
+      method: 'GET POST',
+      responseKind: 'FileStream',
+      rawRequest: '{ whCode: string }',
+      rawResponse: 'file stream',
+    });
+  });
+
   it('converts legacy service taskDefinitionUids into compatible orchestration steps', () => {
     const document = normalizeDocument({
       meta: { domain: '测试模型' },

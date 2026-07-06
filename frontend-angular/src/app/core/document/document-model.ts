@@ -319,6 +319,10 @@ function normalizeService(document: BlmDocument, service: ApplicationService, in
     responseParams: normalizeServiceParameters(asArray(service.responseParams).length ? asArray(service.responseParams) : legacyOutputs),
     orchestration,
   };
+  for (const field of ['actor', 'kind', 'responseKind', 'rawRequest', 'rawResponse'] as const) {
+    const value = String((service as any)[field] || '').trim();
+    if (value) (normalized as any)[field] = value;
+  }
   return normalized;
 }
 

@@ -191,6 +191,11 @@ export interface ApplicationService {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | string;
   path?: string;
   desc?: string;
+  actor?: string;
+  kind?: string;
+  responseKind?: string;
+  rawRequest?: string;
+  rawResponse?: string;
   taskDefinitionUids?: string[];
   nodeRefs?: string[];
   requestParams?: ServiceParameter[];

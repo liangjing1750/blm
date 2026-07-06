@@ -229,6 +229,42 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(service["responseParams"], [])
         self.assertEqual(service["orchestration"], {"variables": [], "steps": [], "returnMapping": []})
 
+    def test_canonical_document_preserves_application_interface_spec_fields(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "API spec fields"},
+                "processes": [],
+                "serviceGroups": [{"uid": "sg-1", "name": "仓库管理页面"}],
+                "services": [
+                    {
+                        "uid": "svc-1",
+                        "name": "导出仓库信息",
+                        "serviceGroupUid": "sg-1",
+                        "actor": "管理端",
+                        "kind": "导出",
+                        "method": "GET POST",
+                        "path": "/queryservice/sdrp/whinfo/admin/info-export",
+                        "responseKind": "文件流",
+                        "rawRequest": "{ whCode: string }",
+                        "rawResponse": "文件流",
+                        "requestParams": [
+                            {"name": "whCode", "type": "String", "required": False, "note": "仓库编码"}
+                        ],
+                        "responseParams": [],
+                    }
+                ],
+            }
+        )
+
+        service = document["services"][0]
+        self.assertEqual(service["actor"], "管理端")
+        self.assertEqual(service["kind"], "导出")
+        self.assertEqual(service["method"], "GET POST")
+        self.assertEqual(service["responseKind"], "文件流")
+        self.assertEqual(service["rawRequest"], "{ whCode: string }")
+        self.assertEqual(service["rawResponse"], "文件流")
+        self.assertEqual(service["requestParams"][0]["name"], "whCode")
+
     def test_canonical_document_maps_entity_business_construct_reference_to_uid(self):
         document = canonical_document(
             {
@@ -265,6 +301,33 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(document["stages"][0]["panoramaLaneUid"], _deterministic_ui_uid("panorama-lane", "会员客户"))
         self.assertNotIn("columnId", document["panorama"]["cells"][0])
         self.assertNotIn("panoramaColumnId", document["stages"][0])
+
+    def test_canonical_document_preserves_frontend_uid_for_unnamed_panorama_lanes(self):
+        document = canonical_document(
+            {
+                "meta": {"title": "Unnamed panorama lane"},
+                "panorama": {
+                    "columns": [{"uid": "column-live", "name": ""}],
+                    "lanes": [{"uid": "lane-live", "name": ""}],
+                    "cells": [{"columnUid": "column-live", "laneUid": "lane-live", "status": "draft"}],
+                },
+                "stages": [
+                    {
+                        "uid": "stage-live",
+                        "name": "Draft stage",
+                        "panoramaColumnUid": "column-live",
+                        "panoramaLaneUid": "lane-live",
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(document["panorama"]["columns"][0]["uid"], "column-live")
+        self.assertEqual(document["panorama"]["lanes"][0]["uid"], "lane-live")
+        self.assertEqual(document["panorama"]["cells"][0]["columnUid"], "column-live")
+        self.assertEqual(document["panorama"]["cells"][0]["laneUid"], "lane-live")
+        self.assertEqual(document["stages"][0]["panoramaColumnUid"], "column-live")
+        self.assertEqual(document["stages"][0]["panoramaLaneUid"], "lane-live")
 
     def test_canonical_document_filters_empty_stage_flow_references(self):
         document = canonical_document(
@@ -468,7 +531,7 @@ class DocumentFileStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = WorkspaceStorage(Path(temp_dir))
             storage.save("Uid Only", document)
-            manifest_path = Path(temp_dir) / "Uid Only" / "manifest.json"
+            manifest_path = Path(temp_dir) / "Uid Only" / "manifest" / "manifest.json"
             raw = manifest_path.read_text("utf-8")
 
             self.assertNotIn('"id": "R1"', raw)
