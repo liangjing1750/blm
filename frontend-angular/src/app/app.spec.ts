@@ -3594,6 +3594,78 @@ describe('App', () => {
     expect((fixture.componentInstance as any).activeNodeSection()).toBe('process-material-section');
   });
 
+  it('should compact node material navigation and expose section-level interface jumps', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procId'] = 'process-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [{ uid: 'role-a', id: 'role-a', name: '仓库' }],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-inbound',
+        name: '入库流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '新增线下查库',
+          roleIds: ['role-a'],
+          userSteps: [{ id: 'step-1', type: '点击', name: '提交申请' }],
+          forms: [{
+            uid: 'form-1',
+            name: '查库表单',
+            sections: [{
+              uid: 'section-1',
+              name: '筛选条件',
+              note: '分组说明',
+              serviceUid: 'service-submit',
+              fields: [{ uid: 'field-1', name: '仓库', type: 'Text', note: '默认全部' }],
+            }],
+          }],
+          entity_ops: [],
+          orchestrationTasks: [],
+          businessRules: [{ id: 'rule-1', title: '规则', content: '规则内容' }],
+        }],
+      }],
+      services: [{ uid: 'service-submit', name: '修改垛位应用接口', method: 'POST', path: '/stock/location' }],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ProcessEditorWorkbenchComponent);
+    fixture.componentRef.setInput('editing', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const nav = compiled.querySelector<HTMLElement>('[data-testid="process-node-section-nav"]')!;
+    const progressIndex = nav.querySelector('.node-progress-step span');
+    const progressCount = nav.querySelector<HTMLElement>('.node-progress-step em')!;
+    const materialSection = compiled.querySelector<HTMLElement>('[data-testid="process-material-section"]')!;
+    const sectionHead = compiled.querySelector<HTMLElement>('[data-testid="task-form-section-card"] .task-form-section-head')!;
+    const serviceSummary = compiled.querySelector<HTMLElement>('[data-testid="task-form-section-service-summary"]')!;
+    const serviceJump = compiled.querySelector<HTMLButtonElement>('[data-testid="task-form-section-service-jump"]')!;
+
+    expect(progressIndex).toBeFalsy();
+    expect(getComputedStyle(progressCount).color).toBe('rgb(15, 23, 42)');
+    expect(materialSection.textContent).not.toContain('表单模型');
+    expect(serviceSummary.textContent).toContain('/stock/location');
+    expect(serviceSummary.textContent).not.toContain('POST');
+    expect(serviceJump.textContent).toContain('🌐');
+    expect(getComputedStyle(sectionHead).gridTemplateColumns.split(' ').length).toBeGreaterThanOrEqual(6);
+
+    serviceJump.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('applicationWorkbench');
+    expect(runtime.ui['applicationWorkbenchTab']).toBe('service');
+    expect(runtime.ui['applicationServiceUid']).toBe('service-submit');
+  });
+
   it('should keep form and rule controls read-only until node editing is opened', async () => {
     const runtime = getAngularRuntimeState();
     runtime.currentFile = 'agent.json';

@@ -35,7 +35,7 @@
                 <span class="node-top-node-index">{{ index + 1 }}</span>
                 <span class="node-top-node-name">{{ node.name || '未命名节点' }}</span>
                 <span class="node-top-node-edit" (click)="startRenameNode(node, $event)" title="修改节点名称">✎</span>
-              </button>
+              &#127760;</button>
             }
           } @empty {
             <span class="node-top-node-empty">暂无节点</span>
@@ -56,7 +56,6 @@
                   [ngClass]="'tone-' + item.tone"
                   (click)="scrollToNodeSection(item.id)"
                 >
-                  <span>{{ index + 1 }}</span>
                   <b>{{ item.label }}</b>
                   <em>{{ item.count }}</em>
                 </button>
@@ -211,8 +210,7 @@
             </div>
             @if (materialTab() === 'forms') {
               <div class="node-form-list" data-testid="process-form-section">
-                <div class="node-section-head node-sub-section-head">
-                  <div><h4>表单模型</h4><span class="node-count-pill">{{ forms(task).length }} 个表单</span></div>
+                <div class="node-form-model-actions">
                   <button class="btn btn-outline btn-sm" type="button" data-testid="process-form-add" [disabled]="!editing" (click)="addForm(task)">+ 表单</button>
                 </div>
                 <p class="node-section-note node-form-model-note">表单是用户查看、填写和提交的材料载体。这里先站在用户和产品视角描述材料形式，不和技术上的数据实体绑定。</p>
@@ -248,6 +246,7 @@
                               }
                             </select>
                             <span class="task-form-section-service-summary" data-testid="task-form-section-service-summary">{{ formSectionServiceSummary(section, task) }}</span>
+                            <button class="task-form-service-jump" type="button" data-testid="task-form-section-service-jump" title="??????" [disabled]="!formSectionServiceId(section)" (click)="jumpToApplicationService(section)">&#127760;</button>
                             <button class="btn btn-outline btn-sm" type="button" data-testid="task-form-field-add" [disabled]="!editing" (click)="addFormField(section)">+ 字段</button>
                             <div class="step-actions task-form-inline-actions">
                               <button class="step-action" type="button" data-testid="task-form-section-add-after" title="插入分组" [disabled]="!editing" (click)="addFormSection(form, section)">+</button>

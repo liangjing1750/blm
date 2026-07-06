@@ -37,7 +37,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly orchServiceGroupUid = signal('__all__');
   protected readonly orchSvcId = signal('');
   protected readonly selectedServiceGroupUid = signal('__all__');
-  protected readonly selectedServiceId = signal('');
+  protected readonly selectedServiceId = signal(String(this.runtime.ui['applicationServiceUid'] || this.runtime.ui['applicationServiceId'] || ''));
   protected readonly selectedStepUid = signal('');
   protected readonly editorOpen = signal(false);
   protected readonly serviceDrawerId = signal('');

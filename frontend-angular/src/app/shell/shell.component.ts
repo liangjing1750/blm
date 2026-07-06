@@ -317,6 +317,18 @@ export class ShellComponent implements OnInit, OnDestroy {
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
+  @HostListener('window:blm-jump-workbench', ['$event'])
+  protected jumpToWorkbench(event: Event): void {
+    const detail = (event as CustomEvent<{ mainTab?: string }>).detail || {};
+    const target = String(detail.mainTab || this.runtime.ui['mainTab'] || '').trim();
+    if (!target) return;
+    this.runtime.ui['mainTab'] = target;
+    this.activeDropdown.set('');
+    this.refreshShellView();
+    void this.router.navigateByUrl(routePathFromWorkbenchId(target));
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+  }
+
   protected currentDocumentLabel(): string {
     // 模块意图：顶部展示给用户的是业务文档名称，而不是服务端持久化 key。
     // 关键流程：属性保存会更新 meta.title/domain；这里优先读取 meta，刷新界面时能立即看到已生效的文档名。

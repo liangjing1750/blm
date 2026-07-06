@@ -266,9 +266,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected formSectionServiceSummary(section: LegacyTaskFormSection, task: LegacyProcessNode): string {
     const service = this.formSectionService(section, task);
     if (!service) return '未关联接口需求';
-    const method = String(service.method || '').trim().toUpperCase();
     const path = String(service.path || '').trim();
-    return [method, path].filter(Boolean).join(' ') || service.name || this.serviceId(service);
+    return path || service.name || this.serviceId(service);
   }
 
   protected setFormService(form: LegacyTaskForm, task: LegacyProcessNode, value: string): void {
@@ -289,6 +288,18 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     section.serviceName = service?.name || '';
     this.adapter.touch();
     this.refresh();
+  }
+
+  protected jumpToApplicationService(section: LegacyTaskFormSection): void {
+    const serviceUid = this.formSectionServiceId(section);
+    if (!serviceUid) return;
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.ui['applicationWorkbenchTab'] = 'service';
+    runtime.ui['applicationServiceUid'] = serviceUid;
+    runtime.ui['applicationServiceId'] = serviceUid;
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    window.dispatchEvent(new CustomEvent('blm-jump-workbench', { detail: { mainTab: 'applicationWorkbench' } }));
   }
 
   private applicationServices(): ProcessApplicationService[] {

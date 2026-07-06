@@ -63,9 +63,9 @@
 .node-progress-guide--vertical {
   display: grid;
   grid-template-columns: 6px minmax(0, 1fr);
-  gap: 6px;
+  gap: 8px;
   min-height: 0;
-  padding: 10px 6px;
+  padding: 10px 8px;
   border: 1px solid #d7e4f3;
   border-radius: 12px;
   background: #fff;
@@ -128,8 +128,8 @@
 .node-progress-guide--vertical .node-progress-step {
   grid-template-columns: 1fr;
   justify-items: center;
-  min-height: 88px;
-  padding: 7px 4px;
+  min-height: 86px;
+  padding: 7px 5px;
   text-align: center;
 }
 
@@ -138,16 +138,15 @@
   justify-self: center;
 }
 
-.node-progress-step span,
 .node-progress-step em {
   display: inline-grid;
-  min-width: 20px;
-  height: 20px;
+  min-width: 22px;
+  height: 18px;
   place-items: center;
   border-radius: 999px;
-  background: #eef5ff;
-  color: #2563eb;
-  font-size: 11px;
+  background: rgba(15, 23, 42, .06);
+  color: #0f172a;
+  font-size: 12px;
   font-style: normal;
   font-weight: 900;
 }

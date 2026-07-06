@@ -168,11 +168,11 @@
 
 .node-editor-work-area {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   gap: 10px;
   flex: 1;
   min-height: 0;
-  padding: 10px 14px 14px;
+  padding: 10px 14px 14px 18px;
 }
 
 .node-context-panel,

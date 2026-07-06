@@ -154,9 +154,15 @@
 
 .node-task-form-card .task-form-section-head {
   display: grid;
-  grid-template-columns: minmax(140px, .9fr) minmax(180px, 1fr) minmax(130px, .7fr) auto auto;
+  grid-template-columns: minmax(104px, .55fr) minmax(180px, 1fr) minmax(180px, .8fr) minmax(92px, auto) 32px auto auto;
   gap: 6px;
   align-items: center;
+}
+
+.node-form-model-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
 }
 
 .node-editor-card--entity .node-entity-op-list {
@@ -212,7 +218,8 @@
 }
 
 .task-form-entity-summary,
-.task-form-service-summary {
+.task-form-service-summary,
+.task-form-section-service-summary {
   display: inline-flex;
   min-height: 28px;
   align-items: center;
@@ -224,6 +231,34 @@
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.task-form-section-service-summary {
+  overflow: hidden;
+  max-width: 128px;
+  color: #334155;
+  background: #f8fafc;
+  border-color: #d7e4f3;
+  text-overflow: ellipsis;
+}
+
+.task-form-service-jump {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.task-form-service-jump:disabled {
+  opacity: .45;
+  cursor: default;
 }
 
 .node-task-form-card .task-form-field-table-wrap {
