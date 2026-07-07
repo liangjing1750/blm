@@ -2,20 +2,22 @@ import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../core/api/api.service';
+import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-registry';
 import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 import { sanitizeRichTextHtml } from '../../shared/rich-text/rich-text-utils';
+import { PreviewGraphHostComponent } from './preview-graph-host.component';
 
 interface PreviewOutlineItem {
   id: string;
   label: string;
-  depth: 0 | 1;
+  depth: 0 | 1 | 2;
 }
 
 @Component({
   selector: 'app-preview-workbench',
   standalone: true,
-  imports: [CommonModule, WaitDialogComponent],
+  imports: [CommonModule, WaitDialogComponent, PreviewGraphHostComponent],
   templateUrl: './preview-workbench.html',
   styleUrl: './preview-workbench.scss',
 })
@@ -32,7 +34,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   private readonly loadedPreviewSections = signal<Set<string>>(new Set());
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly markdown = computed(() => this.buildMarkdown());
-  protected readonly renderedHtml = computed<SafeHtml>(() => this.sanitizer.bypassSecurityTrustHtml(this.renderDocumentHtml()));
+  protected readonly metaHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMeta(this.runtime.doc?.meta || {})));
   protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
 
   protected toggleRaw(): void {
@@ -41,17 +43,136 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   }
 
   protected jumpTo(anchorId: string): void {
-    this.ensurePreviewSection(anchorId);
-    this.ensureAllPreviewSections();
     document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   ngAfterViewInit(): void {
-    window.setTimeout(() => this.initPreviewLazyRendering(), 0);
   }
 
   ngOnDestroy(): void {
     this.previewLazyObserver?.disconnect();
+  }
+
+  protected roles(): any[] {
+    return this.asArray(this.runtime.doc?.roles);
+  }
+
+  protected terms(): any[] {
+    const doc = this.runtime.doc || {};
+    return this.asArray(doc.terms || doc.language);
+  }
+
+  protected stages(): any[] {
+    return this.asArray(this.runtime.doc?.stages);
+  }
+
+  protected processes(): any[] {
+    return this.asArray(this.runtime.doc?.processes);
+  }
+
+  protected entities(): any[] {
+    return this.asArray(this.runtime.doc?.entities);
+  }
+
+  protected components(): any[] {
+    return this.asArray(this.runtime.doc?.businessComponents);
+  }
+
+  protected constructs(): any[] {
+    return this.asArray(this.runtime.doc?.businessConstructs);
+  }
+
+  protected taskDefinitions(): any[] {
+    return this.asArray(this.runtime.doc?.taskDefinitions);
+  }
+
+  protected services(): any[] {
+    return this.asArray(this.runtime.doc?.applicationServices || this.runtime.doc?.appServices);
+  }
+
+  protected interfaces(): any[] {
+    return this.asArray(this.runtime.doc?.applicationInterfaces || this.runtime.doc?.appInterfaces);
+  }
+
+  protected processAnchor(process: any, index: number): string {
+    return this.anchorId('proc', this.identityOf(process, `process-${index + 1}`));
+  }
+
+  protected stageAnchor(stage: any, index: number): string {
+    return this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`));
+  }
+
+  protected entityAnchor(entity: any, index: number): string {
+    return this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`));
+  }
+
+  protected stageGraphId(kind: Extract<ExportGraphKind, 'stage-panorama' | 'stage-flow'>, stage?: any, index = 0): string {
+    if (kind === 'stage-panorama') return exportGraphId(kind);
+    const suffix = stage ? this.identityOf(stage, `stage-${index + 1}`) : 'panorama';
+    return exportGraphId(kind, suffix);
+  }
+
+  protected processGraphId(process: any, index: number): string {
+    return exportGraphId('process-flow', this.identityOf(process, `process-${index + 1}`));
+  }
+
+  protected entityGraphId(kind: Extract<ExportGraphKind, 'entity-relation' | 'entity-state'>, entity?: any, index = 0): string {
+    const suffix = entity ? this.identityOf(entity, `entity-${index + 1}`) : 'overview';
+    return exportGraphId(kind, kind === 'entity-relation' ? '' : suffix);
+  }
+
+  protected processNodes(process: any): any[] {
+    return this.asArray(process?.nodes || process?.tasks || process?.steps);
+  }
+
+  protected richText(value: unknown): SafeHtml {
+    return this.trustedHtml(this.richTextCell(value));
+  }
+
+  protected fieldRows(entity: any): any[] {
+    return this.asArray(entity?.fields);
+  }
+
+  protected componentKindLabel(component: any): string {
+    const value = String(component?.kind || component?.type || '').toLowerCase();
+    if (value.includes('core') || value.includes('核心')) return '核心组件';
+    if (value.includes('common') || value.includes('通用')) return '通用组件';
+    return component?.kind || component?.type || '业务组件';
+  }
+
+  protected componentNameById(uid: unknown): string {
+    const key = String(uid || '');
+    const item = this.components().find((component) => this.identityOf(component, '') === key || component.uid === key || component.id === key);
+    return item ? this.displayName(item, '未命名组件') : (key || '-');
+  }
+
+  protected constructNameById(uid: unknown): string {
+    const key = String(uid || '');
+    const item = this.constructs().find((construct) => this.identityOf(construct, '') === key || construct.uid === key || construct.id === key);
+    return item ? this.displayName(item, '未命名构件') : (key || '-');
+  }
+
+  protected constructEntities(construct: any): any[] {
+    const ids = new Set(this.asArray(construct?.entityUids || construct?.entities).map((item) => typeof item === 'string' ? item : this.identityOf(item, '')));
+    return this.entities().filter((entity) => ids.has(this.identityOf(entity, '')) || entity.businessConstructUid === construct.uid || entity.constructUid === construct.uid);
+  }
+
+  protected constructTasks(construct: any): any[] {
+    const ids = new Set(this.asArray(construct?.taskUids || construct?.tasks).map((item) => typeof item === 'string' ? item : this.identityOf(item, '')));
+    return this.taskDefinitions().filter((task) => ids.has(this.identityOf(task, '')) || task.businessConstructUid === construct.uid || task.constructUid === construct.uid);
+  }
+
+  protected constructEntityNames(construct: any): string {
+    return this.constructEntities(construct).map((entity) => this.displayName(entity, '未命名实体')).join('、') || '-';
+  }
+
+  protected constructTaskNames(construct: any): string {
+    return this.constructTasks(construct).map((task) => this.displayName(task, '未命名任务')).join('、') || '-';
+  }
+
+  protected applicationInterfaceRows(service?: any): any[] {
+    const serviceId = service ? this.identityOf(service, '') : '';
+    return this.interfaces().filter((item) => !serviceId || item.serviceUid === serviceId || item.serviceId === serviceId || item.applicationServiceUid === serviceId);
   }
 
   protected exportJson(): void {
@@ -98,19 +219,32 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   private buildOutlineItems(): PreviewOutlineItem[] {
     const doc = this.runtime.doc || {};
     const items: PreviewOutlineItem[] = [{ id: 'preview-top', label: this.title(), depth: 0 }];
+    const outlinedProcessAnchors = new Set<string>();
     if (this.asArray(doc.roles).length) items.push({ id: 'preview-roles', label: '角色', depth: 0 });
     if (this.asArray(doc.terms || doc.language).length) items.push({ id: 'preview-language', label: '统一语言/术语表', depth: 0 });
     if (this.asArray(doc.stages).length) {
-      items.push({ id: 'preview-stages', label: '全景与阶段视图', depth: 0 });
+      items.push({ id: 'preview-stages', label: '业务全景', depth: 0 });
       items.push({ id: 'preview-stage-panorama', label: '全景视图', depth: 1 });
       this.asArray(doc.stages).forEach((stage, index) => {
-        items.push({ id: this.anchorId('stage', this.identityOf(stage, `stage-${index + 1}`)), label: `阶段视图 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 1 });
+        const stageId = this.identityOf(stage, `stage-${index + 1}`);
+        items.push({ id: this.anchorId('stage', stageId), label: `阶段 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 1 });
+        this.stageProcessRefs(stage, doc).forEach((ref, refIndex) => {
+          const process = this.findProcessByRef(ref, doc) || ref;
+          const processAnchor = this.anchorId('proc', this.identityOf(process, `${stageId}-process-${refIndex + 1}`));
+          if (!outlinedProcessAnchors.has(processAnchor)) {
+            outlinedProcessAnchors.add(processAnchor);
+            items.push({ id: processAnchor, label: `流程 · ${this.displayName(process, '未命名流程')}`, depth: 2 });
+          }
+        });
       });
     }
     if (this.asArray(doc.processes).length) {
       items.push({ id: 'preview-processes', label: '流程视图', depth: 0 });
       this.asArray(doc.processes).forEach((process, index) => {
-        items.push({ id: this.anchorId('proc', this.identityOf(process, `process-${index + 1}`)), label: this.displayName(process, '未命名流程'), depth: 1 });
+        const processAnchor = this.anchorId('proc', this.identityOf(process, `process-${index + 1}`));
+        if (!outlinedProcessAnchors.has(processAnchor)) {
+          items.push({ id: processAnchor, label: this.displayName(process, '未命名流程'), depth: 1 });
+        }
       });
     }
     if (this.asArray(doc.entities).length) {
@@ -121,7 +255,15 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       });
     }
     if (this.asArray(doc.businessComponents).length || this.asArray(doc.businessConstructs).length || this.asArray(doc.taskDefinitions).length) {
-      items.push({ id: 'preview-components', label: '组件构件', depth: 0 });
+      items.push({ id: 'preview-components', label: '构件建模', depth: 0 });
+      if (this.asArray(doc.businessComponents).length) items.push({ id: 'preview-business-components', label: '业务组件', depth: 1 });
+      if (this.asArray(doc.businessConstructs).length) items.push({ id: 'preview-business-constructs', label: '业务构件', depth: 1 });
+      if (this.asArray(doc.taskDefinitions).length) items.push({ id: 'preview-task-definitions', label: '任务定义', depth: 1 });
+    }
+    if (this.services().length || this.interfaces().length) {
+      items.push({ id: 'preview-applications', label: '应用建模', depth: 0 });
+      if (this.services().length) items.push({ id: 'preview-application-services', label: '应用服务', depth: 1 });
+      if (this.interfaces().length) items.push({ id: 'preview-application-interfaces', label: '应用接口', depth: 1 });
     }
     return items;
   }
@@ -625,7 +767,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       .filter((rule) => rule.name || rule.content);
   }
 
-  private taskParameterSummary(parameters: any): string {
+  protected taskParameterSummary(parameters: any): string {
     const inputs = this.asArray(parameters?.inputs).length;
     const outputs = this.asArray(parameters?.outputs).length;
     return `入参 ${inputs} · 出参 ${outputs}`;
@@ -724,16 +866,20 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return String(this.runtime.currentFile || this.title() || 'blm-document').replace(/\.json$/i, '') || 'blm-document';
   }
 
-  private displayName(item: any, fallback: string): string {
+  protected displayName(item: any, fallback: string): string {
     return String(item?.name || '').trim() || fallback;
   }
 
-  private identityOf(item: any, fallback: string): string {
+  protected identityOf(item: any, fallback: string): string {
     return String(item?.uid || item?.id || fallback);
   }
 
-  private asArray<T = any>(value: T[] | null | undefined): T[] {
+  protected asArray<T = any>(value: T[] | null | undefined): T[] {
     return Array.isArray(value) ? value : [];
+  }
+
+  private trustedHtml(html: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(html);
   }
 
   private esc(value: unknown): string {

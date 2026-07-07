@@ -45,9 +45,6 @@ export interface AngularRuntimeState {
 interface AngularNavigationSnapshot {
   mainTab: string;
   ui?: Record<string, string | number | boolean | null>;
-  procId?: string;
-  taskId?: string | null;
-  entityId?: string;
 }
 
 const ANGULAR_NAV_HISTORY_LIMIT = 30;
@@ -57,8 +54,11 @@ const ANGULAR_NAVIGATION_UI_KEYS = new Set([
   'procId',
   'taskId',
   'entityId',
+  'procView',
+  'stageId',
   'processWorkbenchView',
   'processWorkbenchTab',
+  'componentTab',
   'componentWorkbenchTab',
   'componentWorkbenchReturnTab',
   'componentWorkbenchConstructId',
@@ -72,19 +72,23 @@ const ANGULAR_NAVIGATION_UI_KEYS = new Set([
   'applicationOrchestrationStepUid',
 ]);
 
+type AngularDocumentHistoryEntry = [any, AngularNavigationSnapshot];
+
 interface AngularDocumentHistory {
-  undo: any[];
-  redo: any[];
+  undo: AngularDocumentHistoryEntry[];
+  redo: AngularDocumentHistoryEntry[];
   baseline: any;
+  baselineNav: AngularNavigationSnapshot | null;
 }
 
 // 模块意图：为所有经由 markAngularRuntimeModified 的工作台提供统一的内存级撤销栈。
-// 关键流程：修改发生后把上一份 baseline 入 undo，撤销/重做时替换完整文档并继续走本地草稿标记。
-// 边界细节：历史只保留最近 50 步，打开或替换文档会重置；这里不持久化操作记录，避免和协同 baseSeq 混在一起。
+// 关键流程：修改发生后把上一份 baseline 和当时界面位置一起入 undo，撤销/重做时恢复文档并定位回相关界面。
+// 边界细节：历史只保留最近 50 步，不持久化操作记录，避免和协同 baseSeq 混在一起。
 const documentHistory: AngularDocumentHistory = {
   undo: [],
   redo: [],
   baseline: null,
+  baselineNav: null,
 };
 
 // 模块意图：提供 Angular 内部的工作壳状态源，替代旧全局运行时的隐式状态。
@@ -155,9 +159,11 @@ export function canRedoAngularRuntimeDocument(): boolean {
 export function undoAngularRuntimeDocument(): boolean {
   const previous = documentHistory.undo.pop();
   if (!previous) return false;
-  documentHistory.redo.push(cloneRuntimeDocument(runtimeState.doc));
-  runtimeState.doc = normalizeDocument(previous);
+  documentHistory.redo.push(createAngularDocumentHistoryEntry(runtimeState.doc));
+  runtimeState.doc = normalizeDocument(previous[0]);
+  restoreAngularNavigationSnapshot(previous[1]);
   documentHistory.baseline = cloneRuntimeDocument(runtimeState.doc);
+  documentHistory.baselineNav = captureAngularNavigationSnapshot();
   markRuntimeDocumentChangedByHistory();
   return true;
 }
@@ -165,10 +171,12 @@ export function undoAngularRuntimeDocument(): boolean {
 export function redoAngularRuntimeDocument(): boolean {
   const next = documentHistory.redo.pop();
   if (!next) return false;
-  documentHistory.undo.push(cloneRuntimeDocument(runtimeState.doc));
+  documentHistory.undo.push(createAngularDocumentHistoryEntry(runtimeState.doc));
   trimAngularRuntimeHistory(documentHistory.undo);
-  runtimeState.doc = normalizeDocument(next);
+  runtimeState.doc = normalizeDocument(next[0]);
+  restoreAngularNavigationSnapshot(next[1]);
   documentHistory.baseline = cloneRuntimeDocument(runtimeState.doc);
+  documentHistory.baselineNav = captureAngularNavigationSnapshot();
   markRuntimeDocumentChangedByHistory();
   return true;
 }
@@ -181,12 +189,16 @@ export function clearAngularRuntimeUndoHistory(): void {
 
 function resetAngularRuntimeUndoBaseline(): void {
   documentHistory.baseline = cloneRuntimeDocument(runtimeState.doc);
+  documentHistory.baselineNav = captureAngularNavigationSnapshot();
 }
 
 function recordAngularRuntimeUndoBoundary(): void {
   if (!documentHistory.baseline) resetAngularRuntimeUndoBaseline();
   if (areRuntimeDocumentsEqual(documentHistory.baseline, runtimeState.doc)) return;
-  documentHistory.undo.push(cloneRuntimeDocument(documentHistory.baseline));
+  documentHistory.undo.push(createAngularDocumentHistoryEntry(
+    documentHistory.baseline,
+    documentHistory.baselineNav || captureAngularNavigationSnapshot(),
+  ));
   trimAngularRuntimeHistory(documentHistory.undo);
   documentHistory.redo = [];
   resetAngularRuntimeUndoBaseline();
@@ -201,10 +213,17 @@ function markRuntimeDocumentChangedByHistory(): void {
   emitRuntimeRefresh();
 }
 
-function trimAngularRuntimeHistory(history: any[]): void {
+function trimAngularRuntimeHistory(history: AngularDocumentHistoryEntry[]): void {
   if (history.length > ANGULAR_UNDO_HISTORY_LIMIT) {
     history.splice(0, history.length - ANGULAR_UNDO_HISTORY_LIMIT);
   }
+}
+
+function createAngularDocumentHistoryEntry(
+  document: any,
+  navigation: AngularNavigationSnapshot = captureAngularNavigationSnapshot(),
+): AngularDocumentHistoryEntry {
+  return [cloneRuntimeDocument(document), navigation];
 }
 
 function cloneRuntimeDocument(document: any): any {
@@ -252,9 +271,17 @@ export function navigateAngularWorkbench(tab: string, options: Record<string, un
   const before = captureAngularNavigationSnapshot();
   if (tab === 'process') {
     runtimeState.ui['mainTab'] = 'processWorkbench';
-    runtimeState.ui['processWorkbenchView'] = 'flow';
+    runtimeState.ui['tab'] = 'process';
     if (options['procId']) runtimeState.ui['procId'] = String(options['procId']);
-    if (options['taskId']) runtimeState.ui['taskId'] = String(options['taskId']);
+    if (options['taskId']) {
+      runtimeState.ui['taskId'] = String(options['taskId']);
+      runtimeState.ui['procView'] = 'node';
+      runtimeState.ui['processWorkbenchView'] = 'node';
+    } else {
+      runtimeState.ui['taskId'] = null;
+      runtimeState.ui['procView'] = 'flow';
+      runtimeState.ui['processWorkbenchView'] = 'flow';
+    }
   } else if (tab === 'data') {
     runtimeState.ui['mainTab'] = 'constructWorkbench';
     if (options['entityId']) runtimeState.ui['entityId'] = String(options['entityId']);
@@ -263,6 +290,10 @@ export function navigateAngularWorkbench(tab: string, options: Record<string, un
     pushAngularNavigationSnapshot(before);
   }
   emitRuntimeRefresh();
+}
+
+export function recordAngularNavigationBoundary(): void {
+  recordAngularNavigationSnapshot();
 }
 
 export function emitRuntimeRefresh(): void {
@@ -312,8 +343,8 @@ export function getAngularBackNavigationTitle(): string {
   if (!previous) return '当前没有可返回的位置';
   const labels: Record<string, string> = {
     panoramaWorkbench: '返回到全景工作台',
-    processWorkbench: previous.taskId ? '返回到流程节点' : '返回到流程工作台',
-    constructWorkbench: previous.entityId ? '返回到实体' : '返回到构件工作台',
+    processWorkbench: previous.ui?.['taskId'] ? '返回到流程节点' : '返回到流程工作台',
+    constructWorkbench: previous.ui?.['entityId'] ? '返回到实体' : '返回到构件工作台',
     applicationWorkbench: '返回到应用工作台',
     orchestrationWorkbench: '返回到编排工作台',
     preview: '返回到预览',
@@ -358,9 +389,6 @@ function captureAngularNavigationSnapshot(): AngularNavigationSnapshot {
   return {
     mainTab: normalizeMainWorkbenchId(runtimeState.ui['mainTab']),
     ui: captureAngularNavigationUi(),
-    procId: String(runtimeState.ui['procId'] || '').trim(),
-    taskId: runtimeState.ui['taskId'] ? String(runtimeState.ui['taskId']).trim() : null,
-    entityId: String(runtimeState.ui['entityId'] || '').trim(),
   };
 }
 
@@ -387,9 +415,6 @@ function restoreAngularNavigationSnapshot(snapshot: AngularNavigationSnapshot): 
     }
     return;
   }
-  runtimeState.ui['procId'] = snapshot.procId || '';
-  runtimeState.ui['taskId'] = snapshot.taskId || null;
-  runtimeState.ui['entityId'] = snapshot.entityId || '';
 }
 
 function isAngularNavigationUiKey(key: string): boolean {
@@ -415,8 +440,6 @@ function angularNavigationHistory(): AngularNavigationSnapshot[] {
 
 function areAngularNavigationSnapshotsEqual(left: AngularNavigationSnapshot, right: AngularNavigationSnapshot): boolean {
   return String(left.mainTab || '') === String(right.mainTab || '')
-    && String(left.procId || '') === String(right.procId || '')
-    && String(left.taskId || '') === String(right.taskId || '')
-    && String(left.entityId || '') === String(right.entityId || '')
     && JSON.stringify(left.ui || {}) === JSON.stringify(right.ui || {});
 }
+

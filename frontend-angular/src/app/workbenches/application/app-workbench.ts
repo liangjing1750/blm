@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench, recordAngularNavigationBoundary } from '../../core/runtime/angular-runtime';
 
 type AppTab = 'service' | 'orchestration';
 
@@ -17,6 +17,16 @@ interface LegacyServiceGroup { uid?: string; id?: string; name?: string; desc?: 
 interface LegacyService { uid?: string; name?: string; serviceGroupUid?: string; method?: string; path?: string; desc?: string; actor?: string; kind?: string; responseKind?: string; rawRequest?: string; rawResponse?: string; requestParams?: ServiceParam[]; responseParams?: ServiceParam[]; inputs?: ServiceParam[]; outputs?: ServiceParam[]; orchestration?: ServiceOrchestration; steps?: OrchStep[]; parameterMappings: ParamMapping[]; nodeRefs: string[]; }
 interface ParamRow { param: ServiceParam; path: number[]; level: number; testPath: string; }
 interface VariableOption { value: string; label: string; }
+interface ContractParamLine {
+  kind: 'field' | 'close';
+  level: number;
+  name: string;
+  type: string;
+  required: boolean;
+  note: string;
+  open: string;
+  close: string;
+}
 
 @Component({
   selector: 'app-application-workbench', standalone: true, imports: [CommonModule, FormsModule],
@@ -49,19 +59,14 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     requestParams: 'list',
     responseParams: 'list',
   });
-  protected readonly serviceParamJsonDrafts = signal<Record<'requestParams' | 'responseParams', string>>({
-    requestParams: '',
-    responseParams: '',
-  });
   protected readonly serviceInterfaceView = signal<'form' | 'json'>('form');
-  protected readonly serviceInterfaceJsonDraft = signal('');
-  protected readonly serviceInterfaceJsonError = signal('');
 
   protected doc(): any { this.version(); return this.runtime.doc || {}; }
   protected serviceGroups(): LegacyServiceGroup[] { this.doc().serviceGroups ||= []; return this.doc().serviceGroups; }
   protected services(): LegacyService[] { return this.doc().services || []; }
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
   protected switchTab(t: AppTab): void {
+    recordAngularNavigationBoundary();
     this.runtime.ui['applicationWorkbenchTab'] = t;
     this.activeTab.set(t);
     if (t === 'orchestration') this.ensureOrchestrationInterfaceSelection();
@@ -203,11 +208,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected jumpToProcessNode(node: { processUid: string; nodeUid: string }): void {
-    this.runtime.ui['mainTab'] = 'processWorkbench';
-    this.runtime.ui['processWorkbenchTab'] = 'node';
-    this.runtime.ui['procId'] = node.processUid;
-    this.runtime.ui['taskId'] = node.nodeUid;
-    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    navigateAngularWorkbench('process', { procId: node.processUid, taskId: node.nodeUid });
     window.dispatchEvent(new CustomEvent('blm-jump-workbench', { detail: { mainTab: 'processWorkbench' } }));
   }
 
@@ -219,8 +220,6 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.ensureServiceShape(svc);
     this.selectService(svc);
     this.serviceInterfaceView.set('form');
-    this.serviceInterfaceJsonDraft.set('');
-    this.serviceInterfaceJsonError.set('');
     this.serviceDrawerId.set(this.uid(svc));
   }
   protected closeServiceDrawer(): void {
@@ -230,8 +229,6 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       this.touch();
     }
     this.serviceInterfaceView.set('form');
-    this.serviceInterfaceJsonDraft.set('');
-    this.serviceInterfaceJsonError.set('');
     this.serviceDrawerId.set('');
   }
   protected startEdit(svc?: LegacyService): void {
@@ -396,91 +393,92 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected paramView(target: 'requestParams' | 'responseParams'): 'list' | 'json' {
     return this.serviceParamViews()[target];
   }
-  protected setParamView(target: 'requestParams' | 'responseParams', view: 'list' | 'json', svc?: LegacyService): void {
-    if (view === 'json' && svc) {
-      this.serviceParamJsonDrafts.update((drafts) => ({ ...drafts, [target]: this.paramsJson(svc, target) }));
-    }
+  protected setParamView(target: 'requestParams' | 'responseParams', view: 'list' | 'json'): void {
     this.serviceParamViews.update((views) => ({ ...views, [target]: view }));
   }
   protected interfaceView(): 'form' | 'json' {
     return this.serviceInterfaceView();
   }
-  protected setInterfaceView(view: 'form' | 'json', svc: LegacyService): void {
-    if (view === 'json') {
-      this.serviceInterfaceJsonDraft.set(this.interfaceJson(svc));
-      this.serviceInterfaceJsonError.set('');
-    }
+  protected setInterfaceView(view: 'form' | 'json'): void {
     this.serviceInterfaceView.set(view);
   }
-  // 模块意图：接口 JSON 视图承载 PDF/Word 中的完整接口契约，避免列表字段覆盖不了非结构化片段。
-  protected interfaceJson(svc: LegacyService): string {
-    return JSON.stringify({
-      name: svc.name || '',
-      actor: svc.actor || '',
-      kind: svc.kind || '',
-      serviceGroupUid: svc.serviceGroupUid || '',
-      method: svc.method || 'POST',
-      path: svc.path || '',
-      responseKind: svc.responseKind || '',
-      desc: svc.desc || '',
-      rawRequest: svc.rawRequest || '',
-      rawResponse: svc.rawResponse || '',
-      requestParams: this.serviceRequestParams(svc),
-      responseParams: this.serviceResponseParams(svc),
-    }, null, 2);
+  // 模块意图：接口文档视图面向传阅和复制，保持接近旧版文档表格，而不是暴露 BLM 内部持久化结构。
+  protected interfaceDocumentText(svc: LegacyService): string {
+    return [
+      `接口描述：${svc.name || ''}`,
+      `使用者：${svc.actor || ''}`,
+      `路径：${svc.path || '/'} ${svc.method || 'POST'}`,
+      '入参：',
+      this.paramsDocumentText(this.serviceRequestParams(svc)),
+      '出参：',
+      this.paramsDocumentText(this.serviceResponseParams(svc)),
+    ].join('\n');
   }
-  // 关键流程：JSON 合法时立即回写同一个服务对象，继续沿用现有草稿和撤销机制。
-  protected updateInterfaceFromJson(svc: LegacyService, raw: string): void {
-    if (!this.canEdit()) return;
-    this.serviceInterfaceJsonDraft.set(raw);
-    try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-      svc.name = String(parsed.name || '').trim();
-      svc.actor = String(parsed.actor || '').trim();
-      svc.kind = String(parsed.kind || '').trim();
-      svc.serviceGroupUid = String(parsed.serviceGroupUid || '').trim();
-      svc.method = String(parsed.method || 'POST').trim() || 'POST';
-      svc.path = String(parsed.path || '').trim();
-      svc.responseKind = String(parsed.responseKind || '').trim();
-      svc.desc = String(parsed.desc || '').trim();
-      svc.rawRequest = String(parsed.rawRequest || '').trim();
-      svc.rawResponse = String(parsed.rawResponse || '').trim();
-      svc.requestParams = Array.isArray(parsed.requestParams)
-        ? parsed.requestParams.filter((item: unknown): item is Partial<ServiceParam> => Boolean(item && typeof item === 'object')).map((item: Partial<ServiceParam>) => this.normalizeSvcParam(item))
-        : [];
-      svc.responseParams = Array.isArray(parsed.responseParams)
-        ? parsed.responseParams.filter((item: unknown): item is Partial<ServiceParam> => Boolean(item && typeof item === 'object')).map((item: Partial<ServiceParam>) => this.normalizeSvcParam(item))
-        : [];
-      this.serviceInterfaceJsonError.set('');
-      this.touch();
-      this.version.update((value) => value + 1);
-    } catch {
-      this.serviceInterfaceJsonError.set('JSON 格式错误，暂不覆盖接口定义。');
+  protected contractParamLines(params: ServiceParam[], level = 0): ContractParamLine[] {
+    const lines: ContractParamLine[] = [];
+    for (const param of params) {
+      const open = this.paramDocumentOpen(param);
+      const close = this.paramDocumentClose(param);
+      lines.push({
+        kind: 'field',
+        level,
+        name: param.name || '未命名参数',
+        type: param.type || 'String',
+        required: Boolean(param.required),
+        note: param.note || '',
+        open,
+        close: '',
+      });
+      if (param.children?.length) {
+        lines.push(...this.contractParamLines(param.children, level + 1));
+        lines.push({ kind: 'close', level, name: '', type: '', required: false, note: '', open: '', close });
+      }
     }
+    return lines;
   }
-  protected paramJsonDraft(target: 'requestParams' | 'responseParams'): string {
-    return this.serviceParamJsonDrafts()[target];
+  protected copyInterfaceDocument(svc: LegacyService): void {
+    navigator.clipboard?.writeText(this.interfaceDocumentText(svc));
   }
-  protected paramsJson(svc: LegacyService, target: 'requestParams' | 'responseParams'): string {
-    const params = target === 'requestParams' ? this.serviceRequestParams(svc) : this.serviceResponseParams(svc);
-    return JSON.stringify(params, null, 2);
-  }
-  protected updateParamsFromJson(svc: LegacyService, target: 'requestParams' | 'responseParams', raw: string): void {
-    if (!this.canEdit()) return;
-    this.serviceParamJsonDrafts.update((drafts) => ({ ...drafts, [target]: raw }));
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-      const normalized = parsed
-        .filter((item): item is Partial<ServiceParam> => Boolean(item && typeof item === 'object'))
-        .map((item) => this.normalizeSvcParam(item));
-      if (target === 'requestParams') svc.requestParams = normalized;
-      else svc.responseParams = normalized;
-      this.touch();
-    } catch {
-      // 边界细节：JSON 视图允许用户暂时输入半成品；解析失败时不覆盖原参数。
+  private paramsDocumentText(params: ServiceParam[], level = 0): string {
+    if (!params.length && level === 0) return '{}';
+    const indent = (value: number) => '  '.repeat(value + 1);
+    const lines = level === 0 ? ['{'] : [];
+    for (const param of params) {
+      const required = param.required ? ' *' : '';
+      const note = param.note ? ` // ${param.note}${required}` : required;
+      const open = this.paramDocumentOpen(param);
+      lines.push(`${indent(level)}${param.name || '未命名参数'}: ${this.docTypeName(param.type)}${open ? ` ${open}` : ''}${note}`);
+      if (param.children?.length) {
+        lines.push(this.paramsDocumentText(param.children, level + 1));
+        lines.push(`${indent(level)}${this.paramDocumentClose(param)}`);
+      }
     }
+    if (level === 0) lines.push('}');
+    return lines.join('\n');
+  }
+  private paramDocumentOpen(param: ServiceParam): string {
+    if (!param.children?.length) return '';
+    const type = String(param.type || '').toLowerCase();
+    if (type === 'array' || type === 'list') return '[{';
+    return '{';
+  }
+  private paramDocumentClose(param: ServiceParam): string {
+    const type = String(param.type || '').toLowerCase();
+    if (type === 'array' || type === 'list') return '}]';
+    return '}';
+  }
+  private docTypeName(type = 'String'): string {
+    const normalized = String(type || 'String').trim();
+    const map: Record<string, string> = {
+      String: 'string',
+      Number: 'number',
+      Boolean: 'boolean',
+      Array: 'array',
+      List: 'list',
+      Map: 'map',
+      Object: 'object',
+    };
+    return map[normalized] || normalized;
   }
   private normalizeSvcParam(param: Partial<ServiceParam>): ServiceParam {
     const children = Array.isArray(param.children) ? param.children.map((child) => this.normalizeSvcParam(child)) : [];
@@ -543,15 +541,69 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected doImportJson(svc: LegacyService): void {
     if (!this.canEdit()) return;
     try {
-      const obj = JSON.parse(this.importJsonText());
+      const imported = this.parsePastedParams(this.importJsonText());
+      if (!imported.length) throw new Error('empty');
       const arr = this.importJsonTarget() === 'requestParams' ? this.serviceRequestParams(svc) : this.serviceResponseParams(svc);
-      for (const [key, val] of Object.entries(obj)) {
-        if (!arr.some(p => p.name === key)) arr.push(this.paramFromJsonValue(key, val));
+      for (const param of imported) {
+        if (!arr.some((item) => item.name === param.name)) arr.push(param);
       }
       this.importJsonVisible.set(false);
       this.importJsonError.set('');
       this.touch();
-    } catch { this.importJsonError.set('JSON 格式错误，请检查后再导入。'); }
+    } catch { this.importJsonError.set('没有识别到可导入的参数，请粘贴 JSON 或旧文档中的 name: type // 说明 片段。'); }
+  }
+
+  private parsePastedParams(raw: string): ServiceParam[] {
+    const text = raw.trim();
+    if (!text) return [];
+    try {
+      return this.paramsFromParsedJson(JSON.parse(text));
+    } catch {
+      return this.paramsFromLooseText(text);
+    }
+  }
+
+  private paramsFromParsedJson(parsed: unknown): ServiceParam[] {
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((item): item is Partial<ServiceParam> => Boolean(item && typeof item === 'object'))
+        .map((item) => this.normalizeSvcParam(item));
+    }
+    if (parsed && typeof parsed === 'object') {
+      return Object.entries(parsed as Record<string, unknown>).map(([key, value]) => this.paramFromJsonValue(key, value));
+    }
+    return [];
+  }
+
+  // 边界细节：旧文档经常复制的是非严格 JSON 片段，这里只抽取稳定的 "字段: 类型 // 说明" 行，避免把大段示例文本误写入模型。
+  private paramsFromLooseText(text: string): ServiceParam[] {
+    const result: ServiceParam[] = [];
+    const seen = new Set<string>();
+    const linePattern = /^["']?([A-Za-z_][\w.-]*)["']?\s*:\s*([A-Za-z][\w\[\]]*)\s*,?\s*(?:\/\/\s*(.*))?$/;
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim().replace(/,$/, '');
+      if (!line || /^[{}\[\]]+$/.test(line) || line.includes('......')) continue;
+      const match = line.match(linePattern);
+      if (!match) continue;
+      const [, name, type, noteText = ''] = match;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const required = line.includes('*');
+      const note = noteText.replace(/\*/g, '').trim();
+      result.push({ name, type: this.normalizeDocImportType(type), required, note });
+    }
+    return result;
+  }
+
+  private normalizeDocImportType(type: string): string {
+    const lower = String(type || '').toLowerCase();
+    if (lower.includes('number') || lower.includes('decimal') || lower === 'int' || lower === 'integer') return 'Number';
+    if (lower.includes('bool')) return 'Boolean';
+    if (lower.includes('array')) return 'Array';
+    if (lower.includes('list') || lower.endsWith('[]')) return 'List';
+    if (lower.includes('map')) return 'Map';
+    if (lower.includes('object')) return 'Object';
+    return 'String';
   }
 
   private paramFromJsonValue(name: string, value: any): ServiceParam {
@@ -569,22 +621,6 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       ? Object.entries(childrenSource).map(([childName, childValue]) => this.paramFromJsonValue(childName, childValue))
       : [];
     return { name, type, required: false, note: '', ...(children.length ? { children } : {}) };
-  }
-
-  // 复制为 JSON
-  protected copyParamsAsJson(svc: LegacyService, target: 'requestParams'|'responseParams'): void {
-    const arr = target === 'requestParams' ? this.serviceRequestParams(svc) : this.serviceResponseParams(svc);
-    const obj: Record<string, any> = {};
-    for (const p of arr) obj[p.name] = this.paramExampleValue(p);
-    navigator.clipboard?.writeText(JSON.stringify(obj, null, 2));
-  }
-
-  private paramExampleValue(param: ServiceParam): any {
-    const children = param.children || [];
-    if (param.type === 'Object' || param.type === 'Map') return Object.fromEntries(children.map((child) => [child.name, this.paramExampleValue(child)]));
-    if (param.type === 'Array' || param.type === 'List') return children.length ? [Object.fromEntries(children.map((child) => [child.name, this.paramExampleValue(child)]))] : [];
-    const defaults: Record<string, any> = { String: '', Number: 0, Boolean: false };
-    return defaults[param.type] ?? '';
   }
 
   // ─── Tab 2: 应用编排 ──────────────────────────

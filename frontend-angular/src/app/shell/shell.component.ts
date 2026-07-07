@@ -243,8 +243,15 @@ export class ShellComponent implements OnInit, OnDestroy {
   @HostListener('document:contextmenu', ['$event'])
   protected showLocatorMenu(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
+    if (this.shouldIgnoreLocatorContextMenu(target)) {
+      this.locatorMenu.set(null);
+      return;
+    }
     const anchor = target?.closest?.('#tab-content, #sidebar-content, .file-name, .collab-status');
-    if (!anchor || !this.runtime.currentFile) return;
+    if (!anchor || !this.runtime.currentFile) {
+      this.locatorMenu.set(null);
+      return;
+    }
     const actions = this.locatorActions(target);
     if (!actions.length) return;
     event.preventDefault();
@@ -714,6 +721,20 @@ export class ShellComponent implements OnInit, OnDestroy {
       });
     }
     return actions;
+  }
+
+  private shouldIgnoreLocatorContextMenu(target?: HTMLElement | null): boolean {
+    return Boolean(target?.closest?.([
+      '.drawer-overlay',
+      '.drawer',
+      '.modal-backdrop',
+      '.modal-card',
+      '.app-service-modal-overlay',
+      '.locator-menu',
+      '[role="dialog"]',
+      '[data-testid="service-interface-drawer"]',
+      '[data-testid="service-group-drawer"]',
+    ].join(',')));
   }
 
   protected async copyLocatorAction(action: LocatorAction): Promise<void> {

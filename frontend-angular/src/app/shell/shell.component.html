@@ -142,7 +142,16 @@
       <app-entity-workbench *ngIf="activeMainTab() === 'entity'"></app-entity-workbench>
       <app-knowledge-workbench *ngIf="activeMainTab() === 'knowledge'"></app-knowledge-workbench>
       <app-role-workbench *ngIf="activeMainTab() === 'role'"></app-role-workbench>
-      <app-preview-workbench *ngIf="activeMainTab() === 'preview'"></app-preview-workbench>
+      @if (activeMainTab() === 'preview') {
+        @defer (when activeMainTab() === 'preview') {
+          <app-preview-workbench></app-preview-workbench>
+        } @placeholder {
+          <section class="tool-placeholder">
+            <h2>预览导出</h2>
+            <p>正在加载预览内容...</p>
+          </section>
+        }
+      }
       <section *ngIf="false && activeMainTab() === 'preview'" class="tool-placeholder">
         <h2>预览导出</h2>
         <p>新版迁移中，暂不使用旧前端预览代码。</p>

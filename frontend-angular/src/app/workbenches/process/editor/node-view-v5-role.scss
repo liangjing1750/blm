@@ -111,9 +111,9 @@
 }
 
 .node-progress-guide--vertical {
-  width: 74px;
-  grid-template-columns: 8px minmax(0, 56px);
-  gap: 6px;
+  width: 58px;
+  grid-template-columns: 6px minmax(0, 44px);
+  gap: 5px;
 }
 
 .node-progress-step {
@@ -134,8 +134,8 @@
 .node-progress-guide--vertical .node-progress-step {
   grid-template-columns: 1fr;
   justify-items: center;
-  min-height: 92px;
-  padding: 6px 4px;
+  min-height: 78px;
+  padding: 5px 3px;
   text-align: center;
 }
 
@@ -174,10 +174,11 @@
 .node-progress-more {
   grid-column: 2;
   width: 100%;
-  min-height: 28px;
-  margin-top: -2px;
+  min-height: 30px;
+  margin-top: 0;
   border: 1px solid #d7e4f3;
-  border-radius: 999px;
+  border-left: 4px solid #3b82f6;
+  border-radius: 10px;
   background: #fff;
   color: #475569;
   cursor: pointer;
@@ -187,7 +188,7 @@
 
 .node-selected-role-icon {
   position: relative;
-  display: inline-block;
+  display: none;
   width: 14px;
   height: 14px;
   margin-right: 4px;
@@ -283,7 +284,7 @@
 
 .node-step-main-row {
   display: grid;
-  grid-template-columns: auto 120px minmax(360px, 1fr) minmax(260px, 1fr) auto;
+  grid-template-columns: auto 120px minmax(540px, 1.35fr) minmax(180px, .45fr) auto;
   gap: 8px;
   align-items: start;
 }

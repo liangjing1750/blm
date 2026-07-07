@@ -73,7 +73,7 @@
             </div>
             <div class="node-selected-chip-row">
               @for (roleName of selectedRoleLabels(task); track roleName) {
-                <span data-testid="node-selected-role-chip"><span class="node-selected-role-icon" aria-hidden="true"></span>{{ roleName }}</span>
+                <span data-testid="node-selected-role-chip">{{ roleName }}</span>
               } @empty {
                 <span class="is-empty">尚未选择办理角色</span>
               }
@@ -252,19 +252,29 @@
                               @if (isSectionServicePickerOpen(form, section) && sectionServicePicker(); as picker) {
                                 <div class="task-form-service-menu" data-testid="task-form-section-service-menu">
                                   <div class="task-form-service-menu-head">
-                                    <button type="button" data-testid="task-form-section-service-selected-only" [class.active]="picker.selectedOnly" (click)="toggleSectionServicePickerSelectedOnly()">只看已选</button>
+                                    <button type="button" data-testid="task-form-section-service-selected-only" [class.active]="picker.selectedOnly" [disabled]="!editing" (click)="toggleSectionServicePickerSelectedOnly()">只看已选</button>
+                                    @if (editing) {
+                                      <input
+                                        class="task-form-service-search"
+                                        type="search"
+                                        data-testid="task-form-section-service-search"
+                                        [ngModel]="picker.keyword"
+                                        (ngModelChange)="setSectionServicePickerKeyword($event)"
+                                        placeholder="搜索服务/接口"
+                                      />
+                                    }
                                     <button type="button" (click)="closeSectionServicePicker()">关闭</button>
                                   </div>
                                   <div class="task-form-service-menu-body">
                                     <div class="task-form-service-groups">
-                                      @for (group of formServiceGroups(task); track serviceGroupId(group)) {
-                                        <button type="button" [class.active]="picker.activeGroupUid === serviceGroupId(group)" (click)="setSectionServicePickerGroup(serviceGroupId(group))">
+                                      @for (group of visibleFormServiceGroups(task, picker, section); track serviceGroupId(group)) {
+                                        <button type="button" [class.active]="activeSectionServiceGroupUid(task, picker, section) === serviceGroupId(group)" (click)="setSectionServicePickerGroup(serviceGroupId(group))">
                                           <span>{{ group.name || serviceGroupId(group) }}</span><b>›</b>
                                         </button>
                                       }
                                     </div>
                                     <div class="task-form-service-options">
-                                      @for (service of formServicesForGroup(task, picker.activeGroupUid, picker.selectedOnly, section); track serviceId(service)) {
+                                      @for (service of visibleFormServicesForPicker(task, picker, section); track serviceId(service)) {
                                         <label data-testid="task-form-section-service-option">
                                           <span>
                                             <strong>{{ service.name || serviceId(service) }}</strong>

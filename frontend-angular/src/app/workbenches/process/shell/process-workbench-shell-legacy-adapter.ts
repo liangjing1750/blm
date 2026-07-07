@@ -1,5 +1,5 @@
 import { LegacyProcess, LegacyProcessNode } from '../editor/process-editor-legacy-adapter';
-import { getAngularRuntimeState, emitRuntimeRefresh } from '../../../core/runtime/angular-runtime';
+import { getAngularRuntimeState, emitRuntimeRefresh, recordAngularNavigationBoundary } from '../../../core/runtime/angular-runtime';
 
 interface LegacyState {
   doc?: { processes?: LegacyProcess[] };
@@ -89,10 +89,20 @@ export function createProcessWorkbenchShellLegacyAdapter(
     if (current && !ui().procId) ui().procId = processId(current);
   }
 
+  function currentView(): ProcessShellView {
+    const raw = ui().procView || 'valueDomain';
+    if (raw === 'list') return 'editor';
+    if (raw === 'valueDomain') return 'valueDomain';
+    if (raw === 'node') return 'node';
+    if (raw === 'flow') return 'flow';
+    return 'stage';
+  }
+
   function setNormalView(view: ProcessShellView): void {
     // 模块意图：Angular 壳层接管二级 tab 状态，legacy 只保留数据模型和旧版对比入口。
     // 关键流程：切换视图时只改 S.ui，子工作台通过各自 adapter 读取同一个状态，避免同级组件直接依赖。
     // 边界细节：不在这里调用 renderProcessTab，防止壳层切换又被 legacy 重新生成。
+    if (currentView() !== view) recordAngularNavigationBoundary();
     ui().tab = 'process';
     if (view === 'valueDomain') {
       ui().procView = 'valueDomain';
@@ -128,12 +138,7 @@ export function createProcessWorkbenchShellLegacyAdapter(
     processId,
     taskId,
     view() {
-      const raw = ui().procView || 'valueDomain';
-      if (raw === 'list') return 'editor';
-      if (raw === 'valueDomain') return 'valueDomain';
-      if (raw === 'node') return 'node';
-      if (raw === 'flow') return 'flow';
-      return 'stage';
+      return currentView();
     },
     stageEditing() {
       return (ui().procView || 'stage') === 'stage' && ui().stageEditorCollapsed === false;
@@ -151,6 +156,7 @@ export function createProcessWorkbenchShellLegacyAdapter(
       setNormalView('node');
     },
     openEditor(targetProcessId = null, targetTaskId = null) {
+      recordAngularNavigationBoundary();
       if (targetProcessId) ui().procId = targetProcessId;
       ui().taskId = targetTaskId || null;
       ensureProcessSelection();

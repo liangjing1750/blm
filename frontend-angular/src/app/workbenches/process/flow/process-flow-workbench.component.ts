@@ -156,6 +156,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   @Input() editing = true;
   @Input() exportGraphId = '';
+  @Input() previewProcessId = '';
   @Output() readonly taskEditorRequested = new EventEmitter<string>();
 
   protected processes(): LegacyProcess[] {
@@ -170,6 +171,11 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   protected currentProcess(): LegacyProcess | null {
     this.version();
+    const previewId = String(this.previewProcessId || '').trim();
+    if (previewId) {
+      return this.adapter.processes().find((process) => this.processId(process) === previewId || process.id === previewId || process.uid === previewId)
+        || null;
+    }
     return this.adapter.currentProcess();
   }
 

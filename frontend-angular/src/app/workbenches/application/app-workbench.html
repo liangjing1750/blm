@@ -302,14 +302,14 @@
   @if (importJsonVisible()) {
     <div class="comp-overlay" (click)="importJsonVisible.set(false)">
       <div class="comp-dialog" (click)="$event.stopPropagation()">
-        <h3>从 JSON 导入{{ importJsonTarget() === 'requestParams' ? '输入' : '输出' }}参数</h3>
-        <textarea [ngModel]="importJsonText()" (ngModelChange)="importJsonText.set($event)" rows="8" placeholder='粘贴 JSON，如 {"reservation":{"warehouseUid":"WH-A","items":[{"productCode":"CU"}]}}' class="svc-json-import"></textarea>
+        <h3>粘贴导入{{ importJsonTarget() === 'requestParams' ? '输入' : '输出' }}参数</h3>
+        <textarea data-testid="service-param-import-text" [ngModel]="importJsonText()" (ngModelChange)="importJsonText.set($event)" rows="8" placeholder='支持 JSON，也支持旧文档片段，如：pageIndex: number, // 当前页码 *' class="svc-json-import"></textarea>
         @if (importJsonError()) {
           <p class="import-json-error" data-testid="import-json-error">{{ importJsonError() }}</p>
         }
         <div class="comp-dialog-actions">
           <button class="btn btn-outline btn-sm" type="button" (click)="importJsonVisible.set(false)">取消</button>
-          <button class="btn btn-primary btn-sm" type="button" (click)="doImportJson(serviceDrawer()!)">导入</button>
+          <button class="btn btn-primary btn-sm" data-testid="service-param-import-submit" type="button" (click)="doImportJson(serviceDrawer()!)">导入</button>
         </div>
       </div>
     </div>
@@ -355,16 +355,64 @@
             </section>
           } @else {
             <div class="svc-interface-view-switch">
-              <button class="btn-ghost-sm" data-testid="service-interface-form-view" [class.active]="interfaceView()==='form'" type="button" (click)="setInterfaceView('form', svc)">表单视图</button>
-              <button class="btn-ghost-sm" data-testid="service-interface-json-view" [class.active]="interfaceView()==='json'" type="button" (click)="setInterfaceView('json', svc)">JSON 视图</button>
+              <button class="btn-ghost-sm" data-testid="service-interface-form-view" [class.active]="interfaceView()==='form'" type="button" (click)="setInterfaceView('form')">表单视图</button>
+              <button class="btn-ghost-sm" data-testid="service-interface-json-view" [class.active]="interfaceView()==='json'" type="button" (click)="setInterfaceView('json')">JSON 视图</button>
             </div>
             @if (interfaceView() === 'json') {
-              <section class="svc-params-section svc-interface-json-section">
-                <div class="svc-params-head"><span>完整接口定义</span></div>
-                <textarea class="svc-param-json svc-interface-json" data-testid="service-interface-json-editor" [value]="serviceInterfaceJsonDraft() || interfaceJson(svc)" (input)="updateInterfaceFromJson(svc, $any($event.target).value)" (change)="updateInterfaceFromJson(svc, $any($event.target).value)"></textarea>
-                @if (serviceInterfaceJsonError()) {
-                  <p class="drawer-error">{{ serviceInterfaceJsonError() }}</p>
-                }
+              <section class="svc-contract-section" data-testid="service-interface-contract-view">
+                <div class="svc-contract-toolbar">
+                  <span>接口文档视图</span>
+                  <button class="btn-ghost-sm" type="button" (click)="copyInterfaceDocument(svc)">复制</button>
+                </div>
+                <div class="svc-contract-grid">
+                  <div class="svc-contract-head">接口描述</div>
+                  <div class="svc-contract-head">使用者</div>
+                  <div class="svc-contract-head">路径</div>
+                  <div class="svc-contract-head">入参</div>
+                  <div class="svc-contract-head">出参</div>
+                  <div class="svc-contract-cell svc-contract-name">{{ svc.name || '未命名接口' }}</div>
+                  <div class="svc-contract-cell">{{ svc.actor || '未填写' }}</div>
+                  <div class="svc-contract-cell">
+                    <code>{{ svc.path || '/' }}</code>
+                    <strong>{{ svc.method || 'POST' }}</strong>
+                  </div>
+                  <div class="svc-contract-cell svc-contract-code">
+                    @if (contractParamLines(serviceRequestParams(svc)).length) {
+                      <span class="json-brace">{{ '{' }}</span>
+                      @for (line of contractParamLines(serviceRequestParams(svc)); track $index) {
+                        <div class="json-line" [style.padding-left.px]="(line.level + 1) * 16">
+                          @if (line.kind === 'close') {
+                            <span class="json-brace">{{ line.close }}</span>
+                          } @else {
+                            <span class="json-key">{{ line.name }}</span><span>: </span><span class="json-type">{{ line.type }}</span>
+                            @if (line.open) { <span class="json-brace"> {{ line.open }}</span> }
+                            @if (line.note) { <span class="json-note"> // {{ line.note }}</span> }
+                            @if (line.required) { <span class="json-required"> *</span> }
+                          }
+                        </div>
+                      }
+                      <span class="json-brace">{{ '}' }}</span>
+                    } @else { <span class="muted">暂无入参</span> }
+                  </div>
+                  <div class="svc-contract-cell svc-contract-code">
+                    @if (contractParamLines(serviceResponseParams(svc)).length) {
+                      <span class="json-brace">{{ '{' }}</span>
+                      @for (line of contractParamLines(serviceResponseParams(svc)); track $index) {
+                        <div class="json-line" [style.padding-left.px]="(line.level + 1) * 16">
+                          @if (line.kind === 'close') {
+                            <span class="json-brace">{{ line.close }}</span>
+                          } @else {
+                            <span class="json-key">{{ line.name }}</span><span>: </span><span class="json-type">{{ line.type }}</span>
+                            @if (line.open) { <span class="json-brace"> {{ line.open }}</span> }
+                            @if (line.note) { <span class="json-note"> // {{ line.note }}</span> }
+                            @if (line.required) { <span class="json-required"> *</span> }
+                          }
+                        </div>
+                      }
+                      <span class="json-brace">{{ '}' }}</span>
+                    } @else { <span class="muted">暂无出参</span> }
+                  </div>
+                </div>
               </section>
             } @else {
             <section class="svc-edit-section svc-edit-basics">
@@ -386,10 +434,6 @@
                 <select [attr.data-testid]="'interface-response-kind-' + uid(svc)" [(ngModel)]="svc.responseKind" (ngModelChange)="touch()"><option value="">响应形态</option><option>JSON</option><option>文件流</option><option>FormData</option><option>string[]</option><option>handler</option></select>
               </div>
               <textarea [attr.data-testid]="'interface-desc-' + uid(svc)" [(ngModel)]="svc.desc" (ngModelChange)="touch()" rows="1" placeholder="接口说明" class="svc-edit-note svc-edit-note--compact"></textarea>
-              <div class="svc-edit-raw-grid">
-                <textarea [attr.data-testid]="'interface-raw-request-' + uid(svc)" [(ngModel)]="svc.rawRequest" (ngModelChange)="touch()" rows="3" placeholder="原始入参片段，可保留 PDF 中不规则文本"></textarea>
-                <textarea [attr.data-testid]="'interface-raw-response-' + uid(svc)" [(ngModel)]="svc.rawResponse" (ngModelChange)="touch()" rows="3" placeholder="原始出参片段，如：文件流、string[]"></textarea>
-              </div>
             </section>
 
             <div class="svc-params-section">
@@ -397,12 +441,28 @@
                 <span>请求参数</span>
                 <div class="svc-params-head-actions">
                   <button class="btn-ghost-sm" data-testid="service-param-list-view-requestParams" [class.active]="paramView('requestParams')==='list'" type="button" (click)="setParamView('requestParams', 'list')">列表视图</button>
-                  <button class="btn-ghost-sm" data-testid="service-param-json-view-requestParams" [class.active]="paramView('requestParams')==='json'" type="button" (click)="setParamView('requestParams', 'json', svc)">JSON 视图</button>
+                  <button class="btn-ghost-sm" data-testid="service-param-json-view-requestParams" [class.active]="paramView('requestParams')==='json'" type="button" (click)="setParamView('requestParams', 'json')">JSON 视图</button>
                   <button class="btn-ghost-sm" data-testid="service-drawer-add-request-param" type="button" (click)="addSvcParam(serviceRequestParams(svc))">+ 添加</button>
+                  <button class="btn-ghost-sm" data-testid="service-drawer-paste-request-param" type="button" (click)="startImportJson('requestParams')">粘贴</button>
                 </div>
               </div>
               @if (paramView('requestParams') === 'json') {
-                <textarea class="svc-param-json" data-testid="service-param-json-requestParams" [value]="paramJsonDraft('requestParams') || paramsJson(svc, 'requestParams')" (input)="updateParamsFromJson(svc, 'requestParams', $any($event.target).value)" (change)="updateParamsFromJson(svc, 'requestParams', $any($event.target).value)"></textarea>
+                <div class="svc-param-json-doc" data-testid="service-param-json-requestParams">
+                  <span class="json-brace">{{ '{' }}</span>
+                  @for (line of contractParamLines(serviceRequestParams(svc)); track $index) {
+                    <div class="json-line" [style.padding-left.px]="(line.level + 1) * 16">
+                      @if (line.kind === 'close') {
+                        <span class="json-brace">{{ line.close }}</span>
+                      } @else {
+                        <span class="json-key">{{ line.name }}</span><span>: </span><span class="json-type">{{ line.type }}</span>
+                        @if (line.open) { <span class="json-brace"> {{ line.open }}</span> }
+                        @if (line.note) { <span class="json-note"> // {{ line.note }}</span> }
+                        @if (line.required) { <span class="json-required"> *</span> }
+                      }
+                    </div>
+                  } @empty { <div class="muted">暂无请求参数</div> }
+                  <span class="json-brace">{{ '}' }}</span>
+                </div>
               } @else {
                 <table class="svc-params-table">
                   <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>
@@ -434,12 +494,28 @@
                 <span>响应参数</span>
                 <div class="svc-params-head-actions">
                   <button class="btn-ghost-sm" data-testid="service-param-list-view-responseParams" [class.active]="paramView('responseParams')==='list'" type="button" (click)="setParamView('responseParams', 'list')">列表视图</button>
-                  <button class="btn-ghost-sm" data-testid="service-param-json-view-responseParams" [class.active]="paramView('responseParams')==='json'" type="button" (click)="setParamView('responseParams', 'json', svc)">JSON 视图</button>
+                  <button class="btn-ghost-sm" data-testid="service-param-json-view-responseParams" [class.active]="paramView('responseParams')==='json'" type="button" (click)="setParamView('responseParams', 'json')">JSON 视图</button>
                   <button class="btn-ghost-sm" data-testid="service-drawer-add-response-param" type="button" (click)="addSvcParam(serviceResponseParams(svc))">+ 添加</button>
+                  <button class="btn-ghost-sm" data-testid="service-drawer-paste-response-param" type="button" (click)="startImportJson('responseParams')">粘贴</button>
                 </div>
               </div>
               @if (paramView('responseParams') === 'json') {
-                <textarea class="svc-param-json" data-testid="service-param-json-responseParams" [value]="paramJsonDraft('responseParams') || paramsJson(svc, 'responseParams')" (input)="updateParamsFromJson(svc, 'responseParams', $any($event.target).value)" (change)="updateParamsFromJson(svc, 'responseParams', $any($event.target).value)"></textarea>
+                <div class="svc-param-json-doc" data-testid="service-param-json-responseParams">
+                  <span class="json-brace">{{ '{' }}</span>
+                  @for (line of contractParamLines(serviceResponseParams(svc)); track $index) {
+                    <div class="json-line" [style.padding-left.px]="(line.level + 1) * 16">
+                      @if (line.kind === 'close') {
+                        <span class="json-brace">{{ line.close }}</span>
+                      } @else {
+                        <span class="json-key">{{ line.name }}</span><span>: </span><span class="json-type">{{ line.type }}</span>
+                        @if (line.open) { <span class="json-brace"> {{ line.open }}</span> }
+                        @if (line.note) { <span class="json-note"> // {{ line.note }}</span> }
+                        @if (line.required) { <span class="json-required"> *</span> }
+                      }
+                    </div>
+                  } @empty { <div class="muted">暂无响应参数</div> }
+                  <span class="json-brace">{{ '}' }}</span>
+                </div>
               } @else {
                 <table class="svc-params-table">
                   <thead><tr><th>参数名</th><th>类型</th><th>必填</th><th>说明</th><th></th></tr></thead>

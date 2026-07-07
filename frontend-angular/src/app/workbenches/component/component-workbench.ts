@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
-import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified, recordAngularNavigationBoundary } from '../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
 
 type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
@@ -1204,6 +1204,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return `${baseName}${index}`;
   }
   protected switchTab(t: ComponentTab): void {
+    recordAngularNavigationBoundary();
     if (t === 'businessConstruct' && !this.selectedConstructId()) this.setSelectedConstruct(this.constructs()[0] || null);
     this.runtime.ui['componentWorkbenchTab'] = t;
     this.activeTab.set(t);

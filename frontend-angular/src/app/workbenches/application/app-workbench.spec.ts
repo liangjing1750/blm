@@ -230,7 +230,8 @@ describe('ApplicationWorkbenchComponent', () => {
     nodeLink?.click();
     fixture.detectChanges();
     expect(runtime.ui['mainTab']).toBe('processWorkbench');
-    expect(runtime.ui['processWorkbenchTab']).toBe('node');
+    expect(runtime.ui['procView']).toBe('node');
+    expect(runtime.ui['processWorkbenchView']).toBe('node');
     expect(runtime.ui['procId']).toBe('process-1');
     expect(runtime.ui['taskId']).toBe('node-submit');
   });
@@ -324,9 +325,15 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(note.classList.contains('svc-edit-note--compact')).toBe(true);
   });
 
-  it('switches interface parameters between list and json views', () => {
+  it('switches interface parameters between list and read-only json views', () => {
     const runtime = getAngularRuntimeState();
-    runtime.doc.services[0].requestParams = [{ name: 'orderId', type: 'String', required: true, note: 'order id' }];
+    runtime.doc.services[0].requestParams = [{
+      name: 'items',
+      type: 'List',
+      required: true,
+      note: 'order items',
+      children: [{ name: 'sku', type: 'String', required: true, note: 'sku code' }],
+    }];
     host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
@@ -336,23 +343,55 @@ describe('ApplicationWorkbenchComponent', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="service-param-json-view-requestParams"]')?.click();
     fixture.detectChanges();
 
-    const json = host.querySelector<HTMLTextAreaElement>('[data-testid="service-param-json-requestParams"]');
+    const json = host.querySelector<HTMLElement>('[data-testid="service-param-json-requestParams"]');
     expect(json).toBeTruthy();
-    expect(json?.value).toContain('orderId');
+    expect(json?.textContent).toContain('items');
+    expect(json?.textContent).toContain('[{');
+    expect(json?.textContent).toContain('sku');
+    expect(json?.textContent).toContain('}]');
+    expect(json?.querySelector<HTMLElement>('.json-line')?.style.paddingLeft).toBe('16px');
     expect(host.querySelector('[data-testid="service-request-param-name-0"]')).toBeFalsy();
-
-    json!.value = '[{"name":"customerId","type":"String","required":false,"note":"customer"}]';
-    json!.dispatchEvent(new Event('input', { bubbles: true }));
-    fixture.detectChanges();
-    expect(runtime.doc.services[0].requestParams[0].name).toBe('customerId');
+    expect(host.querySelector('textarea[data-testid="service-param-json-requestParams"]')).toBeFalsy();
 
     host.querySelector<HTMLButtonElement>('[data-testid="service-param-list-view-requestParams"]')?.click();
     fixture.detectChanges();
-    expect(host.querySelector<HTMLInputElement>('[data-testid="service-request-param-name-0"]')?.value).toBe('customerId');
+    expect(host.querySelector<HTMLInputElement>('[data-testid="service-request-param-name-0"]')?.value).toBe('items');
   });
 
-  it('switches an application interface between form and full json views', () => {
+  it('imports old document parameter snippets from the paste action', () => {
     const runtime = getAngularRuntimeState();
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="service-drawer-paste-request-param"]')?.click();
+    fixture.detectChanges();
+
+    const importText = host.querySelector<HTMLTextAreaElement>('[data-testid="service-param-import-text"]')!;
+    importText.value = `{
+pageIndex: number, // 当前页码 *
+pageSize: number, // 每页数量 *
+whCode: string, // 仓库编码
+}`;
+    importText.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-param-import-submit"]')?.click();
+    fixture.detectChanges();
+
+    expect(runtime.doc.services[0].requestParams.map((param: any) => param.name)).toEqual(['pageIndex', 'pageSize', 'whCode']);
+    expect(runtime.doc.services[0].requestParams[0].required).toBe(true);
+    expect(runtime.doc.services[0].requestParams[2].note).toBe('仓库编码');
+  });
+
+  it('shows application interface json as a read-only document contract view', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services[0].name = '仓库信息管理查询';
+    runtime.doc.services[0].actor = '管理端';
+    runtime.doc.services[0].method = 'POST';
+    runtime.doc.services[0].path = '/queryservice/sdrp/whinfo/admin/info-query';
+    runtime.doc.services[0].requestParams = [{ name: 'whCode', type: 'String', required: false, note: '仓库编码' }];
+    runtime.doc.services[0].responseParams = [{ name: 'result', type: 'List', required: false, note: '查询结果' }];
     host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
@@ -361,36 +400,14 @@ describe('ApplicationWorkbenchComponent', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="service-interface-json-view"]')?.click();
     fixture.detectChanges();
 
-    const json = host.querySelector<HTMLTextAreaElement>('[data-testid="service-interface-json-editor"]');
-    expect(json).toBeTruthy();
-    expect(json?.value).toContain('"name":');
-    expect(json?.value).toContain('"requestParams":');
-
-    json!.value = JSON.stringify({
-      name: 'Warehouse export',
-      actor: 'Admin',
-      kind: 'Export',
-      method: 'GET POST',
-      path: '/queryservice/sdrp/whinfo/admin/info-export',
-      responseKind: 'FileStream',
-      rawRequest: '{ whCode: string }',
-      rawResponse: 'file stream',
-      requestParams: [{ name: 'whCode', type: 'String', required: false, note: 'warehouse code' }],
-      responseParams: [],
-    }, null, 2);
-    json!.dispatchEvent(new Event('input', { bubbles: true }));
-    fixture.detectChanges();
-
-    expect(runtime.doc.services[0].name).toBe('Warehouse export');
-    expect(runtime.doc.services[0].actor).toBe('Admin');
-    expect(runtime.doc.services[0].kind).toBe('Export');
-    expect(runtime.doc.services[0].method).toBe('GET POST');
-    expect(runtime.doc.services[0].responseKind).toBe('FileStream');
-    expect(runtime.doc.services[0].requestParams[0].name).toBe('whCode');
-
-    host.querySelector<HTMLButtonElement>('[data-testid="service-interface-form-view"]')?.click();
-    fixture.detectChanges();
-    expect(host.querySelector<HTMLInputElement>('[data-testid="interface-name-svc-1"]')?.value).toBe('Warehouse export');
+    const contract = host.querySelector<HTMLElement>('[data-testid="service-interface-contract-view"]');
+    expect(contract).toBeTruthy();
+    expect(contract?.textContent).toContain('接口描述');
+    expect(contract?.textContent).toContain('管理端');
+    expect(contract?.textContent).toContain('/queryservice/sdrp/whinfo/admin/info-query');
+    expect(contract?.textContent).toContain('whCode');
+    expect(contract?.textContent).toContain('result');
+    expect(host.querySelector('[data-testid="service-interface-json-editor"]')).toBeFalsy();
   });
 
   it('offers add move up move down and delete actions for interface parameters', () => {

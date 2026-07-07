@@ -77,6 +77,7 @@ interface SectionServicePickerState {
   key: string;
   activeGroupUid: string;
   selectedOnly: boolean;
+  keyword: string;
 }
 
 interface PendingEntityFieldCopy {
@@ -342,7 +343,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
       this.sectionServicePicker.set(null);
       return;
     }
-    this.sectionServicePicker.set({ key, activeGroupUid: this.initialSectionServiceGroupUid(section, task), selectedOnly: false });
+    this.sectionServicePicker.set({ key, activeGroupUid: this.initialSectionServiceGroupUid(section, task), selectedOnly: !this.editing, keyword: '' });
   }
 
   protected closeSectionServicePicker(): void {
@@ -355,11 +356,31 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected toggleSectionServicePickerSelectedOnly(): void {
+    if (!this.editing) return;
     const state = this.sectionServicePicker();
     if (state) this.sectionServicePicker.set({ ...state, selectedOnly: !state.selectedOnly });
   }
 
-  protected formServiceGroups(task: LegacyProcessNode): ProcessApplicationServiceGroup[] {
+  protected setSectionServicePickerKeyword(keyword: string): void {
+    const state = this.sectionServicePicker();
+    if (state) this.sectionServicePicker.set({ ...state, keyword });
+  }
+
+  protected visibleFormServiceGroups(task: LegacyProcessNode, state: SectionServicePickerState, section: LegacyTaskFormSection): ProcessApplicationServiceGroup[] {
+    return this.formServiceGroups(task, state.selectedOnly, section, state.keyword);
+  }
+
+  protected activeSectionServiceGroupUid(task: LegacyProcessNode, state: SectionServicePickerState, section: LegacyTaskFormSection): string {
+    const groups = this.visibleFormServiceGroups(task, state, section);
+    if (groups.some((group) => this.serviceGroupId(group) === state.activeGroupUid)) return state.activeGroupUid;
+    return this.serviceGroupId(groups[0]) || state.activeGroupUid;
+  }
+
+  protected visibleFormServicesForPicker(task: LegacyProcessNode, state: SectionServicePickerState, section: LegacyTaskFormSection): ProcessApplicationService[] {
+    return this.formServicesForGroup(task, this.activeSectionServiceGroupUid(task, state, section), state.selectedOnly, section, state.keyword);
+  }
+
+  protected formServiceGroups(task: LegacyProcessNode, selectedOnly = false, section: LegacyTaskFormSection | null = null, keyword = ''): ProcessApplicationServiceGroup[] {
     const groupMap = new Map<string, ProcessApplicationServiceGroup>();
     this.applicationServiceGroups().forEach((group) => {
       const uid = this.serviceGroupId(group);
@@ -369,14 +390,23 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
       const uid = String(service.serviceGroupUid || '').trim() || '__ungrouped';
       if (!groupMap.has(uid)) groupMap.set(uid, { uid, name: uid === '__ungrouped' ? '未分组接口' : uid });
     });
-    return Array.from(groupMap.values()).filter((group) => this.formServicesForGroup(task, this.serviceGroupId(group), false, null).length);
+    return Array.from(groupMap.values()).filter((group) => this.formServicesForGroup(task, this.serviceGroupId(group), selectedOnly, section, keyword).length);
   }
 
-  protected formServicesForGroup(task: LegacyProcessNode, groupUid: string, selectedOnly: boolean, section: LegacyTaskFormSection | null): ProcessApplicationService[] {
+  protected formServicesForGroup(task: LegacyProcessNode, groupUid: string, selectedOnly: boolean, section: LegacyTaskFormSection | null, keyword = ''): ProcessApplicationService[] {
     const selected = section ? new Set(this.formSectionServiceIds(section)) : null;
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    const groupName = this.applicationServiceGroups().find((group) => this.serviceGroupId(group) === groupUid)?.name || groupUid;
     return this.formServiceOptions(task)
       .filter((service) => (String(service.serviceGroupUid || '').trim() || '__ungrouped') === groupUid)
       .filter((service) => !selectedOnly || selected?.has(this.serviceId(service)))
+      .filter((service) => !normalizedKeyword || [
+        service.name,
+        service.path,
+        service.method,
+        this.serviceId(service),
+        groupName,
+      ].some((value) => String(value || '').toLowerCase().includes(normalizedKeyword)))
       .sort((left, right) => String(left.name || this.serviceId(left)).localeCompare(String(right.name || this.serviceId(right)), 'zh-Hans-CN'));
   }
 
@@ -787,7 +817,21 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     // 边界细节：不使用全局 ID 查询，保持新增 Angular 代码不直接穿透 DOM 全局对象。
     this.activeNodeSection.set(sectionId);
     const target = this.nodeSections?.find((item) => item.nativeElement.id === sectionId);
-    target?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const element = target?.nativeElement;
+    if (!element) return;
+    const scroller = element.closest('.node-editor-scroll--body') as HTMLElement | null;
+    if (!scroller) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const scrollerTop = scroller.getBoundingClientRect().top;
+    const targetTop = element.getBoundingClientRect().top;
+    const nextTop = scroller.scrollTop + targetTop - scrollerTop;
+    if (typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ top: nextTop, behavior: 'smooth' });
+    } else {
+      scroller.scrollTop = nextTop;
+    }
   }
 
   protected openMoreNodeSection(): void {

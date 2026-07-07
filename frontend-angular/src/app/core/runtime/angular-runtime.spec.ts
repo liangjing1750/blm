@@ -7,6 +7,7 @@ import {
   getAngularRuntimeState,
   goBackAngularNavigation,
   markAngularRuntimeModified,
+  recordAngularNavigationBoundary,
   redoAngularRuntimeDocument,
   replaceRuntimeDocument,
   switchAngularMainTab,
@@ -70,6 +71,34 @@ describe('angular runtime undo history', () => {
     expect(canRedoAngularRuntimeDocument()).toBe(false);
   });
 
+  it('restores the workbench location captured with undo and redo document snapshots', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procView'] = 'node';
+    runtime.ui['procId'] = 'process-1';
+    runtime.ui['taskId'] = 'node-1';
+
+    runtime.doc.meta.domain = 'Node view edit';
+    markAngularRuntimeModified();
+
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.ui['applicationWorkbenchTab'] = 'service';
+    runtime.doc.meta.domain = 'Application view edit';
+    markAngularRuntimeModified();
+
+    expect(undoAngularRuntimeDocument()).toBe(true);
+    expect(runtime.doc.meta.domain).toBe('Node view edit');
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['procView']).toBe('node');
+    expect(runtime.ui['procId']).toBe('process-1');
+    expect(runtime.ui['taskId']).toBe('node-1');
+
+    expect(redoAngularRuntimeDocument()).toBe(true);
+    expect(runtime.doc.meta.domain).toBe('Application view edit');
+    expect(runtime.ui['mainTab']).toBe('applicationWorkbench');
+    expect(runtime.ui['applicationWorkbenchTab']).toBe('service');
+  });
+
   it('keeps only the latest fifty undo snapshots', () => {
     const runtime = getAngularRuntimeState();
 
@@ -116,6 +145,27 @@ describe('angular runtime undo history', () => {
     expect(runtime.ui['componentWorkbenchTab']).toBe('businessConstruct');
     expect(runtime.ui['componentWorkbenchConstructId']).toBe('construct-1');
     expect(runtime.ui['taskDefinitionId']).toBe('task-1');
+  });
+
+  it('restores process third-level view and selected node when returning inside the same workbench', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procView'] = 'node';
+    runtime.ui['processWorkbenchView'] = 'node';
+    runtime.ui['procId'] = 'process-1';
+    runtime.ui['taskId'] = 'task-1';
+
+    recordAngularNavigationBoundary();
+    runtime.ui['procView'] = 'flow';
+    runtime.ui['processWorkbenchView'] = 'flow';
+    runtime.ui['taskId'] = null;
+
+    expect(canGoBackAngularNavigation()).toBe(true);
+    expect(goBackAngularNavigation()).toBe('processWorkbench');
+    expect(runtime.ui['procView']).toBe('node');
+    expect(runtime.ui['processWorkbenchView']).toBe('node');
+    expect(runtime.ui['procId']).toBe('process-1');
+    expect(runtime.ui['taskId']).toBe('task-1');
   });
 
   it('restores application workbench tab and interface selection when returning from another workbench', () => {

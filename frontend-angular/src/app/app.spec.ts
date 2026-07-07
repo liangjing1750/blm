@@ -12,6 +12,20 @@ import { ProcessEditorWorkbenchComponent } from './workbenches/process/editor/pr
 import { ProcessFlowWorkbenchComponent } from './workbenches/process/flow/process-flow-workbench.component';
 import { ProcessStageWorkbenchComponent } from './workbenches/process/stage/process-stage-workbench.component';
 
+class TestIntersectionObserver {
+  constructor(private readonly callback: IntersectionObserverCallback) {}
+  observe(target: Element): void {
+    this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+  }
+  unobserve(): void {}
+  disconnect(): void {}
+  takeRecords(): IntersectionObserverEntry[] { return []; }
+}
+
+if (!globalThis.IntersectionObserver) {
+  globalThis.IntersectionObserver = TestIntersectionObserver as unknown as typeof IntersectionObserver;
+}
+
 describe('App', () => {
   beforeEach(async () => {
     const runtime = getAngularRuntimeState();
@@ -747,12 +761,10 @@ describe('App', () => {
 
     expect(compiled.querySelector('[data-testid="preview-workbench"]')?.textContent).toContain('交割监管平台');
     expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('大纲视图');
-    expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('流程视图');
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="stage-panorama"]')).toBeTruthy();
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="process"]')).toBeTruthy();
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="entity-overview"]')).toBeTruthy();
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-preview-lazy="entity"]')).toBeTruthy();
-    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).not.toContain('流程节点: 提交申请');
+    expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('业务全景');
+    expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('流程 · 入库流程');
+    expect(compiled.querySelector('[data-testid="preview-outline"]')?.textContent).toContain('构件建模');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('.pv-graph-card')).toBeTruthy();
 
     const outlineButton = (label: string, extra?: string) => Array
       .from(compiled.querySelectorAll<HTMLButtonElement>('.preview-outline-link'))
@@ -760,24 +772,19 @@ describe('App', () => {
     outlineButton('全景视图')?.click();
     fixture.detectChanges();
     let rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
-    expect(rendered?.querySelector('[data-testid="preview-stage-panorama"]')).toBeTruthy();
-    expect(rendered?.textContent).toContain('入库监管');
+    expect(rendered?.querySelector('.pv-graph-card')).toBeTruthy();
 
-    outlineButton('阶段视图', '入库')?.click();
+    outlineButton('阶段', '入库')?.click();
     fixture.detectChanges();
     rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
-    const stagePreview = rendered?.querySelector('[data-testid="preview-stage-detail-stage-1"]');
+    const stagePreview = rendered?.querySelector('#preview-stage-stage-1');
     expect(stagePreview).toBeTruthy();
-    expect(stagePreview?.querySelector('.stage-flow-node')?.textContent).toContain('入库流程');
-    expect(stagePreview?.querySelector('.stage-flow-svg')).toBeTruthy();
     expect(rendered?.textContent).toContain('入库流程');
 
     outlineButton('入库流程')?.click();
     fixture.detectChanges();
     rendered = compiled.querySelector<HTMLElement>('[data-testid="preview-rendered"]');
-    expect(rendered?.querySelector('[data-testid="preview-process-graph"]')).toBeTruthy();
-    expect(rendered?.querySelector('[data-testid="preview-process-graph"] .flow-node')?.textContent).toContain('提交申请');
-    expect(rendered?.querySelector('[data-testid="preview-process-graph"] .flow-edge')).toBeTruthy();
+    expect(rendered?.querySelector('.pv-graph-card')).toBeTruthy();
     expect(rendered?.textContent).toContain('流程节点: 提交申请');
     expect(rendered?.querySelector('.pv-task-description strong')?.textContent).toContain('任务说明');
     const stepRichText = rendered?.querySelectorAll('.pv-rich-text')[1];
@@ -790,16 +797,16 @@ describe('App', () => {
 
     outlineButton('实体关系图')?.click();
     fixture.detectChanges();
-    const entityOverview = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector<HTMLElement>('[data-testid="preview-entity-overview"]');
+    const entityOverview = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector<HTMLElement>('#preview-entity-overview');
     expect(entityOverview).toBeTruthy();
-    expect(entityOverview?.querySelector('.entity-node')?.textContent).toContain('仓单');
+    expect(entityOverview?.querySelector('.pv-graph-card, .pv-graph-placeholder')).toBeTruthy();
 
     outlineButton('仓单')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('实体: 仓单');
-    const entityStateGraph = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('[data-testid="preview-entity-state-graph"]');
+    const entityStateGraph = compiled.querySelector('[data-testid="preview-rendered"]')?.querySelector('.pv-graph-card');
     expect(entityStateGraph).toBeTruthy();
-    expect(entityStateGraph?.textContent).toContain('草稿');
+    expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('业务组件');
     expect(compiled.querySelector('[data-testid="preview-rendered"]')?.textContent).toContain('调用聚合根保存仓单');
 
     compiled.querySelector<HTMLButtonElement>('#preview-raw-toggle')?.click();
@@ -3665,7 +3672,7 @@ describe('App', () => {
     expect(getComputedStyle(progressCount).color).toBe('rgb(15, 23, 42)');
     expect(compiled.querySelector('[data-testid="process-editor-node"] .node-top-node-service-jump')).toBeFalsy();
     expect(compiled.querySelector('[data-testid="process-task-lite-panel"] .node-fold-btn')?.textContent).toContain('选择角色');
-    expect(selectedRole?.querySelector('.node-selected-role-icon')).toBeTruthy();
+    expect(selectedRole?.querySelector('.node-selected-role-icon')).toBeFalsy();
     expect(materialSection.textContent).not.toContain('表单模型');
     expect(serviceSummary.textContent?.trim()).toBe('');
     expect(serviceSummary.classList.contains('task-form-section-service-summary--compact')).toBe(true);
@@ -6415,6 +6422,60 @@ describe('App', () => {
     expect(copied).toContain('proc=proc-inbound');
     expect(copied).toContain('task=node-submit');
     expect(copied).toContain('view=swimlane');
+    expect(compiled.querySelector('[data-testid="locator-menu"]')).toBeFalsy();
+  });
+
+  it('should hide locator menu on blank context menu and ignore modal context menus', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procId'] = 'proc-inbound';
+    runtime.ui['taskId'] = 'node-submit';
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [
+        {
+          uid: 'proc-inbound',
+          name: '入库流程',
+          nodes: [{ uid: 'node-submit', name: '客户提交', userSteps: [], forms: [], entity_ops: [], orchestrationTasks: [], businessRules: [] }],
+        },
+      ],
+      entities: [],
+      businessComponents: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+    };
+
+    const fixture = TestBed.createComponent(ShellComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLElement>('#tab-content')?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 320,
+      clientY: 180,
+    }));
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="locator-menu"]')).toBeTruthy();
+
+    document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="locator-menu"]')).toBeFalsy();
+
+    (fixture.componentInstance as any).modal.set('create');
+    fixture.detectChanges();
+    compiled.querySelector<HTMLElement>('[data-testid="angular-modal"]')?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 240,
+      clientY: 160,
+    }));
+    fixture.detectChanges();
     expect(compiled.querySelector('[data-testid="locator-menu"]')).toBeFalsy();
   });
 

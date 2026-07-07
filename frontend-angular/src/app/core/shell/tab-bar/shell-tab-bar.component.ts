@@ -72,12 +72,18 @@ export class ShellTabBarComponent {
 
   protected undoDocumentEdit(): void {
     if (!this.canUndoDocumentEdit()) return;
-    if (undoAngularRuntimeDocument()) this.version.update((value) => value + 1);
+    if (undoAngularRuntimeDocument()) {
+      this.location.go(routePathFromWorkbenchId(getAngularRuntimeState().ui['mainTab']));
+      this.version.update((value) => value + 1);
+    }
   }
 
   protected redoDocumentEdit(): void {
     if (!this.canRedoDocumentEdit()) return;
-    if (redoAngularRuntimeDocument()) this.version.update((value) => value + 1);
+    if (redoAngularRuntimeDocument()) {
+      this.location.go(routePathFromWorkbenchId(getAngularRuntimeState().ui['mainTab']));
+      this.version.update((value) => value + 1);
+    }
   }
 
   @HostListener('window:blm-shell-tabbar-refresh')

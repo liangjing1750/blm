@@ -84,6 +84,8 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
 
   protected readonly adapter: ProcessStageLegacyAdapter = createProcessStageLegacyAdapter();
   @Input() exportGraphId = '';
+  @Input() previewMode: 'auto' | 'panorama' | 'detail' = 'auto';
+  @Input() previewStageId = '';
   @Output() readonly processEditorRequested = new EventEmitter<string>();
   private readonly stageSlotWidth = 184;
   private readonly stageSlotHeight = 38;
@@ -97,11 +99,13 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
 
   protected mode(): 'panorama' | 'detail' {
     this.version();
+    if (this.previewMode !== 'auto') return this.previewMode;
     return this.adapter.ui().stageViewMode === 'detail' ? 'detail' : 'panorama';
   }
 
   protected editing(): boolean {
     this.version();
+    if (this.previewMode !== 'auto') return false;
     return this.adapter.ui().stageEditorCollapsed === false;
   }
 
@@ -111,7 +115,7 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected currentStage(): LegacyStage | null {
-    const currentId = String(this.adapter.ui().stageId || '');
+    const currentId = String(this.previewStageId || this.adapter.ui().stageId || '');
     return this.stages().find((stage) => this.stageId(stage) === currentId || stage.id === currentId || stage.uid === currentId)
       || this.stages()[0]
       || null;

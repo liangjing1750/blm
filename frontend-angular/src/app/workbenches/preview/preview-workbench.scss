@@ -7,3 +7,213 @@
   min-height: 0;
   height: 100%;
 }
+
+.preview-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  background: #eef3f8;
+}
+
+.preview-topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #dbe5f0;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.preview-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 12px 16px 16px;
+}
+
+.preview-outline {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #dbe5f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+}
+
+.preview-outline-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.preview-outline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-outline-link {
+  border: 0;
+  background: transparent;
+  color: #475569;
+  text-align: left;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preview-outline-link:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.preview-outline-link.depth-1 {
+  padding-left: 18px;
+}
+
+.preview-outline-link.depth-2 {
+  padding-left: 32px;
+  color: #64748b;
+}
+
+.preview-rendered {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #dbe5f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 22px 26px 48px;
+  color: #0f172a;
+}
+
+.preview-rendered h1 {
+  margin: 0 0 12px;
+  font-size: 26px;
+}
+
+.preview-rendered h2 {
+  margin: 28px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #dbeafe;
+  color: #1d4ed8;
+  font-size: 20px;
+}
+
+.preview-rendered h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.preview-rendered h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.preview-rendered table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 16px;
+  font-size: 12px;
+}
+
+.preview-rendered th,
+.preview-rendered td {
+  border: 1px solid #dbe5f0;
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.preview-rendered th {
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 800;
+}
+
+.pv-section,
+.pv-subsection {
+  scroll-margin-top: 16px;
+}
+
+.pv-meta,
+.pv-note {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.pv-graph-card,
+.pv-task-detail,
+.pv-component-card {
+  border: 1px solid #dbe5f0;
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.pv-graph-card app-process-stage-workbench,
+.pv-graph-card app-process-flow-workbench,
+.pv-graph-card app-entity-design-workbench,
+.pv-graph-card app-preview-graph-host,
+.pv-graph-placeholder {
+  display: block;
+  height: 420px;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid #dbe5f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pv-graph-placeholder {
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 13px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.pv-component-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pv-component-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pv-component-head span {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.preview-md {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 12px 16px 16px;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid #dbe5f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.pv-center {
+  text-align: center;
+}
