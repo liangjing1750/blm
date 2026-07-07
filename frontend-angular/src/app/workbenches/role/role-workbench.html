@@ -41,10 +41,28 @@
             <div class="role-light-list">
               @for (role of group.roles; track roleIdentity(role)) {
                 <div class="role-light-chip-wrap">
-                  <button class="role-light-chip" type="button" data-testid="role-summary-chip" [attr.data-role-id]="roleIdentity(role)" (click)="selectRole(role)">
-                    <span class="role-light-name">{{ role.name }}</span>
+                  <button class="role-light-chip" type="button" data-testid="role-summary-chip" [attr.data-role-id]="roleIdentity(role)" (click)="activateRole(role)">
+                    @if (renamingRoleId() === roleIdentity(role)) {
+                      <input
+                        class="role-light-name-input"
+                        type="text"
+                        data-testid="role-name-input"
+                        [ngModel]="role.name || ''"
+                        (click)="$event.stopPropagation()"
+                        (dblclick)="$event.stopPropagation()"
+                        (blur)="finishRenameRole(role, $any($event.target).value)"
+                        (keydown.enter)="finishRenameRole(role, $any($event.target).value)"
+                        (keydown.escape)="renamingRoleId.set('')"
+                        autofocus
+                      />
+                    } @else {
+                      <span class="role-light-name" data-testid="role-light-name" (dblclick)="startRenameRole(role, $event)">{{ role.name }}</span>
+                    }
                     <span class="role-light-count">{{ roleUsageSummary(role) }}</span>
                   </button>
+                  @if (editing) {
+                    <button class="role-light-edit" type="button" title="修改角色名称" aria-label="修改角色名称" data-testid="role-name-edit-button" (click)="startRenameRole(role, $event)">✎</button>
+                  }
                   @if (editing && roleUsage(role).length === 0) {
                     <button class="role-light-remove" type="button" title="删除未使用角色" (click)="removeRole(role, $event)">×</button>
                   }

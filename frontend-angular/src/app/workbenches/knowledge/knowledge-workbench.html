@@ -60,14 +60,74 @@
     <article class="knowledge-panel" data-testid="knowledge-dictionary-panel">
       <header class="knowledge-panel-head">
         <div>
-          <h2>字典管理</h2>
-          <p>用于维护枚举、分类、码表等可复用字典。当前先保留入口。</p>
+          <h2>数据字典</h2>
+          <p>维护可复用码表，后续实体字段、表单字段、接口参数统一通过 dictionaryUid 关联。</p>
         </div>
-        <span class="knowledge-count" data-testid="knowledge-dictionary-count">占位</span>
+        <div class="knowledge-actions">
+          <span class="knowledge-count" data-testid="knowledge-dictionary-count">字典 {{ dictionaries().length }}</span>
+          @if (editing) {
+            <button class="knowledge-primary" type="button" data-testid="knowledge-dictionary-add" (click)="addDictionary()">新增字典</button>
+          }
+        </div>
       </header>
-      <div class="knowledge-empty" data-testid="knowledge-dictionary-empty">
-        字典管理后续单独设计数据模型和维护方式，本轮只先明确入口。
+      <div class="knowledge-dictionary-toolbar">
+        <input type="search" data-testid="knowledge-dictionary-search" placeholder="搜索字典 / 英文名 / 字典项" [ngModel]="dictionaryKeyword()" (ngModelChange)="setDictionaryKeyword($event)" />
       </div>
+      @if (filteredDictionaries().length) {
+        <div class="knowledge-dictionary-cards workbench-scroll-body" data-testid="knowledge-dictionary-list">
+          @for (dictionary of filteredDictionaries(); track dictionaryId(dictionary, $index); let dictionaryIndex = $index) {
+            <section class="knowledge-dictionary-card" data-testid="knowledge-dictionary-card" [class.is-expanded]="isDictionaryExpanded(dictionary, dictionaryIndex)">
+              <button class="knowledge-dictionary-summary" type="button" data-testid="knowledge-dictionary-summary" (click)="toggleDictionary(dictionary, dictionaryIndex)">
+                <strong>{{ dictionary.name || '未命名字典' }}</strong>
+                <code>{{ dictionary.code || '未设置英文名' }}</code>
+                <span class="knowledge-dictionary-count">{{ dictionaryEntries(dictionary).length }} 项</span>
+                <span class="knowledge-rule-card-arrow" [class.expanded]="isDictionaryExpanded(dictionary, dictionaryIndex)">▾</span>
+              </button>
+              @if (isDictionaryExpanded(dictionary, dictionaryIndex)) {
+                <div class="knowledge-dictionary-body">
+                  <div class="knowledge-dictionary-fields">
+                    <label>UID<input [ngModel]="dictionaryId(dictionary, dictionaryIndex)" readonly data-testid="knowledge-dictionary-uid" /></label>
+                    <label>英文名称<input [ngModel]="dictionary.code || ''" [readonly]="!editing" data-testid="knowledge-dictionary-code" (ngModelChange)="updateDictionary(dictionary, 'code', $event)" /></label>
+                    <label>中文名称<input [ngModel]="dictionary.name || ''" [readonly]="!editing" data-testid="knowledge-dictionary-name" (ngModelChange)="updateDictionary(dictionary, 'name', $event)" /></label>
+                    <label>说明<input [ngModel]="dictionary.desc || ''" [readonly]="!editing" data-testid="knowledge-dictionary-desc" (ngModelChange)="updateDictionary(dictionary, 'desc', $event)" /></label>
+                  </div>
+                  <div class="knowledge-dictionary-entry-head">
+                    <strong>字典项</strong>
+                    @if (editing) {
+                      <button class="knowledge-secondary" type="button" data-testid="knowledge-dictionary-entry-add" (click)="addDictionaryEntry(dictionary)">+ 字典项</button>
+                    }
+                  </div>
+                  @if (dictionaryEntries(dictionary).length) {
+                    <div class="knowledge-dictionary-entry-list">
+                      @for (entry of dictionaryEntries(dictionary); track entry.uid || entry.id || entry.code || $index; let entryIndex = $index) {
+                        <div class="knowledge-dictionary-entry-row" data-testid="knowledge-dictionary-entry">
+                          <input [ngModel]="entry.code || ''" [readonly]="!editing" placeholder="英文值" data-testid="knowledge-dictionary-entry-code" (ngModelChange)="updateDictionaryEntry(entry, 'code', $event)" />
+                          <input [ngModel]="entry.name || ''" [readonly]="!editing" placeholder="中文值" data-testid="knowledge-dictionary-entry-name" (ngModelChange)="updateDictionaryEntry(entry, 'name', $event)" />
+                          <input [ngModel]="entry.desc || ''" [readonly]="!editing" placeholder="说明" data-testid="knowledge-dictionary-entry-desc" (ngModelChange)="updateDictionaryEntry(entry, 'desc', $event)" />
+                          @if (editing) {
+                            <button class="is-danger" type="button" data-testid="knowledge-dictionary-entry-remove" (click)="removeDictionaryEntry(dictionary, entryIndex)">×</button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <div class="knowledge-dictionary-entry-empty">暂无字典项。</div>
+                  }
+                  @if (editing) {
+                    <div class="knowledge-dictionary-actions">
+                      <button class="knowledge-secondary is-danger" type="button" data-testid="knowledge-dictionary-remove" (click)="removeDictionary(dictionaryIndex)">删除字典</button>
+                    </div>
+                  }
+                </div>
+              }
+            </section>
+          }
+        </div>
+      } @else {
+        <div class="knowledge-empty" data-testid="knowledge-dictionary-empty">
+          {{ dictionaries().length ? '没有匹配的数据字典。' : '暂无数据字典。可先建立状态、分类、来源等码表，再在字段或参数上通过 dictionaryUid 引用。' }}
+        </div>
+      }
     </article>
   } @else {
     <article class="knowledge-panel" data-testid="knowledge-rules-panel">
@@ -175,7 +235,14 @@
                             <span class="knowledge-rule-tag">{{ rule.nodeName }}</span>
                           }
                           @if (rule.content) {
-                            <div class="knowledge-rule-content" [innerHTML]="trustedHtml(rule.content)"></div>
+                            <app-rich-text-editor
+                              class="knowledge-rule-content"
+                              label=""
+                              placeholder=""
+                              testIdPrefix="knowledge-rule-content"
+                              [value]="rule.content"
+                              [readonly]="true"
+                            ></app-rich-text-editor>
                           }
                         </div>
                       </div>

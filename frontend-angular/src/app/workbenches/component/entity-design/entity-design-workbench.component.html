@@ -227,10 +227,10 @@
             </div>
             <div class="field-group">
               <label>所属业务构件</label>
-              <select data-testid="entity-design-construct" [value]="entity.businessConstructUid || entity.businessConstructId || entity.constructUid || entity.constructId || ''" (change)="setEntityConstruct(entity, $any($event.target).value)">
+              <select data-testid="entity-design-construct" [attr.data-selected-construct]="entityConstructValue(entity)" [value]="entityConstructValue(entity)" (change)="setEntityConstruct(entity, $any($event.target).value)">
                 <option value="">未分组构件</option>
                 @for (construct of constructs(); track constructId(construct)) {
-                  <option [value]="constructId(construct)">{{ constructOptionLabel(construct) }}</option>
+                  <option [value]="constructId(construct)" [selected]="entityConstructValue(entity) === constructId(construct)">{{ constructOptionLabel(construct) }}</option>
                 }
               </select>
             </div>
@@ -262,9 +262,9 @@
                   @for (field of entity.fields || []; track fieldId(field, $index); let index = $index) {
                     <tr data-testid="entity-design-field-row">
                       <td class="field-td-name"><input type="text" [attr.data-testid]="'entity-field-name-' + index" [value]="field.name || ''" placeholder="字段名" (input)="setField(field, 'name', $any($event.target).value)"></td>
-                      <td class="field-td-type"><select [attr.data-testid]="'entity-field-type-' + index" [value]="field.type || 'string'" (change)="setField(field, 'type', $any($event.target).value)">
+                      <td class="field-td-type"><select [attr.data-testid]="'entity-field-type-' + index" [attr.data-selected-type]="fieldTypeValue(field)" [value]="fieldTypeValue(field)" (change)="setField(field, 'type', $any($event.target).value)">
                         @for (type of fieldTypes; track type.value) {
-                          <option [value]="type.value">{{ type.label }}</option>
+                          <option [value]="type.value" [selected]="fieldTypeValue(field) === type.value">{{ type.label }}</option>
                         }
                       </select></td>
                       <td style="text-align:center"><input type="checkbox" [checked]="field.is_key" (change)="setFieldBoolean(field, 'is_key', $any($event.target).checked)"></td>

@@ -3,7 +3,14 @@ import { ApiService } from '../api/api.service';
 import { CollaborationService } from '../collaboration/collaboration.service';
 import { LocalCollabDraftService } from '../collaboration/local-collab-draft.service';
 import { DocumentStore } from '../document/document-store';
-import { getAngularRuntimeState, replaceRuntimeDocument } from '../runtime/angular-runtime';
+import { emitRuntimeRefresh, getAngularRuntimeState, replaceRuntimeDocument } from '../runtime/angular-runtime';
+
+export class SyncConflictError extends Error {
+  constructor(readonly analysis: any) {
+    super('同步发现冲突，请先处理冲突项。');
+    this.name = 'SyncConflictError';
+  }
+}
 
 @Injectable({ providedIn: 'root' })
 export class SyncService {
@@ -41,6 +48,14 @@ export class SyncService {
         recoveryMode: Boolean(runtime.collab.recoveryMode),
         user: this.collaboration.currentUser(),
       });
+      if ((result?.conflicts || []).length) {
+        runtime.collab.syncing = false;
+        runtime.collab.pendingSnapshot = true;
+        runtime.collab.hasRemoteUpdate = true;
+        runtime.collab.lastError = '';
+        emitRuntimeRefresh();
+        throw new SyncConflictError(result);
+      }
       const document = result?.document || result?.merged_document || result?.mergedDocument || runtime.doc;
       const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || runtime.collab.seq || 0);
       const editedDuringSync = this.hashDocument(runtime.doc) !== frozenHash;
@@ -66,6 +81,12 @@ export class SyncService {
       }
       this.collaboration.announceDocumentSaved(runtime.currentFile);
     } catch (error) {
+      if (error instanceof SyncConflictError) {
+        runtime.collab.syncing = false;
+        runtime.collab.lastError = '';
+        emitRuntimeRefresh();
+        throw error;
+      }
       this.collaboration.failSync(error);
       throw error;
     }

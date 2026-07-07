@@ -444,6 +444,11 @@ class CollaborationManager:
                     "conflictCount": stats["conflictCount"],
                     "conflicts": conflict_list,
                     "document": deepcopy(merged),
+                    "merged_document": deepcopy(merged),
+                    "base_document": deepcopy(_bd) if isinstance(_bd, dict) else None,
+                    "left_document": deepcopy(document),
+                    "right_document": deepcopy(session.document),
+                    "merge_mode": "3way" if isinstance(_bd, dict) else "combine",
                 }
                 stats["user"] = client.user_name
                 stats["userId"] = client.user_id
@@ -700,7 +705,7 @@ class CollaborationManager:
         # （merge引擎将"未修改+被对方删除"的元素保留，对协作场景这是错误的）
         # combine模式也需保护：base_doc即当前服务端状态
         delete_ref = server_doc if server_doc is not None else base_doc
-        if isinstance(conflicts, list):
+        if server_doc is not None and isinstance(conflicts, list):
             uc = self._clean_deleted_items(merged, base_doc, user_doc, delete_ref)
             delete_conflicts = uc
         if server_doc is not None and recovery_mode:
@@ -834,6 +839,8 @@ class CollaborationManager:
             if isinstance(value, list):
                 normalized_items = [normalize(item) for item in value]
                 return [item for item in normalized_items if item not in (None, "", [], {})]
+            if value == "None":
+                return None
             return value
 
         return normalize(left) == normalize(right)

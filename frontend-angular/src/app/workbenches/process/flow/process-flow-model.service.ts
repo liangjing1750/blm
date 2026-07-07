@@ -5,6 +5,7 @@ import {
   LegacyProcess,
   LegacyProcessNode,
 } from '../editor/process-editor-legacy-adapter';
+import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 
 export interface ProcessFlowLayoutOffset {
   dx?: number;
@@ -78,9 +79,20 @@ export class ProcessFlowModelService {
   setTaskRoleIds(task: LegacyProcessNode, roleIds: string[]): void {
     // 关键流程：保留旧模型兼容字段，同时以 roleIds 作为多角色事实来源。
     const ids = roleIds.map((item) => String(item || '').trim()).filter(Boolean);
+    const roles = Array.isArray(getAngularRuntimeState().doc?.roles) ? getAngularRuntimeState().doc.roles : [];
+    const roleById = new Map(roles.map((role: any) => [String(role.id || role.uid || '').trim(), role]));
+    const roleNames = ids.map((id) => String((roleById.get(id) as any)?.name || '').trim()).filter(Boolean);
     task.roleIds = ids;
+    task.role_ids = ids;
+    task.role_uids = ids;
+    task.role_uid = ids[0] || '';
     task.role_id = ids[0] || '';
-    task.role = ids[0] || '';
+    task.roles = roleNames;
+    task.role = roleNames.join('、');
+    if (!ids.length) {
+      task.roles = [];
+      task.role = '';
+    }
   }
 
   setGateway(gateway: LegacyFlowGateway, field: 'title' | 'role_id', value: string): void {

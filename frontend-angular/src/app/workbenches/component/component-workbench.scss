@@ -163,7 +163,7 @@
 .taskdef-editor-dialog .taskdef-edit-params table { min-width: 660px; }
 .taskdef-contract-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: #0f172a; font-size: 14px; font-weight: 900; }
 .taskdef-contract-title span { border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; color: #2563eb; font-size: 12px; font-weight: 800; padding: 3px 9px; }
-.taskdef-contract-grid { display: grid; grid-template-columns: repeat(2, minmax(560px, 1fr)); gap: 14px; align-items: start; overflow-x: auto; padding-bottom: 4px; }
+.taskdef-contract-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; overflow-x: auto; padding-bottom: 4px; }
 .taskdef-param-table th:nth-child(1), .taskdef-param-table td:nth-child(1) { width: 23%; }
 .taskdef-param-table th:nth-child(2), .taskdef-param-table td:nth-child(2) { width: 15%; }
 .taskdef-param-table th:nth-child(3), .taskdef-param-table td:nth-child(3) { width: 58px; }

@@ -560,6 +560,10 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   protected setField(field: EntityDesignField, key: 'name' | 'type' | 'note' | 'state_values', value: string): void {
     const previousName = key === 'name' ? String(field.name || '') : '';
     field[key] = value;
+    if (key === 'type') {
+      field.dataType = value;
+      field.fieldType = value;
+    }
     if (key === 'name' && previousName && this.stateFieldName() === previousName) this.stateFieldName.set(value);
     this.changed();
   }
@@ -612,6 +616,15 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     relation[key] = value;
     if (key === 'from') relation.source = value;
     if (key === 'to') relation.target = value;
+    if (key === 'from') {
+      relation.sourceEntityUid = value;
+      relation.fromEntityUid = value;
+    }
+    if (key === 'to') {
+      relation.targetEntityUid = value;
+      relation.toEntityUid = value;
+    }
+    if (key === 'type') relation.cardinality = value;
     this.changed();
   }
 
@@ -624,8 +637,42 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected relationTypeValue(relation: EntityDesignRelation): string {
-    const type = String(relation.type || '').trim();
+    const type = String(relation.type || relation.cardinality || '').trim();
     return type === '1:1' || type === '1:N' || type === 'N:N' ? type : '1:1';
+  }
+
+  protected entityConstructValue(entity: EntityDesignEntity): string {
+    const raw = String(
+      entity.businessConstructUid
+      || entity.businessConstructId
+      || entity.constructUid
+      || entity.constructId
+      || (entity.businessConstructUids || [])[0]
+      || (entity.constructUids || [])[0]
+      || '',
+    ).trim();
+    if (raw) return this.resolveConstructId(raw);
+    const name = String(entity.businessConstructName || entity.constructName || '').trim();
+    if (!name) return '';
+    return this.constructId(this.constructs().find((construct) => construct.name === name) || {}) || '';
+  }
+
+  protected fieldTypeValue(field: EntityDesignField): string {
+    const raw = String(field.type || field.dataType || field.fieldType || field.valueType || '').trim();
+    const lower = raw.toLowerCase();
+    const aliases: Record<string, string> = {
+      int: 'number',
+      integer: 'number',
+      long: 'number',
+      double: 'decimal',
+      float: 'decimal',
+      bool: 'boolean',
+      str: 'string',
+      varchar: 'string',
+      object: 'text',
+    };
+    const normalized = aliases[lower] || lower;
+    return this.fieldTypes.some((type) => type.value === normalized) ? normalized : 'string';
   }
 
   protected fieldRuleHeight(field: EntityDesignField): number {
@@ -1592,16 +1639,39 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   private relationFrom(relation: EntityDesignRelation): string {
-    return String(relation.from || relation.source || '').trim();
+    return String(
+      relation.from
+      || relation.source
+      || relation.sourceEntityUid
+      || relation.sourceEntityId
+      || relation.fromEntityUid
+      || relation.fromEntityId
+      || '',
+    ).trim();
   }
 
   private relationTo(relation: EntityDesignRelation): string {
-    return String(relation.to || relation.target || '').trim();
+    return String(
+      relation.to
+      || relation.target
+      || relation.targetEntityUid
+      || relation.targetEntityId
+      || relation.toEntityUid
+      || relation.toEntityId
+      || '',
+    ).trim();
   }
 
   private constructForEntity(entity: EntityDesignEntity): EntityDesignConstruct | undefined {
-    const constructId = String(entity.businessConstructUid || entity.businessConstructId || entity.constructUid || entity.constructId || '').trim();
+    const constructId = this.entityConstructValue(entity);
     return this.constructs().find((construct) => this.constructId(construct) === constructId);
+  }
+
+  private resolveConstructId(raw: string): string {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    const construct = this.constructs().find((item) => this.constructId(item) === value || item.name === value);
+    return this.constructId(construct || {}) || value;
   }
 
   private componentLabel(componentKey: string): string {

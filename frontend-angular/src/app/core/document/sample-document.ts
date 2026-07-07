@@ -73,6 +73,18 @@ export const SAMPLE_DOCUMENT: BlmDocument = {
   terms: [
     { uid: 'term-receipt', name: '仓单', desc: '用于表达货物入库、监管和交割状态的核心业务凭证。' },
   ],
+  dataDictionaries: [
+    {
+      uid: 'dictionary-status',
+      code: 'status',
+      name: '状态',
+      desc: '通用状态码表',
+      entries: [
+        { uid: 'dictionary-status-enabled', code: 'enabled', name: '启用' },
+        { uid: 'dictionary-status-disabled', code: 'disabled', name: '停用' },
+      ],
+    },
+  ],
   rules: [
     { uid: 'rule-entry', name: '入库资料完整性规则', desc: '提交入库申请前必须具备客户、仓库、品种和数量信息。' },
   ],

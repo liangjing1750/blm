@@ -458,23 +458,46 @@
             <summary>更多 <span>应用服务、关联实体</span></summary>
             <section class="node-more-section" data-testid="process-application-service-more">
               <div class="node-section-head">
-                <div><h4>应用服务</h4><span class="node-count-pill">{{ applicationServicesForTask(task).length }} 个</span></div>
+                <div><h4>应用服务</h4><span class="node-count-pill">{{ nodeApplicationServiceUsages(task).length }} 个接口</span></div>
               </div>
-              <div class="node-step-list">
-                @for (service of applicationServicesForTask(task); track serviceId(service)) {
-                  <article class="node-step-row node-step-row--rich" data-testid="process-application-service-card">
-                    <div class="node-step-main-row">
-                      <span class="node-step-index">{{ service.method || 'HTTP' }}</span>
-                      <div class="node-step-name">
-                        <strong>{{ service.name || serviceId(service) || '未命名应用服务' }}</strong>
-                        <small>{{ service.path || '未配置路径' }}</small>
-                      </div>
-                    </div>
-                  </article>
-                } @empty {
-                  <p class="node-empty">暂无关联应用服务。</p>
-                }
-              </div>
+              @if (nodeApplicationServiceUsages(task).length) {
+                <div class="node-more-service-table-wrap">
+                  <table class="node-more-service-table" data-testid="process-node-service-usage-table">
+                    <thead>
+                      <tr><th>节点</th><th>关联应用服务</th><th>关联应用接口</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (usage of nodeApplicationServiceUsages(task); track usage.interfaceId) {
+                        <tr data-testid="process-node-service-usage-row">
+                          <td>{{ usage.nodeName }}</td>
+                          <td>
+                            <button class="node-more-link" type="button" data-testid="process-node-service-group-jump" [disabled]="!usage.serviceGroupUid" (click)="jumpToApplicationServiceGroup(usage.serviceGroupUid)">
+                              {{ usage.serviceGroupName }}
+                            </button>
+                            @if (usage.serviceUseCount > 1) {
+                              <span class="node-use-count" data-testid="process-node-service-group-count">{{ usage.serviceUseCount }}</span>
+                            }
+                          </td>
+                          <td>
+                            <button class="node-more-link node-more-link--interface" type="button" data-testid="process-node-service-interface-jump" (click)="jumpToApplicationService(usage.service)">
+                              <span>{{ usage.interfaceMethod }}</span>
+                              <strong>{{ usage.interfaceName }}</strong>
+                              @if (usage.interfacePath) {
+                                <small>{{ usage.interfacePath }}</small>
+                              }
+                            </button>
+                            @if (usage.interfaceUseCount > 1) {
+                              <span class="node-use-count" data-testid="process-node-service-interface-count">{{ usage.interfaceUseCount }}</span>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              } @else {
+                <p class="node-empty">暂无关联应用服务。</p>
+              }
             </section>
             <section class="node-more-section" data-testid="process-entity-operation-more">
               <div class="node-section-head">

@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnChanges, OnInit, OnDestroy, SimpleChanges, inject, signal } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, OnDestroy, SimpleChanges, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
+import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
 
 interface LegacyTerm {
   uid?: string;
@@ -19,6 +19,23 @@ interface LegacyRule {
   name?: string;
   desc?: string;
   content?: string;
+}
+
+interface LegacyDictionaryEntry {
+  uid?: string;
+  id?: string;
+  code?: string;
+  name?: string;
+  desc?: string;
+}
+
+interface LegacyDictionary {
+  uid?: string;
+  id?: string;
+  code?: string;
+  name?: string;
+  desc?: string;
+  entries?: LegacyDictionaryEntry[];
 }
 
 interface LegacyNode {
@@ -40,6 +57,7 @@ interface LegacyProcess {
 interface LegacyDocument {
   terms?: LegacyTerm[];
   language?: LegacyTerm[];
+  dataDictionaries?: LegacyDictionary[];
   rules?: LegacyRule[];
   processes?: LegacyProcess[];
   stages?: Array<{ uid?: string; id?: string; name?: string }>;
@@ -84,13 +102,11 @@ interface FunctionView {
 @Component({
   selector: 'app-knowledge-workbench',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RichTextEditorComponent],
   templateUrl: './knowledge-workbench.html',
   styleUrl: './knowledge-workbench.scss',
 })
 export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy {
-
-  private readonly sanitizer = inject(DomSanitizer);
 
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {
@@ -107,7 +123,9 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
   // 模块意图：规则 tab 按阶段分类→流程卡片→规则列表三层组织，支持全局搜索和富文本。
   protected readonly activeTab = signal<'termManagement' | 'dictionaryManagement' | 'rules'>('termManagement');
   protected readonly ruleKeyword = signal('');
+  protected readonly dictionaryKeyword = signal('');
   protected readonly termsCollapsed = signal(false);
+  protected readonly expandedDictionaryIds = signal<Set<string>>(new Set());
   protected readonly rulesCollapsed = signal(false);
   protected readonly expandedGroupId = signal('');
   protected readonly selectedStageId = signal(''); // '' = 全部
@@ -154,6 +172,99 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
       }
     }
     return rows;
+  }
+
+  protected dictionaries(): LegacyDictionary[] {
+    this.version();
+    const dictionaries = this.document().dataDictionaries;
+    return Array.isArray(dictionaries) ? dictionaries : [];
+  }
+
+  protected filteredDictionaries(): LegacyDictionary[] {
+    const keyword = this.dictionaryKeyword().trim().toLowerCase();
+    if (!keyword) return this.dictionaries();
+    return this.dictionaries().filter((dictionary) => [
+      dictionary.code,
+      dictionary.name,
+      dictionary.desc,
+      ...this.dictionaryEntries(dictionary).flatMap((entry) => [entry.code, entry.name, entry.desc]),
+    ].some((value) => String(value || '').toLowerCase().includes(keyword)));
+  }
+
+  protected setDictionaryKeyword(value: string): void {
+    this.dictionaryKeyword.set(value);
+  }
+
+  protected dictionaryId(dictionary: LegacyDictionary, index = 0): string {
+    return String(dictionary.uid || dictionary.id || dictionary.code || `dictionary-${index + 1}`).trim();
+  }
+
+  protected dictionaryEntries(dictionary: LegacyDictionary): LegacyDictionaryEntry[] {
+    return Array.isArray(dictionary.entries) ? dictionary.entries : [];
+  }
+
+  protected isDictionaryExpanded(dictionary: LegacyDictionary, index: number): boolean {
+    return this.expandedDictionaryIds().has(this.dictionaryId(dictionary, index));
+  }
+
+  protected toggleDictionary(dictionary: LegacyDictionary, index: number): void {
+    const id = this.dictionaryId(dictionary, index);
+    const next = new Set(this.expandedDictionaryIds());
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.expandedDictionaryIds.set(next);
+  }
+
+  protected addDictionary(): void {
+    if (!this.editing) return;
+    const target = this.ensureDictionaries();
+    const nextIndex = target.length + 1;
+    const uid = `dictionary-${Date.now()}`;
+    target.push({ uid, code: `dict_${nextIndex}`, name: `数据字典${nextIndex}`, desc: '', entries: [] });
+    this.expandedDictionaryIds.update((value) => new Set([...value, uid]));
+    this.markChanged();
+  }
+
+  protected updateDictionary(dictionary: LegacyDictionary, field: 'code' | 'name' | 'desc', value: string): void {
+    if (!this.editing) return;
+    dictionary[field] = value;
+    this.markChanged();
+  }
+
+  protected removeDictionary(index: number): void {
+    if (!this.editing) return;
+    const target = this.ensureDictionaries();
+    const dictionary = target[index];
+    if (!dictionary) return;
+    target.splice(index, 1);
+    const removedId = this.dictionaryId(dictionary, index);
+    this.expandedDictionaryIds.update((value) => {
+      const next = new Set(value);
+      next.delete(removedId);
+      return next;
+    });
+    this.markChanged();
+  }
+
+  protected addDictionaryEntry(dictionary: LegacyDictionary): void {
+    if (!this.editing) return;
+    dictionary.entries ||= [];
+    const nextIndex = dictionary.entries.length + 1;
+    dictionary.entries.push({ uid: `dict-entry-${Date.now()}`, code: `value_${nextIndex}`, name: `字典项${nextIndex}`, desc: '' });
+    this.markChanged();
+  }
+
+  protected updateDictionaryEntry(entry: LegacyDictionaryEntry, field: 'code' | 'name' | 'desc', value: string): void {
+    if (!this.editing) return;
+    entry[field] = value;
+    this.markChanged();
+  }
+
+  protected removeDictionaryEntry(dictionary: LegacyDictionary, index: number): void {
+    if (!this.editing) return;
+    if (!Array.isArray(dictionary.entries)) return;
+    dictionary.entries.splice(index, 1);
+    this.markChanged();
   }
 
   protected functions(): FunctionView[] {
@@ -308,23 +419,6 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     return this.expandedGroupId() === processId;
   }
 
-  // 富文本渲染：保留加粗/列表/换行等基本 HTML，过滤危险标签
-  protected trustedHtml(content: string): SafeHtml {
-    if (!content?.trim()) return '';
-    // 反转义 → 过滤危险标签 → 净化
-    const decoded = content
-      .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-      .replace(/&amp;/gi, '&').replace(/&nbsp;/gi, ' ');
-    // 移除 script/style/iframe/on* 事件
-    const safe = decoded
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-      .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-      .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
-      .replace(/\s+on\w+\s*=\s*[^\s>]*/gi, '');
-    return this.sanitizer.bypassSecurityTrustHtml(safe);
-  }
-
   protected totalRuleCount(group: { nodeGroups: RuleNodeGroup[] }): number {
     return group.nodeGroups.reduce((sum, ng) => sum + ng.rules.length, 0);
   }
@@ -418,6 +512,12 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     }
     if (!Array.isArray(doc.language)) doc.language = [];
     return doc.language;
+  }
+
+  private ensureDictionaries(): LegacyDictionary[] {
+    const doc = this.document();
+    if (!Array.isArray(doc.dataDictionaries)) doc.dataDictionaries = [];
+    return doc.dataDictionaries;
   }
 
   private processNodes(process: LegacyProcess): LegacyNode[] {

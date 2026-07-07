@@ -120,6 +120,54 @@ describe('document model algorithms', () => {
     expect(getServiceOrchestrationSteps(document, document.services[0])).toEqual([]);
   });
 
+  it('normalizes reusable data dictionaries with stable uid and entries', () => {
+    const document = normalizeDocument({
+      meta: { domain: 'dictionary-test' },
+      dataDictionaries: [{
+        code: 'warehouse_status',
+        name: '仓库状态',
+        entries: [{ code: 'enabled', name: '启用' }],
+      }],
+    } as Partial<BlmDocument>);
+
+    expect(document.dataDictionaries).toEqual([{
+      uid: 'dictionary-1',
+      code: 'warehouse_status',
+      name: '仓库状态',
+      desc: '',
+      entries: [{
+        uid: 'dictionary-1-entry-1',
+        code: 'enabled',
+        name: '启用',
+        desc: '',
+      }],
+    }]);
+  });
+
+  it('preserves flat orchestration tree placement fields without nesting steps', () => {
+    const document = normalizeDocument({
+      meta: { domain: 'Test' },
+      taskDefinitions: [{ uid: 'task-a', name: 'Task A' }],
+      services: [{
+        uid: 'service-a',
+        name: 'Service A',
+        orchestration: {
+          variables: [],
+          steps: [
+            { uid: 'branch-a', name: 'Branch A', stepAlias: 'branch1', taskDefinitionUid: '', inputMapping: [], outputMapping: [], order: 1 },
+            { uid: 'step-a', name: 'Step A', stepAlias: 'stepA', taskDefinitionUid: 'task-a', inputMapping: [], outputMapping: [], parentUid: 'branch-a', slot: 'then', order: 2 },
+          ],
+          returnMapping: [],
+        },
+      }],
+    });
+
+    expect(document.services[0].orchestration?.steps).toEqual([
+      expect.objectContaining({ uid: 'branch-a', order: 1 }),
+      expect.objectContaining({ uid: 'step-a', parentUid: 'branch-a', slot: 'then', order: 2 }),
+    ]);
+  });
+
   it('normalizes malformed application service array fields', () => {
     const document = normalizeDocument({
       meta: { domain: 'compat' },

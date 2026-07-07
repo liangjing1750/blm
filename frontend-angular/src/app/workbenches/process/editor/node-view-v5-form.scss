@@ -42,6 +42,100 @@
   padding-top: 16px;
 }
 
+.node-more-service-table-wrap {
+  overflow: auto;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.node-more-service-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.node-more-service-table th,
+.node-more-service-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 9px 10px;
+  color: #334155;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.node-more-service-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 900;
+}
+
+.node-more-service-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.node-more-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  text-align: left;
+}
+
+.node-more-link:disabled {
+  color: #64748b;
+  cursor: default;
+}
+
+.node-more-link:not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.node-more-link--interface {
+  flex-wrap: wrap;
+}
+
+.node-more-link--interface span {
+  display: inline-grid;
+  min-width: 42px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.node-more-link--interface small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.node-use-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .form-copy-menu {
   position: absolute;
   z-index: 20;
@@ -176,6 +270,11 @@
 
 .node-task-form-card .task-form-section-card:has(.task-form-service-menu) {
   overflow: visible;
+}
+
+.node-editor-card--material:has(.task-form-service-menu) {
+  overflow: visible;
+  z-index: 40;
 }
 
 .node-task-form-card .task-form-section-head {

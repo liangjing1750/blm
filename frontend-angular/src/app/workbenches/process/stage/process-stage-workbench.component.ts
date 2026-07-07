@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { confirmRuntimeAction } from '../../../core/runtime/angular-runtime';
 import {
   LegacyProcess,
   LegacyStage,
@@ -238,7 +239,12 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
   protected availableProcesses(): LegacyProcess[] {
     const stage = this.currentStage();
     if (!stage) return [];
-    const usedIds = new Set(this.flowNodes().map((node) => node.processId));
+    // 模块意图：阶段视图只允许“无阶段流程”被加入，避免同一流程被多个阶段共同管理。
+    // 关键流程：从全局阶段引用表收集已归属流程，而不是只看当前阶段画布上的节点。
+    // 边界细节：兼容 processUid/processId 以及 uid/id 两套历史字段，避免旧文档重复挂载。
+    const usedIds = new Set((this.adapter.document().stageFlowRefs || [])
+      .map((ref) => String(ref.processUid || ref.processId || '').trim())
+      .filter(Boolean));
     return this.adapter.processes().filter((process) => !usedIds.has(this.adapter.processId(process)));
   }
 
@@ -361,8 +367,13 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
-  protected deleteProcess(node: FlowNode): void {
+  protected async deleteProcess(node: FlowNode): Promise<void> {
     if (!node.processId) return;
+    const confirmed = await confirmRuntimeAction(`确认删除流程“${node.label || node.processId}”吗？相关阶段引用和阶段连线也会一并移除。`, {
+      title: '删除流程',
+      confirmLabel: '删除',
+    });
+    if (!confirmed) return;
     this.adapter.deleteProcess(node.processId);
     this.refresh();
   }

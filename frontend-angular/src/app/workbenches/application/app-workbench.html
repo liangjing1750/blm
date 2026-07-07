@@ -19,6 +19,7 @@
         <input type="search" placeholder="搜索服务 / 接口 / 路径" [ngModel]="svcKeyword()" (ngModelChange)="setServiceKeyword($event)" />
         @if (canEdit()) {
           <button class="btn btn-outline btn-sm" type="button" data-testid="service-group-new" (click)="createServiceGroup()">+ 新建服务</button>
+          <button class="btn btn-outline btn-sm" type="button" data-testid="service-group-edit-current" [disabled]="!selectedServiceGroup()" (click)="editSelectedServiceGroup()">编辑服务</button>
           <button class="btn btn-primary btn-sm" type="button" data-testid="service-interface-new" (click)="createService()">+ 新建接口</button>
         }
       </div>
@@ -32,19 +33,9 @@
             <span>未分组接口</span><strong>{{ serviceGroupCount(null) }}</strong>
           </button>
           @for (group of visibleServiceGroups(); track uid(group)) {
-            <button type="button" class="app-service-nav-item" [class.active]="selectedServiceGroupUid()===uid(group)" [attr.data-testid]="'service-group-card-' + uid(group)" (click)="selectServiceGroup(uid(group))">
+            <button type="button" class="app-service-nav-item app-service-nav-item--with-desc" [class.active]="selectedServiceGroupUid()===uid(group)" [attr.data-testid]="'service-group-card-' + uid(group)" [attr.data-service-desc]="serviceGroupTooltip(group)" (click)="selectServiceGroup(uid(group))">
               <span>{{ group.name }}</span><strong>{{ serviceGroupCount(group) }}</strong>
             </button>
-          }
-          @if (canEdit() && selectedServiceGroup(); as group) {
-            <div class="app-service-nav-actions">
-              <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-edit-' + uid(group)" (click)="openServiceGroupDrawer(group)">编辑服务</button>
-              <button class="btn-ghost-sm" type="button" [attr.data-testid]="'service-group-add-interface-' + uid(group)" (click)="createInterface(uid(group))">+ 接口</button>
-            </div>
-          } @else if (canEdit() && selectedServiceGroupUid()==='__ungrouped__') {
-            <div class="app-service-nav-actions">
-              <button class="btn-ghost-sm" type="button" data-testid="service-group-add-interface-ungrouped" (click)="createInterface('')">+ 接口</button>
-            </div>
           }
         </aside>
 
@@ -152,51 +143,57 @@
 
   @if (activeTab() === 'orchestration') {
     <div class="comp-tab-body orch-body">
-      <div class="comp-toolbar orch-toolbar">
-        <span>应用服务</span>
-        <select data-testid="orchestration-service-group-select" [value]="orchServiceGroupUid()" (change)="selectOrchestrationServiceGroup($any($event.target).value)">
-          <option value="__all__">全部应用服务</option>
-          @for (group of serviceGroups(); track uid(group)) { <option [value]="uid(group)">{{ group.name }}</option> }
-          <option value="__ungrouped__">未分组接口</option>
-        </select>
-        <span>应用接口</span>
-        <select data-testid="orchestration-service-select" [value]="orchSvcId()" (change)="selectOrchestrationService($any($event.target).value)">
-          @for (svc of orchestrationInterfaces(); track uid(svc)) { <option [value]="uid(svc)">{{ svc.name }}</option> }
-        </select>
+      <div class="comp-toolbar orch-toolbar orch-filter-bar" data-testid="orchestration-filter-bar">
+        <label>应用服务
+          <select data-testid="orchestration-service-group-select" [value]="orchServiceGroupUid()" (change)="selectOrchestrationServiceGroup($any($event.target).value)">
+            <option value="__all__">全部应用服务</option>
+            @for (group of serviceGroups(); track uid(group)) { <option [value]="uid(group)">{{ group.name }}</option> }
+            <option value="__ungrouped__">未分组接口</option>
+          </select>
+        </label>
+        <label>应用接口
+          <select data-testid="orchestration-service-select" [value]="orchSvcId()" (change)="selectOrchestrationService($any($event.target).value)">
+            @for (svc of orchestrationInterfaces(); track uid(svc)) { <option [value]="uid(svc)">{{ orchestrationInterfaceLabel(svc) }}</option> }
+          </select>
+        </label>
+        <label>搜索任务/变量
+          <input type="search" placeholder="搜索任务/变量" [ngModel]="orchKeyword()" (ngModelChange)="setOrchestrationKeyword($event)" />
+        </label>
       </div>
       @if (orchSvcId(); as sid) {
         @if (services().find(s => uid(s) === sid); as svc) {
-          <div class="orch-layout">
+          <div class="orch-layout orch-layout--scenario">
             <div class="orch-steps-panel" data-testid="orchestration-step-list">
               <div class="orch-panel-head"><strong>编排任务</strong><span>{{ orderedSteps(svc).length }} 个</span></div>
-              @for (step of orderedSteps(svc); track step.uid; let i = $index) {
-                <div class="orch-step-card orch-step-card--select" role="button" tabindex="0" [class.active]="selectedStep(svc)?.uid === step.uid" [attr.data-testid]="'orchestration-step-select-' + step.uid" (click)="selectStep(step)">
-                  <span class="orch-step-idx">{{ i + 1 }}</span>
-                  <span class="orch-step-title">{{ stepTaskDef(step)?.name || step.taskDefinitionUid }}</span>
-                  <span class="muted">{{ stepAlias(step, i) }}</span>
-                  @if (canEdit()) {
-                    <span class="orch-step-actions">
-                      <button [disabled]="i===0" type="button" (click)="moveStep(svc, i, -1); $event.stopPropagation()">↑</button>
-                      <button [disabled]="i===orderedSteps(svc).length-1" type="button" (click)="moveStep(svc, i, 1); $event.stopPropagation()">↓</button>
-                      <button class="danger" type="button" (click)="removeStep(svc, i); $event.stopPropagation()">×</button>
-                    </span>
-                  }
-                </div>
-              }
+              <ng-container *ngTemplateOutlet="orchStepTree; context: { steps: rootOrchestrationSteps(svc), svc: svc, depth: 0 }"></ng-container>
               @if (canEdit()) {
                 <select class="tag-select" data-testid="orchestration-add-step" (change)="addStep(svc, $any($event.target).value); $any($event.target).selectedIndex=0">
                   <option value="">+ 添加任务定义</option>
                   @for (td of taskDefs(); track uid(td)) { <option [value]="uid(td)">{{ td.name }}</option> }
                 </select>
+                <div class="orch-modeling-actions">
+                  <button type="button" (click)="addModelingStep(svc, 'branch')">+ 分支</button>
+                  <button type="button" (click)="addModelingStep(svc, 'loop')">+ 循环</button>
+                  <button type="button" (click)="addModelingStep(svc, 'assertion')">+ 断言</button>
+                  <button type="button" (click)="addModelingStep(svc, 'transform')">+ 加工</button>
+                  <button type="button" (click)="addModelingStep(svc, 'return')">+ 返回</button>
+                </div>
               }
             </div>
 
             <div class="orch-mappings-panel" data-testid="orchestration-step-detail">
               @if (selectedStep(svc); as step) {
                 <div class="orch-panel-head">
-                  <strong>{{ stepTaskDef(step)?.name || step.taskDefinitionUid }}</strong>
-                  <span>{{ stepAlias(step, orderedSteps(svc).indexOf(step)) }}</span>
+                  <strong>{{ stepDisplayName(step) }}</strong>
+                  <span>{{ stepKindLabel(step) }} · {{ stepAlias(step, orderedSteps(svc).indexOf(step)) }}</span>
                 </div>
+                @if (stepKind(step) !== 'task') {
+                  <div class="orch-expression-card">
+                    <label>规则表达
+                      <textarea [disabled]="!canEdit()" [(ngModel)]="step.expression" (ngModelChange)="touch()" rows="2" [placeholder]="stepDescription(step)"></textarea>
+                    </label>
+                  </div>
+                }
                 @if (stepTaskDef(step); as td) {
                   <div class="orch-step-params">
                     @if ((td.parameters?.inputs||[]).length) { <div class="orch-param-group"><span class="orch-param-label">输入</span>@for(p of td.parameters!.inputs!; track p.name){<span class="orch-param" [class.required]="p.required">{{ p.name }}</span>}</div> }
@@ -207,88 +204,81 @@
                   </div>
                 }
 
-                <div class="orch-variable-pool" data-testid="orchestration-variable-pool">
-                  <span class="orch-param-label">参数变量</span>
-                  @for (option of variablePoolOptions(svc, step); track option.value) {
-                    <code>{{ option.value }}</code>
+                <div class="orch-context-grid">
+                  <section class="orch-variable-pool" data-testid="orchestration-variable-pool">
+                    <span class="orch-param-label">可用输入</span>
+                    @for (option of variablePoolOptions(svc, step); track option.value) {
+                      <code>{{ option.value }}</code>
+                    } @empty {
+                      <em>暂无可用输入</em>
+                    }
+                  </section>
+                  <section class="orch-variable-pool">
+                    <span class="orch-param-label">当前输出</span>
+                    @for (option of selectedStepOutputOptions(svc, step); track option.value) {
+                      <code>{{ option.value }}</code>
+                    } @empty {
+                      <em>暂无显式输出</em>
+                    }
+                  </section>
+                </div>
+
+                <div class="orch-binding-section">
+                  <div class="orch-step-mapping-head"><span>当前任务输入</span><em>以任务参数为主线选择上下文来源</em></div>
+                  @for (target of inputTargetOptions(step); track target.value; let ti = $index) {
+                    <div class="orch-binding-row" [class.missing]="!inputMappingSource(step, target.value)">
+                      <code>{{ target.label }}</code>
+                      <span class="orch-mapping-arrow">←</span>
+                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-input-source-' + step.uid + '-' + ti" [ngModel]="inputMappingSource(step, target.value)" (ngModelChange)="setInputMappingSource(step, target.value, $event)">
+                        <option value="">未绑定来源</option>
+                        @for (option of inputSourceOptions(svc, step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+                      </select>
+                      @if (inputMappingWarning(svc, step, target.value); as warning) {
+                        <span class="orch-map-warning" [attr.data-testid]="'mapping-source-warning-' + step.uid + '-' + ti">{{ warning }}</span>
+                      }
+                    </div>
+                  } @empty {
+                    <p class="orch-binding-empty">当前任务没有固化输入参数。</p>
                   }
                 </div>
 
-                <div class="orch-step-mappings">
-                  <div class="orch-step-mapping-head">
-                    <span>输入映射</span>
-                    @if (canEdit()) {
-                      <button class="btn-ghost-sm" [attr.data-testid]="'mapping-add-input-' + step.uid" type="button" (click)="addInputMapping(step)">+ 添加</button>
-                    }
-                  </div>
-                  @for (m of step.inputMapping; track $index; let mi = $index) {
-                    <div class="orch-mapping-row">
-                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-input-source-' + step.uid + '-' + mi" [(ngModel)]="m.source" (ngModelChange)="touch()" (input)="m.source=$any($event.target).value; touch()">
-                        <option value="">选择来源变量</option>
-                        @for (option of inputSourceOptions(svc, step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
-                      </select>
+                <div class="orch-binding-section">
+                  <div class="orch-step-mapping-head"><span>当前任务输出</span><em>需要给后续步骤使用时，绑定为上下文变量</em></div>
+                  @for (source of outputSourceOptions(step); track source.value; let oi = $index) {
+                    <div class="orch-binding-row">
+                      <code>{{ source.label }}</code>
                       <span class="orch-mapping-arrow">→</span>
-                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-input-target-' + step.uid + '-' + mi" [(ngModel)]="m.target" (ngModelChange)="touch()" (input)="m.target=$any($event.target).value; touch()">
-                        <option value="">选择任务输入</option>
-                        @for (option of inputTargetOptions(step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
-                      </select>
-                      @if (canEdit()) {
-                        <button class="btn-ghost-sm danger" type="button" (click)="removeInputMapping(step, mi)">×</button>
-                      }
-                      @if (mappingSourceWarning(svc, step, m); as warning) {
-                        <span class="orch-map-warning" [attr.data-testid]="'mapping-source-warning-' + step.uid + '-' + mi">{{ warning }}</span>
-                      }
-                    </div>
-                  }
-
-                  <div class="orch-step-mapping-head">
-                    <span>输出绑定</span>
-                    @if (canEdit()) {
-                      <button class="btn-ghost-sm" [attr.data-testid]="'mapping-add-output-' + step.uid" type="button" (click)="addOutputMapping(step)">+ 添加</button>
-                    }
-                  </div>
-                  @for (m of step.outputMapping; track $index; let mi = $index) {
-                    <div class="orch-mapping-row">
-                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-output-source-' + step.uid + '-' + mi" [(ngModel)]="m.source" (ngModelChange)="touch()" (input)="m.source=$any($event.target).value; touch()">
-                        <option value="">选择任务输出</option>
-                        @for (option of outputSourceOptions(step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
-                      </select>
-                      <span class="orch-mapping-arrow">→</span>
-                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-output-target-' + step.uid + '-' + mi" [(ngModel)]="m.target" (ngModelChange)="touch()" (input)="m.target=$any($event.target).value; touch()">
-                        <option value="">选择变量名</option>
+                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-output-target-' + step.uid + '-' + oi" [ngModel]="outputBindingTarget(step, source.value)" (ngModelChange)="setOutputBindingTarget(step, source.value, $event)">
+                        <option value="">不加入上下文</option>
                         @for (option of outputTargetOptions(svc, step); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
                       </select>
-                      @if (canEdit()) {
-                        <button class="btn-ghost-sm danger" type="button" (click)="removeOutputMapping(step, mi)">×</button>
-                      }
                     </div>
+                  } @empty {
+                    <p class="orch-binding-empty">当前任务没有固化输出参数。</p>
                   }
                 </div>
 
                 <div class="orch-return-section">
-                  <div class="orch-step-mapping-head">
-                    <span>返回映射</span>
-                    @if (canEdit()) {
-                      <button class="btn-ghost-sm" data-testid="mapping-add-return" type="button" (click)="addReturnMapping(svc)">+ 添加</button>
-                    }
-                  </div>
-                  @for (m of returnMappings(svc); track $index; let i = $index) {
-                    <div class="orch-mapping-row">
-                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-return-source-' + i" [(ngModel)]="m.source" (ngModelChange)="touch()" (input)="m.source=$any($event.target).value; touch()">
-                        <option value="">选择返回来源</option>
+                  <div class="orch-step-mapping-head"><span>接口返回</span><em>从上下文选择最终返回给调用方的字段</em></div>
+                  @for (target of returnTargetOptions(svc); track target.value; let i = $index) {
+                    <div class="orch-binding-row">
+                      <code>{{ target.label }}</code>
+                      <span class="orch-mapping-arrow">←</span>
+                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-return-source-' + i" [ngModel]="returnMappingSource(svc, target.value)" (ngModelChange)="setReturnMappingSource(svc, target.value, $event)">
+                        <option value="">未设置返回来源</option>
                         @for (option of returnSourceOptions(svc); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
                       </select>
-                      <span class="orch-mapping-arrow">→</span>
-                      <select [disabled]="!canEdit()" [attr.data-testid]="'mapping-return-target-' + i" [(ngModel)]="m.target" (ngModelChange)="touch()" (input)="m.target=$any($event.target).value; touch()">
-                        <option value="">选择返回字段</option>
-                        @for (option of returnTargetOptions(svc); track option.value) { <option [value]="option.value">{{ option.label }}</option> }
-                      </select>
-                      @if (canEdit()) {
-                        <button class="btn-ghost-sm danger" type="button" (click)="removeReturnMapping(svc, i)">×</button>
-                      }
                     </div>
+                  } @empty {
+                    <p class="orch-binding-empty">当前接口没有定义返回参数。</p>
                   }
                 </div>
+                <section class="orch-export-doc" data-testid="orchestration-export-doc">
+                  <strong>文档导出说明</strong>
+                  @for (line of orchestrationExportSummary(svc); track line) {
+                    <p>{{ line }}</p>
+                  }
+                </section>
               } @else {
                 <p class="node-empty">请选择或新增一个编排任务。</p>
               }
@@ -298,6 +288,102 @@
       }
     </div>
   }
+
+  <ng-template #orchStepTree let-steps="steps" let-svc="svc" let-depth="depth">
+    @for (step of steps; track step.uid; let i = $index) {
+      <div class="orch-tree-row" [style.margin-left.px]="depth * 18">
+        <div class="orch-step-card orch-step-card--select orch-step-card--tree" role="button" tabindex="0" [class.active]="selectedStep(svc)?.uid === step.uid" [attr.data-testid]="'orchestration-step-select-' + step.uid" (click)="selectStep(step)">
+          <span class="orch-step-idx">{{ i + 1 }}</span>
+          <span class="orch-kind-chip" [class]="'orch-kind-chip--' + stepKind(step)">{{ stepKindLabel(step) }}</span>
+          <span class="orch-step-title">{{ stepDisplayName(step) }}</span>
+          <span class="muted">{{ stepAlias(step, orderedSteps(svc).indexOf(step)) }}</span>
+          @if (canEdit()) {
+            <span class="orch-step-actions">
+              <button [disabled]="i===0" type="button" title="上移" (click)="moveStepInScope(svc, step, -1); $event.stopPropagation()">↑</button>
+              <button [disabled]="i===steps.length-1" type="button" title="下移" (click)="moveStepInScope(svc, step, 1); $event.stopPropagation()">↓</button>
+              <button class="danger" type="button" title="删除" (click)="removeStepNode(svc, step); $event.stopPropagation()">×</button>
+            </span>
+          }
+        </div>
+        @if (stepKind(step) === 'branch') {
+          <div class="orch-tree-slot">
+            <div class="orch-tree-slot-head"><span>满足时</span></div>
+            <ng-container *ngTemplateOutlet="orchStepTree; context: { steps: branchThenSteps(svc, step), svc: svc, depth: depth + 1 }"></ng-container>
+            @if (canEdit()) {
+              <div class="orch-slot-actions">
+                <select class="tag-select" (change)="addStep(svc, $any($event.target).value, step.uid, 'then'); $any($event.target).selectedIndex=0">
+                  <option value="">+ 任务</option>
+                  @for (td of taskDefs(); track uid(td)) { <option [value]="uid(td)">{{ td.name }}</option> }
+                </select>
+                <button type="button" (click)="addModelingStep(svc, 'transform', step.uid, 'then')">+ 加工</button>
+                <button type="button" (click)="addModelingStep(svc, 'assertion', step.uid, 'then')">+ 断言</button>
+              </div>
+            }
+          </div>
+          <div class="orch-tree-slot">
+            <div class="orch-tree-slot-head"><span>否则</span></div>
+            <ng-container *ngTemplateOutlet="orchStepTree; context: { steps: branchElseSteps(svc, step), svc: svc, depth: depth + 1 }"></ng-container>
+            @if (canEdit()) {
+              <div class="orch-slot-actions">
+                <select class="tag-select" (change)="addStep(svc, $any($event.target).value, step.uid, 'else'); $any($event.target).selectedIndex=0">
+                  <option value="">+ 任务</option>
+                  @for (td of taskDefs(); track uid(td)) { <option [value]="uid(td)">{{ td.name }}</option> }
+                </select>
+                <button type="button" (click)="addModelingStep(svc, 'transform', step.uid, 'else')">+ 加工</button>
+                <button type="button" (click)="addModelingStep(svc, 'assertion', step.uid, 'else')">+ 断言</button>
+              </div>
+            }
+          </div>
+        }
+        @if (stepKind(step) === 'loop') {
+          <div class="orch-tree-slot orch-tree-slot--body">
+            <div class="orch-tree-slot-head"><span>循环体</span></div>
+            <ng-container *ngTemplateOutlet="orchStepTree; context: { steps: loopBodySteps(svc, step), svc: svc, depth: depth + 1 }"></ng-container>
+            @if (canEdit()) {
+              <div class="orch-slot-actions">
+                <select class="tag-select" (change)="addStep(svc, $any($event.target).value, step.uid, 'body'); $any($event.target).selectedIndex=0">
+                  <option value="">+ 任务</option>
+                  @for (td of taskDefs(); track uid(td)) { <option [value]="uid(td)">{{ td.name }}</option> }
+                </select>
+                <button type="button" (click)="addModelingStep(svc, 'branch', step.uid, 'body')">+ 分支</button>
+                <button type="button" (click)="addModelingStep(svc, 'transform', step.uid, 'body')">+ 加工</button>
+                <button type="button" (click)="addModelingStep(svc, 'assertion', step.uid, 'body')">+ 断言</button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </ng-template>
+
+  <ng-template #orchPreviewTree let-steps="steps" let-svc="svc" let-depth="depth">
+    @for (step of steps; track step.uid; let i = $index) {
+      <button type="button" class="orch-chain-node orch-chain-node--tree" [class.active]="selectedStep(svc)?.uid === step.uid" [style.margin-left.px]="depth * 18" (click)="selectStep(step)">
+        <span class="orch-kind-chip" [class]="'orch-kind-chip--' + stepKind(step)">{{ stepKindLabel(step) }}</span>
+        <strong>{{ stepDisplayName(step) }}</strong>
+        <em>{{ stepDescription(step) }}</em>
+      </button>
+      @if (stepKind(step) === 'branch') {
+        <div class="orch-preview-slot" [style.margin-left.px]="(depth + 1) * 18">
+          <span>满足时</span>
+          <ng-container *ngTemplateOutlet="orchPreviewTree; context: { steps: branchThenSteps(svc, step), svc: svc, depth: depth + 1 }"></ng-container>
+        </div>
+        <div class="orch-preview-slot" [style.margin-left.px]="(depth + 1) * 18">
+          <span>否则</span>
+          <ng-container *ngTemplateOutlet="orchPreviewTree; context: { steps: branchElseSteps(svc, step), svc: svc, depth: depth + 1 }"></ng-container>
+        </div>
+      }
+      @if (stepKind(step) === 'loop') {
+        <div class="orch-preview-slot orch-preview-slot--body" [style.margin-left.px]="(depth + 1) * 18">
+          <span>循环体</span>
+          <ng-container *ngTemplateOutlet="orchPreviewTree; context: { steps: loopBodySteps(svc, step), svc: svc, depth: depth + 1 }"></ng-container>
+        </div>
+      }
+      @if (i < steps.length - 1) {
+        <div class="orch-chain-arrow">↓</div>
+      }
+    }
+  </ng-template>
 
   @if (importJsonVisible()) {
     <div class="comp-overlay" (click)="importJsonVisible.set(false)">
@@ -549,7 +635,7 @@
   }
 
   @if (serviceGroupDrawer(); as group) {
-    <div class="drawer-overlay" data-testid="service-group-drawer" (click)="closeServiceGroupDrawer()">
+    <div class="drawer-overlay app-service-group-overlay" data-testid="service-group-drawer" (click)="closeServiceGroupDrawer()">
       <aside class="drawer app-service-group-drawer" (click)="$event.stopPropagation()">
         <header class="drawer-head">
           <h3>{{ group.uid ? '编辑服务' : '新建服务' }}</h3>
@@ -563,11 +649,15 @@
           <label>服务说明<input [attr.data-testid]="group.uid ? 'service-group-desc-' + group.uid : 'service-group-drawer-desc'" [(ngModel)]="group.desc" placeholder="服务说明" /></label>
         </div>
         <footer class="drawer-actions">
-          <button class="btn btn-primary btn-sm" data-testid="service-group-drawer-save" type="button" (click)="saveServiceGroupDrawer()">保存</button>
-          <button class="btn btn-outline btn-sm" type="button" (click)="closeServiceGroupDrawer()">取消</button>
-          @if (group.uid) {
-            <button class="btn btn-outline btn-sm danger" [attr.data-testid]="'service-group-delete-' + group.uid" type="button" (click)="deleteServiceGroupFromDrawer()">删除</button>
-          }
+          <div class="drawer-actions-left">
+            @if (group.uid) {
+              <button class="btn btn-outline btn-sm danger" [attr.data-testid]="'service-group-delete-' + group.uid" type="button" (click)="deleteServiceGroupFromDrawer()">删除</button>
+            }
+          </div>
+          <div class="drawer-actions-right">
+            <button class="btn btn-primary btn-sm" data-testid="service-group-drawer-save" type="button" (click)="saveServiceGroupDrawer()">保存</button>
+            <button class="btn btn-outline btn-sm" type="button" (click)="closeServiceGroupDrawer()">取消</button>
+          </div>
         </footer>
       </aside>
     </div>

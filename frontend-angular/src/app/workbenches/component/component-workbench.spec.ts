@@ -286,6 +286,11 @@ describe('ComponentWorkbenchComponent', () => {
     expect(legend.textContent).toContain('实体');
     expect(legend.textContent).toContain('任务');
 
+    const canvas = tree.querySelector<HTMLElement>('[data-testid="business-mindmap-canvas"]')!;
+    expect(getComputedStyle(canvas).paddingTop).toBe('0px');
+    expect(getComputedStyle(legend).position).toBe('absolute');
+    expect(getComputedStyle(legend).width).toBe('68px');
+
     const component = tree.querySelector<HTMLButtonElement>('[data-testid="mind-node-component-comp-1"]')!;
     component.click();
     fixture.detectChanges();
@@ -358,6 +363,24 @@ describe('ComponentWorkbenchComponent', () => {
     fixture.detectChanges();
     window.removeEventListener('blm-runtime-confirm', confirmSpy);
     expect(runtime.doc.taskDefinitions.some((task: any) => task.uid === 'task-1')).toBe(false);
+  });
+
+  it('keeps Backspace inside mind map name inputs from deleting the selected node', () => {
+    const runtime = getAngularRuntimeState();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-editor-toggle"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="component-businesscomponent-tab"]')?.click();
+    fixture.detectChanges();
+
+    const taskNode = host.querySelector<HTMLButtonElement>('[data-testid="mind-node-task-task-1"]')!;
+    taskNode.click();
+    taskNode.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    fixture.detectChanges();
+
+    const input = host.querySelector<HTMLInputElement>('[data-testid="mind-node-name-editor"]')!;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.doc.taskDefinitions.some((task: any) => task.uid === 'task-1')).toBe(true);
   });
 
   it('cycles the child create menu with horizontal and vertical arrows', () => {
@@ -667,6 +690,21 @@ describe('ComponentWorkbenchComponent', () => {
     expect(host.querySelector('[data-testid="taskdef-empty-map"]')?.textContent).toContain('暂无任务能力');
   });
 
+  it('renders implemented task cards from address without pending labels', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.taskDefinitions[0].target = '未实现';
+    runtime.doc.taskDefinitions[0].address = '/query/orders';
+
+    host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+
+    const card = host.querySelector<HTMLElement>('[data-testid="taskdef-card-task-1"]')!;
+    expect(card.textContent).toContain('已设置实现');
+    expect(card.textContent).toContain('/query/orders');
+    expect(card.textContent).not.toContain('未设置实现');
+    expect(card.textContent).not.toContain('未实现');
+  });
+
   it('renders and edits task definition details with the shared rich text editor', () => {
     const runtime = getAngularRuntimeState();
     runtime.doc.taskDefinitions[0].note = '<p><strong>查询订单说明</strong></p>';
@@ -968,6 +1006,35 @@ describe('ComponentWorkbenchComponent', () => {
     expect(selected.join(' ')).toContain('订单');
     expect(selected.join(' ')).toContain('订单明细');
     expect(entityHost.querySelector('[data-testid="entity-design-drawer"]')).toBeTruthy();
+  });
+
+  it('loads legacy entity construct, field type and relation endpoint aliases in the property drawer', () => {
+    fixture.destroy();
+    const runtime = getAngularRuntimeState();
+    runtime.ui['entityView'] = 'relation';
+    runtime.ui['entityId'] = 'entity-1';
+    runtime.doc.businessConstructs = [{ uid: 'construct-1', name: '订单构件' }];
+    runtime.doc.entities = [
+      {
+        uid: 'entity-1',
+        name: '订单',
+        businessConstructUids: ['construct-1'],
+        fields: [{ uid: 'field-1', name: '数量', dataType: 'number' }],
+        pos: { x: 80, y: 80 },
+      },
+      { uid: 'entity-2', name: '订单明细', fields: [], pos: { x: 280, y: 80 } },
+    ];
+    runtime.doc.relations = [{ uid: 'rel-1', sourceEntityUid: 'entity-1', targetEntityUid: 'entity-2', cardinality: '1:N', label: '包含' }];
+
+    const entityFixture = TestBed.createComponent(EntityDesignWorkbenchComponent);
+    entityFixture.componentRef.setInput('editing', true);
+    entityFixture.detectChanges();
+    const entityHost = entityFixture.nativeElement as HTMLElement;
+
+    expect(entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-design-construct"]')?.value).toBe('construct-1');
+    expect(entityHost.querySelector<HTMLSelectElement>('[data-testid="entity-field-type-0"]')?.value).toBe('number');
+    expect(entityHost.querySelector('[data-testid="entity-design-relation-row"]')).toBeTruthy();
+    expect(entityHost.querySelector('.entity-rel-line')).toBeTruthy();
   });
 
   it('keeps legacy relation shortcuts and drag gestures distinct', () => {

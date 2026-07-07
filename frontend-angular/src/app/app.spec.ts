@@ -508,6 +508,16 @@ describe('App', () => {
     expect(runtime.collab.pendingSnapshot).toBe(true);
     expect(compiled.querySelector('[data-testid="role-create-inline"]')).toBeTruthy();
 
+    compiled.querySelector<HTMLButtonElement>('[data-testid="role-name-edit-button"]')?.click();
+    fixture.detectChanges();
+    const renameInput = compiled.querySelector<HTMLInputElement>('[data-testid="role-name-input"]')!;
+    renameInput.value = '清算复核员';
+    renameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    renameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(runtime.doc.roles.some((role: any) => role.name === '清算复核员')).toBe(true);
+
     const preventDefault = vi.fn();
     (fixture.componentInstance as any).handleShortcut({ key: 's', ctrlKey: true, metaKey: false, preventDefault });
     await Promise.resolve();
@@ -5041,6 +5051,115 @@ describe('App', () => {
     expect(nodes[1].y).toBe(nodes[0].y);
     expect(nodes[2].x).toBe(nodes[0].x);
     expect(nodes[2].y).toBeGreaterThan(nodes[0].y);
+  });
+
+  it('should only list stage-free processes when adding an existing process to a stage', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procView'] = 'stage';
+    runtime.ui['stageViewMode'] = 'detail';
+    runtime.ui['stageId'] = 'stage-1';
+    runtime.ui['stageEditorCollapsed'] = false;
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [
+        { uid: 'stage-1', name: '入库', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' },
+        { uid: 'stage-2', name: '出库', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' },
+      ],
+      stageFlowRefs: [
+        { uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 },
+        { uid: 'ref-2', stageUid: 'stage-2', processUid: 'process-2', order: 1 },
+      ],
+      stageFlowLinks: [],
+      processes: [
+        { uid: 'process-1', name: '入库流程', nodes: [] },
+        { uid: 'process-2', name: '出库流程', nodes: [] },
+        { uid: 'process-3', name: '无阶段流程', nodes: [] },
+      ],
+      businessComponents: [],
+      businessConstructs: [],
+      entities: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+
+    const fixture = TestBed.createComponent(ProcessStageWorkbenchComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const select = host.querySelector<HTMLSelectElement>('[data-testid="stage-process-select"]')!;
+    const options = Array.from(select.options).map((option) => option.textContent || '');
+
+    expect(options[0]).toContain('选择流程加入当前阶段');
+    expect(options.join('\n')).toContain('无阶段流程');
+    expect(options.join('\n')).not.toContain('入库流程');
+    expect(options.join('\n')).not.toContain('出库流程');
+  });
+
+  it('should confirm before deleting a process card from the stage detail view', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const confirmEvents: Array<{ message: string; resolve: (confirmed: boolean) => void }> = [];
+    const onConfirm = (event: Event) => {
+      const detail = (event as CustomEvent<{ message: string; resolve: (confirmed: boolean) => void; markHandled: () => void }>).detail;
+      detail.markHandled();
+      confirmEvents.push(detail);
+    };
+    window.addEventListener('blm-runtime-confirm', onConfirm);
+    const runtime = getAngularRuntimeState();
+    runtime.currentFile = 'agent.json';
+    runtime.ui['procView'] = 'stage';
+    runtime.ui['stageViewMode'] = 'detail';
+    runtime.ui['stageId'] = 'stage-1';
+    runtime.ui['stageEditorCollapsed'] = false;
+    runtime.doc = {
+      meta: { domain: 'Agent' },
+      roles: [],
+      stages: [{ uid: 'stage-1', name: '入库', panoramaColumnUid: 'column-1', panoramaLaneUid: 'lane-1' }],
+      stageFlowRefs: [{ uid: 'ref-1', stageUid: 'stage-1', processUid: 'process-1', order: 1 }],
+      stageFlowLinks: [{ uid: 'link-1', stageUid: 'stage-1', fromRefUid: 'ref-1', toRefUid: 'ref-1' }],
+      processes: [{ uid: 'process-1', name: '入库流程', nodes: [] }],
+      businessComponents: [],
+      businessConstructs: [],
+      entities: [],
+      taskDefinitions: [],
+      terms: [],
+      rules: [],
+      panorama: {
+        columns: [{ uid: 'column-1', name: '入库价值流' }],
+        lanes: [{ uid: 'lane-1', name: '交易业务域' }],
+        cells: [],
+      },
+    };
+
+    try {
+      const fixture = TestBed.createComponent(ProcessStageWorkbenchComponent);
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      host.querySelector<HTMLButtonElement>('[data-testid="stage-member-delete-button"]')?.click();
+      fixture.detectChanges();
+
+      expect(confirmEvents).toHaveLength(1);
+      expect(confirmEvents[0].message).toContain('入库流程');
+      expect(runtime.doc.processes).toHaveLength(1);
+
+      confirmEvents[0].resolve(true);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(runtime.doc.processes).toEqual([]);
+      expect(runtime.doc.stageFlowRefs).toEqual([]);
+      expect(runtime.doc.stageFlowLinks).toEqual([]);
+      expect(confirmSpy).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('blm-runtime-confirm', onConfirm);
+      confirmSpy.mockRestore();
+    }
   });
 
   it('should keep migration status aligned with restored Angular workbench entries', () => {

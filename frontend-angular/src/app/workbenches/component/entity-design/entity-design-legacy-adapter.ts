@@ -3,6 +3,9 @@ export interface EntityDesignField {
   id?: string;
   name?: string;
   type?: string;
+  dataType?: string;
+  fieldType?: string;
+  valueType?: string;
   note?: string;
   is_key?: boolean;
   is_status?: boolean;
@@ -23,8 +26,12 @@ export interface EntityDesignEntity {
   state_nodes?: EntityStateNode[];
   businessConstructUid?: string;
   businessConstructId?: string;
+  businessConstructUids?: string[];
   constructUid?: string;
   constructId?: string;
+  constructUids?: string[];
+  constructName?: string;
+  businessConstructName?: string;
   pos?: { x?: number; y?: number };
 }
 
@@ -42,8 +49,17 @@ export interface EntityDesignRelation {
   to?: string;
   source?: string;
   target?: string;
+  sourceEntityUid?: string;
+  targetEntityUid?: string;
+  sourceEntityId?: string;
+  targetEntityId?: string;
+  fromEntityUid?: string;
+  toEntityUid?: string;
+  fromEntityId?: string;
+  toEntityId?: string;
   label?: string;
   type?: string;
+  cardinality?: string;
 }
 
 export interface EntityStateTransition {

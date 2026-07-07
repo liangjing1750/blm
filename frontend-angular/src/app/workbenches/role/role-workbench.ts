@@ -132,6 +132,7 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly selectedRoleId = signal(this.currentRoleId());
   protected readonly version = signal(0);
   protected readonly createOpen = signal(false);
+  protected readonly renamingRoleId = signal('');
   @Input() editing = true;
   protected newRoleName = '';
   protected selectedGroup = this.defaultRoleGroup();
@@ -344,6 +345,38 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
     this.legacy().S!.ui!['roleWorkbenchMode'] = 'view';
   }
 
+  protected activateRole(role: LegacyRole): void {
+    const roleId = this.roleIdentity(role);
+    this.selectedRoleId.set(roleId);
+    this.legacy().S!.ui!['roleId'] = roleId;
+    if (!this.editing) {
+      this.mode.set('view');
+      this.legacy().S!.ui!['roleWorkbenchMode'] = 'view';
+    }
+  }
+
+  protected startRenameRole(role: LegacyRole, event: Event): void {
+    if (!this.editing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.renamingRoleId.set(this.roleIdentity(role));
+    this.selectedRoleId.set(this.roleIdentity(role));
+  }
+
+  protected finishRenameRole(role: LegacyRole, value: string): void {
+    if (!this.editing) return;
+    const nextName = value.trim();
+    if (!nextName) {
+      this.renamingRoleId.set('');
+      return;
+    }
+    role.name = this.uniqueRoleName(nextName, role);
+    this.renamingRoleId.set('');
+    this.selectedRoleId.set(this.roleIdentity(role));
+    this.legacy().S!.ui!['roleId'] = this.roleIdentity(role);
+    this.markChanged();
+  }
+
   protected showManagement(): void {
     this.mode.set('management');
     this.legacy().S!.ui!['roleWorkbenchMode'] = 'management';
@@ -507,8 +540,11 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
     return this.roles().find((role) => [role.uid, role.id, role.name].filter(Boolean).map(String).includes(roleId)) || null;
   }
 
-  private uniqueRoleName(baseName: string): string {
-    const existing = new Set(this.roles().map((role) => String(role.name || '').trim()));
+  private uniqueRoleName(baseName: string, currentRole: LegacyRole | null = null): string {
+    const currentId = currentRole ? this.roleIdentity(currentRole) : '';
+    const existing = new Set(this.roles()
+      .filter((role) => !currentId || this.roleIdentity(role) !== currentId)
+      .map((role) => String(role.name || '').trim()));
     if (!existing.has(baseName)) return baseName;
     let index = 2;
     while (existing.has(`${baseName}${index}`)) index += 1;

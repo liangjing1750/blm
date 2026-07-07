@@ -4,11 +4,27 @@ import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench, recordAngularNavigationBoundary } from '../../core/runtime/angular-runtime';
 
 type AppTab = 'service' | 'orchestration';
+type OrchestrationStepKind = 'task' | 'branch' | 'loop' | 'assertion' | 'transform' | 'return';
+type OrchestrationStepSlot = 'then' | 'else' | 'body';
 
 interface TaskParam { name: string; type: string; required: boolean; note: string; }
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; target?: string; address?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; }
 interface OrchStep { taskDefUid: string; order: number; }
-interface OrchestrationStep { uid: string; name: string; stepAlias: string; taskDefinitionUid: string; inputMapping: ParamMappingV3[]; outputMapping: ParamMappingV3[]; }
+interface OrchestrationStep {
+  uid: string;
+  name: string;
+  stepAlias: string;
+  taskDefinitionUid: string;
+  inputMapping: ParamMappingV3[];
+  outputMapping: ParamMappingV3[];
+  kind?: OrchestrationStepKind;
+  expression?: string;
+  condition?: string;
+  loopSource?: string;
+  parentUid?: string;
+  slot?: OrchestrationStepSlot;
+  order?: number;
+}
 interface ServiceOrchestration { variables: unknown[]; steps: OrchestrationStep[]; returnMapping: ParamMappingV3[]; }
 interface ParamMappingV3 { source: string; target: string; note?: string; }
 interface ParamMapping { fromTaskDefUid: string; fromParamName: string; toTaskDefUid: string; toParamName: string; note: string; }
@@ -33,7 +49,10 @@ interface ContractParamLine {
   templateUrl: './app-workbench.html', styleUrl: './app-workbench.scss',
 })
 export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
-  private readonly onRefresh = () => this.version.update((v) => v + 1);
+  private readonly onRefresh = () => {
+    this.syncSelectionAfterDocumentRefresh();
+    this.version.update((v) => v + 1);
+  };
   private readonly runtime = getAngularRuntimeState();
   ngOnInit(): void {
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
@@ -46,6 +65,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly svcKeyword = signal('');
   protected readonly orchServiceGroupUid = signal(String(this.runtime.ui['applicationOrchestrationServiceGroupUid'] || '__all__'));
   protected readonly orchSvcId = signal(String(this.runtime.ui['applicationOrchestrationServiceUid'] || ''));
+  protected readonly orchKeyword = signal('');
   protected readonly selectedServiceGroupUid = signal(String(this.runtime.ui['applicationServiceGroupUid'] || '__all__'));
   protected readonly selectedServiceId = signal(String(this.runtime.ui['applicationServiceUid'] || this.runtime.ui['applicationServiceId'] || ''));
   protected readonly interfacePage = signal(1);
@@ -177,7 +197,64 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.runtime.ui['applicationServiceId'] = serviceUid;
   }
 
+  // 模块意图：远端同步会整体替换 runtime.doc，应用工作台需要把当前选择重新对齐到新文档。
+  // 关键流程：保留仍存在的服务/步骤；如果远端删除了当前对象，则切到同一列表里的第一个可用对象。
+  // 边界细节：只修正 UI 指针，不主动创建业务数据，避免“立即同步”把远端文档再次标脏。
+  private syncSelectionAfterDocumentRefresh(): void {
+    const services = this.services();
+    const selectedServiceUid = this.selectedServiceId();
+    if (selectedServiceUid && !services.some((service) => this.uid(service) === selectedServiceUid)) {
+      const fallback = this.pagedServices()[0] || this.filteredServices()[0] || services[0];
+      const fallbackUid = fallback ? this.uid(fallback) : '';
+      this.selectedServiceId.set(fallbackUid);
+      this.runtime.ui['applicationServiceUid'] = fallbackUid;
+      this.runtime.ui['applicationServiceId'] = fallbackUid;
+    }
+    if (this.serviceDrawerId() && !services.some((service) => this.uid(service) === this.serviceDrawerId())) {
+      this.serviceDrawerId.set('');
+      this.editorOpen.set(false);
+    }
+    if (this.orchSvcId() && !services.some((service) => this.uid(service) === this.orchSvcId())) {
+      this.ensureOrchestrationInterfaceSelection();
+    }
+    const orchestrationService = services.find((service) => this.uid(service) === this.orchSvcId());
+    if (orchestrationService) {
+      const steps = this.orchestrationSteps(orchestrationService);
+      if (this.selectedStepUid() && !steps.some((step) => step.uid === this.selectedStepUid())) {
+        const fallbackStepUid = steps[0]?.uid || '';
+        this.selectedStepUid.set(fallbackStepUid);
+        this.runtime.ui['applicationOrchestrationStepUid'] = fallbackStepUid;
+      }
+    } else if (this.selectedStepUid()) {
+      this.selectedStepUid.set('');
+      this.runtime.ui['applicationOrchestrationStepUid'] = '';
+    }
+  }
+
   protected orderedSteps(svc: LegacyService): OrchestrationStep[] { return this.orchestrationSteps(svc); }
+  protected rootOrchestrationSteps(svc: LegacyService): OrchestrationStep[] { return this.stepsInSlot(svc, '', 'root'); }
+  protected branchThenSteps(svc: LegacyService, step: OrchestrationStep): OrchestrationStep[] { return this.stepsInSlot(svc, step.uid, 'then'); }
+  protected branchElseSteps(svc: LegacyService, step: OrchestrationStep): OrchestrationStep[] { return this.stepsInSlot(svc, step.uid, 'else'); }
+  protected loopBodySteps(svc: LegacyService, step: OrchestrationStep): OrchestrationStep[] { return this.stepsInSlot(svc, step.uid, 'body'); }
+  protected stepTreeDepth(svc: LegacyService, step: OrchestrationStep): number {
+    const byUid = new Map(this.orchestrationSteps(svc).map((item) => [item.uid, item]));
+    let depth = 0;
+    let parentUid = String(step.parentUid || '').trim();
+    while (parentUid && depth < 8) {
+      const parent = byUid.get(parentUid);
+      if (!parent) break;
+      depth += 1;
+      parentUid = String(parent.parentUid || '').trim();
+    }
+    return depth;
+  }
+  protected stepHasChildren(svc: LegacyService, step: OrchestrationStep): boolean {
+    return this.orchestrationSteps(svc).some((item) => item.parentUid === step.uid);
+  }
+  protected canHaveChildSteps(step: OrchestrationStep): boolean {
+    const kind = this.stepKind(step);
+    return kind === 'branch' || kind === 'loop';
+  }
   protected stepTaskDef(step: OrchestrationStep | OrchStep): LegacyTaskDef | undefined { return this.taskDefs().find(t => this.uid(t) === this.stepTaskUid(step)); }
   protected stepCount(svc: LegacyService): number { return this.orchestrationSteps(svc).length; }
   // 模块意图：主页面只提供服务与接口的浏览摘要，编辑细节继续由后续抽屉接管。
@@ -190,6 +267,10 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected serviceGroupDesc(group: LegacyServiceGroup | null): string {
     return group ? group.desc || '暂无服务说明' : '旧文档或未归属服务的接口会显示在这里。';
+  }
+  protected serviceGroupTooltip(group: LegacyServiceGroup): string | null {
+    const desc = String(group.desc || '').trim();
+    return desc || null;
   }
   protected serviceGroupFor(svc: LegacyService): LegacyServiceGroup | null {
     return this.serviceGroups().find((group) => this.uid(group) === String(svc.serviceGroupUid || '')) || null;
@@ -274,6 +355,12 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     if (!this.canEdit()) return;
     this.openServiceGroupDrawer();
   }
+  protected editSelectedServiceGroup(): void {
+    if (!this.canEdit()) return;
+    const group = this.selectedServiceGroup();
+    if (!group) return;
+    this.openServiceGroupDrawer(group);
+  }
   protected openServiceGroupDrawer(group?: LegacyServiceGroup): void {
     if (!this.canEdit()) return;
     this.serviceGroupNameError.set('');
@@ -324,8 +411,8 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     }
     this.touch();
   }
-  protected addSvcParam(arr: ServiceParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); }
-  protected removeSvcParam(arr: ServiceParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); }
+  protected addSvcParam(arr: ServiceParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); this.touch(); }
+  protected removeSvcParam(arr: ServiceParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); this.touch(); }
   // 模块意图：参数树是接口契约的轻量表达，不在工作台内引入完整 OpenAPI Schema。
   // 关键流程：模板用 path 定位嵌套行，表单直接绑定 row.param 写回原参数对象。
   // 边界细节：空 children 不落盘，保持生成 JSON 简洁并兼容旧文档。
@@ -524,6 +611,41 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected orchestrationSteps(svc: LegacyService): OrchestrationStep[] {
     return this.ensureOrchestration(svc).steps;
   }
+
+  private stepsInSlot(svc: LegacyService, parentUid: string, slot: OrchestrationStepSlot | 'root'): OrchestrationStep[] {
+    const targetParentUid = String(parentUid || '').trim();
+    return this.orchestrationSteps(svc)
+      .map((step, index) => ({ step, index }))
+      .filter(({ step }) => {
+        const stepParentUid = String(step.parentUid || '').trim();
+        if (slot === 'root') return !stepParentUid;
+        return stepParentUid === targetParentUid && step.slot === slot;
+      })
+      .sort((left, right) => this.stepOrderValue(left.step, left.index) - this.stepOrderValue(right.step, right.index))
+      .map(({ step }) => step);
+  }
+
+  private stepOrderValue(step: OrchestrationStep, index: number): number {
+    const value = Number(step.order);
+    return Number.isFinite(value) ? value : index + 1;
+  }
+
+  private nextStepOrder(svc: LegacyService, parentUid = '', slot: OrchestrationStepSlot | 'root' = 'root'): number {
+    const siblings = this.stepsInSlot(svc, parentUid, slot);
+    return siblings.reduce((max, step, index) => Math.max(max, this.stepOrderValue(step, index)), 0) + 1;
+  }
+
+  private assignStepPlacement(
+    svc: LegacyService,
+    step: OrchestrationStep,
+    parentUid = '',
+    slot: OrchestrationStepSlot | 'root' = 'root',
+  ): void {
+    step.parentUid = parentUid || undefined;
+    step.slot = slot === 'root' ? undefined : slot;
+    step.order = this.nextStepOrder(svc, parentUid, slot);
+  }
+
   protected stepTaskUid(step: OrchestrationStep | OrchStep): string {
     return String((step as OrchestrationStep).taskDefinitionUid || (step as OrchStep).taskDefUid || '').trim();
   }
@@ -577,6 +699,8 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
 
   // 边界细节：旧文档经常复制的是非严格 JSON 片段，这里只抽取稳定的 "字段: 类型 // 说明" 行，避免把大段示例文本误写入模型。
   private paramsFromLooseText(text: string): ServiceParam[] {
+    const structured = this.paramsFromLooseStructuredText(text);
+    if (structured.length) return structured;
     const result: ServiceParam[] = [];
     const seen = new Set<string>();
     const linePattern = /^["']?([A-Za-z_][\w.-]*)["']?\s*:\s*([A-Za-z][\w\[\]]*)\s*,?\s*(?:\/\/\s*(.*))?$/;
@@ -593,6 +717,79 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       result.push({ name, type: this.normalizeDocImportType(type), required, note });
     }
     return result;
+  }
+
+  // 模块意图：兼容接口文档里常见的“像 JSON 的类型说明”，不要求 key 加引号或每行都有逗号。
+  // 关键流程：按行维护对象/数组上下文，把字段挂回最近的父参数，数组示例对象会成为数组字段的 children。
+  // 边界细节：只识别字段定义和结构符号，忽略省略号等展示文本，避免把文档噪声导入模型。
+  private paramsFromLooseStructuredText(text: string): ServiceParam[] {
+    type Context = { kind: 'object'|'array'; children: ServiceParam[]; owner?: ServiceParam };
+    const root: ServiceParam[] = [];
+    const stack: Context[] = [{ kind: 'object', children: root }];
+    const fieldPattern = /^["']?([A-Za-z_][\w.-]*)["']?\s*:\s*(.*?)\s*,?$/;
+
+    const closeContext = (kind?: 'object'|'array'): void => {
+      for (let index = stack.length - 1; index > 0; index -= 1) {
+        const context = stack[index];
+        stack.pop();
+        if (!kind || context.kind === kind) return;
+      }
+    };
+
+    for (const rawLine of text.split(/\r?\n/)) {
+      const [body = '', noteText = ''] = rawLine.split('//');
+      let line = body.trim();
+      if (!line || line.includes('......')) continue;
+
+      while (/^[}\]],?$/.test(line)) {
+        closeContext(line.startsWith(']') ? 'array' : 'object');
+        line = line.replace(/^[}\]],?\s*/, '').trim();
+      }
+      if (!line || line === '{' || line === '[') {
+        if (line === '{' && stack.at(-1)?.kind === 'array') {
+          stack.push({ kind: 'object', children: stack.at(-1)?.children ?? [] });
+        }
+        continue;
+      }
+
+      const match = line.match(fieldPattern);
+      if (!match) continue;
+      const [, name, rawValue = ''] = match;
+      const value = rawValue.replace(/,$/, '').trim();
+      const required = noteText.includes('*');
+      const note = noteText.replace(/\*/g, '').trim();
+      const parent = stack.at(-1) ?? stack[0];
+      const param: ServiceParam = {
+        name,
+        type: this.looseValueType(value),
+        required,
+        note,
+      };
+      parent.children.push(param);
+
+      if (value.startsWith('{')) {
+        param.children = [];
+        stack.push({ kind: 'object', children: param.children, owner: param });
+      } else if (value.startsWith('[')) {
+        param.children = [];
+        stack.push({ kind: 'array', children: param.children, owner: param });
+      }
+
+      if (value.includes('}') && stack.at(-1)?.owner === param) closeContext('object');
+      if (value.includes(']') && stack.at(-1)?.owner === param) closeContext('array');
+    }
+    return root;
+  }
+
+  private looseValueType(value: string): string {
+    const trimmed = value.trim();
+    const lower = trimmed.toLowerCase();
+    if (trimmed.startsWith('[')) return 'Array';
+    if (trimmed.startsWith('{')) return 'Object';
+    if (/^['"]/.test(trimmed)) return 'String';
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) return 'Number';
+    if (lower === 'true' || lower === 'false') return 'Boolean';
+    return this.normalizeDocImportType(trimmed);
   }
 
   private normalizeDocImportType(type: string): string {
@@ -626,11 +823,44 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   // ─── Tab 2: 应用编排 ──────────────────────────
   protected orchestrationInterfaces(): LegacyService[] {
     const groupUid = this.orchServiceGroupUid();
-    return this.services().filter((svc) => {
-      if (groupUid === '__all__') return true;
-      if (groupUid === '__ungrouped__') return !svc.serviceGroupUid;
-      return String(svc.serviceGroupUid || '') === groupUid;
-    });
+    const keyword = this.orchKeyword().trim().toLowerCase();
+    const deduped = new Map<string, LegacyService>();
+    for (const svc of this.services()) {
+      const id = this.uid(svc);
+      if (!id || deduped.has(id)) continue;
+      if (groupUid === '__all__') continue;
+      if (groupUid === '__ungrouped__') {
+        if (svc.serviceGroupUid) continue;
+      } else if (String(svc.serviceGroupUid || '') !== groupUid) {
+        continue;
+      }
+      const label = this.orchestrationInterfaceLabel(svc).toLowerCase();
+      if (keyword && !label.includes(keyword)) continue;
+      deduped.set(id, svc);
+    }
+    if (groupUid === '__all__') {
+      for (const svc of this.services()) {
+        const id = this.uid(svc);
+        if (!id || deduped.has(id)) continue;
+        const label = this.orchestrationInterfaceLabel(svc).toLowerCase();
+        if (keyword && !label.includes(keyword)) continue;
+        deduped.set(id, svc);
+      }
+    }
+    return [...deduped.values()].sort((left, right) =>
+      String(left.name || this.uid(left)).localeCompare(String(right.name || this.uid(right)), 'zh-Hans-CN', { numeric: true }),
+    );
+  }
+
+  protected setOrchestrationKeyword(keyword: string): void {
+    this.orchKeyword.set(keyword);
+    this.ensureOrchestrationInterfaceSelection();
+  }
+
+  protected orchestrationInterfaceLabel(svc: LegacyService): string {
+    const group = this.serviceGroupFor(svc);
+    const name = svc.name || this.uid(svc);
+    return `${this.serviceGroupTitle(group)} · ${name}`;
   }
   protected selectOrchestrationServiceGroup(groupUid: string): void {
     this.orchServiceGroupUid.set(groupUid);
@@ -659,23 +889,108 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.selectedStepUid.set(step.uid);
     this.runtime.ui['applicationOrchestrationStepUid'] = step.uid;
   }
-  protected addStep(svc: LegacyService, tid: string): void {
+  protected addStep(svc: LegacyService, tid: string, parentUid = '', slot: OrchestrationStepSlot | 'root' = 'root'): void {
     if (!this.canEdit()) return;
+    if (!tid) return;
     const steps = this.orchestrationSteps(svc);
-    if (steps.some(s => s.taskDefinitionUid === tid)) return;
+    if (steps.some(s => s.taskDefinitionUid === tid && String(s.parentUid || '') === String(parentUid || '') && (s.slot || 'root') === slot)) return;
     const task = this.taskDefs().find((td) => this.uid(td) === tid);
     const step: OrchestrationStep = {
       uid: `step-${this.uid(svc) || 'service'}-${steps.length + 1}-${tid}`,
       name: task?.name || tid,
       stepAlias: `step${steps.length + 1}`,
       taskDefinitionUid: tid,
+      kind: 'task',
       inputMapping: [],
       outputMapping: [],
     };
+    this.assignStepPlacement(svc, step, parentUid, slot);
     steps.push(step);
     this.selectedStepUid.set(step.uid);
     delete svc.steps;
     this.touch();
+  }
+
+  protected addModelingStep(svc: LegacyService, kind: OrchestrationStepKind, parentUid = '', slot: OrchestrationStepSlot | 'root' = 'root'): void {
+    if (!this.canEdit()) return;
+    if (kind === 'task') return;
+    const steps = this.orchestrationSteps(svc);
+    const count = steps.filter((step) => this.stepKind(step) === kind).length + 1;
+    const step: OrchestrationStep = {
+      uid: `step-${this.uid(svc) || 'service'}-${kind}-${Date.now()}-${count}`,
+      name: this.defaultStepName(kind, count),
+      stepAlias: `${kind}${count}`,
+      taskDefinitionUid: '',
+      kind,
+      inputMapping: [],
+      outputMapping: [],
+      expression: kind === 'assertion' ? '表达业务校验条件' : kind === 'transform' ? '表达字段加工规则' : '',
+      condition: kind === 'branch' ? '满足条件时执行' : '',
+      loopSource: kind === 'loop' ? '选择列表或循环条件' : '',
+    };
+    this.assignStepPlacement(svc, step, parentUid, slot);
+    steps.push(step);
+    this.selectStep(step);
+    delete svc.steps;
+    this.touch();
+  }
+
+  protected stepKind(step: OrchestrationStep): OrchestrationStepKind {
+    return step.kind || (step.taskDefinitionUid ? 'task' : 'task');
+  }
+
+  protected stepKindLabel(stepOrKind: OrchestrationStep | OrchestrationStepKind): string {
+    const kind = typeof stepOrKind === 'string' ? stepOrKind : this.stepKind(stepOrKind);
+    const labels: Record<OrchestrationStepKind, string> = {
+      task: '任务',
+      branch: '分支',
+      loop: '循环',
+      assertion: '断言',
+      transform: '加工',
+      return: '返回',
+    };
+    return labels[kind];
+  }
+
+  protected stepDisplayName(step: OrchestrationStep): string {
+    return this.stepTaskDef(step)?.name || step.name || this.stepKindLabel(step);
+  }
+
+  protected stepDescription(step: OrchestrationStep): string {
+    const kind = this.stepKind(step);
+    if (kind === 'task') return this.stepTaskDef(step)?.target || this.stepTaskDef(step)?.address || '调用任务定义';
+    if (kind === 'branch') return step.condition || '按条件选择后续路径';
+    if (kind === 'loop') return step.loopSource || '对列表或条件重复执行';
+    if (kind === 'assertion') return step.expression || '表达业务校验';
+    if (kind === 'transform') return step.expression || '字段转换、组合或格式化';
+    return '定义应用接口最终输出';
+  }
+
+  protected orchestrationExportSummary(svc: LegacyService): string[] {
+    return [
+      `应用接口：${svc.name || this.uid(svc)}`,
+      ...this.orchestrationSteps(svc).map((step, index) => `${index + 1}. [${this.stepKindLabel(step)}] ${this.stepDisplayName(step)} - ${this.stepDescription(step)}`),
+      `返回映射：${this.returnMappings(svc).length} 项`,
+    ];
+  }
+
+  protected selectedStepOutputOptions(svc: LegacyService, step: OrchestrationStep): VariableOption[] {
+    const kind = this.stepKind(step);
+    if (kind === 'task') return this.outputTargetOptions(svc, step);
+    const alias = this.stepAlias(step, this.orchestrationSteps(svc).indexOf(step));
+    return [{ value: `step.${alias}.result`, label: `step.${alias}.result` }];
+  }
+
+  private defaultStepName(kind: OrchestrationStepKind, count: number): string {
+    const labels: Record<OrchestrationStepKind, string> = {
+      task: '任务',
+      branch: '分支判断',
+      loop: '循环处理',
+      assertion: '业务断言',
+      transform: '数据加工',
+      return: '返回结果',
+    };
+    return `${labels[kind]}${count > 1 ? count : ''}`;
   }
   protected removeStep(svc: LegacyService, idx: number): void {
     if (!this.canEdit()) return;
@@ -687,6 +1002,48 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.selectedStepUid.set(steps[Math.min(idx, steps.length - 1)]?.uid || '');
     this.touch();
   }
+
+  protected removeStepNode(svc: LegacyService, step: OrchestrationStep): void {
+    if (!this.canEdit()) return;
+    const steps = this.orchestrationSteps(svc);
+    const removedUids = new Set<string>();
+    const collect = (uid: string) => {
+      removedUids.add(uid);
+      steps.filter((item) => item.parentUid === uid).forEach((child) => collect(child.uid));
+    };
+    collect(step.uid);
+    const removedTaskUids = new Set(steps.filter((item) => removedUids.has(item.uid)).map((item) => item.taskDefinitionUid).filter(Boolean));
+    this.ensureOrchestration(svc).steps = steps.filter((item) => !removedUids.has(item.uid));
+    if (removedTaskUids.size) {
+      svc.parameterMappings = (svc.parameterMappings || []).filter((mapping) => !removedTaskUids.has(mapping.fromTaskDefUid) && !removedTaskUids.has(mapping.toTaskDefUid));
+    }
+    this.selectedStepUid.set(this.rootOrchestrationSteps(svc)[0]?.uid || this.orchestrationSteps(svc)[0]?.uid || '');
+    this.touch();
+  }
+
+  protected async moveStepInScope(svc: LegacyService, step: OrchestrationStep, dir: number): Promise<void> {
+    if (!this.canEdit()) return;
+    const slot = (step.slot || 'root') as OrchestrationStepSlot | 'root';
+    const siblings = this.stepsInSlot(svc, step.parentUid || '', slot);
+    const idx = siblings.indexOf(step);
+    const ni = idx + dir;
+    if (idx < 0 || ni < 0 || ni >= siblings.length) return;
+    const confirmed = await confirmRuntimeAction('调整任务顺序会改变后续步骤可用的上下文，输入映射可能需要重新设置。继续调整吗？', {
+      title: '调整编排顺序',
+      confirmLabel: '调整并清理失效映射',
+    });
+    if (!confirmed) return;
+    const left = siblings[idx];
+    const right = siblings[ni];
+    const leftOrder = this.stepOrderValue(left, this.orchestrationSteps(svc).indexOf(left));
+    const rightOrder = this.stepOrderValue(right, this.orchestrationSteps(svc).indexOf(right));
+    left.order = rightOrder;
+    right.order = leftOrder;
+    this.selectedStepUid.set(step.uid);
+    this.repairInvalidInputMappings(svc);
+    this.touch();
+  }
+
   protected async moveStep(svc: LegacyService, idx: number, dir: number): Promise<void> {
     if (!this.canEdit()) return;
     const steps = this.orchestrationSteps(svc);
@@ -735,6 +1092,68 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   protected removeReturnMapping(svc: LegacyService, idx: number): void {
     if (!this.canEdit()) return;
     this.returnMappings(svc).splice(idx, 1);
+    this.touch();
+  }
+  protected inputMappingSource(step: OrchestrationStep, target: string): string {
+    return (step.inputMapping || []).find((mapping) => mapping.target === target)?.source || '';
+  }
+  protected inputMappingWarning(svc: LegacyService, step: OrchestrationStep, target: string): string {
+    const mapping = (step.inputMapping || []).find((item) => item.target === target);
+    return mapping ? this.mappingSourceWarning(svc, step, mapping) : '';
+  }
+  protected setInputMappingSource(step: OrchestrationStep, target: string, source: string): void {
+    if (!this.canEdit()) return;
+    step.inputMapping ||= [];
+    const existing = step.inputMapping.find((mapping) => mapping.target === target);
+    if (!source) {
+      step.inputMapping = step.inputMapping.filter((mapping) => mapping.target !== target);
+      this.touch();
+      return;
+    }
+    if (existing) {
+      existing.source = source;
+    } else {
+      step.inputMapping.push({ source, target });
+    }
+    this.touch();
+  }
+  protected outputBindingTarget(step: OrchestrationStep, source: string): string {
+    return (step.outputMapping || []).find((mapping) => mapping.source === source)?.target || '';
+  }
+  protected setOutputBindingTarget(step: OrchestrationStep, source: string, target: string): void {
+    if (!this.canEdit()) return;
+    step.outputMapping ||= [];
+    const existing = step.outputMapping.find((mapping) => mapping.source === source);
+    if (!target) {
+      step.outputMapping = step.outputMapping.filter((mapping) => mapping.source !== source);
+      this.touch();
+      return;
+    }
+    if (existing) {
+      existing.target = target;
+    } else {
+      step.outputMapping.push({ source, target });
+    }
+    this.touch();
+  }
+  protected returnMappingSource(svc: LegacyService, target: string): string {
+    return this.returnMappings(svc).find((mapping) => mapping.target === target)?.source || '';
+  }
+  protected setReturnMappingSource(svc: LegacyService, target: string, source: string): void {
+    if (!this.canEdit()) return;
+    const mappings = this.returnMappings(svc);
+    const existing = mappings.find((mapping) => mapping.target === target);
+    if (!source) {
+      const index = mappings.findIndex((mapping) => mapping.target === target);
+      if (index >= 0) mappings.splice(index, 1);
+      this.touch();
+      return;
+    }
+    if (existing) {
+      existing.source = source;
+    } else {
+      mappings.push({ source, target });
+    }
     this.touch();
   }
   // 模块意图：参数变量池只负责提供可选择路径，不在这里解释运行时表达式。

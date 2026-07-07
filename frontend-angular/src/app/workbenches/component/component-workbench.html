@@ -311,17 +311,17 @@
                     <div class="taskdef-capability-head" [attr.data-testid]="'taskdef-head-' + uid(td)">
                       <span class="taskdef-type" [class.query]="td.type !== 'Service'" [class.service]="td.type === 'Service'">{{ td.type === 'Service' ? 'Service' : 'Query' }}</span>
                       <strong [title]="td.name || uid(td)">{{ taskDefCardName(td) }}</strong>
-                      @if (td.target) { <code>{{ td.target }}</code> }
+                      @if (taskImplementationAddress(td)) { <code>{{ taskImplementationAddress(td) }}</code> }
                       <span class="taskdef-arrow" [class.exp]="isTaskExpanded(uid(td))">▾</span>
                     </div>
                     <div class="taskdef-capability-meta">
-                      <span [class.warn]="!(td.target || td.address)">{{ td.target || td.address ? '已设置实现' : '未设置实现' }}</span>
+                      <span [class.warn]="taskImplementationStatus(td) !== 'implemented'">{{ taskImplementationLabel(td) }}</span>
                       <span>入参 {{ (td.parameters?.inputs || []).length }}</span>
                       <span>出参 {{ (td.parameters?.outputs || []).length }}</span>
                       <span>{{ taskNodes(td).length }} 个节点引用</span>
                     </div>
-                    @if (td.target || td.address) {
-                      <code class="taskdef-capability-address">{{ td.target || td.address }}</code>
+                    @if (taskImplementationAddress(td)) {
+                      <code class="taskdef-capability-address">{{ taskImplementationAddress(td) }}</code>
                     }
                     @if (canEdit()) {
                       <div class="taskdef-card-actions">
@@ -357,7 +357,7 @@
         <section class="taskdef-editor-dialog" data-testid="taskdef-editor-dialog" (click)="$event.stopPropagation()">
           <header class="taskdef-editor-head">
             <div>
-              <strong>任务定义</strong>
+              <strong>任务定义：{{ td.name || uid(td) || '未命名任务' }}</strong>
               <span>参数 {{ (td.parameters?.inputs || []).length }}+{{ (td.parameters?.outputs || []).length }}</span>
             </div>
             <div class="taskdef-editor-head-actions">
@@ -423,18 +423,18 @@
                   </div>
                   @if (rows.length) {
                     <table class="taskdef-param-table">
-                      <thead><tr><th>中文名称</th><th>类型</th><th>必填</th><th>英文名称</th><th>说明/示例</th><th></th></tr></thead>
+                      <thead><tr><th>英文名称</th><th>类型</th><th>必填</th><th>中文名称</th><th>说明/示例</th><th></th></tr></thead>
                       <tbody>
                         @for(param of rows; track param.uid || $index){
                           <tr>
-                            <td><input [(ngModel)]="param.name" placeholder="中文名称"/></td>
+                            <td><input [(ngModel)]="param.name" placeholder="英文名称"/></td>
                             <td>
                               <select [attr.data-testid]="'taskdef-param-type-' + kind + '-' + $index" [ngModel]="param.type || ''" (ngModelChange)="setParamType(param, $event)">
                                 @for(option of taskParamTypeOptions; track option.value) { <option [value]="option.value">{{ option.label }}</option> }
                               </select>
                             </td>
                             <td class="td-cb"><label><input type="checkbox" [(ngModel)]="param.required"/> 必填</label></td>
-                            <td><input [ngModel]="taskParamCode(param)" (ngModelChange)="setTaskParamCode(param, $event)" placeholder="英文名称"/></td>
+                            <td><input [ngModel]="taskParamCode(param)" (ngModelChange)="setTaskParamCode(param, $event)" placeholder="中文名称"/></td>
                             <td><input [ngModel]="taskParamNote(param)" (ngModelChange)="setTaskParamNote(param, $event)" placeholder="说明/示例"/></td>
                             <td class="taskdef-param-actions">
                               <button data-testid="taskdef-param-insert" class="btn-ghost-sm" type="button" title="在下方增加" (click)="insertParam(rows, $index)">+</button>
@@ -455,12 +455,12 @@
                                     <div class="taskdef-param-child-list">
                                       @for(child of param.children || []; track child.uid || $index) {
                                         <div class="taskdef-param-child-row">
-                                          <input [(ngModel)]="child.name" placeholder="中文名称"/>
+                                          <input [(ngModel)]="child.name" placeholder="英文名称"/>
                                           <select [ngModel]="child.type || ''" (ngModelChange)="setParamType(child, $event)">
                                             @for(option of taskParamTypeOptions; track option.value) { @if (option.value !== 'list') { <option [value]="option.value">{{ option.label }}</option> } }
                                           </select>
                                           <label><input type="checkbox" [(ngModel)]="child.required"/> 必填</label>
-                                          <input [ngModel]="taskParamCode(child)" (ngModelChange)="setTaskParamCode(child, $event)" placeholder="英文名称"/>
+                                          <input [ngModel]="taskParamCode(child)" (ngModelChange)="setTaskParamCode(child, $event)" placeholder="中文名称"/>
                                           <input [ngModel]="taskParamNote(child)" (ngModelChange)="setTaskParamNote(child, $event)" placeholder="说明/示例"/>
                                           <span class="taskdef-param-actions">
                                             <button class="btn-ghost-sm" type="button" title="在下方增加" (click)="insertParamChild(param, $index)">+</button>
@@ -497,9 +497,9 @@
                       <option value="implemented">已实现</option>
                     </select>
                   </label>
-                  <label>任务地址<input [(ngModel)]="td.address" placeholder="地址 /api/... 或 planTaskHandler.xxx" /></label>
+                  <label>任务地址<input [(ngModel)]="td.address" (ngModelChange)="touch()" placeholder="地址 /api/... 或 planTaskHandler.xxx" /></label>
                 </div>
-                <app-rich-text-editor class="taskdef-rich-text taskdef-design-editor" label="任务详细设计" placeholder="描述任务用途、输入输出口径、边界条件、异常处理或处理说明" testIdPrefix="taskdef-note" [value]="td.note || ''" (valueChange)="td.note = $event"></app-rich-text-editor>
+                <app-rich-text-editor class="taskdef-rich-text taskdef-design-editor" label="任务详细设计" placeholder="描述任务用途、输入输出口径、边界条件、异常处理或处理说明" testIdPrefix="taskdef-note" [value]="td.note || ''" (valueChange)="td.note = $event; touch()"></app-rich-text-editor>
               </section>
             }
           </div>

@@ -457,13 +457,35 @@
   background: #f8fafc;
   border-radius: 8px;
   color: #475569;
-  font-size: 13px;
-  line-height: 1.7;
   padding: 10px 12px;
 
-  ul, ol { padding-left: 20px; margin: 4px 0; }
-  li { margin: 2px 0; }
-  strong, b { color: #334155; }
+  ::ng-deep .node-rich-editor {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  ::ng-deep .node-rich-label,
+  ::ng-deep .node-rich-toolbar-row,
+  ::ng-deep .rich-text-storage {
+    display: none;
+  }
+
+  ::ng-deep .node-rich-content {
+    background: transparent;
+    border: 0;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.7;
+    min-height: 0;
+    padding: 0;
+  }
+
+  ::ng-deep .node-rich-content strong,
+  ::ng-deep .node-rich-content b {
+    color: #334155;
+  }
 }
 
 .knowledge-rule-empty {
@@ -509,4 +531,161 @@
 .knowledge-note {
   margin-top: 0;
   padding: 14px;
+}
+
+.knowledge-dictionary-cards {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  max-height: min(560px, calc(100vh - 230px));
+  padding: 4px 0;
+}
+
+.knowledge-dictionary-toolbar {
+  padding: 0 0 10px;
+}
+
+.knowledge-dictionary-toolbar input {
+  background: #fff;
+  border: 1px solid #c8d8ea;
+  border-radius: 8px;
+  font: inherit;
+  height: 34px;
+  padding: 5px 10px;
+  width: min(360px, 100%);
+}
+
+.knowledge-dictionary-card {
+  background: #fbfdff;
+  border: 1px solid #d7e4f3;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.knowledge-dictionary-card.is-expanded {
+  border-color: #93c5fd;
+  grid-column: 1 / -1;
+  box-shadow: 0 6px 18px rgba(59, 130, 246, .08);
+}
+
+.knowledge-dictionary-summary {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.knowledge-dictionary-summary:hover {
+  background: #f8fafc;
+}
+
+.knowledge-dictionary-summary strong,
+.knowledge-dictionary-summary code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-dictionary-summary code {
+  color: #64748b;
+  font-size: 12px;
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.knowledge-dictionary-count {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  justify-self: start;
+  padding: 2px 8px;
+}
+
+.knowledge-dictionary-body {
+  border-top: 1px solid #e2e8f0;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.knowledge-dictionary-fields {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 150px repeat(3, minmax(140px, 1fr));
+}
+
+.knowledge-dictionary-fields label {
+  color: #334155;
+  display: grid;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 4px;
+}
+
+.knowledge-dictionary-fields input,
+.knowledge-dictionary-entry-row input {
+  background: #fff;
+  border: 1px solid #c8d8ea;
+  border-radius: 7px;
+  font: inherit;
+  height: 30px;
+  min-width: 0;
+  padding: 4px 8px;
+}
+
+.knowledge-dictionary-fields input[readonly],
+.knowledge-dictionary-entry-row input[readonly] {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.knowledge-dictionary-entry-head,
+.knowledge-dictionary-actions {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.knowledge-dictionary-entry-list {
+  display: grid;
+  gap: 6px;
+}
+
+.knowledge-dictionary-entry-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) 1fr 32px;
+}
+
+.knowledge-dictionary-entry-row .is-danger {
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.knowledge-dictionary-entry-empty {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.knowledge-secondary.is-danger {
+  border-color: #fecaca;
+  color: #dc2626;
 }

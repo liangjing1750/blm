@@ -20,6 +20,7 @@ export interface BlmDocument {
   serviceGroups: ServiceGroup[];
   services: ApplicationService[];
   terms: KnowledgeTerm[];
+  dataDictionaries: DataDictionary[];
   rules: BusinessRule[];
 }
 
@@ -113,6 +114,7 @@ export interface EntityField {
   name: string;
   type: string;
   note?: string;
+  dictionaryUid?: string;
   state_values?: string;
 }
 
@@ -166,6 +168,7 @@ export interface TaskParameter {
   example?: string;
   note?: string;
   desc?: string;
+  dictionaryUid?: string;
   children?: TaskParameter[];
 }
 
@@ -227,6 +230,9 @@ export interface OrchestrationStep {
   taskDefinitionUid: string;
   inputMapping: OrchestrationMapping[];
   outputMapping: OrchestrationMapping[];
+  parentUid?: string;
+  slot?: 'then' | 'else' | 'body';
+  order?: number;
 }
 
 export interface OrchestrationMapping {
@@ -237,6 +243,21 @@ export interface OrchestrationMapping {
 
 export interface KnowledgeTerm {
   uid: string;
+  name: string;
+  desc?: string;
+}
+
+export interface DataDictionary {
+  uid: string;
+  code: string;
+  name: string;
+  desc?: string;
+  entries: DataDictionaryEntry[];
+}
+
+export interface DataDictionaryEntry {
+  uid: string;
+  code: string;
   name: string;
   desc?: string;
 }

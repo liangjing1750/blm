@@ -29,6 +29,7 @@ TOP_LEVEL_LIST_FIELDS = (
     "taskDefinitions",
     "serviceGroups",
     "services",
+    "dataDictionaries",
     "forms",
 )
 
@@ -325,11 +326,14 @@ def canonicalize_model_references(document: dict | None) -> dict:
             name = str(item.get("name", "")).strip() if has_name else f"{fallback_label}{index}"
             has_semantic_name = bool(_normalize_name_key(name))
             existing_uid = str(item.get("uid", "")).strip()
-            if has_name and has_semantic_name:
+            has_legacy_axis_id = bool(str(item.get("id") or item.get("key") or "").strip())
+            if has_name and has_semantic_name and (_normalize_name_key(name) in known or has_legacy_axis_id):
                 next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
             elif existing_uid and existing_uid not in used:
                 next_uid = existing_uid
                 used.add(next_uid)
+            elif has_name and has_semantic_name:
+                next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
             else:
                 next_uid = _semantic_panorama_uid(prefix, name, index, used, known)
             for source_field in ("uid", "id", "key"):
@@ -941,6 +945,7 @@ def create_empty_document(name: str) -> dict:
             ],
             "entities": [],
             "relations": [],
+            "dataDictionaries": [],
             "rules": [],
         }
     )

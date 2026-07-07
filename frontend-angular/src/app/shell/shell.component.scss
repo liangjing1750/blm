@@ -372,6 +372,91 @@ app-shell-tab-bar {
   background: #fff;
 }
 
+.merge-conflict-list {
+  display: grid;
+  gap: 12px;
+}
+
+.merge-conflict-card {
+  border: 1px solid #d7e4f5;
+  border-radius: 10px;
+  background: #fbfdff;
+  overflow: hidden;
+}
+
+.merge-conflict-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.merge-conflict-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.merge-conflict-head strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.merge-conflict-path {
+  color: #64748b;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.merge-conflict-values {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px;
+}
+
+.merge-conflict-values label {
+  color: #475569;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.merge-conflict-values pre {
+  min-height: 76px;
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font: 12px/1.5 Consolas, 'Courier New', monospace;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.merge-conflict-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(180px, 260px) minmax(220px, 1fr);
+  padding: 0 12px 12px;
+}
+
+.merge-conflict-controls .modal-search {
+  margin: 0;
+}
+
 .compare-report-head {
   position: sticky;
   top: 0;

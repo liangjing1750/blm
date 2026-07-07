@@ -30,10 +30,12 @@
 .app-service-nav, .app-interface-list, .app-service-detail { min-height: 0; max-height: 100%; overflow-x: hidden; overflow-y: auto; border: 1px solid #dbe5f0; border-radius: 10px; background: #fff; }
 .app-interface-list, .app-service-detail { scrollbar-gutter: stable; }
 .app-service-nav { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-.app-service-nav-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 8px; background: #fff; color: #334155; padding: 9px 10px; cursor: pointer; text-align: left; }
+.app-service-nav-item { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 8px; background: #fff; color: #334155; padding: 9px 10px; cursor: pointer; text-align: left; }
 .app-service-nav-item:hover, .app-service-nav-item.active { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
 .app-service-nav-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
 .app-service-nav-item strong { border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 11px; padding: 2px 7px; }
+.app-service-nav-item--with-desc[data-service-desc]::after { content: attr(data-service-desc); position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%); z-index: 50; width: max-content; max-width: 260px; border: 1px solid #cbd5e1; border-radius: 8px; background: #0f172a; color: #fff; box-shadow: 0 10px 24px rgba(15,23,42,.18); padding: 8px 10px; font-size: 12px; font-weight: 600; line-height: 1.45; white-space: normal; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .12s ease 2s, visibility 0s linear 2s; }
+.app-service-nav-item--with-desc[data-service-desc]:hover::after { opacity: 1; visibility: visible; }
 .app-service-nav-actions { display: flex; gap: 6px; padding: 6px 2px 2px; }
 .app-interface-list { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 .app-interface-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; }
@@ -106,8 +108,11 @@
 /* ─── 应用服务抽屉 ─────────────────────── */
 .drawer-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.18); z-index: 500; display: flex; justify-content: flex-end; overflow: hidden; }
 .app-service-modal-overlay { align-items: center; justify-content: center; padding: 28px; }
+.app-service-group-overlay { align-items: center; justify-content: center; padding: 28px; }
 .drawer { width: min(720px, 92vw); height: calc(100vh - 92px); background: #fff; box-shadow: -4px 0 24px rgba(15,23,42,.1); display: flex; flex-direction: column; }
 .app-service-modal-overlay .app-service-drawer { width: min(860px, calc(100vw - 56px)); height: min(76vh, 720px); border-radius: 12px; box-shadow: 0 24px 60px rgba(15,23,42,.22); }
+.app-service-group-overlay .app-service-group-drawer { width: min(420px, calc(100vw - 56px)); height: auto; max-height: min(420px, calc(100vh - 56px)); border-radius: 12px; box-shadow: 0 24px 60px rgba(15,23,42,.22); }
+.app-service-group-drawer .drawer-body { flex: 0 0 auto; overflow: visible; padding: 16px 20px 4px; }
 .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
 .drawer-head h3 { margin: 0; font-size: 15px; }
 .drawer-head span { color: #64748b; font-size: 12px; }
@@ -120,25 +125,37 @@
 .drawer-section-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .drawer-read-row { display: flex; justify-content: space-between; gap: 12px; margin: 0; padding: 6px 0; color: #64748b; font-size: 12px; }
 .drawer-read-row strong { color: #1e293b; font-weight: 600; text-align: right; }
-.drawer-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid #e2e8f0; flex-shrink: 0; }
+.drawer-actions { display: flex; gap: 8px; justify-content: space-between; padding: 12px 20px; border-top: 1px solid #e2e8f0; flex-shrink: 0; }
+.drawer-actions-left,
+.drawer-actions-right { display: flex; gap: 8px; align-items: center; }
 .drawer-actions .danger { color: #ef4444; border-color: #fecaca; }
 
 /* ─── Tab2: 应用编排 ───────────────────────── */
 .orch-body { display: flex; flex-direction: column; min-height: 0; }
 .orch-toolbar { flex: 0 0 auto; }
-.orch-layout { display: grid; grid-template-columns: minmax(260px, 360px) minmax(420px, 1fr); gap: 12px; flex: 1; min-height: 0; overflow: hidden; }
-.orch-steps-panel, .orch-mappings-panel { min-height: 0; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow-y: auto; overflow-x: hidden; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
-.orch-steps-panel::-webkit-scrollbar, .orch-mappings-panel::-webkit-scrollbar { width: 6px; }
-.orch-steps-panel::-webkit-scrollbar-thumb, .orch-mappings-panel::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.orch-filter-bar { display: grid; grid-template-columns: minmax(240px, .75fr) minmax(460px, 1.7fr) minmax(260px, .75fr); align-items: center; gap: 12px; border: 1px solid #dbe5f0; border-radius: 10px; background: #fff; padding: 8px 12px; }
+.orch-filter-bar label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; color: #475569; font-size: 12px; font-weight: 800; }
+.orch-filter-bar select, .orch-filter-bar input { width: 100%; max-width: none; min-height: 32px; border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; color: #0f172a; font-size: 13px; padding: 5px 10px; }
+.orch-layout { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr); gap: 12px; flex: 1; min-height: 0; overflow: hidden; }
+.orch-steps-panel, .orch-mappings-panel, .orch-chain-panel { min-height: 0; border: 1px solid #dbe5f0; border-radius: 10px; background: #fff; overflow-y: auto; overflow-x: hidden; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.orch-steps-panel::-webkit-scrollbar, .orch-mappings-panel::-webkit-scrollbar, .orch-chain-panel::-webkit-scrollbar { width: 6px; }
+.orch-steps-panel::-webkit-scrollbar-thumb, .orch-mappings-panel::-webkit-scrollbar-thumb, .orch-chain-panel::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 .orch-panel-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; margin-bottom: 4px; }
 .orch-panel-head strong { font-size: 13px; color: #1e293b; }
 .orch-panel-head span { font-size: 11px; color: #94a3b8; }
 
 .orch-step-card { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-.orch-step-card--select { display: grid; grid-template-columns: 28px 1fr auto auto; align-items: center; gap: 8px; padding: 8px 10px; background: #fff; cursor: pointer; text-align: left; }
+.orch-step-card--select { display: grid; grid-template-columns: 24px auto minmax(0, 1fr) auto auto; align-items: center; gap: 7px; padding: 8px 10px; background: #fff; cursor: pointer; text-align: left; }
+.orch-step-card--tree { grid-template-columns: 22px auto minmax(0, 1fr) auto auto; }
 .orch-step-card--select:hover { border-color: #93c5fd; background: #f8fbff; }
 .orch-step-card--select.active { border-color: #3b82f6; background: #eff6ff; }
 .orch-step-title { color: #334155; font-size: 13px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch-kind-chip { display: inline-flex; align-items: center; justify-content: center; min-height: 20px; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; padding: 1px 8px; font-size: 11px; font-weight: 900; white-space: nowrap; }
+.orch-kind-chip--branch { border-color: #fde68a; background: #fffbeb; color: #b45309; }
+.orch-kind-chip--loop { border-color: #c4b5fd; background: #f5f3ff; color: #6d28d9; }
+.orch-kind-chip--assertion { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+.orch-kind-chip--transform { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; }
+.orch-kind-chip--return { border-color: #bbf7d0; background: #f0fdf4; color: #15803d; }
 .orch-step-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8fafc; }
 .orch-step-idx { color: #94a3b8; font-size: 12px; font-weight: 700; min-width: 20px; }
 .orch-step-info { flex: 1; min-width: 0; }
@@ -148,7 +165,19 @@
 .orch-step-actions button { background: #fff; border: 1px solid #e2e8f0; border-radius: 5px; cursor: pointer; font-size: 11px; padding: 3px 6px; }
 .orch-step-actions button:disabled { opacity: .3; }
 .orch-step-actions button.danger { color: #ef4444; }
-.orch-step-params { padding: 6px 10px 8px 38px; display: flex; flex-direction: column; gap: 4px; }
+.orch-modeling-actions { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 2px; }
+.orch-modeling-actions button { border: 1px solid #dbe5f0; border-radius: 999px; background: #f8fafc; color: #334155; cursor: pointer; font-size: 12px; font-weight: 800; padding: 4px 9px; }
+.orch-modeling-actions button:hover { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+.orch-tree-row { display: grid; gap: 6px; }
+.orch-tree-slot { display: grid; gap: 6px; margin: 0 0 4px 12px; padding: 7px 0 7px 10px; border-left: 2px solid #fde68a; background: linear-gradient(90deg, rgba(255,251,235,.68), rgba(255,255,255,0)); }
+.orch-tree-slot--body { border-left-color: #c4b5fd; background: linear-gradient(90deg, rgba(245,243,255,.72), rgba(255,255,255,0)); }
+.orch-tree-slot-head { display: flex; align-items: center; min-height: 20px; color: #64748b; font-size: 11px; font-weight: 900; }
+.orch-tree-slot-head span { border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; padding: 2px 8px; }
+.orch-slot-actions { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.orch-slot-actions .tag-select { min-width: 90px; max-width: 130px; }
+.orch-slot-actions button { border: 1px solid #dbe5f0; border-radius: 999px; background: #fff; color: #334155; cursor: pointer; font-size: 11px; font-weight: 800; padding: 3px 8px; }
+.orch-slot-actions button:hover { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+.orch-step-params { padding: 6px 0 8px; display: flex; flex-direction: column; gap: 4px; }
 .orch-param-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .orch-param-label { font-size: 10px; font-weight: 700; color: #94a3b8; margin-right: 2px; }
 .orch-param { background: #f1f5f9; border-radius: 4px; font-size: 10px; padding: 1px 6px; color: #475569; }
@@ -156,13 +185,44 @@
 .orch-param-warning, .orch-map-warning { display: inline-flex; align-items: center; border-radius: 999px; background: #fff7ed; border: 1px solid #fed7aa; color: #c2410c; font-size: 11px; font-weight: 700; padding: 2px 8px; width: fit-content; }
 .orch-map-warning { flex: 0 0 auto; }
 
+.orch-chain-head { border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 2px; }
+.orch-chain-head strong { display: block; color: #0f172a; font-size: 14px; }
+.orch-chain-head span { display: block; margin-top: 3px; color: #64748b; font-size: 12px; }
+.orch-chain-node { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 9px; align-items: center; width: 100%; border: 1px solid #dbeafe; border-radius: 9px; background: #fbfdff; padding: 9px 10px; text-align: left; cursor: pointer; }
+.orch-chain-node--tree { min-height: 54px; }
+.orch-chain-node:hover, .orch-chain-node.active { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 4px 12px rgba(59,130,246,.08); }
+.orch-chain-node strong { color: #0f172a; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch-chain-node em { grid-column: 2; color: #64748b; font-size: 12px; font-style: normal; line-height: 1.4; }
+.orch-chain-arrow { color: #94a3b8; font-size: 16px; font-weight: 900; line-height: 1; text-align: center; }
+.orch-empty-chain { border: 1px dashed #cbd5e1; border-radius: 9px; color: #64748b; background: #f8fafc; padding: 18px; text-align: center; font-size: 12px; }
+.orch-preview-slot { display: grid; gap: 6px; padding: 7px 0 7px 10px; border-left: 2px solid #fde68a; }
+.orch-preview-slot--body { border-left-color: #c4b5fd; }
+.orch-preview-slot > span { width: fit-content; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; color: #64748b; font-size: 11px; font-weight: 900; padding: 2px 8px; }
+.orch-expression-card { border: 1px solid #e2e8f0; border-radius: 9px; background: #f8fafc; padding: 10px; }
+.orch-expression-card label { display: flex; flex-direction: column; gap: 6px; color: #475569; font-size: 12px; font-weight: 800; }
+.orch-expression-card textarea { width: 100%; border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; color: #0f172a; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 9px; resize: vertical; }
+.orch-context-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.orch-variable-pool { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px; border: 1px solid #dbeafe; border-radius: 9px; background: #fbfdff; padding: 9px; min-height: 58px; }
+.orch-variable-pool .orch-param-label { flex: 0 0 100%; font-size: 11px; color: #475569; }
+.orch-variable-pool code { border-radius: 5px; background: #eef2ff; color: #3730a3; font-size: 11px; padding: 2px 6px; }
+.orch-variable-pool em { color: #94a3b8; font-style: normal; font-size: 12px; }
+.orch-binding-section { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid #f1f5f9; }
+.orch-binding-row { display: grid; grid-template-columns: minmax(130px, .8fr) auto minmax(220px, 1.2fr) auto; align-items: center; gap: 7px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 7px 8px; }
+.orch-binding-row.missing { background: #fffdfa; border-color: #fde68a; }
+.orch-binding-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 5px; background: #f8fafc; color: #0f172a; font-size: 12px; padding: 3px 7px; }
+.orch-binding-row select { width: 100%; min-width: 0; border: 1px solid #dbe5f0; border-radius: 6px; background: #fff; color: #0f172a; font-size: 12px; padding: 5px 8px; }
+.orch-binding-empty { margin: 0; border: 1px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; color: #64748b; font-size: 12px; padding: 9px 10px; }
 .orch-mapping-row { display: flex; align-items: center; gap: 4px; padding: 4px 0; flex-wrap: wrap; }
 .orch-mapping-row input { min-width: 180px; flex: 1 1 220px; border: 1px solid #e2e8f0; border-radius: 5px; font-size: 12px; padding: 5px 7px; }
-.orch-mapping-row select { border: 1px solid #e2e8f0; border-radius: 5px; font-size: 11px; padding: 3px 6px; max-width: 130px; }
+.orch-mapping-row select { border: 1px solid #e2e8f0; border-radius: 5px; font-size: 11px; padding: 3px 6px; max-width: 180px; }
 .orch-mapping-arrow { color: #94a3b8; font-size: 12px; }
 .orch-mapping-note { border: 1px solid #e2e8f0; border-radius: 5px; font-size: 11px; padding: 3px 6px; width: 80px; }
 .orch-step-mappings, .orch-return-section { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid #f1f5f9; }
 .orch-step-mapping-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #475569; font-size: 12px; font-weight: 700; }
+.orch-step-mapping-head em { color: #94a3b8; font-size: 11px; font-style: normal; font-weight: 600; }
+.orch-export-doc { border-top: 1px solid #f1f5f9; padding-top: 10px; }
+.orch-export-doc strong { color: #1e293b; font-size: 12px; }
+.orch-export-doc p { margin: 5px 0 0; color: #64748b; font-size: 12px; line-height: 1.45; }
 
 .tag-select { border: 1px dashed #cbd5e1; border-radius: 5px; font-size: 12px; padding: 4px 8px; color: #94a3b8; background: none; cursor: pointer; }
 
@@ -194,7 +254,7 @@
 .json-note { color: #64748b; }
 .json-required { color: #dc2626; font-weight: 900; }
 .svc-json-import { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font: inherit; font-size: 13px; font-family: monospace; resize: vertical; }
-.comp-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.2); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.comp-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.2); display: flex; align-items: center; justify-content: center; z-index: 4000; }
 .comp-dialog { background: #fff; border-radius: 12px; box-shadow: 0 16px 40px rgba(15,23,42,.16); min-width: 420px; max-width: 520px; padding: 20px 24px; }
 .comp-dialog h3 { margin: 0 0 14px; font-size: 15px; }
 .comp-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }

@@ -841,6 +841,75 @@ class MergeEngineTests(unittest.TestCase):
         self.assertEqual(merged["taskDefinitions"][0]["uid"], "td-1")
         self.assertEqual(merged["processes"][0]["nodes"][0]["orchestrationTasks"][0]["taskDefinitionUid"], "td-1")
 
+    def test_three_way_merge_preserves_application_service_nested_contract_and_orchestration(self):
+        base = create_empty_document("ApplicationServiceMerge")
+        base["taskDefinitions"] = [
+            {"uid": "task-check", "name": "校验仓库"},
+            {"uid": "task-save", "name": "保存预约"},
+        ]
+        base["serviceGroups"] = [{"uid": "service-group-inbound", "name": "入库应用服务"}]
+        base["services"] = [
+            {
+                "uid": "service-submit",
+                "name": "提交入库预约接口",
+                "serviceGroupUid": "service-group-inbound",
+                "method": "POST",
+                "path": "/inbound/submit",
+                "requestParams": [{"name": "warehouseUid", "type": "String", "required": True, "note": "仓库"}],
+                "responseParams": [],
+                "taskDefinitionUids": ["task-check"],
+                "nodeRefs": ["node-submit"],
+                "orchestration": {
+                    "variables": [],
+                    "steps": [
+                        {
+                            "uid": "step-check",
+                            "name": "校验仓库",
+                            "stepAlias": "step1",
+                            "taskDefinitionUid": "task-check",
+                            "inputMapping": [],
+                            "outputMapping": [],
+                        }
+                    ],
+                    "returnMapping": [],
+                },
+            }
+        ]
+        left = deepcopy(base)
+        left["services"][0]["requestParams"].append(
+            {"name": "productCode", "type": "String", "required": True, "note": "品种"}
+        )
+        left["services"][0]["orchestration"]["returnMapping"].append(
+            {"source": "step.step1.output.available", "target": "available", "note": "返回库存可用"}
+        )
+        right = deepcopy(base)
+        right["services"][0]["responseParams"].append(
+            {"name": "reservationUid", "type": "String", "required": False, "note": "预约ID"}
+        )
+        right["services"][0]["taskDefinitionUids"].append("task-save")
+        right["services"][0]["orchestration"]["steps"].append(
+            {
+                "uid": "step-save",
+                "name": "保存预约",
+                "stepAlias": "step2",
+                "taskDefinitionUid": "task-save",
+                "inputMapping": [{"source": "request.productCode", "target": "productCode"}],
+                "outputMapping": [],
+            }
+        )
+
+        analysis = analyze_merge("3way", left, right, base)
+        service = analysis["merged_document"]["services"][0]
+
+        self.assertEqual([param["name"] for param in service["requestParams"]], ["warehouseUid", "productCode"])
+        self.assertEqual([param["name"] for param in service["responseParams"]], ["reservationUid"])
+        self.assertEqual(service["taskDefinitionUids"], ["task-check", "task-save"])
+        self.assertEqual(
+            [step["taskDefinitionUid"] for step in service["orchestration"]["steps"]],
+            ["task-check", "task-save"],
+        )
+        self.assertEqual(service["orchestration"]["returnMapping"][0]["target"], "available")
+
     def test_two_way_combine_reports_same_name_conflict_for_legacy_documents(self):
         left = {
             "meta": {"title": "A"},

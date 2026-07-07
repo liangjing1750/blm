@@ -83,6 +83,7 @@ export interface LegacyFlowGateway {
   gatewayType?: string;
   title?: string;
   role_id?: string;
+  role_uid?: string;
 }
 
 export interface LegacyFlowEdge {
@@ -108,8 +109,10 @@ export interface LegacyProcessNode {
   name?: string;
   role?: string;
   role_id?: string;
+  role_uid?: string;
   roleIds?: string[];
   role_ids?: string[];
+  role_uids?: string[];
   roles?: string[];
   description?: string;
   userSteps?: LegacyUserStep[];
@@ -427,8 +430,23 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     },
     taskRoleIds(task) {
       if (typeof legacyWindow.getTaskRoleIds === 'function') return legacyWindow.getTaskRoleIds(task);
+      const roleList = this.roles();
+      const roleById = new Map<string, LegacyRole>(roleList.map((role) => [String(role.id || role.uid || '').trim(), role]));
+      const roleByName = new Map<string, LegacyRole>(
+        roleList
+          .map((role): [string, LegacyRole] => [String(role.name || '').trim(), role])
+          .filter(([name]) => Boolean(name)),
+      );
+      const resolveRoleId = (value: unknown): string => {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const role = roleById.get(raw) || roleByName.get(raw);
+        return role ? String(role.id || role.uid || '').trim() : '';
+      };
       const rawIds = Array.isArray(task.roleIds) && task.roleIds.length
         ? task.roleIds
+        : Array.isArray(task.role_uids) && task.role_uids.length
+        ? task.role_uids
         : Array.isArray(task.role_ids) && task.role_ids.length
         ? task.role_ids
         : Array.isArray(task.roles) && task.roles.length
@@ -440,19 +458,34 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
         : [];
       return rawIds
         .flatMap((item) => String(item || '').split(/[、,，/]/))
-        .map((item) => String(item || '').trim())
+        .map((item) => resolveRoleId(item))
         .filter(Boolean);
     },
     setTaskRoleIds(task, roleIds) {
       const process = currentProcess();
       const ids = roleIds.map((item) => String(item || '').trim()).filter(Boolean);
+      const roleList = this.roles();
+      const roleById = new Map(roleList.map((role) => [String(role.id || role.uid || '').trim(), role]));
+      const roleNames = ids.map((id) => String(roleById.get(id)?.name || '').trim()).filter(Boolean);
       if (process && typeof legacyWindow.setTaskRoles === 'function') {
         legacyWindow.setTaskRoles(processId(process), taskId(task), ids);
       } else {
         task.roleIds = ids;
         task.role_ids = ids;
+        task.role_uids = ids;
+        task.role_uid = ids[0] || '';
         task.role_id = ids[0] || '';
-        task.role = ids[0] || '';
+        task.roles = roleNames;
+        task.role = roleNames.join('、');
+      }
+      if (!ids.length) {
+        task.roleIds = [];
+        task.role_ids = [];
+        task.role_uids = [];
+        task.role_uid = '';
+        task.roles = [];
+        task.role_id = '';
+        task.role = '';
       }
       dirty();
     },

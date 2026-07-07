@@ -73,6 +73,19 @@ interface ProcessApplicationServiceGroup {
   desc?: string;
 }
 
+interface NodeApplicationServiceUsage {
+  nodeName: string;
+  serviceGroupUid: string;
+  serviceGroupName: string;
+  service: ProcessApplicationService;
+  interfaceId: string;
+  interfaceName: string;
+  interfacePath: string;
+  interfaceMethod: string;
+  serviceUseCount: number;
+  interfaceUseCount: number;
+}
+
 interface SectionServicePickerState {
   key: string;
   activeGroupUid: string;
@@ -260,6 +273,50 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     return String(service?.uid || service?.id || service?.name || '').trim();
   }
 
+  protected nodeApplicationServiceUsages(task: LegacyProcessNode): NodeApplicationServiceUsage[] {
+    this.version();
+    // 模块意图：这里展示节点“表单实际用了哪些接口”，避免更多区和表单分组的已选结果口径不一致。
+    // 关键流程：先按表单分组收集接口引用，再按应用服务组和接口分别统计复用次数，最后输出表格行。
+    // 边界细节：历史数据可能只存接口 ID；找不到完整接口对象时仍保留引用，避免用户看不到已有关系。
+    const servicesById = new Map(this.applicationServices().map((service) => [this.serviceId(service), service]));
+    const groupsById = new Map(this.applicationServiceGroups().map((group) => [this.serviceGroupId(group), group]));
+    const serviceGroupCounts = new Map<string, number>();
+    const interfaceCounts = new Map<string, number>();
+    const orderedInterfaceIds: string[] = [];
+
+    this.forms(task).forEach((form) => {
+      this.sections(form).forEach((section) => {
+        this.formSectionServiceIds(section).forEach((interfaceId) => {
+          if (!interfaceId) return;
+          const service = servicesById.get(interfaceId);
+          const groupUid = String(service?.serviceGroupUid || '').trim() || `__ungrouped:${interfaceId}`;
+          if (!interfaceCounts.has(interfaceId)) orderedInterfaceIds.push(interfaceId);
+          interfaceCounts.set(interfaceId, (interfaceCounts.get(interfaceId) || 0) + 1);
+          serviceGroupCounts.set(groupUid, (serviceGroupCounts.get(groupUid) || 0) + 1);
+        });
+      });
+    });
+
+    return orderedInterfaceIds.map((interfaceId) => {
+      const service = servicesById.get(interfaceId) || { uid: interfaceId, name: interfaceId };
+      const serviceGroupUid = String(service.serviceGroupUid || '').trim();
+      const serviceGroupCountKey = serviceGroupUid || `__ungrouped:${interfaceId}`;
+      const group = serviceGroupUid ? groupsById.get(serviceGroupUid) : null;
+      return {
+        nodeName: task.name || this.taskId(task) || '未命名节点',
+        serviceGroupUid,
+        serviceGroupName: group?.name || (serviceGroupUid || '未分组应用服务'),
+        service,
+        interfaceId,
+        interfaceName: service.name || interfaceId,
+        interfacePath: String(service.path || '').trim(),
+        interfaceMethod: String(service.method || 'HTTP').trim().toUpperCase(),
+        serviceUseCount: serviceGroupCounts.get(serviceGroupCountKey) || 0,
+        interfaceUseCount: interfaceCounts.get(interfaceId) || 0,
+      };
+    });
+  }
+
   protected formServiceOptions(task: LegacyProcessNode): ProcessApplicationService[] {
     const linkedServices = this.applicationServicesForTask(task);
     return linkedServices.length ? linkedServices : this.applicationServices();
@@ -432,6 +489,16 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     runtime.ui['applicationWorkbenchTab'] = 'service';
     runtime.ui['applicationServiceUid'] = serviceUid;
     runtime.ui['applicationServiceId'] = serviceUid;
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    window.dispatchEvent(new CustomEvent('blm-jump-workbench', { detail: { mainTab: 'applicationWorkbench' } }));
+  }
+
+  protected jumpToApplicationServiceGroup(serviceGroupUid: string): void {
+    if (!serviceGroupUid) return;
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'applicationWorkbench';
+    runtime.ui['applicationWorkbenchTab'] = 'service';
+    runtime.ui['applicationServiceGroupUid'] = serviceGroupUid;
     window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
     window.dispatchEvent(new CustomEvent('blm-jump-workbench', { detail: { mainTab: 'applicationWorkbench' } }));
   }

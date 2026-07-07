@@ -27,7 +27,7 @@ import { routePathFromWorkbenchId, workbenchIdFromUrl } from '../core/shell/rout
 import { SidebarDirectoryComponent } from '../core/shell/sidebar/sidebar-directory.component';
 import { ShellTabBarComponent } from '../core/shell/tab-bar/shell-tab-bar.component';
 import { WaitDialogComponent } from '../core/shell/wait-dialog/wait-dialog.component';
-import { SyncService } from '../core/sync/sync.service';
+import { SyncConflictError, SyncService } from '../core/sync/sync.service';
 import { ComponentWorkbenchShellComponent } from '../workbenches/component/shell/component-workbench-shell.component';
 import { ApplicationWorkbenchShellComponent } from '../workbenches/application/app-workbench-shell.component';
 import { EntityWorkbench } from '../workbenches/entity/entity-workbench';
@@ -98,6 +98,12 @@ interface CompareGroup {
 }
 
 interface MergeAnalysis {
+  source?: 'sync' | 'merge';
+  doc?: string;
+  left_name?: string;
+  right_name?: string;
+  mode?: string;
+  merge_mode?: string;
   suggested_name?: string;
   summary?: {
     autoMergedCount?: number;
@@ -105,7 +111,11 @@ interface MergeAnalysis {
   };
   conflicts?: any[];
   validation_issues?: any[];
+  document?: any;
   merged_document?: any;
+  base_document?: any;
+  left_document?: any;
+  right_document?: any;
 }
 
 interface MergePreviewMetric {
@@ -613,9 +623,43 @@ export class ShellComponent implements OnInit, OnDestroy {
       await this.runBusy(async () => {
         await this.syncService.syncNow();
       });
+    } catch (error) {
+      const conflictAnalysis = this.syncConflictAnalysis(error);
+      if (conflictAnalysis) {
+        this.openSyncConflictDialog(conflictAnalysis);
+        return;
+      }
+      throw error;
     } finally {
       this.waitDialog.set(null);
     }
+  }
+
+  private openSyncConflictDialog(analysis: MergeAnalysis): void {
+    this.mergeLeftName = this.runtime.currentFile;
+    this.mergeRightName = this.runtime.currentFile;
+    this.mergeAnalysis.set({
+      ...(analysis || {}),
+      source: 'sync',
+      doc: this.runtime.currentFile,
+      merged_document: analysis?.merged_document || analysis?.document,
+      left_document: analysis?.left_document || this.runtime.doc,
+      right_document: analysis?.right_document || analysis?.document,
+      mode: analysis?.merge_mode || analysis?.mode || (analysis?.base_document ? '3way' : 'combine'),
+    });
+    this.mergeResolutions.set({});
+    this.mergeCustomValues.set({});
+    this.modal.set('merge');
+    this.showToast('同步发现冲突，请处理后再保存。', 'error');
+  }
+
+  private syncConflictAnalysis(error: unknown): MergeAnalysis | null {
+    if (error instanceof SyncConflictError) return error.analysis;
+    const anyError = error as { name?: string; analysis?: MergeAnalysis; conflicts?: any[] };
+    if (anyError?.name === 'SyncConflictError' && anyError.analysis) return anyError.analysis;
+    if (Array.isArray(anyError?.analysis?.conflicts)) return anyError.analysis;
+    if (Array.isArray(anyError?.conflicts)) return anyError as MergeAnalysis;
+    return null;
   }
 
   protected async openHistory(): Promise<void> {
@@ -1433,6 +1477,15 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.mergeCustomValues.set({ ...this.mergeCustomValues(), [key]: value });
   }
 
+  protected mergeConflictValue(value: unknown): string {
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value ?? null, null, 2);
+    } catch {
+      return String(value ?? '');
+    }
+  }
+
   protected async saveMergeResult(): Promise<void> {
     const analysis = this.mergeAnalysis();
     if (!analysis) {
@@ -1455,6 +1508,20 @@ export class ShellComponent implements OnInit, OnDestroy {
     const mergedDocument = result.merged_document;
     if (!mergedDocument) {
       this.showToast('合并检查没有返回可保存的文档。', 'error');
+      return;
+    }
+    if (result.source === 'sync' || analysis.source === 'sync') {
+      await this.runBusy(async () => {
+        const targetName = result.doc || analysis.doc || this.runtime.currentFile;
+        replaceRuntimeDocument(mergedDocument, targetName);
+        this.documentStore.load(mergedDocument, targetName);
+        this.runtime.modified = true;
+        this.runtime.collab.pendingSnapshot = true;
+        this.runtime.collab.hasRemoteUpdate = false;
+        this.runtime.collab.lastError = '';
+        this.modal.set('');
+        this.showToast('冲突已合并到当前文档，请再次立即同步。');
+      });
       return;
     }
     const nextName = this.mergeResultName(result);
@@ -1486,18 +1553,21 @@ export class ShellComponent implements OnInit, OnDestroy {
         : { choice },
     ]));
     const [leftDocument, rightDocument] = await Promise.all([
-      this.loadMergeDocument(this.mergeLeftName),
-      this.loadMergeDocument(this.mergeRightName),
+      analysis.left_document ? Promise.resolve(analysis.left_document) : this.loadMergeDocument(this.mergeLeftName),
+      analysis.right_document ? Promise.resolve(analysis.right_document) : this.loadMergeDocument(this.mergeRightName),
     ]);
     const result = await this.api.applyMerge({
+      mode: analysis.merge_mode || analysis.mode || (analysis.base_document ? '3way' : 'combine'),
       left_name: this.mergeLeftName,
       right_name: this.mergeRightName,
       left_document: leftDocument,
       right_document: rightDocument,
+      ...(analysis.base_document ? { base_document: analysis.base_document } : {}),
       resolutions,
     });
-    this.mergeAnalysis.set(result || analysis);
-    return result || analysis;
+    const next = { ...analysis, ...(result || {}) };
+    this.mergeAnalysis.set(next);
+    return next;
   }
 
   private async loadMergeDocument(name: string): Promise<any> {

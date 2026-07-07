@@ -193,6 +193,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     return this.constructsFor({ uid: selected.id }).some((item) => this.uid(item) === constructId);
   }
   protected onMindMapKeydown(event: KeyboardEvent): void {
+    if (this.isEditableKeyTarget(event.target)) return;
     if ((event.ctrlKey || event.metaKey) && event.key === '-') {
       event.preventDefault();
       this.collapseAllMindNodes();
@@ -242,6 +243,13 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
       return;
     }
     this.openOrCreateMindChild(selected);
+  }
+
+  private isEditableKeyTarget(target: EventTarget | null): boolean {
+    const element = target as HTMLElement | null;
+    if (!element) return false;
+    const tag = element.tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable;
   }
   protected isMindChildMenuOpenFor(construct: LegacyConstruct): boolean {
     return this.mindChildMenu()?.constructId === this.uid(construct);
@@ -971,6 +979,17 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     const name = String(td.name || this.uid(td) || '').trim();
     return name.length > 15 ? `${name.slice(0, 15)}…` : name;
   }
+
+  protected taskImplementationLabel(td: LegacyTaskDef): string {
+    return this.taskImplementationStatus(td) === 'implemented' ? '已设置实现' : '未设置实现';
+  }
+
+  protected taskImplementationAddress(td: LegacyTaskDef): string {
+    const address = String(td.address || '').trim();
+    if (address) return address;
+    const target = String(td.target || '').trim();
+    return target && target !== '未实现' && target !== '已实现' ? target : '';
+  }
   protected editingTaskId = signal('');
   protected readonly taskDefEditorTab = signal<'basic' | 'contract' | 'implementation'>('basic');
   protected expandedTaskIds = signal(new Set<string>());
@@ -1146,6 +1165,7 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected setTaskImplementationStatus(td: LegacyTaskDef, status: string): void {
     if (!this.canEdit()) return;
     td.target = status === 'implemented' ? '已实现' : '未实现';
+    if (status !== 'implemented') td.address = '';
     this.touch();
   }
 

@@ -36,7 +36,7 @@
                   </div>
                   <div class="stage-flow-tool-group stage-flow-node-tools">
                     <select data-testid="stage-process-select" (change)="addExistingProcess($any($event.target).value); $any($event.target).value = ''">
-                      <option value="">选择已有流程加入当前阶段...</option>
+                      <option value="">选择流程加入当前阶段...</option>
                       @for (process of availableProcesses(); track adapter.processId(process)) {
                         <option [value]="adapter.processId(process)">{{ process.name || '未命名流程' }}</option>
                       }

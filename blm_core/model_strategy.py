@@ -143,7 +143,26 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
         "lists": {},
     },
     "service_group": {"scalars": ["name", "note"], "lists": {}},
-    "service": {"scalars": ["name", "serviceGroupUid", "method", "path", "desc"], "lists": {}},
+    "service": {
+        "scalars": ["name", "serviceGroupUid", "method", "path", "desc", "actor", "kind", "responseKind", "rawRequest", "rawResponse"],
+        "set_lists": ["taskDefinitionUids", "nodeRefs"],
+        "objects": {"orchestration": "service_orchestration"},
+        "lists": {"requestParams": "service_param", "responseParams": "service_param"},
+    },
+    "service_param": {
+        "scalars": ["name", "type", "required", "note", "code", "description"],
+        "lists": {"children": "service_param"},
+    },
+    "service_orchestration": {
+        "scalars": [],
+        "lists": {"variables": "service_variable", "steps": "service_step", "returnMapping": "param_mapping"},
+    },
+    "service_variable": {"scalars": ["name", "type", "value", "note"], "lists": {}},
+    "service_step": {
+        "scalars": ["name", "stepAlias", "taskDefinitionUid", "kind", "expression", "condition", "loopSource"],
+        "lists": {"inputMapping": "param_mapping", "outputMapping": "param_mapping"},
+    },
+    "param_mapping": {"scalars": ["source", "target", "note"], "lists": {}},
 }
 
 
@@ -236,6 +255,10 @@ SEMANTIC_KEY_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "task_definition": [("name",), ("target",), ("uid",)],
     "service_group": [("name",), ("uid",)],
     "service": [("serviceGroupUid", "method", "path"), ("name",), ("uid",)],
+    "service_param": [("name",), ("code",), ("uid",)],
+    "service_variable": [("name",), ("uid",)],
+    "service_step": [("stepAlias",), ("taskDefinitionUid",), ("name",), ("uid",)],
+    "param_mapping": [("source", "target"), ("target",), ("uid",)],
     "entity": [("name",), ("uid",)],
     "field": [("name",)],
     "state_node": [("name",)],

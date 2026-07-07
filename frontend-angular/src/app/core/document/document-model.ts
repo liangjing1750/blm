@@ -29,6 +29,7 @@ const EMPTY_ARRAY_FIELDS = [
   'serviceGroups',
   'services',
   'terms',
+  'dataDictionaries',
   'rules',
 ] as const;
 
@@ -105,6 +106,25 @@ export function normalizeDocument(raw: Partial<BlmDocument> | null | undefined):
     uid: String(term.uid || '').trim() || `term-${index + 1}`,
     name: String(term.name || `术语${index + 1}`).trim(),
   }));
+  document.dataDictionaries = document.dataDictionaries.map((dictionary, index) => {
+    const dictionaryUid = identityOf(dictionary) || `dictionary-${index + 1}`;
+    return {
+      ...dictionary,
+      uid: dictionaryUid,
+      code: String(dictionary.code || '').trim(),
+      name: String(dictionary.name || `数据字典${index + 1}`).trim(),
+      desc: String(dictionary.desc || '').trim(),
+      entries: Array.isArray(dictionary.entries)
+        ? dictionary.entries.map((entry, entryIndex) => ({
+          ...entry,
+          uid: identityOf(entry) || `${dictionaryUid}-entry-${entryIndex + 1}`,
+          code: String(entry.code || '').trim(),
+          name: String(entry.name || `字典项${entryIndex + 1}`).trim(),
+          desc: String(entry.desc || '').trim(),
+        }))
+        : [],
+    };
+  });
   document.rules = document.rules.map((rule, index) => ({
     ...rule,
     uid: String(rule.uid || '').trim() || `rule-${index + 1}`,
@@ -353,7 +373,7 @@ function normalizeOrchestrationStep(
 ): OrchestrationStep {
   const taskDefinitionUid = String(step.taskDefinitionUid || '').trim();
   const task = document.taskDefinitions.find((candidate) => candidate.uid === taskDefinitionUid || candidate.id === taskDefinitionUid);
-  return {
+  const normalized: OrchestrationStep = {
     uid: String(step.uid || '').trim() || `step-${serviceUid}-${index + 1}-${taskDefinitionUid || 'task'}`,
     name: String(step.name || task?.name || `步骤${index + 1}`).trim(),
     stepAlias: String(step.stepAlias || `step${index + 1}`).trim(),
@@ -361,6 +381,11 @@ function normalizeOrchestrationStep(
     inputMapping: asArray(step.inputMapping),
     outputMapping: asArray(step.outputMapping),
   };
+  const parentUid = String(step.parentUid || '').trim();
+  if (parentUid) normalized.parentUid = parentUid;
+  if (step.slot === 'then' || step.slot === 'else' || step.slot === 'body') normalized.slot = step.slot;
+  if (Number.isFinite(Number(step.order))) normalized.order = Number(step.order);
+  return normalized;
 }
 
 function legacyStepTaskUids(service: ApplicationService): string[] {
@@ -380,6 +405,7 @@ function legacyTaskStep(document: BlmDocument, serviceUid: string, taskDefinitio
     taskDefinitionUid,
     inputMapping: [],
     outputMapping: [],
+    order: index + 1,
   };
 }
 

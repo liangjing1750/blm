@@ -6,7 +6,7 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from blm_core.document import SCHEMA_VERSION, canonical_document, migrate_document
+from blm_core.document import SCHEMA_VERSION, _deterministic_ui_uid, canonical_document, migrate_document
 from blm_core.model_strategy import (
     DESCRIPTORS,
     INTERNAL_SCALAR_FIELDS,
@@ -44,6 +44,21 @@ def _is_empty(value: Any) -> bool:
 
 def _copy(value: Any) -> Any:
     return deepcopy(value)
+
+
+def _merge_internal_scalar_field(base_value: Any, left_value: Any, right_value: Any) -> Any:
+    """Merge UI-owned position/layout scalars without letting stale clients erase newer placement."""
+    if base_value is not MISSING:
+        if _value_equal(left_value, right_value):
+            return _copy(left_value)
+        if _value_equal(left_value, base_value) and not _value_equal(right_value, base_value):
+            return _copy(right_value)
+        if _value_equal(right_value, base_value) and not _value_equal(left_value, base_value):
+            return _copy(left_value)
+    for value in (left_value, right_value, base_value):
+        if value is not MISSING and not _is_empty(value):
+            return _copy(value)
+    return ""
 
 
 def _reference_tokens(item: dict) -> set[str]:
@@ -171,11 +186,13 @@ def _merge_panorama_item_3way(base_item: dict, left_item: dict, right_item: dict
     return result
 
 
-def _panorama_item_key(item: dict) -> str:
+def _panorama_item_key(item: dict, *, prefer_semantic: bool = False) -> str:
+    name_key = _normalize_name(item.get("name"))
+    if prefer_semantic and name_key:
+        return f"name:{name_key}"
     uid = str(item.get("uid", "")).strip()
     if uid:
         return f"uid:{uid}"
-    name_key = _normalize_name(item.get("name"))
     if name_key:
         return f"name:{name_key}"
     id_key = _normalize_name(item.get("id"))
@@ -354,7 +371,7 @@ class MergeEngine:
             for item in panorama.get(axis, []) if isinstance(panorama, dict) else []:
                 if not isinstance(item, dict):
                     continue
-                key = _panorama_item_key(item)
+                key = _panorama_item_key(item, prefer_semantic=self.mode == "combine")
                 if not key or key == "uid:":
                     continue
                 result[key] = item
@@ -395,6 +412,11 @@ class MergeEngine:
                             _merge_panorama_item(merged, right_item)
                         if base_item:
                             _merge_panorama_item(merged, base_item)
+                        if self.mode == "combine":
+                            name = str(merged.get("name", "")).strip()
+                            if name:
+                                prefix = "panorama-column" if axis == "columns" else "panorama-lane"
+                                merged["uid"] = _deterministic_ui_uid(prefix, name)
                     ordered.append(merged)
 
                     # reference maps
@@ -564,10 +586,10 @@ class MergeEngine:
 
         for field in descriptor.get("scalars", []):
             if field in INTERNAL_SCALAR_FIELDS:
-                merged[field] = _copy(
-                    left_value.get(field)
-                    or right_value.get(field)
-                    or (base_value.get(field) if isinstance(base_value, dict) and base_value is not MISSING else "")
+                merged[field] = _merge_internal_scalar_field(
+                    base_value.get(field) if isinstance(base_value, dict) and base_value is not MISSING else MISSING,
+                    left_value.get(field),
+                    right_value.get(field),
                 )
                 continue
             merged[field] = self._merge_scalar(
