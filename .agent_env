@@ -1,3 +1,0 @@
-# Easy Agent 服务地址
-# 修改此文件后重启 BLM 服务即可生效
-AGENT_URL=http://127.0.0.1:8088

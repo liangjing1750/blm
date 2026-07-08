@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import gzip
 import http.server
 import json
@@ -28,23 +29,28 @@ from blm_core.storage import (
     WorkspaceStorage,
 )
 
-def _load_agent_url(project_root: Path) -> str:
-    env_file = project_root / ".agent_env"
-    default_url = "http://127.0.0.1:8088"
+def _load_env(key: str, default: str = "", root: Path | None = None) -> str:
+    if root is None:
+        import __main__
+        root = Path(getattr(__main__, "__file__", ".")).parent
+    env_file = root / ".env"
     if not env_file.exists():
-        return default_url
+        return os.environ.get(key, default)
+    # 环境变量优先于 .env 文件
+    env_val = os.environ.get(key)
+    if env_val is not None:
+        return env_val
     try:
         for line in env_file.read_text("utf-8").splitlines():
             line = line.strip()
             if line.startswith("#") or "=" not in line:
                 continue
-            key, _, value = line.partition("=")
-            if key.strip() == "AGENT_URL":
-                url = value.strip().strip('"').strip("'")
-                return url or default_url
+            candidate_key, _, value = line.partition("=")
+            if candidate_key.strip() == key:
+                return value.strip().strip('"').strip("'") or default
     except Exception:
         pass
-    return default_url
+    return os.environ.get(key, default)
 
 
 DOCS_MANIFEST = [
@@ -244,7 +250,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                             "supports_docs": True,
                             "supports_copy": True,
                             "supports_collab": bool(collab),
-                            "agent_url": _load_agent_url(app_dir.parent),
+                            "agent_url": _load_env("AGENT_URL", "http://127.0.0.1:8088", app_dir.parent),
                         }
                     )
                 if path == "/api/collab/ws" and collab:
@@ -1014,7 +1020,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             try:
                 req = urlrequest.Request(
-                    f"{_load_agent_url(app_dir.parent)}/handoffs",
+                    f"{_load_env('AGENT_URL', 'http://127.0.0.1:8088', app_dir.parent)}/handoffs",
                     data=data,
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -1128,6 +1134,7 @@ def run_server(
     workspace_dir: Path,
     open_browser: bool = True,
     admin_port: int | None = None,
+    host: str = "127.0.0.1",
 ) -> None:
     started_at = time.time()
     storage = WorkspaceStorage(workspace_dir)
@@ -1136,7 +1143,7 @@ def run_server(
     migration_result = storage.migrate_workspace_layout()
     handler = create_handler(app_dir, storage, collab)
     try:
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+        server = http.server.ThreadingHTTPServer((host, port), handler)
         server.allow_reuse_address = True
     except OSError as exc:
         print(f"\n?? 端口 {port} 已被占用，无法启动 BLM 服务。")
@@ -1153,7 +1160,7 @@ def run_server(
                 app_port=port,
                 started_at=started_at,
             )
-            admin_server = http.server.ThreadingHTTPServer(("127.0.0.1", admin_port), admin_handler)
+            admin_server = http.server.ThreadingHTTPServer((host, admin_port), admin_handler)
             admin_thread = threading.Thread(target=admin_server.serve_forever, daemon=True)
             admin_thread.start()
             log_admin_start(admin_port, workspace_dir)
@@ -1161,13 +1168,14 @@ def run_server(
             admin_server = None
             log_error("blm.admin", "admin.start.error", port=admin_port, error=str(exc))
             print(f"管理端启动失败: 端口 {admin_port} 不可用，主服务继续运行。")
-    url = f"http://127.0.0.1:{port}"
+    display_host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+    url = f"http://{display_host}:{port}"
 
     print(f"BLM Tool 已启动: {url}")
     print(f"文档目录: {workspace_dir}")
     print(f"日志目录: {log_dir}")
     if admin_server:
-        print(f"管理端: http://127.0.0.1:{admin_port}")
+        print(f"管理端: http://{display_host}:{admin_port}")
     log_event(
         "blm.server",
         "server.start",

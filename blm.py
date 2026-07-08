@@ -21,6 +21,7 @@ ROOT = Path(__file__).parent
 
 @dataclass(frozen=True)
 class RuntimeConfig:
+    host: str
     port: int
     admin_port: int | None
     app_dir: Path
@@ -44,15 +45,36 @@ def _resolve_path(root: Path, value: str | None, fallback: Path) -> Path:
     return root / path
 
 
+def _load_env_file(key: str, default: str = "") -> str:
+    env_file = ROOT / ".env"
+    if not env_file.exists():
+        return os.environ.get(key, default)
+    env_val = os.environ.get(key)
+    if env_val is not None:
+        return env_val
+    try:
+        for line in env_file.read_text("utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            candidate_key, _, value = line.partition("=")
+            if candidate_key.strip() == key:
+                return value.strip().strip('"').strip("'") or default
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+
 def build_runtime_config() -> RuntimeConfig:
     # 模块意图：启动入口只负责解析运行时环境，把服务创建交给 blm_core.server。
-    port_text = (os.getenv("BLM_PORT") or str(PORT)).strip()
+    host = _load_env_file("BLM_HOST", "127.0.0.1")
+    port_text = (_load_env_file("BLM_PORT") or str(PORT)).strip()
     try:
         port = int(port_text)
     except ValueError as exc:
         raise ValueError("BLM_PORT 必须是整数") from exc
 
-    admin_port_text = (os.getenv("BLM_ADMIN_PORT") or str(ADMIN_PORT)).strip()
+    admin_port_text = (_load_env_file("BLM_ADMIN_PORT") or str(ADMIN_PORT)).strip()
     admin_port = None
     if admin_port_text:
         try:
@@ -66,6 +88,7 @@ def build_runtime_config() -> RuntimeConfig:
     workspace_dir = _resolve_path(ROOT, os.getenv("BLM_WORKSPACE_DIR"), ROOT / "workspace")
     open_browser = not _read_bool_env("BLM_NO_BROWSER", False)
     return RuntimeConfig(
+        host=host,
         port=port,
         admin_port=admin_port,
         app_dir=app_dir,
@@ -77,6 +100,7 @@ def build_runtime_config() -> RuntimeConfig:
 def _run_server() -> None:
     config = build_runtime_config()
     run_server(
+        host=config.host,
         port=config.port,
         app_dir=config.app_dir,
         workspace_dir=config.workspace_dir,
