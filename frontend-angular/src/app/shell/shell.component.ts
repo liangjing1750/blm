@@ -193,7 +193,10 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
   protected readonly collabUsersOpen = signal(false);
   protected readonly locatorMenu = signal<LocatorMenuState | null>(null);
+  protected readonly outdatedVersion = signal(false);
   private readonly shellVersion = signal(0);
+  private initialVersion = '3.0';
+  private versionCheckTimer: ReturnType<typeof setInterval> | null = null;
   protected openQuery = '';
   protected createDocumentName = '';
   protected copyDocumentName = '';
@@ -230,7 +233,9 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.routeSubscription = this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event) => this.syncMainTabFromRoute(event.urlAfterRedirects));
-    void this.loadRuntimeConfig();
+    void this.loadRuntimeConfig().then(() => {
+      this.startVersionCheck();
+    });
     if (this.runtime.currentFile) this.collaboration.start(this.runtime.currentFile);
     void this.refreshWorkspaceFiles();
     void this.openStartupLocatorIfPresent();
@@ -240,13 +245,29 @@ export class ShellComponent implements OnInit, OnDestroy {
     try {
       const info = await this.api.runtime();
       if (info?.agent_url) this.runtime.runtime.agentUrl = info.agent_url;
-      if (info?.app_version) this.runtime.runtime.appVersion = info.app_version;
+      if (info?.app_version) {
+        this.runtime.runtime.appVersion = info.app_version;
+        this.initialVersion = info.app_version;
+      }
     } catch (_) { /* keep default */ }
+  }
+
+  private startVersionCheck(): void {
+    this.versionCheckTimer = setInterval(async () => {
+      try {
+        const info = await this.api.runtime();
+        if (info?.app_version && info.app_version !== this.initialVersion) {
+          this.outdatedVersion.set(true);
+          if (this.versionCheckTimer) { clearInterval(this.versionCheckTimer); this.versionCheckTimer = null; }
+        }
+      } catch (_) { /* 忽略检查失败 */ }
+    }, 5 * 60 * 1000);
   }
 
   ngOnDestroy(): void {
     this.routeSubscription?.unsubscribe();
     this.collaboration.stop();
+    if (this.versionCheckTimer) { clearInterval(this.versionCheckTimer); this.versionCheckTimer = null; }
   }
 
   @HostListener('document:click', ['$event'])

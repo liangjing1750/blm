@@ -732,3 +732,11 @@
   [message]="shellToast.message"
   [kind]="shellToast.kind"
 ></app-shell-notification>
+
+@if (outdatedVersion()) {
+  <div class="version-outdate-banner" data-testid="version-outdate-banner">
+    <span>系统已更新至新版本，请保存工作后</span>
+    <a href="javascript:location.reload()">刷新页面</a>
+    <button type="button" class="version-outdate-close" (click)="outdatedVersion.set(false)">×</button>
+  </div>
+}

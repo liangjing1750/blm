@@ -2880,6 +2880,8 @@ class DocsApiTests(unittest.TestCase):
         self.assertTrue(result["supports_docs"])
         self.assertTrue(result["supports_copy"])
         self.assertEqual(result["mode"], "browser")
+        self.assertIn("app_version", result)
+        self.assertIsInstance(result["app_version"], str)
 
     def test_docs_api_lists_builtin_documents(self):
         with tempfile.TemporaryDirectory() as temp_dir:
