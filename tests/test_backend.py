@@ -2902,10 +2902,11 @@ class DocsApiTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=2)
 
-        self.assertEqual(
-            [item["id"] for item in result],
-            ["user-manual", "design", "modeling-thinking"],
-        )
+        ids = [item["id"] for item in result]
+        self.assertIn("index", ids)
+        self.assertIn("user-manual", ids)
+        self.assertIn("design", ids)
+        self.assertGreaterEqual(len(ids), 6)
         self.assertTrue(all(item["title"] for item in result))
 
     def test_docs_api_returns_markdown_content(self):
@@ -2946,7 +2947,7 @@ class DocsApiTests(unittest.TestCase):
 
             try:
                 with urllib.request.urlopen(
-                    f"http://127.0.0.1:{server.server_port}/api/docs/assets/screenshots/05_open_dialog.png"
+                    f"http://127.0.0.1:{server.server_port}/api/docs/assets/user/screenshots/05_open_dialog.png"
                 ) as response:
                     body = response.read()
                     content_type = response.headers.get_content_type()

@@ -319,7 +319,8 @@ export class FeedbackWorkbenchComponent implements OnInit {
   }
 
   private currentUserName(): string {
-    return localStorage.getItem('blm.collab.userName')?.trim() || 'agent';
+    const name = localStorage.getItem('blm.collab.userName')?.trim() || '';
+    return name || '未设置用户';
   }
 
   private createLocalUid(prefix: string): string {

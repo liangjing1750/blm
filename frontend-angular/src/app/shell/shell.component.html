@@ -43,6 +43,14 @@
       data-testid="collab-status"
       (click)="toggleCollabUsers($event)"
     >{{ collaborationLabel() }}</span>
+    <button
+      class="user-account-button"
+      [class.empty]="!currentUserConfigured()"
+      type="button"
+      [title]="currentUserConfigured() ? '当前用户：' + currentUserLabel() : '配置协作显示名称'"
+      data-testid="user-account-button"
+      (click)="openUserSettings()"
+    >{{ currentUserLabel() }}</button>
     @if (collabUsersOpen()) {
       <div class="collab-users-popup" data-testid="collab-users-popup" (click)="$event.stopPropagation()">
         <div class="collab-users-popup-head">
@@ -390,6 +398,20 @@
         <div class="modal-actions">
           <button class="btn btn-outline" type="button" (click)="closeModal()">取消</button>
           <button class="btn btn-primary" type="button" data-testid="document-properties-save-button" [disabled]="busy() || !documentProperties.name.trim()" (click)="saveDocumentProperties()">保存</button>
+        </div>
+      </section>
+
+      <section *ngSwitchCase="'user-settings'" class="user-settings-dialog" data-testid="user-settings-dialog">
+        <h2>用户信息配置</h2>
+        <p class="user-settings-subtitle">配置显示名称，用于协作时识别修改人。同一浏览器的多个页面会复用同一个用户。</p>
+        <label class="property-field">
+          <span>显示名称</span>
+          <input class="modal-search" type="text" data-testid="user-settings-name-input" [(ngModel)]="userSettingsName" placeholder="例如：张三" (keydown.enter)="saveUserSettings()">
+        </label>
+        <p class="user-settings-note">浏览器用户ID：{{ collaboration.currentUser().id }}；当前页面连接ID：{{ collaboration.currentUser().sessionId }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-outline" type="button" (click)="closeUserSettings()">取消</button>
+          <button class="btn btn-primary" type="button" data-testid="user-settings-save-button" (click)="saveUserSettings()">保存配置</button>
         </div>
       </section>
 

@@ -278,11 +278,64 @@ export class CollaborationService {
     const nameKey = 'blm.collab.userName';
     const id = localStorage.getItem(idKey) || this.createId();
     const sessionId = sessionStorage.getItem(sessionKey) || this.createId();
-    const name = (localStorage.getItem(nameKey) || 'agent').trim();
+    let name = (localStorage.getItem(nameKey) || '').trim();
+    // 迁移旧版 blm.user.profile 中的用户名
+    if (!name) {
+      name = this.migrateLegacyUserName();
+    }
+    // 规范化显示名称，拒绝无效默认值
+    name = CollaborationService.normalizeDisplayName(name);
     localStorage.setItem(idKey, id);
     sessionStorage.setItem(sessionKey, sessionId);
-    localStorage.setItem(nameKey, name);
+    if (name) {
+      localStorage.setItem(nameKey, name);
+    } else {
+      localStorage.removeItem(nameKey);
+    }
     return { id, sessionId, name };
+  }
+
+  private migrateLegacyUserName(): string {
+    try {
+      const legacy = JSON.parse(localStorage.getItem('blm.user.profile') || 'null');
+      if (legacy && typeof legacy.name === 'string') {
+        const legacyName = CollaborationService.normalizeDisplayName(legacy.name);
+        if (legacyName) return legacyName;
+      }
+    } catch (_) { /* ignore */ }
+    return '';
+  }
+
+  static normalizeDisplayName(value: string): string {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (/^用户[0-9a-f]{4}$/i.test(text)) return '';
+    if (text === '未设置用户') return '';
+    if (/^[{[]/.test(text) && /(?:user|name|sessionId|clientId)/.test(text)) return '';
+    return text.slice(0, 40);
+  }
+
+  setUserName(name: string): void {
+    const normalized = CollaborationService.normalizeDisplayName(name);
+    if (normalized) {
+      localStorage.setItem('blm.collab.userName', normalized);
+    } else {
+      localStorage.removeItem('blm.collab.userName');
+    }
+    this.profile = this.loadProfile();
+    // 同步更新旧版 profile 键
+    this.saveLegacyProfile(this.profile.id, this.profile.name);
+  }
+
+  private saveLegacyProfile(id: string, name: string): void {
+    try {
+      localStorage.setItem('blm.user.profile', JSON.stringify({ id, name }));
+    } catch (_) { /* ignore */ }
+  }
+
+  static isUserNameConfigured(): boolean {
+    const name = localStorage.getItem('blm.collab.userName') || '';
+    return CollaborationService.normalizeDisplayName(name) !== '';
   }
 
   private createId(): string {

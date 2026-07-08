@@ -40,7 +40,7 @@ import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 import { FeedbackWorkbenchComponent } from '../workbenches/support/feedback/feedback-workbench.component';
 import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-workbench.component';
 
-type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'placeholder';
+type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'placeholder' | 'user-settings';
 type OpenDocumentTab = 'workspace' | 'trash';
 type CompareSource = 'current' | 'version' | 'history' | 'submit';
 
@@ -207,6 +207,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected mergeRightName = '';
   protected archiveVersionMessage = '';
   protected documentProperties: DocumentPropertiesForm = readDocumentProperties(null);
+  protected userSettingsName = '';
   private routeSubscription: Subscription | null = null;
 
   protected readonly activeMainTab = computed(() => {
@@ -229,9 +230,19 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.routeSubscription = this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event) => this.syncMainTabFromRoute(event.urlAfterRedirects));
+    void this.loadRuntimeConfig();
     if (this.runtime.currentFile) this.collaboration.start(this.runtime.currentFile);
     void this.refreshWorkspaceFiles();
     void this.openStartupLocatorIfPresent();
+  }
+
+  private async loadRuntimeConfig(): Promise<void> {
+    try {
+      const info = await this.api.runtime();
+      if (info?.agent_url) {
+        this.runtime.runtime.agentUrl = info.agent_url;
+      }
+    } catch (_) { /* keep default */ }
   }
 
   ngOnDestroy(): void {
@@ -361,6 +372,16 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected collaborationLabel(): string {
     return this.collaboration.statusText();
+  }
+
+  protected currentUserLabel(): string {
+    const user = this.collaboration.currentUser();
+    return user.name || '未设置用户';
+  }
+
+  protected currentUserConfigured(): boolean {
+    const user = this.collaboration.currentUser();
+    return Boolean(user.name);
   }
 
   protected collaborationTitle(): string {
@@ -990,7 +1011,7 @@ export class ShellComponent implements OnInit, OnDestroy {
       const handoff = await this.api.createAgentHandoff(payload);
       const handoffId = String(handoff?.handoffId || '').trim();
       if (!handoffId) throw new Error('Easy Agent handoff 创建失败');
-      const url = new URL('http://127.0.0.1:8088/');
+      const url = new URL(this.runtime.runtime.agentUrl || 'http://127.0.0.1:8088');
       url.searchParams.set('plugin', 'blm-agent-plugin');
       url.searchParams.set('source', 'blm');
       url.searchParams.set('handoffId', handoffId);
@@ -1011,7 +1032,7 @@ export class ShellComponent implements OnInit, OnDestroy {
       pluginId: 'blm-agent-plugin',
       user: {
         id: String(user.id || '').trim() || 'anonymous',
-        name: String(user.name || '').trim() || 'agent',
+        name: String(user.name || '').trim() || '未设置用户',
       },
       documentSummary: this.documentSummary(doc),
     };
@@ -1577,6 +1598,27 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   protected closeModal(): void {
+    this.modal.set('');
+  }
+
+  protected openUserSettings(): void {
+    this.userSettingsName = this.collaboration.currentUser().name || '';
+    this.modal.set('user-settings');
+    this.activeDropdown.set('');
+  }
+
+  protected closeUserSettings(): void {
+    this.modal.set('');
+  }
+
+  protected saveUserSettings(): void {
+    const name = this.userSettingsName.trim();
+    if (!CollaborationService.normalizeDisplayName(name)) {
+      this.showToast('请填写真实显示名称，用于协作时识别修改人。');
+      return;
+    }
+    this.collaboration.setUserName(name);
+    this.showToast('用户信息已更新。');
     this.modal.set('');
   }
 

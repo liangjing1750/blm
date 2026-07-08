@@ -85,6 +85,52 @@
   color: #bbf7d0;
 }
 
+.user-account-button {
+  max-width: 120px;
+  min-height: 24px;
+  padding: 3px 10px;
+  border: 1px solid #475569;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 18%);
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.user-account-button:hover {
+  border-color: #93c5fd;
+  background: #334155;
+  color: #fff;
+}
+
+.user-account-button.empty {
+  border-color: #f59e0b;
+  background: rgb(245 158 11 / 16%);
+  color: #fde68a;
+}
+
+.user-settings-dialog {
+  width: min(420px, calc(100vw - 48px));
+  max-width: 420px;
+}
+
+.user-settings-subtitle {
+  color: #64748b;
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.user-settings-note {
+  color: #94a3b8;
+  font-size: 11px;
+  margin: 8px 0 0;
+  word-break: break-all;
+}
+
 .angular-main {
   display: flex;
   height: calc(100vh - 48px);

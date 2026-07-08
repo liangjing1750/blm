@@ -28,42 +28,169 @@ from blm_core.storage import (
     WorkspaceStorage,
 )
 
+def _load_agent_url(project_root: Path) -> str:
+    env_file = project_root / ".agent_env"
+    default_url = "http://127.0.0.1:8088"
+    if not env_file.exists():
+        return default_url
+    try:
+        for line in env_file.read_text("utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            if key.strip() == "AGENT_URL":
+                url = value.strip().strip('"').strip("'")
+                return url or default_url
+    except Exception:
+        pass
+    return default_url
+
+
 DOCS_MANIFEST = [
+    {
+        "id": "index",
+        "title": "文档导航",
+        "filename": "index.md",
+        "summary": "BLM 文档总览：用户文档、开发文档、指导原则、设计规格、重构资产。",
+    },
     {
         "id": "user-manual",
         "title": "用户手册",
-        "filename": "BLM用户手册.md",
+        "filename": "user/manual.md",
         "summary": "查看工作区使用方法、合并流程、回收站和导出说明。",
     },
     {
-        "id": "design",
-        "title": "设计文档",
-        "filename": "BLM设计文档.md",
-        "summary": "查看当前浏览器版架构、工作流、合并和恢复机制。",
-    },
-    {
-        "id": "modeling-thinking",
-        "title": "业务建模思考",
-        "filename": "业务建模思考.md",
-        "summary": "理解业务组件、业务阶段、业务流程和分类标签之间的关系。",
+        "id": "workflow",
+        "title": "工作流建议",
+        "filename": "user/workflow.md",
+        "summary": "团队推广 BLM 的推荐工作流程、角色分工和并行协作节奏。",
     },
     {
         "id": "collaboration-troubleshooting",
         "title": "协作与弱网排障指南",
-        "filename": "BLM协作与弱网排障指南.md",
+        "filename": "user/collaboration.md",
         "summary": "查看实时协作、HTTP 降级、日志格式、管理端和跨网段断线排查步骤。",
-    },
-    {
-        "id": "server-directory",
-        "title": "服务端文件夹说明",
-        "filename": "BLM服务端文件夹说明.md",
-        "summary": "workspace/ 目录结构、关键文件作用、文档序列号和升级迁移说明。",
     },
     {
         "id": "collaboration-merge",
         "title": "多人协作合并比对",
-        "filename": "BLM多人协作合并比对.md",
+        "filename": "user/merge-comparison.md",
         "summary": "3-way 合并规则、冲突处理、旧版本提交、比对功能与历史记录操作。",
+    },
+    {
+        "id": "design",
+        "title": "设计文档",
+        "filename": "dev/design.md",
+        "summary": "产品边界、模块职责、数据模型、合并策略与协作流程。",
+    },
+    {
+        "id": "data-model",
+        "title": "数据模型",
+        "filename": "dev/data-model.md",
+        "summary": "六层建模体系：价值流、业务域、阶段、流程、节点、步骤。",
+    },
+    {
+        "id": "modeling-thinking",
+        "title": "业务建模思考",
+        "filename": "dev/business-modeling.md",
+        "summary": "业务建模方法论：迭代校准、流程分析、建模深度与分工。",
+    },
+    {
+        "id": "testing",
+        "title": "测试用例",
+        "filename": "dev/testing.md",
+        "summary": "Python 单元测试、浏览器 E2E 测试脚本和核心回归用例。",
+    },
+    {
+        "id": "server-directory",
+        "title": "服务端文件夹说明",
+        "filename": "dev/server-layout.md",
+        "summary": "workspace/ 目录结构、关键文件作用、文档序列号和升级迁移说明。",
+    },
+    {
+        "id": "v3-thinking",
+        "title": "v3 版本思考",
+        "filename": "dev/v3-thinking.md",
+        "summary": "v3 产品定位、角色定义、工作台设计、落地顺序。",
+    },
+    {
+        "id": "angular-recovery",
+        "title": "Angular 迁移恢复",
+        "filename": "dev/angular-recovery.md",
+        "summary": "Angular 迁移中丢失功能的恢复情况跟踪。",
+    },
+    {
+        "id": "ai-handoff",
+        "title": "AI 交接文档",
+        "filename": "dev/ai-handoff.md",
+        "summary": "AI 开发者上手指南：项目状态、目录结构、开发规范、验证流程。",
+    },
+    {
+        "id": "release-20260511",
+        "title": "发布记录 2026-05-11",
+        "filename": "dev/release-notes/20260511.md",
+        "summary": "实体状态图、预览增强、对比/合并优化、表单-实体关联优化。",
+    },
+    {
+        "id": "release-20260513",
+        "title": "发布记录 2026-05-13",
+        "filename": "dev/release-notes/20260513.md",
+        "summary": "阶段视图预览、附件存储优化、并行编辑防覆盖、后端健壮性修复。",
+    },
+    {
+        "id": "steering-architecture",
+        "title": "架构原则",
+        "filename": "steering/architecture.md",
+        "summary": "本地优先、文件驱动、向前兼容、业务概念优先。",
+    },
+    {
+        "id": "steering-product",
+        "title": "产品原则",
+        "filename": "steering/product.md",
+        "summary": "目标用户、成功标准。",
+    },
+    {
+        "id": "steering-quality",
+        "title": "质量原则",
+        "filename": "steering/quality.md",
+        "summary": "旧文档兼容率、回归通过率、默认工程实践。",
+    },
+    {
+        "id": "spec-component-tabs",
+        "title": "构件工作台 Tab 拆分",
+        "filename": "specs/component-workbench-tabs.md",
+        "summary": "构件工作台四 Tab 设计规格：组件/构件/任务定义/实体。",
+    },
+    {
+        "id": "spec-app-service-ux",
+        "title": "应用服务 UX 设计",
+        "filename": "specs/application-service-ux.md",
+        "summary": "服务组卡片 + 接口卡片 + 右侧抽屉编辑的设计规格。",
+    },
+    {
+        "id": "spec-app-service-ux-plan",
+        "title": "应用服务 UX 执行计划",
+        "filename": "specs/application-service-ux-plan.md",
+        "summary": "5 步实现任务：卡片浏览、抽屉详情、抽屉编辑、样式验证。",
+    },
+    {
+        "id": "refactor-css-spec",
+        "title": "CSS/SCSS 三层规范",
+        "filename": "refactor/css-tiered-spec.md",
+        "summary": "项目级/模块级/组件级样式管理规范与死样式清理流程。",
+    },
+    {
+        "id": "refactor-data-terminology",
+        "title": "数据术语表",
+        "filename": "refactor/data-terminology.md",
+        "summary": "工作区文档字段名扫描结果与标准化建议。",
+    },
+    {
+        "id": "refactor-styles-classification",
+        "title": "样式分类汇总",
+        "filename": "refactor/styles-classification.md",
+        "summary": "styles.scss 分类：在用样式（628）、全局（213）、疑似死样式（961）。",
     },
 ]
 DOCS_INDEX = {item["id"]: item for item in DOCS_MANIFEST}
@@ -117,6 +244,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                             "supports_docs": True,
                             "supports_copy": True,
                             "supports_collab": bool(collab),
+                            "agent_url": _load_agent_url(app_dir.parent),
                         }
                     )
                 if path == "/api/collab/ws" and collab:
@@ -886,7 +1014,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             try:
                 req = urlrequest.Request(
-                    "http://127.0.0.1:8088/handoffs",
+                    f"{_load_agent_url(app_dir.parent)}/handoffs",
                     data=data,
                     headers={"Content-Type": "application/json"},
                     method="POST",
