@@ -304,11 +304,6 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     this.serviceDrawerId.set(this.uid(svc));
   }
   protected closeServiceDrawer(): void {
-    const svc = this.serviceDrawer();
-    if (svc?.uid === 'draft') {
-      this.doc().services = this.services().filter((service) => service !== svc);
-      this.touch();
-    }
     this.serviceInterfaceView.set('form');
     this.serviceDrawerId.set('');
   }
@@ -345,7 +340,7 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected openNewServiceDrawer(serviceGroupUid = this.uid(this.serviceGroups()[0]) || ''): void {
     if (!this.canEdit()) return;
-    const svc: LegacyService = { uid: 'draft', name: '', serviceGroupUid, method: 'POST', path: '', desc: '', requestParams: [], responseParams: [], steps: [], parameterMappings: [], nodeRefs: [] };
+    const svc: LegacyService = { uid: `interface-${Date.now()}`, name: '', serviceGroupUid, method: 'POST', path: '', desc: '', requestParams: [], responseParams: [], steps: [], parameterMappings: [], nodeRefs: [] };
     this.doc().services ||= [];
     this.doc().services.push(svc);
     this.openServiceDrawer(svc);
@@ -741,13 +736,26 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       let line = body.trim();
       if (!line || line.includes('......')) continue;
 
-      while (/^[}\]],?$/.test(line)) {
-        closeContext(line.startsWith(']') ? 'array' : 'object');
+      while (/^[\]}]/.test(line)) {
+        if (line.startsWith(']')) closeContext('array');
+        else closeContext('object');
         line = line.replace(/^[}\]],?\s*/, '').trim();
       }
-      if (!line || line === '{' || line === '[') {
+      if (!line || line === '{' || line.startsWith('[')) {
         if (line === '{' && stack.at(-1)?.kind === 'array') {
           stack.push({ kind: 'object', children: stack.at(-1)?.children ?? [] });
+        } else if (line.startsWith('[')) {
+          // 关联到上一个集合类型的参数（如 checkDetail: List 后跟 [{）
+          const parentCtx = stack.at(-1);
+          const lastParam = parentCtx?.children?.at(-1);
+          const isCollection = lastParam && ['List', 'Array', 'Object'].includes(lastParam.type);
+          const targetChildren = isCollection && !lastParam.children ? lastParam : null;
+          const arrChildren = targetChildren ? (targetChildren.children = []) : [];
+          stack.push({ kind: 'array', children: arrChildren });
+          const afterArray = line.replace(/^\[+/, '').trim();
+          if (afterArray.startsWith('{')) {
+            stack.push({ kind: 'object', children: arrChildren });
+          }
         }
         continue;
       }

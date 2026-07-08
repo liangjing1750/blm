@@ -1,14 +1,21 @@
 /* Process flow workbench migrated global styles. */
 .process-flow-view {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
   padding: 10px 14px 16px;
 }
 
 .process-flow-frame {
   display: grid;
+  grid-template-rows: auto auto 1fr;
   gap: 8px;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .process-flow-topbar {
@@ -51,8 +58,10 @@
 
 .process-flow-body {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .process-flow-edit-shortcut {

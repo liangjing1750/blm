@@ -318,8 +318,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected formServiceOptions(task: LegacyProcessNode): ProcessApplicationService[] {
-    const linkedServices = this.applicationServicesForTask(task);
-    return linkedServices.length ? linkedServices : this.applicationServices();
+    this.version();
+    return this.applicationServices();
   }
 
   protected formServiceId(form: LegacyTaskForm): string {

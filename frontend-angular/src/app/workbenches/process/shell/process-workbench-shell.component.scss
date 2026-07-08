@@ -1,13 +1,20 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
 }
 
 // 模块意图：沿用 legacy 二级 tab 的视觉协议，只把结构所有权迁入 Angular 壳层。
 .process-shell {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
 }
 
 .process-shell .proc-view-toolbar {

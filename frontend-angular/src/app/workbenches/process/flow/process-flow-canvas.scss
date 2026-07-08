@@ -1,7 +1,6 @@
 .process-flow-canvas-shell {
   position: relative;
-  height: calc(100vh - 218px);
-  max-height: calc(100vh - 218px);
+  flex: 1;
   min-height: 240px;
   padding: 10px;
   overflow: auto;

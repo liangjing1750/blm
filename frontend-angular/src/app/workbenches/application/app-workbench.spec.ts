@@ -566,6 +566,51 @@ totalRow: number, // 总条数
     expect(responseParams[2].children[0].children[0].note).toBe('技术主键ID');
   });
 
+  it('imports List type with separate [{ bracket lines', () => {
+    const runtime = getAngularRuntimeState();
+    host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="interface-edit-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="service-drawer-paste-response-param"]')?.click();
+    fixture.detectChanges();
+
+    const importText = host.querySelector<HTMLTextAreaElement>('[data-testid="service-param-import-text"]')!;
+    importText.value = `{
+templateId: String // 模板id *
+class: String // 品种 *
+checkType: String // 检查类型 *
+templateName: String // 模板名称 *
+checkDetail: List
+[{
+checkCategory: String // 检查类别 *
+checkContent: String // 检查内容 *
+subContent: String // 子内容
+fieldType: String // 字段类型 *
+optionValue: String // 选项值
+needAttachment: Number // 需要附件 *
+remark: String // 备注
+}]
+}`;
+    importText.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-param-import-submit"]')?.click();
+    fixture.detectChanges();
+
+    const params = runtime.doc.services[0].responseParams;
+    expect(params.map((p: any) => p.name)).toEqual(['templateId', 'class', 'checkType', 'templateName', 'checkDetail']);
+    expect(params[4].type).toBe('List');
+    expect(params[4].children).toBeDefined();
+    expect(params[4].children.length).toBeGreaterThan(0);
+    expect(params[4].children[0].name).toBe('checkCategory');
+    expect(params[4].children[0].type).toBe('String');
+    expect(params[4].children[0].required).toBe(true);
+    expect(params[4].children[0].note).toBe('检查类别');
+    expect(params[4].children[6].name).toBe('remark');
+    expect(params[4].children[6].note).toBe('备注');
+  });
+
   it('shows application interface json as a read-only document contract view', () => {
     const runtime = getAngularRuntimeState();
     runtime.doc.services[0].name = '仓库信息管理查询';
