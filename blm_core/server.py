@@ -29,6 +29,14 @@ from blm_core.storage import (
     WorkspaceStorage,
 )
 
+def _load_app_version(root: Path) -> str:
+    version_file = root / "version"
+    try:
+        return version_file.read_text("utf-8").strip() or "3.0"
+    except Exception:
+        return "3.0"
+
+
 def _load_env(key: str, default: str = "", root: Path | None = None) -> str:
     if root is None:
         import __main__
@@ -251,6 +259,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                             "supports_copy": True,
                             "supports_collab": bool(collab),
                             "agent_url": _load_env("AGENT_URL", "http://127.0.0.1:8088", app_dir.parent),
+                            "app_version": _load_app_version(app_dir.parent),
                         }
                     )
                 if path == "/api/collab/ws" and collab:

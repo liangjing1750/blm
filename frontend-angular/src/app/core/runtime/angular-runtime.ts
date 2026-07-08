@@ -23,6 +23,7 @@ export interface AngularRuntimeState {
   runtime: {
     supportsCollab: boolean;
     agentUrl: string;
+    appVersion: string;
   };
   collab: {
     seq: number;
@@ -111,6 +112,7 @@ const runtimeState: AngularRuntimeState = {
   runtime: {
     supportsCollab: true,
     agentUrl: 'http://127.0.0.1:8088',
+    appVersion: '3.0',
   },
   collab: {
     seq: 0,

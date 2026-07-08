@@ -239,9 +239,8 @@ export class ShellComponent implements OnInit, OnDestroy {
   private async loadRuntimeConfig(): Promise<void> {
     try {
       const info = await this.api.runtime();
-      if (info?.agent_url) {
-        this.runtime.runtime.agentUrl = info.agent_url;
-      }
+      if (info?.agent_url) this.runtime.runtime.agentUrl = info.agent_url;
+      if (info?.app_version) this.runtime.runtime.appVersion = info.app_version;
     } catch (_) { /* keep default */ }
   }
 
