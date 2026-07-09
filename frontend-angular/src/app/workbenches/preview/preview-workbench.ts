@@ -3,7 +3,7 @@ import { AfterViewInit, Component, OnDestroy, computed, inject, signal } from '@
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../core/api/api.service';
 import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-registry';
-import { getAngularRuntimeState } from '../../core/runtime/angular-runtime';
+import { confirmRuntimeAction, getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 import { sanitizeRichTextHtml } from '../../shared/rich-text/rich-text-utils';
 import { PreviewGraphHostComponent } from './preview-graph-host.component';
@@ -373,45 +373,117 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return this.interfaces().filter((item) => !serviceId || item.serviceUid === serviceId || item.serviceId === serviceId || item.applicationServiceUid === serviceId);
   }
 
-  protected exportJson(): void {
-    const content = JSON.stringify(this.runtime.doc || {}, null, 2);
-    this.download(content, 'application/json;charset=utf-8', `${this.baseFileName()}.json`);
+  /** 当前文档版本号（seq） */
+  private currentVersion(): string {
+    return String(this.runtime.collab?.seq || this.runtime.collab?.acceptedSeq || '').trim();
   }
 
-  protected exportMarkdown(): void {
-    this.download(this.markdown(), 'text/markdown;charset=utf-8', `${this.baseFileName()}.md`);
+  /** 通用导出前检查：远端有更新时提示同步 */
+  private async confirmExport(): Promise<boolean> {
+    if (!this.runtime.currentFile) return false;
+    const latest = Number(this.runtime.collab?.seq || 0);
+    const base = Number(this.runtime.collab?.acceptedSeq || 0);
+    const hasRemote = latest > base;
+    if (hasRemote) {
+      const doSync = await confirmRuntimeAction(
+        '检查当前版本与远端版本不一致，是否立即同步？否则影响预览效果',
+        { title: '同步确认', confirmLabel: '立即同步', cancelLabel: '直接导出' },
+      );
+      if (doSync) {
+        // 先同步
+        await this.api.save(this.runtime.currentFile, this.runtime.doc || {}, { saveMessage: '导出前同步' });
+        // 同步后版本号已更新
+      }
+    }
+    return true;
   }
 
-  protected async exportBundle(): Promise<void> {
-    if (!this.runtime.currentFile) return;
-    const response = await this.api.exportBundle(this.runtime.currentFile);
-    if (!response.ok) return;
-    const blob = await response.blob();
-    this.downloadBlob(blob, this.responseFilename(response) || `${this.baseFileName()}.zip`);
+  protected async exportJson(): Promise<void> {
+    if (!await this.confirmExport()) return;
+    const name = this.runtime.currentFile;
+    const version = this.currentVersion();
+    // 尝试缓存
+    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}`);
+    if (cached.ok) {
+      const blob = await cached.blob();
+      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.zip`);
+      return;
+    }
+    // 无缓存，发起异步生成
+    this.exportWait.set({ title: '正在打包 JSON+附件...', description: '系统会冻结当前版本，并自动下载。' });
+    try {
+      const job: any = await fetch(`/api/export/json/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, version, markdown: this.markdown() }),
+      }).then((r) => r.json());
+      if (job?.id) {
+        const done = await this.waitForExportJob(job.id);
+        if (done?.status === 'done') {
+          const resp = await this.api.downloadExportJob(job.id);
+          if (resp.ok) this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.zip`);
+        }
+      }
+    } finally { this.exportWait.set(null); }
+  }
+
+  protected async exportMarkdown(): Promise<void> {
+    if (!await this.confirmExport()) return;
+    const name = this.runtime.currentFile;
+    const version = this.currentVersion();
+    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}&format=md`);
+    if (cached.ok) {
+      const blob = await cached.blob();
+      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.zip`);
+      return;
+    }
+    this.exportWait.set({ title: '正在打包 MD+截图+附件...', description: '系统会冻结当前版本、生成截图并自动下载。' });
+    try {
+      const job: any = await fetch(`/api/export/markdown/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, version, markdown: this.markdown() }),
+      }).then((r) => r.json());
+      if (job?.id) {
+        const done = await this.waitForExportJob(job.id);
+        if (done?.status === 'done') {
+          const resp = await this.api.downloadExportJob(job.id);
+          if (resp.ok) this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.zip`);
+        }
+      }
+    } finally { this.exportWait.set(null); }
   }
 
   protected async exportDocx(): Promise<void> {
-    if (!this.runtime.currentFile) return;
+    if (!await this.confirmExport()) return;
+    const name = this.runtime.currentFile;
+    const version = this.currentVersion();
+    // 检查缓存
+    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}&format=docx`);
+    if (cached.ok) {
+      const blob = await cached.blob();
+      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.docx`);
+      return;
+    }
     this.exportWait.set({
       title: '正在提交 DOCX 导出任务...',
       description: '系统会冻结当前已保存版本，并在生成完成后自动下载。',
     });
     try {
-      const job = await this.api.startDocxExport(this.runtime.currentFile);
+      const job: any = await fetch(`/api/export-docx/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, version, markdown: this.markdown() }),
+      }).then((r) => r.json());
       if (!job?.id) return;
-      const latestJob = await this.waitForDocxJob(job.id, job);
+      const latestJob = await this.waitForExportJob(job.id);
       if (latestJob?.status !== 'done') return;
       this.exportWait.set({
         title: 'DOCX 已生成，正在下载...',
-        description: latestJob.message || '正在把生成结果交给浏览器下载。',
+        description: latestJob.message || '',
       });
       const response = await this.api.downloadExportJob(job.id);
       if (!response.ok) return;
       const blob = await response.blob();
       this.downloadBlob(blob, latestJob.filename || this.responseFilename(response) || `${this.baseFileName()}.docx`);
-    } finally {
-      this.exportWait.set(null);
-    }
+    } finally { this.exportWait.set(null); }
   }
 
   private buildOutlineItems(): PreviewOutlineItem[] {
@@ -1443,7 +1515,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return asciiMatch?.[1] || '';
   }
 
-  private async waitForDocxJob(jobId: string, initialJob: any): Promise<any> {
+  private async waitForExportJob(jobId: string, initialJob: any): Promise<any> {
     let latestJob = initialJob;
     for (let attempt = 0; attempt < 30; attempt += 1) {
       if (latestJob?.status === 'done' || latestJob?.status === 'failed') return latestJob;

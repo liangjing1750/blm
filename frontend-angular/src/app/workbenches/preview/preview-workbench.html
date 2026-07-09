@@ -1,9 +1,8 @@
 <section class="preview-workbench preview-wrap" data-testid="preview-workbench">
   <div class="preview-topbar">
-    <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-bundle" [disabled]="!runtime.currentFile" (click)="exportBundle()">导出资源包</button>
-    <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-markdown" (click)="exportMarkdown()">导出 Markdown</button>
-    <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-json" (click)="exportJson()">导出 JSON</button>
-    <button class="btn btn-primary btn-sm" type="button" data-testid="preview-export-docx" [disabled]="!runtime.currentFile || !!exportWait()" (click)="exportDocx()">导出 DOCX</button>
+    <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-json" [disabled]="!runtime.currentFile" (click)="exportJson()">导出 JSON</button>
+    <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-markdown" [disabled]="!runtime.currentFile" (click)="exportMarkdown()">导出 MD</button>
+    <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-docx" [disabled]="!runtime.currentFile || !!exportWait()" (click)="exportDocx()">导出 DOCX</button>
     <button id="preview-raw-toggle" class="btn btn-ghost-sm" type="button" style="margin-left:auto" (click)="toggleRaw()">
       {{ showRaw() ? '显示渲染预览' : '显示原文 MD' }}
     </button>
