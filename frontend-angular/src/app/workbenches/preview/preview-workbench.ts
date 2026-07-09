@@ -108,6 +108,48 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
   }
 
+  // ── 附件辅助方法 ──
+
+  /** 构建附件 API URL。prototypeFiles 可能为 {uid, versionUid} 精简格式或 {uid, name, versions:[...]} 完整格式 */
+  protected attachmentUrl(pf: any): string {
+    const docName = this.runtime.currentFile || '';
+    const uid = pf?.uid || '';
+    const versionUid = pf?.versionUid || pf?.versions?.[0]?.uid || '';
+    if (!docName || !uid || !versionUid) return '';
+    return `/api/attachment/${encodeURIComponent(docName)}/${encodeURIComponent(uid)}/${encodeURIComponent(versionUid)}`;
+  }
+
+  protected attachmentContentType(pf: any): string {
+    return String(pf?.versions?.[0]?.contentType || '');
+  }
+
+  protected isImageAttachment(pf: any): boolean {
+    return this.attachmentContentType(pf).startsWith('image/');
+  }
+
+  protected isHtmlAttachment(pf: any): boolean {
+    const ct = this.attachmentContentType(pf).toLowerCase();
+    return ct.includes('html');
+  }
+
+  /** 附件显示名，精简格式无 name 时用 uid 最后 8 位 */
+  protected attachmentLabel(pf: any): string {
+    return pf?.name?.trim() || (pf?.uid ? pf.uid.slice(-8) : '未命名附件');
+  }
+
+  /** 是否有节点级附件 */
+  protected hasNodeAttachments(process: any): boolean {
+    return this.asArray(process?.nodes || process?.tasks).some((n: any) => this.asArray(n?.prototypeFiles).length > 0);
+  }
+
+  /** 遍历所有流程，找出有关联附件的流程 */
+  protected processesWithAttachments(): any[] {
+    return this.processes().filter((p) => {
+      if (this.asArray(p?.prototypeFiles).length) return true;
+      return this.asArray(p?.nodes || p?.tasks).some((n: any) => this.asArray(n?.prototypeFiles).length > 0);
+    });
+  }
+
   ngAfterViewInit(): void {
   }
 
@@ -413,6 +455,31 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       raw.push({ id: 'preview-applications', label: '应用建模', depth: 0 });
       if (this.services().length) raw.push({ id: 'preview-application-services', label: '应用服务', depth: 1 });
       if (this.interfaces().length) raw.push({ id: 'preview-application-interfaces', label: '应用接口', depth: 1 });
+    }
+
+    // ── 附录（按流程→节点→附件组织） ──
+    const appendixProcesses = this.processesWithAttachments();
+    if (appendixProcesses.length) {
+      raw.push({ id: 'preview-appendix', label: '附录', depth: 0 });
+      appendixProcesses.forEach((process) => {
+        const processId = this.identityOf(process, '');
+        raw.push({ id: `preview-appendix-proc-${processId}`, label: this.displayName(process, '未命名流程'), depth: 1 });
+        const processFiles = this.asArray(process?.prototypeFiles);
+        processFiles.forEach((pf: any) => {
+          const name = pf?.name || '未命名附件';
+          raw.push({ id: `preview-appendix-file-${pf.uid || name}`, label: name, depth: 2 });
+        });
+        this.asArray(process?.nodes || process?.tasks).forEach((node: any) => {
+          const nodeFiles = this.asArray(node?.prototypeFiles);
+          if (!nodeFiles.length) return;
+          const nodeId = this.identityOf(node, '');
+          raw.push({ id: `preview-appendix-node-${nodeId}`, label: `节点: ${this.displayName(node, '未命名节点')}`, depth: 2 });
+          nodeFiles.forEach((nf: any) => {
+            const name = nf?.name || '未命名附件';
+            raw.push({ id: `preview-appendix-file-${nf.uid || name}`, label: name, depth: 3 });
+          });
+        });
+      });
     }
 
     // ── 赋序号 ──

@@ -196,10 +196,10 @@
                                 <h5>办理附件</h5>
                                 <ul style="margin:6px 0;padding-left:20px">
                                   @for (pf of asArray(process?.prototypeFiles); track identityOf(pf, 'pf-' + $index)) {
-                                    <li style="font-size:12px;color:#475569">{{ pf.name || '未命名附件' }}</li>
+                                    <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li>
                                   }
                                   @for (pf of asArray(node?.prototypeFiles); track identityOf(pf, 'nf-' + $index) ; let first = $first) {
-                                    <li style="font-size:12px;color:#475569">{{ pf.name || '未命名附件' }}</li>
+                                    <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li>
                                   }
                                 </ul>
                               }
@@ -298,8 +298,8 @@
                         @if (asArray(process?.prototypeFiles).length || asArray(node?.prototypeFiles).length) {
                           <h5>办理附件</h5>
                           <ul style="margin:6px 0;padding-left:20px">
-                            @for (pf of asArray(process?.prototypeFiles); track identityOf(pf, 'pf-' + $index)) { <li style="font-size:12px;color:#475569">{{ pf.name || '未命名附件' }}</li> }
-                            @for (pf of asArray(node?.prototypeFiles); track identityOf(pf, 'nf-' + $index)) { <li style="font-size:12px;color:#475569">{{ pf.name || '未命名附件' }}</li> }
+                            @for (pf of asArray(process?.prototypeFiles); track identityOf(pf, 'pf-' + $index)) { <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li> }
+                            @for (pf of asArray(node?.prototypeFiles); track identityOf(pf, 'nf-' + $index)) { <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li> }
                           </ul>
                         }
                         @if (asArray(node.businessRules).length) {
@@ -466,6 +466,59 @@
                   </tbody>
                 </table>
               </section>
+            }
+          </section>
+        }
+
+        <!-- ════ 附录 ════ -->
+        @if (processesWithAttachments().length) {
+          <section id="preview-appendix" class="pv-section">
+            <h2>{{ outlineNumber('preview-appendix') }} 附录</h2>
+            @for (process of processesWithAttachments(); track identityOf(process, 'proc-' + $index)) {
+              @if (asArray(process?.prototypeFiles).length || hasNodeAttachments(process)) {
+                <section [id]="'preview-appendix-proc-' + identityOf(process, '')" class="pv-graph-card" style="margin:12px 0">
+                  <h3>{{ outlineNumber('preview-appendix-proc-' + identityOf(process, '')) }} {{ displayName(process, '未命名流程') }}</h3>
+
+                  <!-- 流程级附件 -->
+                  @for (pf of asArray(process?.prototypeFiles); track pf.uid || $index) {
+                    <div [id]="'preview-appendix-file-' + (pf.uid || pf.name)" class="pv-appendix-file" style="margin:8px 0;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                      <h4>{{ outlineNumber('preview-appendix-file-' + (pf.uid || pf.name)) }} {{ attachmentLabel(pf) }}</h4>
+                      @if (isImageAttachment(pf)) {
+                        <img [src]="attachmentUrl(pf)" alt="{{ pf.name || '附件图片' }}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:6px" />
+                      } @else if (isHtmlAttachment(pf)) {
+                        <iframe [src]="attachmentUrl(pf)" style="width:100%;height:400px;border:1px solid #dbe5f0;border-radius:6px" sandbox="allow-same-origin"></iframe>
+                      } @else {
+                        <a [href]="attachmentUrl(pf) + '?download=1'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">
+                          <span>⬇</span> 下载附件 {{ pf.name || '' }}
+                        </a>
+                      }
+                    </div>
+                  }
+
+                  <!-- 节点级附件 -->
+                  @for (node of asArray(process?.nodes || process?.tasks); track identityOf(node, 'node-' + $index)) {
+                    @if (asArray(node?.prototypeFiles).length) {
+                      <div [id]="'preview-appendix-node-' + identityOf(node, '')" style="margin:10px 0 6px 16px;padding:8px 10px;border-left:3px solid #93c5fd;background:#f8fafc;border-radius:0 8px 8px 0">
+                        <h4>{{ outlineNumber('preview-appendix-node-' + identityOf(node, '')) }} 节点：{{ displayName(node, '未命名节点') }}</h4>
+                      </div>
+                      @for (nf of asArray(node?.prototypeFiles); track nf.uid || $index) {
+                        <div [id]="'preview-appendix-file-' + (nf.uid || nf.name)" class="pv-appendix-file" style="margin:8px 0 8px 16px;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                          <h4>{{ outlineNumber('preview-appendix-file-' + (nf.uid || nf.name)) }} {{ nf.name || '未命名附件' }}</h4>
+                          @if (isImageAttachment(nf)) {
+                            <img [src]="attachmentUrl(nf)" alt="{{ nf.name || '附件图片' }}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:6px" />
+                          } @else if (isHtmlAttachment(nf)) {
+                            <iframe [src]="attachmentUrl(nf)" style="width:100%;height:400px;border:1px solid #dbe5f0;border-radius:6px" sandbox="allow-same-origin"></iframe>
+                          } @else {
+                            <a [href]="attachmentUrl(nf) + '?download=1'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">
+                              <span>⬇</span> 下载附件 {{ nf.name || '' }}
+                            </a>
+                          }
+                        </div>
+                      }
+                    }
+                  }
+                </section>
+              }
             }
           </section>
         }
