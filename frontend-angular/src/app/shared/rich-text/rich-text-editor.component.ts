@@ -56,11 +56,32 @@ export class RichTextEditorComponent implements AfterViewInit, OnChanges {
     editor?.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  private savedRange: Range | null = null;
+
+  private saveSelection(): Range | null {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    const editor = this.editorRef?.nativeElement;
+    if (!editor || !editor.contains(range.commonAncestorContainer)) return null;
+    return range.cloneRange();
+  }
+
+  private restoreSelection(range: Range | null): void {
+    if (!range) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
   protected apply(command: 'bold' | 'ordered' | 'unordered' | 'indent' | 'outdent' | 'secondOrdered'): void {
     if (this.readonly) return;
     const editor = this.editorRef?.nativeElement;
     if (!editor) return;
+    const saved = this.saveSelection();
     editor.focus();
+    if (saved) this.restoreSelection(saved);
     if (command === 'secondOrdered') {
       this.applySecondLevelOrderedList(editor);
       return;
