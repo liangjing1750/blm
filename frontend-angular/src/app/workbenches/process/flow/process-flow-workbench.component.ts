@@ -888,6 +888,25 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  protected duplicateSelected(process: LegacyProcess): void {
+    const id = this.selectedElementId();
+    if (!id || id === 'START' || id === 'END') return;
+    const task = this.tasks(process).find((t) => this.taskId(t) === id);
+    const gateway = !task ? this.gateways(process).find((g) => this.gatewayId(g) === id) : null;
+    const clone = task ? this.flowModel.duplicateTask(process, task) : gateway ? this.flowModel.duplicateGateway(process, gateway) : null;
+    if (!clone) return;
+    const cloneId = String(clone.uid || clone.id || '').trim();
+    const existingNodes = this.flowNodes(process).filter((n) => n.baseId !== cloneId);
+    const rightEdge = existingNodes.length ? Math.max(...existingNodes.map((n) => n.x + n.width)) : this.graphNodeStartX;
+    const orderIndex = Math.max(0, this.flowOrder(process).indexOf(cloneId) - 1);
+    const baseX = this.graphNodeStartX + orderIndex * this.columnGap;
+    const dx = Math.max(0, rightEdge + this.columnGap - baseX);
+    if (dx > 0) this.flowModel.setFlowOffset(process, cloneId, dx, 0);
+    this.adapter.touch();
+    this.selectedElementId.set(cloneId);
+    this.refresh();
+  }
+
   protected openNodeView(node: FlowCanvasNode): void {
     if (!node.task) return;
     this.adapter.selectTask(this.taskId(node.task));

@@ -47,6 +47,7 @@
               <button type="button" data-testid="process-flow-cancel-connect" title="&#x53d6;&#x6d88;&#x8fde;&#x7ebf;" (click)="connectingFromId.set('')"><b>!</b><span>&#x53d6;&#x6d88;</span></button>
             }
             @if (selectedElementId()) {
+              <button type="button" data-testid="process-flow-copy-selected" title="&#x590d;&#x5236;&#x9009;&#x4e2d;" (click)="duplicateSelected(process)"><b>⧉</b><span>&#x590d;&#x5236;</span></button>
               <button class="danger" type="button" data-testid="process-flow-delete-selected" title="&#x5220;&#x9664;&#x9009;&#x4e2d;" (click)="removeSelected(process)"><b>x</b><span>&#x5220;&#x9664;</span></button>
             }
           </div>

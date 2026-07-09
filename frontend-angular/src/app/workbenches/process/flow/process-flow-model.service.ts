@@ -104,6 +104,36 @@ export class ProcessFlowModelService {
     if (field === 'label') edge.condition = value;
   }
 
+  duplicateTask(process: LegacyProcess, task: LegacyProcessNode): LegacyProcessNode | null {
+    const list = this.tasks(process);
+    const index = list.indexOf(task);
+    if (index < 0) return null;
+    const clone = structuredClone(task);
+    const id = this.nextId('T', list);
+    clone.id = id;
+    clone.uid = id;
+    const baseName = String(task.name || '').replace(/\s*副本(\d*)$/, '');
+    const copies = list.filter((t) => t.name?.startsWith(baseName) && t.name !== task.name).length + 1;
+    clone.name = `${baseName} 副本${copies > 1 ? copies : ''}`;
+    list.splice(index + 1, 0, clone);
+    return clone;
+  }
+
+  duplicateGateway(process: LegacyProcess, gateway: LegacyFlowGateway): LegacyFlowGateway | null {
+    const list = this.gateways(process);
+    const index = list.indexOf(gateway);
+    if (index < 0) return null;
+    const clone = structuredClone(gateway);
+    const id = this.nextId('B', list);
+    clone.id = id;
+    clone.uid = id;
+    const baseName = String(gateway.title || '').replace(/\s*副本(\d*)$/, '');
+    const copies = list.filter((g) => g.title?.startsWith(baseName) && g.title !== gateway.title).length + 1;
+    clone.title = `${baseName} 副本${copies > 1 ? copies : ''}`;
+    list.splice(index + 1, 0, clone);
+    return clone;
+  }
+
   removeElement(process: LegacyProcess, id: string): void {
     if (!id || id === 'START' || id === 'END') return;
     process.nodes = this.tasks(process).filter((task) => this.nodeId(task) !== id);
