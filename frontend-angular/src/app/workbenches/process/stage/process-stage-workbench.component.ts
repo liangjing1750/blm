@@ -81,6 +81,8 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly version = signal(0);
   protected readonly renamingStageId = signal('');
   protected readonly draftLinkFromRefId = signal('');
+  protected readonly migratePickerNodeId = signal('');
+  protected readonly migratePickerColumnUid = signal('');
   protected readonly dragState = signal<FlowDragState | null>(null);
 
   protected readonly adapter: ProcessStageLegacyAdapter = createProcessStageLegacyAdapter();
@@ -360,10 +362,41 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
-  protected removeProcess(node: FlowNode): void {
+  protected toggleMigratePicker(node: FlowNode, event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.migratePickerNodeId() === node.id) {
+      this.closeMigratePicker();
+      return;
+    }
+    this.migratePickerNodeId.set(node.id);
+    this.migratePickerColumnUid.set('');
+  }
+
+  protected closeMigratePicker(): void {
+    this.migratePickerNodeId.set('');
+    this.migratePickerColumnUid.set('');
+  }
+
+  protected selectMigrateColumn(columnUid: string): void {
+    this.migratePickerColumnUid.set(this.migratePickerColumnUid() === columnUid ? '' : columnUid);
+  }
+
+  protected migratePickerStages(): LegacyStage[] {
+    const columnUid = this.migratePickerColumnUid();
+    if (!columnUid) return [];
+    return this.stages().filter((stage) =>
+      (stage.panoramaColumnUid || stage.panoramaColumnId || '') === columnUid
+    );
+  }
+
+  protected migrateProcess(node: FlowNode, targetStageId: string): void {
     const stage = this.currentStage();
-    if (!stage) return;
-    this.adapter.removeProcessFromStage(this.stageId(stage), node.processId);
+    if (!stage || !node.processId) return;
+    const sourceStageId = this.stageId(stage);
+    if (sourceStageId === targetStageId) return;
+    this.adapter.removeProcessFromStage(sourceStageId, node.processId);
+    this.adapter.addExistingProcess(targetStageId, node.processId);
+    this.closeMigratePicker();
     this.refresh();
   }
 
@@ -375,6 +408,12 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
     this.adapter.deleteProcess(node.processId);
+    this.refresh();
+  }
+
+  protected duplicateProcess(node: FlowNode): void {
+    if (!node.processId) return;
+    this.adapter.duplicateProcess(node.processId);
     this.refresh();
   }
 

@@ -14,6 +14,78 @@
   min-width: max-content;
 }
 
+.stage-migrate-picker {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0;
+  min-width: 220px;
+  border: 1px solid #d7e4f3;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .14);
+  overflow: hidden;
+}
+
+.stage-migrate-columns {
+  display: flex;
+  flex-direction: column;
+  min-width: 100px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.stage-migrate-columns button {
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.stage-migrate-columns button.active,
+.stage-migrate-columns button:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.stage-migrate-stages {
+  display: flex;
+  flex-direction: column;
+  min-width: 130px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.stage-migrate-stages button {
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.stage-migrate-stages button:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.stage-migrate-stages button.current {
+  color: #94a3b8;
+  font-style: italic;
+  pointer-events: none;
+}
+
 .stage-flow-node-group-editor {
   left: -20px;
   top: 132px;

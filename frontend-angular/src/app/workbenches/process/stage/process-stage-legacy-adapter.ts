@@ -99,6 +99,7 @@ export interface ProcessStageLegacyAdapter {
   setRefOffset(refId: string, offset: { x: number; y: number }): void;
   addProcess(stageId: string): void;
   addExistingProcess(stageId: string, processId: string): void;
+  duplicateProcess(processId: string): void;
   removeProcessFromStage(stageId: string, processId: string): void;
   deleteProcess(processId: string): void;
   addLink(stageId: string, fromRefId: string, toRefId: string): void;
@@ -284,6 +285,67 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
         processUid: process.uid || process.id,
         order: refsForStage(targetStageId).length + 1,
       });
+      markModified(true);
+    },
+    duplicateProcess(targetProcessId: string) {
+      const source = findProcess(targetProcessId);
+      if (!source) return;
+      const doc = document();
+      doc.processes ||= [];
+      doc.stageFlowRefs ||= [];
+      const procId = nextProcessId();
+      const clone = JSON.parse(JSON.stringify(source)) as LegacyProcess;
+      clone.id = procId;
+      clone.uid = procId;
+      const baseName = String(source.name || '未命名流程').replace(/\s*[-–—]?\s*副本(\d*)$/, '');
+      const copies = doc.processes.filter((p) => String(p.name || '').startsWith(baseName)).length;
+      clone.name = `${baseName}${copies > 0 ? ` - 副本${copies}` : ' - 副本'}`;
+      const raw = clone as any;
+      raw.stageUid = '';
+      raw.stageId = '';
+      raw.prototypeFiles = [];
+      // 复制节点并重新生成 ID
+      const nodes = Array.isArray(raw.nodes) ? raw.nodes : [];
+      const taskIdMap = new Map<string, string>();
+      for (const node of nodes) {
+        const oldId = String(node.id || node.uid || '');
+        const newId = nextProcessId();
+        node.id = newId;
+        node.uid = newId;
+        node.name = String(node.name || '') + ' 副本';
+        taskIdMap.set(oldId, newId);
+      }
+      // 复制网关并重新生成 ID
+      const flow: any = raw.flow || {};
+      const gateways = Array.isArray(flow.nodes) ? flow.nodes : [];
+      const gatewayIdMap = new Map<string, string>();
+      for (const gw of gateways) {
+        const oldId = String(gw.id || gw.uid || '');
+        const newId = `B${Date.now()}` + (gatewayIdMap.size + 1);
+        gw.id = newId;
+        gw.uid = newId;
+        gatewayIdMap.set(oldId, newId);
+      }
+      // 复制边线并映射端点
+      flow.edges = (Array.isArray(flow.edges) ? flow.edges : []).map((edge: any) => {
+        const eid = `L${Date.now()}` + Math.random().toString(16).slice(2, 6);
+        const from = edge.from && edge.from !== 'START' && edge.from !== 'END' ? (taskIdMap.get(edge.from) || gatewayIdMap.get(edge.from) || '') : (edge.from || '');
+        const to = edge.to && edge.to !== 'START' && edge.to !== 'END' ? (taskIdMap.get(edge.to) || gatewayIdMap.get(edge.to) || '') : (edge.to || '');
+        return from && to ? { ...edge, id: eid, uid: eid, from, to } : null;
+      }).filter(Boolean);
+      // 复制 stageFlowRefs
+      const existingRefs = (doc.stageFlowRefs || []).filter((ref) => ref.processUid === targetProcessId || ref.processId === targetProcessId || ref.processId === source.id || ref.processUid === source.uid);
+      for (const ref of existingRefs) {
+        doc.stageFlowRefs.push({
+          id: nextRefId(),
+          stageId: ref.stageId || '',
+          stageUid: ref.stageUid || '',
+          processId: procId,
+          processUid: procId,
+          order: (doc.stageFlowRefs.length + 1),
+        });
+      }
+      doc.processes.push(raw);
       markModified(true);
     },
     removeProcessFromStage(targetStageId: string, targetProcessId: string) {

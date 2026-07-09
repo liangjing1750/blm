@@ -104,7 +104,24 @@
                               } @else {
                                 <button class="stage-quick-btn" type="button" data-testid="stage-flow-link-source-button" (click)="beginLink(node)">→</button>
                               }
-                              <button class="stage-quick-btn danger" type="button" data-testid="stage-member-remove-button" (click)="removeProcess(node)">−</button>
+                              <button class="stage-quick-btn" type="button" data-testid="stage-member-copy-button" title="复制流程（包含所有节点、边线、表单）" (click)="duplicateProcess(node)">⧉</button>
+                              <button class="stage-quick-btn" type="button" data-testid="stage-member-migrate-button" title="迁移流程至其他阶段" (click)="toggleMigratePicker(node, $event)">▤</button>
+                              @if (migratePickerNodeId() === node.id) {
+                                <div class="stage-migrate-picker" data-testid="stage-migrate-picker" (click)="$event.stopPropagation()">
+                                  <div class="stage-migrate-columns">
+                                    @for (col of columns(); track columnUid(col)) {
+                                      <button type="button" [class.active]="migratePickerColumnUid() === columnUid(col)" (click)="selectMigrateColumn(columnUid(col))">{{ col.name || columnUid(col) }}</button>
+                                    }
+                                  </div>
+                                  @if (migratePickerColumnUid(); as colUid) {
+                                    <div class="stage-migrate-stages">
+                                      @for (st of migratePickerStages(); track stageId(st)) {
+                                        <button type="button" (click)="migrateProcess(node, stageId(st))" [class.current]="(currentStage() ? stageId(currentStage()!) : '') === stageId(st)">{{ st.name || stageId(st) }}</button>
+                                      }
+                                    </div>
+                                  }
+                                </div>
+                              }
                               <button class="stage-quick-btn danger" type="button" data-testid="stage-member-delete-button" (click)="deleteProcess(node)">×</button>
                             </div>
                             <div class="stage-flow-node-group-editor" data-testid="stage-flow-node-group-editor" (mousedown)="$event.stopPropagation()" (click)="$event.stopPropagation()">
