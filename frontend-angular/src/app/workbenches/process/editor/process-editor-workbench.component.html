@@ -430,6 +430,7 @@
                     <span>R{{ index + 1 }}</span>
                     <textarea class="node-rule-name-textarea" rows="1" [readonly]="!editing" [ngModel]="businessRuleName(rule, index)" (input)="autoGrow($any($event.target)); setBusinessRuleName(task, index, $any($event.target).value)" [placeholder]="businessRuleNamePlaceholder(rule, index)"></textarea>
                     <div class="node-row-actions">
+                      <button type="button" title="在下方插入规则" [disabled]="!editing" (click)="addBusinessRuleAfter(task, index)">+</button>
                       <button type="button" title="上移" [disabled]="!editing || index === 0" (click)="moveBusinessRule(task, index, -1)">↑</button>
                       <button type="button" title="下移" [disabled]="!editing || index === businessRules(task).length - 1" (click)="moveBusinessRule(task, index, 1)">↓</button>
                       <button type="button" title="删除规则" [disabled]="!editing" (click)="removeBusinessRule(task, index)">×</button>

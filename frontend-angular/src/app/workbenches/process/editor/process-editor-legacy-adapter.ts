@@ -275,6 +275,7 @@ export interface ProcessEditorLegacyAdapter {
   addTaskDefinition(task: LegacyProcessNode): void;
   setTaskDefinition(taskDefinition: LegacyTaskDefinition, key: 'name' | 'target' | 'address', value: string): void;
   removeTaskDefinition(task: LegacyProcessNode, taskDefinition: LegacyTaskDefinition): void;
+  createBusinessRule(task: LegacyProcessNode): LegacyBusinessRule;
   addBusinessRule(task: LegacyProcessNode): void;
   setBusinessRule(task: LegacyProcessNode, index: number, value: string): void;
   removeBusinessRule(task: LegacyProcessNode, index: number): void;
@@ -833,10 +834,14 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       task.orchestrationTasks = (task.orchestrationTasks || []).filter((item) => item !== taskDefinition);
       dirty();
     },
-    addBusinessRule(task) {
+    createBusinessRule(task) {
       task.businessRules ||= [];
       const id = nextId('BR', task.businessRules.filter((item): item is LegacyBusinessRule => Boolean(item) && typeof item !== 'string'));
-      task.businessRules.push({ id, uid: id, name: `规则${task.businessRules.length + 1}`, content: '' });
+      return { id, uid: id, name: `规则${task.businessRules.length + 1}`, content: '' };
+    },
+    addBusinessRule(task) {
+      task.businessRules ||= [];
+      task.businessRules.push(this.createBusinessRule(task));
       dirty();
     },
     setBusinessRule(task, index, value) {

@@ -1770,23 +1770,27 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     this.refresh();
   }
 
+  protected addBusinessRuleAfter(task: LegacyProcessNode, index: number): void {
+    if (!this.editing) return;
+    task.businessRules ||= [];
+    const insertIndex = Math.min(Math.max(index + 1, 0), task.businessRules.length);
+    const rule = this.adapter.createBusinessRule(task);
+    task.businessRules.splice(insertIndex, 0, rule);
+    this.adapter.touch();
+    this.refresh();
+  }
+
   protected addCommonBusinessRules(task: LegacyProcessNode): void {
     if (!this.editing) return;
     task.businessRules ||= [];
     const rules = task.businessRules;
-    const nextRule = (name: string, content: string): LegacyBusinessRule => {
+    const existingNames = new Set(rules.map((r) => String(typeof r === 'string' ? r : (r as LegacyBusinessRule).name || '').trim().toLowerCase()).filter(Boolean));
+    const templates = ['功能描述', '前置条件', '后置条件', '输入', '输出', '交互规则', '非功能性需求'];
+    for (const name of templates) {
+      if (existingNames.has(name.toLowerCase())) continue;
       const id = this.nextLocalId('BR', rules as Array<{ id?: string; uid?: string }>);
-      const rule = { id, uid: id, name: '', content: '' };
-      rules.push(rule);
-      this.businessRulePlaceholders.set(id, { name, content });
-      return rule;
-    };
-    // 模块意图：常用规则是节点建模的快捷补齐，不改变规则数据模型。
-    // 关键流程：只生成空规则，并把推荐内容放到占位提示里，避免用户手动删除模板文字。
-    // 边界细节：占位提示仅在当前前端会话内存在；保存到模型的仍是用户真正输入的内容。
-    nextRule('前置条件', '在办理前，需要满足的业务条件。');
-    nextRule('校验规则', '办理过程中需要校验的数据、权限或状态。');
-    nextRule('异常处理', '办理失败、数据不一致或材料缺失时的处理方式。');
+      rules.push({ id, uid: id, name, content: '' });
+    }
     this.adapter.touch();
     this.refresh();
   }
