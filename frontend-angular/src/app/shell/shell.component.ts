@@ -40,7 +40,7 @@ import { RoleWorkbenchComponent } from '../workbenches/role/role-workbench';
 import { FeedbackWorkbenchComponent } from '../workbenches/support/feedback/feedback-workbench.component';
 import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-workbench.component';
 
-type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'placeholder' | 'user-settings';
+type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'collab-conflict' | 'placeholder' | 'user-settings';
 type OpenDocumentTab = 'workspace' | 'trash';
 type CompareSource = 'current' | 'version' | 'history' | 'submit';
 
@@ -188,6 +188,9 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly mergeAnalysis = signal<MergeAnalysis | null>(null);
   protected readonly mergeResolutions = signal<Record<string, string>>({});
   protected readonly mergeCustomValues = signal<Record<string, string>>({});
+  protected readonly collabConflicts = signal<any[]>([]);
+  protected readonly collabConflictChoices = signal<Record<number, string>>({});
+  private collabConflictResolver: ((value: any) => void) | null = null;
   protected readonly busy = signal(false);
   protected readonly toast = signal<ShellToastState | null>(null);
   protected readonly confirmDialog = signal<ConfirmDialogState | null>(null);
@@ -665,9 +668,13 @@ export class ShellComponent implements OnInit, OnDestroy {
         await this.syncService.syncNow();
       });
     } catch (error) {
-      const conflictAnalysis = this.syncConflictAnalysis(error);
-      if (conflictAnalysis) {
-        this.openSyncConflictDialog(conflictAnalysis);
+      if (error instanceof SyncConflictError) {
+        this.waitDialog.set(null);
+        const conflicts = error.analysis?.conflicts || [];
+        const resolution = await this.showCollabConflictDialog(conflicts);
+        await this.runBusy(async () => {
+          await this.applyCollabConflictResolution(resolution, conflicts, error.analysis, error.frozenDocument);
+        });
         return;
       }
       throw error;
@@ -701,6 +708,142 @@ export class ShellComponent implements OnInit, OnDestroy {
     if (Array.isArray(anyError?.analysis?.conflicts)) return anyError.analysis;
     if (Array.isArray(anyError?.conflicts)) return anyError as MergeAnalysis;
     return null;
+  }
+
+  private showCollabConflictDialog(conflicts: any[]): Promise<any> {
+    return new Promise((resolve) => {
+      this.collabConflicts.set(conflicts || []);
+      this.collabConflictChoices.set({});
+      this.collabConflictResolver = resolve;
+      this.modal.set('collab-conflict');
+    });
+  }
+
+  protected setCollabConflictChoice(index: number, choice: string): void {
+    this.collabConflictChoices.set({ ...this.collabConflictChoices(), [index]: choice });
+  }
+
+  protected resolveCollabConflict(resolution: string): void {
+    const resolve = this.collabConflictResolver;
+    this.modal.set('');
+    this.collabConflicts.set([]);
+    this.collabConflictChoices.set({});
+    this.collabConflictResolver = null;
+    if (!resolve) return;
+    if (resolution === 'choices') {
+      resolve({ choices: { ...this.collabConflictChoices() } });
+    } else {
+      resolve(resolution);
+    }
+  }
+
+  protected formatCollabConflictField(conflict: any): string {
+    const path = conflict?.path || '';
+    const label = conflict?.label || '';
+    if (label) return label;
+    const map: Record<string, string> = {
+      'meta.title': '文档标题',
+      'meta.domain': '文档标识',
+      'meta.author': '文档作者',
+      'meta.date': '文档日期',
+      'meta.space': '所属空间',
+      'meta.tags': '标签',
+      'meta.revision': '版本号',
+    };
+    if (map[path]) return map[path];
+    if (conflict?.kind) return `${conflict.kind} - ${(conflict.item_type || '').replace(/_/g, ' ')}`;
+    return path
+      .replace(/^meta\./, '')
+      .replace(/^roles\[\d+\]\./, '角色 · ')
+      .replace(/^processes\[\d+\]\./, '流程 · ')
+      .replace(/^entities\[\d+\]\./, '实体 · ')
+      .replace(/^stages\[\d+\]\./, '阶段 · ')
+      .replace(/^panorama\./, '全景 · ')
+      .replace(/\./g, ' → ');
+  }
+
+  protected formatCollabConflictValue(value: unknown): string {
+    if (value === undefined || value === null) return '（空）';
+    if (Array.isArray(value)) return value.length ? value.join('、') : '（空列表）';
+    if (typeof value === 'object') {
+      try { return JSON.stringify(value, null, 2); } catch (e) { return String(value); }
+    }
+    if (value === '') return '（空）';
+    if (value === true) return '是';
+    if (value === false) return '否';
+    return String(value);
+  }
+
+  private setByPath(obj: any, path: string, value: any): void {
+    if (!path || obj == null) return;
+    const parts = path.split('.');
+    let cur = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts[i];
+      if (Array.isArray(cur)) {
+        const token = String(key || '');
+        const label = token.includes(':') ? token.slice(token.indexOf(':') + 1) : token;
+        let next = cur.find((item: any) => item && (
+          String(item.name || '') === label
+          || String(item.term || '') === label
+          || String(item.uid || '') === label
+          || String(item.id || '') === label
+        ));
+        if (!next) {
+          const numeric = Number.parseInt(token, 10);
+          if (Number.isInteger(numeric)) next = cur[numeric];
+        }
+        if (!next) return;
+        cur = next;
+      } else {
+        if (cur[key] === undefined) cur[key] = {};
+        cur = cur[key];
+      }
+    }
+    if (cur && typeof cur === 'object') cur[parts[parts.length - 1]] = value;
+  }
+
+  private async applyCollabConflictResolution(
+    resolution: any,
+    conflicts: any[],
+    result: any,
+    frozenDocument: any,
+  ): Promise<void> {
+    if (resolution && typeof resolution === 'object' && resolution.choices) {
+      const mergedDoc = result.document ? JSON.parse(JSON.stringify(result.document)) : frozenDocument;
+      Object.keys(resolution.choices).forEach((idx) => {
+        if (resolution.choices[idx] !== 'mine') return;
+        const conflict = conflicts[parseInt(idx, 10)];
+        if (!conflict) return;
+        const userVal = conflict.user ?? conflict.left_value;
+        this.setByPath(mergedDoc, conflict.path || '', userVal);
+      });
+      replaceRuntimeDocument(mergedDoc, this.runtime.currentFile);
+      this.documentStore.load(mergedDoc, this.runtime.currentFile);
+      this.runtime.modified = true;
+      this.runtime.collab.pendingSnapshot = true;
+    } else if (resolution === 'mine') {
+      replaceRuntimeDocument(frozenDocument, this.runtime.currentFile);
+      this.documentStore.load(frozenDocument, this.runtime.currentFile);
+      this.runtime.modified = true;
+      this.runtime.collab.pendingSnapshot = true;
+    } else {
+      if (result.document && typeof result.document === 'object') {
+        replaceRuntimeDocument(result.document, this.runtime.currentFile);
+        this.documentStore.load(result.document, this.runtime.currentFile);
+      }
+      this.runtime.modified = false;
+      this.runtime.collab.pendingSnapshot = false;
+    }
+    const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || this.runtime.collab.seq || 0);
+    this.runtime.collab.seq = nextSeq;
+    this.runtime.collab.acceptedSeq = nextSeq;
+    this.runtime.collab.hasRemoteUpdate = false;
+    this.runtime.collab.lastError = '';
+    if (result?.documentHash) {
+      this.runtime.collab.serverDocumentHash = String(result.documentHash);
+    }
+    this.showToast('冲突已处理，请再次立即同步。');
   }
 
   protected async openHistory(): Promise<void> {
@@ -1999,6 +2142,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     try {
       await action();
     } catch (error) {
+      if (error instanceof SyncConflictError) throw error;
       this.showToast(error instanceof Error ? error.message : String(error));
     } finally {
       this.busy.set(false);

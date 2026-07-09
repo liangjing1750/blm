@@ -6,7 +6,10 @@ import { DocumentStore } from '../document/document-store';
 import { emitRuntimeRefresh, getAngularRuntimeState, replaceRuntimeDocument } from '../runtime/angular-runtime';
 
 export class SyncConflictError extends Error {
-  constructor(readonly analysis: any) {
+  constructor(
+    readonly analysis: any,
+    readonly frozenDocument?: any,
+  ) {
     super('同步发现冲突，请先处理冲突项。');
     this.name = 'SyncConflictError';
   }
@@ -54,7 +57,7 @@ export class SyncService {
         runtime.collab.hasRemoteUpdate = true;
         runtime.collab.lastError = '';
         emitRuntimeRefresh();
-        throw new SyncConflictError(result);
+        throw new SyncConflictError(result, frozenDocument);
       }
       const document = result?.document || result?.merged_document || result?.mergedDocument || runtime.doc;
       const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || runtime.collab.seq || 0);

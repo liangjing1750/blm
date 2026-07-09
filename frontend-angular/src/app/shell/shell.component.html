@@ -168,7 +168,7 @@
   </section>
 </main>
 
-<div *ngIf="modal()" class="modal-backdrop" data-testid="angular-modal" (click)="closeModal()">
+<div *ngIf="modal()" class="modal-backdrop" data-testid="angular-modal" (click)="modal() !== 'collab-conflict' && closeModal()">
   <section
     class="modal-card"
     [class.open-document-card]="modal() === 'open'"
@@ -176,10 +176,11 @@
     [class.archive-version-card]="modal() === 'archive'"
     [class.compare-modal-card]="modal() === 'compare'"
     [class.merge-modal-card]="modal() === 'merge'"
+    [class.collab-conflict-dialog]="modal() === 'collab-conflict'"
     [class.open-document-waiting]="waitDialog()"
     (click)="$event.stopPropagation()"
   >
-    <button class="modal-close" type="button" (click)="closeModal()">×</button>
+    <button *ngIf="modal() !== 'collab-conflict'" class="modal-close" type="button" (click)="closeModal()">×</button>
 
     <ng-container [ngSwitch]="modal()">
       <section *ngSwitchCase="'create'" data-testid="create-document-dialog">
@@ -681,6 +682,47 @@
             </div>
           </section>
         }
+      </section>
+
+      <section *ngSwitchCase="'collab-conflict'" class="collab-conflict-dialog-content" data-testid="collab-conflict-dialog">
+        <h3>检测到 {{ collabConflicts().length }} 处修改冲突</h3>
+        <p class="field-hint">以下字段被你和其他人同时修改了。请逐项点击"保留此项"选择每个字段用哪个版本，或使用底部按钮一键处理。</p>
+        <div class="collab-conflict-list">
+          @for (conflict of collabConflicts(); track conflict.path || $index; let i = $index) {
+            <div class="collab-conflict-item" [attr.data-conflict-index]="i">
+              <div class="collab-conflict-field">{{ formatCollabConflictField(conflict) }}</div>
+              <div class="collab-conflict-cols">
+                <div class="collab-conflict-col">
+                  <div class="collab-conflict-label">我的版本</div>
+                  <pre>{{ formatCollabConflictValue(conflict.user ?? conflict.left_value) }}</pre>
+                  <button
+                    class="btn btn-sm collab-conflict-choose"
+                    [class.btn-outline]="collabConflictChoices()[i] !== 'mine'"
+                    [class.btn-primary]="collabConflictChoices()[i] === 'mine'"
+                    [class.is-selected]="collabConflictChoices()[i] === 'mine'"
+                    (click)="setCollabConflictChoice(i, 'mine')"
+                  >{{ collabConflictChoices()[i] === 'mine' ? '已选择' : '保留此项' }}</button>
+                </div>
+                <div class="collab-conflict-col">
+                  <div class="collab-conflict-label">服务端版本</div>
+                  <pre>{{ formatCollabConflictValue(conflict.server ?? conflict.right_value) }}</pre>
+                  <button
+                    class="btn btn-sm collab-conflict-choose"
+                    [class.btn-outline]="collabConflictChoices()[i] !== 'server'"
+                    [class.btn-primary]="collabConflictChoices()[i] === 'server'"
+                    [class.is-selected]="collabConflictChoices()[i] === 'server'"
+                    (click)="setCollabConflictChoice(i, 'server')"
+                  >{{ collabConflictChoices()[i] === 'server' ? '已选择' : '保留此项' }}</button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+        <div class="collab-conflict-actions">
+          <button class="btn btn-outline" type="button" data-testid="collab-conflict-all-mine" (click)="resolveCollabConflict('mine')">全部保留我的版本</button>
+          <button class="btn btn-outline" type="button" data-testid="collab-conflict-apply-choices" (click)="resolveCollabConflict('choices')">按上述选择合并</button>
+          <button class="btn btn-primary" type="button" data-testid="collab-conflict-all-server" (click)="resolveCollabConflict('server')">全部使用服务端版本</button>
+        </div>
       </section>
 
       <section *ngSwitchDefault>

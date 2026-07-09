@@ -360,6 +360,27 @@ app-shell-tab-bar {
   overflow: auto;
 }
 
+.collab-conflict-dialog {
+  width: min(1440px, calc(100vw - 32px));
+  height: min(90vh, 820px);
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+
+.collab-conflict-dialog h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  color: #dc2626;
+  flex-shrink: 0;
+}
+
+.collab-conflict-dialog .field-hint {
+  flex-shrink: 0;
+}
+
 .open-document-waiting {
   filter: blur(3px);
   pointer-events: none;
