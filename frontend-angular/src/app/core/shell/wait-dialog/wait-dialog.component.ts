@@ -7,8 +7,9 @@ import { Component, Input } from '@angular/core';
 })
 export class WaitDialogComponent {
   // Module intent: reusable modal wait indicator for operations that need to block the current overlay.
-  // Key flow: callers provide only content; sizing, spinner, and progress affordance stay consistent.
-  // Boundary detail: this component has no side effects and does not know which operation is running.
+  // Key flow: callers provide title, description, and optional progress (0-100) with remaining seconds.
   @Input() title = '';
   @Input() description = '';
+  @Input() progress = -1;       // 0-100, -1 = indeterminate
+  @Input() remainingSeconds = 0;
 }

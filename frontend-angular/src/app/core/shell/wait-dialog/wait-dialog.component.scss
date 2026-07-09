@@ -53,6 +53,22 @@
   animation: wait-progress 1.3s ease-in-out infinite;
 }
 
+.wait-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  transition: width .4s ease;
+  animation: none !important;
+}
+
+.wait-progress-text {
+  margin: 4px 0 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .wait-dialog p {
   margin: 0;
   color: #667892;

@@ -30,7 +30,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
   private previewLazyObserver: IntersectionObserver | null = null;
   protected readonly runtime = getAngularRuntimeState();
-  protected readonly exportWait = signal<{ title: string; description: string } | null>(null);
+  protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
   protected readonly showRaw = signal(false);
   private readonly loadedPreviewSections = signal<Set<string>>(new Set());
   protected readonly collapsedOutlineIds = signal<Set<string>>(new Set());
@@ -1595,17 +1595,25 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return asciiMatch?.[1] || '';
   }
 
-  private async waitForExportJob(jobId: string, initialJob: any): Promise<any> {
+  /** 轮询导出任务，实时更新进度和剩余时间估算 */
+  private async waitForExportJob(jobId: string, initialJob: any, startTime = Date.now()): Promise<any> {
     let latestJob = initialJob;
-    for (let attempt = 0; attempt < 30; attempt += 1) {
+    const start = startTime;
+    for (let attempt = 0; attempt < 300; attempt += 1) {
       if (latestJob?.status === 'done' || latestJob?.status === 'failed') return latestJob;
+      const progress = Math.min(99, Math.max(0, Number(latestJob?.progress ?? 0)));
+      const elapsed = (Date.now() - start) / 1000;
+      const estimatedTotal = progress > 5 ? (elapsed / progress) * 100 : 60;
+      const remaining = Math.max(1, Math.round(estimatedTotal - elapsed));
       this.exportWait.set({
-        title: '正在生成 DOCX...',
-        description: latestJob?.message || '正在转换图形并嵌入附件，请耐心等待。',
+        title: latestJob?.title || this.exportWait()?.title || '正在导出…',
+        description: latestJob?.message || '请耐心等待。',
+        progress,
+        remainingSeconds: remaining,
       });
       latestJob = await this.api.exportJob(jobId);
       if (latestJob?.status === 'done' || latestJob?.status === 'failed') return latestJob;
-      await this.delay(100);
+      await this.delay(500);
     }
     return latestJob;
   }

@@ -1,8 +1,17 @@
 <section class="wait-dialog" data-testid="wait-dialog" role="status" aria-live="polite">
   <div class="wait-spinner" aria-hidden="true"></div>
   <h2>{{ title }}</h2>
-  <div class="wait-progress" aria-hidden="true">
-    <span></span>
-  </div>
-  <p>{{ description }}</p>
+  @if (progress >= 0) {
+    <div class="wait-progress" aria-hidden="false">
+      <span class="wait-progress-fill" [style.width.%]="progress"></span>
+    </div>
+    <p class="wait-progress-text">{{ progress }}%{{ remainingSeconds > 0 ? ' · 剩余 ' + remainingSeconds + ' 秒' : '' }}</p>
+  } @else {
+    <div class="wait-progress" aria-hidden="true">
+      <span></span>
+    </div>
+  }
+  @if (description) {
+    <p>{{ description }}</p>
+  }
 </section>
