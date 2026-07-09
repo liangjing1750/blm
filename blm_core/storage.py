@@ -995,7 +995,7 @@ class WorkspaceStorage(DocumentFileStore):
             )
         )
         for image in graph_images or []:
-            packaged_files.append((Path("assets") / image.name, image.payload))
+            packaged_files.append((Path("images") / image.name, image.payload))
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for relative_path, payload in packaged_files:
@@ -1039,14 +1039,37 @@ class WorkspaceStorage(DocumentFileStore):
         )
 
     def _markdown_with_graph_images(self, markdown: str, graph_images: list[DocxImage]) -> str:
+        """Embed captured graph snapshots into structured markdown.
+
+        Each graph image is inserted as a figure reference inside the document
+        body (not appended at the end), using the graph's title as caption.
+        """
         if not graph_images:
             return markdown
-        lines = [str(markdown or "").rstrip(), "", "## 静态图形", ""]
+        named: dict[str, str] = {}
         for image in graph_images:
-            title = Path(image.name).stem.replace("-", " ")
-            lines.append(f"![{title}](assets/{image.name})")
-            lines.append("")
-        return "\n".join(lines).rstrip() + "\n"
+            stem = Path(image.name).stem
+            named[image.name] = stem.replace("-", " ").replace("_", " ")
+        lines = list(str(markdown or "").rstrip().splitlines())
+        inserted: set[str] = set()
+        result: list[str] = []
+        for line in lines:
+            result.append(line)
+            if not line.startswith("##"):
+                continue
+            heading = line.lstrip("# ").strip()
+            for filename, title in named.items():
+                if filename in inserted:
+                    continue
+                if title and (title in heading or heading in title):
+                    result.append("")
+                    result.append(f"![{title}](images/{filename})")
+                    inserted.add(filename)
+        for filename, title in named.items():
+            if filename not in inserted:
+                result.append("")
+                result.append(f"![{title}](images/{filename})")
+        return "\n".join(result).rstrip() + "\n"
 
     def migrate_workspace_layout(self) -> dict[str, int]:
         result = {"documents": 0, "history": 0, "trash": 0}
