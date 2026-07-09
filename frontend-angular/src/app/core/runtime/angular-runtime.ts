@@ -112,7 +112,7 @@ const runtimeState: AngularRuntimeState = {
   runtime: {
     supportsCollab: true,
     agentUrl: 'http://127.0.0.1:8088',
-    appVersion: '3.0',
+    appVersion: '3.1',
   },
   collab: {
     seq: 0,

@@ -806,18 +806,30 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected addTask(): void {
     const process = this.currentProcess();
     if (!process) return;
+    const rightEdge = this.flowNodes(process).reduce((max, n) => Math.max(max, n.x + n.width), this.graphNodeStartX);
     const task = this.flowModel.addTask(process);
+    const id = this.taskId(task);
+    const graphIndex = Math.max(0, this.flowOrder(process).indexOf(id) - 1);
+    const baseX = this.graphNodeStartX + graphIndex * this.columnGap;
+    const dx = Math.max(0, rightEdge + this.columnGap - baseX);
+    if (dx > 0) this.flowModel.setFlowOffset(process, id, dx, 0);
     this.adapter.touch();
-    this.selectedElementId.set(this.taskId(task));
+    this.selectedElementId.set(id);
     this.refresh();
   }
 
   protected addGateway(): void {
     const process = this.currentProcess();
     if (!process) return;
+    const rightEdge = this.flowNodes(process).reduce((max, n) => Math.max(max, n.x + n.width), this.graphNodeStartX);
     const gateway = this.flowModel.addGateway(process);
+    const id = this.gatewayId(gateway);
+    const graphIndex = Math.max(0, this.flowOrder(process).indexOf(id) - 1);
+    const baseX = this.graphNodeStartX + graphIndex * this.columnGap;
+    const dx = Math.max(0, rightEdge + this.columnGap - baseX);
+    if (dx > 0) this.flowModel.setFlowOffset(process, id, dx, 0);
     this.adapter.touch();
-    this.selectedElementId.set(this.gatewayId(gateway));
+    this.selectedElementId.set(id);
     this.refresh();
   }
 

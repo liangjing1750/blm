@@ -86,7 +86,6 @@
               @if (isDictionaryExpanded(dictionary, dictionaryIndex)) {
                 <div class="knowledge-dictionary-body">
                   <div class="knowledge-dictionary-fields">
-                    <label>UID<input [ngModel]="dictionaryId(dictionary, dictionaryIndex)" readonly data-testid="knowledge-dictionary-uid" /></label>
                     <label>英文名称<input [ngModel]="dictionary.code || ''" [readonly]="!editing" data-testid="knowledge-dictionary-code" (ngModelChange)="updateDictionary(dictionary, 'code', $event)" /></label>
                     <label>中文名称<input [ngModel]="dictionary.name || ''" [readonly]="!editing" data-testid="knowledge-dictionary-name" (ngModelChange)="updateDictionary(dictionary, 'name', $event)" /></label>
                     <label>说明<input [ngModel]="dictionary.desc || ''" [readonly]="!editing" data-testid="knowledge-dictionary-desc" (ngModelChange)="updateDictionary(dictionary, 'desc', $event)" /></label>
@@ -105,7 +104,12 @@
                           <input [ngModel]="entry.name || ''" [readonly]="!editing" placeholder="中文值" data-testid="knowledge-dictionary-entry-name" (ngModelChange)="updateDictionaryEntry(entry, 'name', $event)" />
                           <input [ngModel]="entry.desc || ''" [readonly]="!editing" placeholder="说明" data-testid="knowledge-dictionary-entry-desc" (ngModelChange)="updateDictionaryEntry(entry, 'desc', $event)" />
                           @if (editing) {
-                            <button class="is-danger" type="button" data-testid="knowledge-dictionary-entry-remove" (click)="removeDictionaryEntry(dictionary, entryIndex)">×</button>
+                            <div class="knowledge-row-actions">
+                              <button type="button" title="在下方新增" data-testid="knowledge-dictionary-entry-add-after" (click)="addDictionaryEntryAfter(dictionary, entryIndex)">+</button>
+                              <button type="button" title="上移" data-testid="knowledge-dictionary-entry-move-up" [disabled]="entryIndex === 0" (click)="moveDictionaryEntry(dictionary, entryIndex, -1)">↑</button>
+                              <button type="button" title="下移" data-testid="knowledge-dictionary-entry-move-down" [disabled]="entryIndex === dictionaryEntries(dictionary).length - 1" (click)="moveDictionaryEntry(dictionary, entryIndex, 1)">↓</button>
+                              <button class="is-danger" type="button" data-testid="knowledge-dictionary-entry-remove" (click)="removeDictionaryEntry(dictionary, entryIndex)">×</button>
+                            </div>
                           }
                         </div>
                       }

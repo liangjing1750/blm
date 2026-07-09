@@ -267,6 +267,24 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
     this.markChanged();
   }
 
+  protected addDictionaryEntryAfter(dictionary: LegacyDictionary, index: number): void {
+    if (!this.editing) return;
+    dictionary.entries ||= [];
+    const insertIndex = Math.min(Math.max(index + 1, 0), dictionary.entries.length);
+    const nextIndex = dictionary.entries.length + 1;
+    dictionary.entries.splice(insertIndex, 0, { uid: `dict-entry-${Date.now()}`, code: `value_${nextIndex}`, name: `字典项${nextIndex}`, desc: '' });
+    this.markChanged();
+  }
+
+  protected moveDictionaryEntry(dictionary: LegacyDictionary, index: number, direction: -1 | 1): void {
+    if (!this.editing) return;
+    if (!Array.isArray(dictionary.entries)) return;
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || index >= dictionary.entries.length || nextIndex >= dictionary.entries.length) return;
+    [dictionary.entries[index], dictionary.entries[nextIndex]] = [dictionary.entries[nextIndex], dictionary.entries[index]];
+    this.markChanged();
+  }
+
   protected functions(): FunctionView[] {
     this.version();
     return (this.document().processes || []).map((process, index) => {

@@ -10,7 +10,7 @@
       </span>
     } @else {
       <span class="live-diagram-hint entity-shortcut-hint" data-testid="entity-relation-shortcut-hint">
-        <strong>拖拽</strong>移动节点 · 点击实体切换编辑对象 · <strong>双击实体</strong>进入编辑 · <strong>Ctrl+A</strong>全选实体 · <strong>Ctrl+点击</strong>多选 · <strong>Shift+左键拖拽</strong>框选
+        <strong>拖拽</strong>移动节点 · 点击实体切换编辑对象 · <strong>双击实体</strong>进入编辑 · <strong>Ctrl+A</strong>全选实体 · <strong>Ctrl+点击</strong>多选 · <strong>Shift+左键拖拽</strong>框选 · <strong>点击构件/组件</strong>选择所属全部实体
       </span>
     }
     @if (view() === 'relation' && canEditRelation()) {
@@ -46,12 +46,12 @@
         <div class="entity-relation-canvas ef-canvas" id="ef-canvas-entity-diagram" data-testid="entity-design-relation-view" [ngStyle]="relationCanvasSize()">
           <div class="entity-board ef-board" id="ef-board-entity-diagram" [class.is-editing]="canEditRelation()" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [ngStyle]="boardSize()" (mousedown)="startSelectionBox($event)" (click)="clearSelection()">
             @for (frame of componentFrames(); track frame.key) {
-              <div class="entity-component-frame ef-component-frame" [ngStyle]="frameStyle(frame)"></div>
-              <div class="entity-component-title ef-component-title" [style.left.px]="frame.left + 18" [style.top.px]="frame.top + 10">{{ frame.label }}</div>
+              <div class="entity-component-frame ef-component-frame" [ngStyle]="frameStyle(frame)" (mousedown)="startFrameDrag(frame, $event)" [title]="'拖曳移动全部 ' + (frame.entityIds?.length || 0) + ' 个实体'"></div>
+              <div class="entity-component-title ef-component-title" [title]="'拖曳移动全部 ' + (frame.entityIds?.length || 0) + ' 个实体'" [style.left.px]="frame.left + 18" [style.top.px]="frame.top + 10" (mousedown)="startFrameDrag(frame, $event)">{{ frame.label }}</div>
             }
             @for (frame of groupFrames(); track frame.key) {
-              <div class="entity-group-frame ef-group-frame" [ngStyle]="frameStyle(frame)">
-                <div class="entity-group-title ef-group-title">{{ frame.label }}</div>
+              <div class="entity-group-frame ef-group-frame" [ngStyle]="frameStyle(frame)" (mousedown)="startFrameDrag(frame, $event)" [title]="'拖曳移动全部 ' + (frame.entityIds?.length || 0) + ' 个实体'">
+                <div class="entity-group-title ef-group-title" [title]="'拖曳移动全部 ' + (frame.entityIds?.length || 0) + ' 个实体'" (mousedown)="startFrameDrag(frame, $event)">{{ frame.label }}</div>
               </div>
             }
             <svg class="entity-rel-svg ef-svg" id="ef-svg-entity-diagram" [attr.width]="boardWidth()" [attr.height]="boardHeight()" aria-hidden="true">

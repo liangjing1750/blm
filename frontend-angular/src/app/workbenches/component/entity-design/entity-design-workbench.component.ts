@@ -55,6 +55,7 @@ interface EntityFrame {
   height: number;
   color?: string;
   fill?: string;
+  entityIds?: string[];
 }
 
 interface StateNodeLayout {
@@ -385,6 +386,8 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       if (next.has(id)) next.delete(id);
       else next.add(id);
       this.selectedEntityIds.set(next);
+    } else if (event?.shiftKey) {
+      return;
     } else {
       this.selectedEntityIds.set(new Set([id]));
     }
@@ -412,7 +415,6 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected startEntityDrag(entity: EntityDesignEntity, event: MouseEvent): void {
-    if (!this.canEditRelation()) return;
     if (event.button !== 0) return;
     if (event.ctrlKey || event.metaKey) return;
     if (event.shiftKey) {
@@ -421,6 +423,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       this.startSelectionBox(event);
       return;
     }
+    if (!this.canEditRelation()) return;
     event.preventDefault();
     event.stopPropagation();
     const id = this.entityId(entity);
@@ -436,8 +439,25 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     this.dragState = { entityId: id, startClientX: event.clientX, startClientY: event.clientY, originalPositions, moved: false };
   }
 
-  protected startSelectionBox(event: MouseEvent): void {
+  protected startFrameDrag(frame: EntityFrame, event: MouseEvent): void {
+    if (event.button !== 0) return;
     if (!this.canEditRelation()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.selectFrameEntities(frame);
+    const draggedIds = this.selectedEntityIds();
+    if (!draggedIds.size) return;
+    const originalPositions: Record<string, { x: number; y: number }> = {};
+    for (const item of this.entities()) {
+      const itemId = this.entityId(item);
+      if (!draggedIds.has(itemId)) continue;
+      const node = this.nodes().find((layout) => layout.id === itemId);
+      originalPositions[itemId] = { x: item.pos?.x ?? node?.x ?? 0, y: item.pos?.y ?? node?.y ?? 0 };
+    }
+    this.dragState = { entityId: [...draggedIds][0] || '', startClientX: event.clientX, startClientY: event.clientY, originalPositions, moved: false };
+  }
+
+  protected startSelectionBox(event: MouseEvent): void {
     if (!event.shiftKey || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -458,11 +478,23 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     return { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` };
   }
 
+  private _selectionBoxApplied = false;
+
   protected clearSelection(): void {
     if (this.selectionBox()) return;
+    if (this._selectionBoxApplied) { this._selectionBoxApplied = false; return; }
     this.selectedEntityIds.set(new Set());
     this.selectedEntityId.set('');
     this.syncRuntimeEntityId('');
+  }
+
+  protected selectFrameEntities(frame: EntityFrame, event?: MouseEvent): void {
+    event?.stopPropagation();
+    const ids = frame.entityIds?.filter(Boolean) || [];
+    if (ids.length === 0) return;
+    this.selectedEntityIds.set(new Set(ids));
+    this.selectedEntityId.set(ids[0]);
+    this.syncRuntimeEntityId(ids[0]);
   }
 
   protected addEntity(): void {
@@ -873,10 +905,14 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected relationsForEntity(entity: EntityDesignEntity): EntityDesignRelation[] {
-    const entityId = this.entityId(entity);
+    const eid = this.entityId(entity);
     return [
-      ...this.adapter.relations().filter((relation) => this.relationFrom(relation) === entityId || this.relationTo(relation) === entityId),
-      ...(entity.relations || []),
+      ...this.adapter.relations().filter((relation) => this.relationFrom(relation) === eid || this.relationTo(relation) === eid),
+      ...(entity.relations || []).map((relation) => ({
+        ...relation,
+        from: this.relationFrom(relation) || eid,
+        to: this.relationTo(relation) || eid,
+      })),
     ];
   }
 
@@ -1242,7 +1278,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   private isRelationShortcutActive(): boolean {
-    return this.view() === 'relation' && Boolean(document.getElementById('ef-canvas-entity-diagram'));
+    return this.view() === 'relation' && Boolean(document.getElementById('ef-board-entity-diagram'));
   }
 
   private changed(): void {
@@ -1306,6 +1342,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   private applySelectionBox(): void {
     const box = this.selectionBox();
     if (!box) return;
+    this._selectionBoxApplied = true;
     const left = Math.min(box.startX, box.currentX);
     const right = Math.max(box.startX, box.currentX);
     const top = Math.min(box.startY, box.currentY);
@@ -1457,37 +1494,42 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   private computeGroupFrames(nodes: EntityNodeLayout[]): EntityFrame[] {
-    const frames = new Map<string, EntityFrame>();
+    const frames = new Map<string, { frame: Omit<EntityFrame, 'entityIds'>; entityIds: Set<string> }>();
     for (const node of nodes) {
       const left = node.x - this.groupPadX;
       const top = node.y - this.groupHeaderHeight - this.groupPadY;
       const right = node.x + node.width + this.groupPadX;
       const bottom = node.y + node.height + this.groupPadY;
-      const current = frames.get(node.constructKey);
+      let current = frames.get(node.constructKey);
       if (!current) {
-        frames.set(node.constructKey, {
-          key: node.constructKey,
-          label: node.constructName,
-          componentKey: node.componentKey,
-          left,
-          top,
-          width: right - left,
-          height: bottom - top,
-          color: node.stroke,
-          fill: `${node.fill}66`,
-        });
+        current = {
+          frame: {
+            key: node.constructKey,
+            label: node.constructName,
+            componentKey: node.componentKey,
+            left, top,
+            width: right - left,
+            height: bottom - top,
+            color: node.stroke,
+            fill: `${node.fill}66`,
+          },
+          entityIds: new Set([node.id]),
+        };
+        frames.set(node.constructKey, current);
       } else {
-        const nextLeft = Math.min(current.left, left);
-        const nextTop = Math.min(current.top, top);
-        const nextRight = Math.max(current.left + current.width, right);
-        const nextBottom = Math.max(current.top + current.height, bottom);
-        current.left = nextLeft;
-        current.top = nextTop;
-        current.width = nextRight - nextLeft;
-        current.height = nextBottom - nextTop;
+        current.entityIds.add(node.id);
+        const cf = current.frame;
+        const nextLeft = Math.min(cf.left, left);
+        const nextTop = Math.min(cf.top, top);
+        const nextRight = Math.max(cf.left + cf.width, right);
+        const nextBottom = Math.max(cf.top + cf.height, bottom);
+        cf.left = nextLeft;
+        cf.top = nextTop;
+        cf.width = nextRight - nextLeft;
+        cf.height = nextBottom - nextTop;
       }
     }
-    return Array.from(frames.values());
+    return Array.from(frames.values()).map((item) => ({ ...item.frame, entityIds: Array.from(item.entityIds) }));
   }
 
   private computeComponentFrames(groupFrames: EntityFrame[]): EntityFrame[] {
@@ -1507,6 +1549,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
           top,
           width: right - left,
           height: bottom - top,
+          entityIds: [...(frame.entityIds || [])],
         });
       } else {
         const nextLeft = Math.min(current.left, left);
@@ -1517,6 +1560,9 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         current.top = nextTop;
         current.width = nextRight - nextLeft;
         current.height = nextBottom - nextTop;
+        if (frame.entityIds && current.entityIds) {
+          current.entityIds = [...new Set([...current.entityIds, ...frame.entityIds])];
+        }
       }
     }
     return Array.from(frames.values());
@@ -2263,10 +2309,12 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
 
   private stateValuesFromNote(note: string): string[] {
     const text = String(note || '');
+    if (!text) return [];
     const match = text.match(/(?:状态|取值|枚举)[：:]\s*([^。；;\n]+)/);
-    return (match?.[1] || '')
-      .split(/[\/,，、\s]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    if (match?.[1]) {
+      return match[1].split(/[\/,，、\s]+/).filter(Boolean);
+    }
+    // 兼容"草稿/待审核/审核通过"无前缀格式（UI 提示的填写方式）
+    return text.split(/[\/,，、\s]+/).map((s) => s.trim()).filter(Boolean);
   }
 }

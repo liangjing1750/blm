@@ -193,22 +193,31 @@
   background: rgba(248, 250, 252, 0.72)
 }
 
-.entity-component-title {
+.entity-component-title,
+.entity-group-title {
   position: absolute;
-  z-index: 2;
-  max-width: 260px;
-  overflow: hidden;
-  padding: 3px 9px;
-  border: 1px solid #dbeafe;
+  z-index: 3;
+  min-width: 60px;
+  padding: 3px 10px;
+  border: 1px solid #bfdbfe;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.95);
-  color: #475569;
+  color: #334155;
   font-size: 12px;
   font-weight: 800;
-  line-height: 1.2;
-  text-overflow: ellipsis;
+  line-height: 1.4;
+  text-align: center;
   white-space: nowrap;
-  pointer-events: none
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s, border-color .15s, box-shadow .15s
+}
+
+.entity-component-title:hover,
+.entity-group-title:hover {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, .25)
 }
 
 .entity-group-frame {
@@ -219,17 +228,10 @@
 }
 
 .entity-group-title {
-  position: absolute;
   top: 5px;
   left: 10px;
   max-width: calc(100% - 20px);
-  overflow: hidden;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap
+  pointer-events: auto
 }
 
 .entity-rel-svg {
