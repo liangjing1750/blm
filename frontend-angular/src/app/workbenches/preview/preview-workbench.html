@@ -438,36 +438,61 @@
           </section>
         }
 
-        <!-- ════ 应用建模 ════ -->
+        <!-- ════ 应用服务（服务组→接口JSON视图） ════ -->
         @if (services().length || applicationInterfaceRows().length) {
           <section id="preview-applications" class="pv-section">
-            <h2>{{ outlineNumber('preview-applications') }} 应用建模</h2>
-            @if (services().length) {
-              <section id="preview-application-services" class="pv-subsection">
-                <h3>{{ outlineNumber('preview-application-services') }} 应用服务</h3>
-                <table>
-                  <thead><tr><th>服务</th><th>接口数</th><th>说明</th></tr></thead>
+            <h2>{{ outlineNumber('preview-applications') }} 应用服务</h2>
+
+            @if (serviceGroups().length) {
+              @for (group of serviceGroups(); track group.uid) {
+                @if (servicesByGroup(group.uid).length) {
+                  <section [id]="'preview-app-svc-' + group.uid" class="pv-graph-card" style="margin:12px 0">
+                    <h3>{{ outlineNumber('preview-app-svc-' + group.uid) }} {{ group.name || displayName(group, '未命名服务组') }}</h3>
+                    <table style="font-size:12px">
+                      <thead><tr><th>接口名称</th><th>方法</th><th>路径</th><th>请求参数</th><th>响应参数</th></tr></thead>
+                      <tbody>
+                        @for (svc of servicesByGroup(group.uid); track svc.uid || $index) {
+                          <tr>
+                            <td><strong>{{ svc.name || '' }}</strong></td>
+                            <td><code>{{ svc.method || '' }}</code></td>
+                            <td><code>{{ svc.path || svc.url || '' }}</code></td>
+                            <td style="max-width:260px;word-break:break-all;font-size:11px">
+                              @if (svc.rawRequest) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawRequest }}</pre>}
+                              @else if (asArray(svc.requestParams || svc.inputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.requestParams || svc.inputs) }}</pre>}
+                              @else {<span class="pv-note">—</span>}
+                            </td>
+                            <td style="max-width:260px;word-break:break-all;font-size:11px">
+                              @if (svc.rawResponse) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawResponse }}</pre>}
+                              @else if (asArray(svc.responseParams || svc.outputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.responseParams || svc.outputs) }}</pre>}
+                              @else {<span class="pv-note">—</span>}
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </section>
+                }
+              }
+            } @else {
+              <section class="pv-graph-card" style="margin:12px 0">
+                <table style="font-size:12px">
+                  <thead><tr><th>接口名称</th><th>方法</th><th>路径</th><th>请求参数</th><th>响应参数</th></tr></thead>
                   <tbody>
-                    @for (service of services(); track identityOf(service, 'service-' + $index)) {
-                      <tr><td>{{ service.name || '' }}</td><td>{{ asArray(service.interfaces).length }}</td><td>{{ service.desc || service.note || '' }}</td></tr>
-                    }
-                  </tbody>
-                </table>
-              </section>
-            }
-            @if (applicationInterfaceRows().length) {
-              <section id="preview-application-interfaces" class="pv-subsection">
-                <h3>{{ outlineNumber('preview-application-interfaces') }} 应用接口</h3>
-                <table>
-                  <thead><tr><th>接口</th><th>方法</th><th>路径</th><th>请求参数</th><th>响应参数</th></tr></thead>
-                  <tbody>
-                    @for (api of applicationInterfaceRows(); track identityOf(api, 'api-' + $index)) {
+                    @for (svc of services(); track svc.uid || $index) {
                       <tr>
-                        <td>{{ api.name || '' }}</td>
-                        <td>{{ api.method || '' }}</td>
-                        <td>{{ api.path || api.url || '' }}</td>
-                        <td>{{ asArray(api.requestParams || api.inputs).length }}</td>
-                        <td>{{ asArray(api.responseParams || api.outputs).length }}</td>
+                        <td><strong>{{ svc.name || '' }}</strong></td>
+                        <td><code>{{ svc.method || '' }}</code></td>
+                        <td><code>{{ svc.path || svc.url || '' }}</code></td>
+                        <td style="max-width:260px;word-break:break-all;font-size:11px">
+                          @if (svc.rawRequest) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawRequest }}</pre>}
+                          @else if (asArray(svc.requestParams || svc.inputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.requestParams || svc.inputs) }}</pre>}
+                          @else {<span class="pv-note">—</span>}
+                        </td>
+                        <td style="max-width:260px;word-break:break-all;font-size:11px">
+                          @if (svc.rawResponse) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawResponse }}</pre>}
+                          @else if (asArray(svc.responseParams || svc.outputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.responseParams || svc.outputs) }}</pre>}
+                          @else {<span class="pv-note">—</span>}
+                        </td>
                       </tr>
                     }
                   </tbody>

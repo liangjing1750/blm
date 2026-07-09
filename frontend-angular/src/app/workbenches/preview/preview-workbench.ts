@@ -263,7 +263,29 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   }
 
   protected services(): any[] {
-    return this.asArray(this.runtime.doc?.applicationServices || this.runtime.doc?.appServices);
+    // 兼容多种字段名：applicationServices / appServices / services
+    const doc = this.runtime.doc || {};
+    const a = this.asArray(doc.applicationServices);
+    if (a.length) return a;
+    const b = this.asArray(doc.appServices);
+    if (b.length) return b;
+    return this.asArray(doc.services);
+  }
+
+  /** 服务组 */
+  protected serviceGroups(): any[] {
+    return this.asArray(this.runtime.doc?.serviceGroups);
+  }
+
+  /** 按服务组 uid 过滤接口 */
+  protected servicesByGroup(groupUid: string): any[] {
+    return this.services().filter((s) => s.serviceGroupUid === groupUid);
+  }
+
+  /** 格式化参数为JSON文本 */
+  protected formatParams(params: any[]): string {
+    if (!Array.isArray(params) || !params.length) return '';
+    try { return JSON.stringify(params, null, 2); } catch { return String(params); }
   }
 
   protected interfaces(): any[] {
@@ -492,11 +514,29 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       if (orphanTasks.length) raw.push({ id: 'preview-task-definitions', label: '任务定义', depth: 1 });
     }
 
-    // ── 应用建模 ──
-    if (this.services().length || this.interfaces().length) {
-      raw.push({ id: 'preview-applications', label: '应用建模', depth: 0 });
-      if (this.services().length) raw.push({ id: 'preview-application-services', label: '应用服务', depth: 1 });
-      if (this.interfaces().length) raw.push({ id: 'preview-application-interfaces', label: '应用接口', depth: 1 });
+    // ── 应用服务（按服务组→应用接口，无三级标题） ──
+    const allSvcs = this.services();
+    const svcGroups = this.serviceGroups();
+    if (allSvcs.length || this.interfaces().length) {
+      raw.push({ id: 'preview-applications', label: '应用服务', depth: 0 });
+      if (svcGroups.length) {
+        svcGroups.forEach((g) => {
+          const groupSvcs = allSvcs.filter((s) => s.serviceGroupUid === g.uid);
+          if (groupSvcs.length) {
+            raw.push({ id: `preview-app-svc-${g.uid}`, label: g.name || this.identityOf(g, '未命名服务组'), depth: 1 });
+          }
+        });
+        // 未归属服务组的接口
+        const ungrouped = allSvcs.filter((s) => !s.serviceGroupUid);
+        if (ungrouped.length) {
+          raw.push({ id: 'preview-app-svc-ungrouped', label: '其他', depth: 1 });
+        }
+      } else {
+        // 无服务组时 flat 列出
+        allSvcs.forEach((s, idx) => {
+          raw.push({ id: `preview-app-svc-${s.uid || s.id || `svc-${idx}`}`, label: this.displayName(s, '未命名服务'), depth: 1 });
+        });
+      }
     }
 
     // ── 附录（按流程→节点→附件组织） ──
