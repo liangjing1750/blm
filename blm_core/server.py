@@ -227,6 +227,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
     feedback_store = FeedbackStore(storage.workspace_dir)
     export_jobs: dict[str, dict] = {}
     export_jobs_lock = threading.RLock()
+    export_cache: dict[str, tuple[str, bytes]] = {}
+    export_cache_lock = threading.RLock()
 
     class BlmRequestHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -304,6 +306,24 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 if path.startswith("/api/export-jobs/"):
                     return self._handle_export_job_status(path)
                 if path.startswith("/api/export-bundle/"):
+                    # 支持 ?version=xxx&format=json|md|docx 参数，缓存命中直接返回
+                    qs = parse_qs(urlparse(self.path).query)
+                    req_version = (qs.get("version") or [None])[0]
+                    req_format = (qs.get("format") or [None])[0]
+                    if req_version and req_format:
+                        name = unquote(path[len("/api/export-bundle/"):].split("?")[0])
+                        try:
+                            safe_name = storage._validate_name(name)
+                            cached = self._check_export_cache(safe_name, req_version, req_format)
+                            if cached:
+                                filename, payload = cached
+                                ctype = "application/zip"
+                                if req_format == "docx":
+                                    ctype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                return self._binary(payload, ctype, filename=filename)
+                        except (InvalidDocumentNameError, FileNotFoundError):
+                            pass
+                        return self._json({"cached": False}, 200)
                     return self._handle_export_bundle(path)
                 if path.startswith("/api/export/"):
                     return self._handle_export(path)
@@ -364,8 +384,12 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._handle_merge_analyze(body)
                 if path == "/api/merge/apply":
                     return self._handle_merge_apply(body)
+                if path == "/api/export/json/start":
+                    return self._start_export(body, "json")
+                if path == "/api/export/markdown/start":
+                    return self._start_export(body, "markdown")
                 if path == "/api/export-docx/start":
-                    return self._handle_export_docx_start(body)
+                    return self._start_export(body, "docx")
                 if path == "/api/agent/handoff":
                     return self._handle_agent_handoff(body)
                 if getattr(self.__class__, '_ai_routes_post', None):
@@ -654,6 +678,121 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 )
             except Exception as exc:  # pragma: no cover - defensive for background thread
                 update(status="failed", progress=100, message="DOCX 生成失败。", error=str(exc), payload=None)
+
+        # ── 统一导出：JSON / Markdown / DOCX ──
+        # 缓存 key = "{name}_{version}_{format}"
+        def _export_cache_key(self, name: str, version: str, fmt: str) -> str:
+            return f"{name}_{version}_{fmt}"
+
+        def _check_export_cache(self, name: str, version: str, fmt: str):
+            key = self._export_cache_key(name, version, fmt)
+            with export_cache_lock:
+                entry = export_cache.get(key)
+                if entry:
+                    return entry  # (filename, payload)
+            return None
+
+        def _store_export_cache(self, name: str, version: str, fmt: str, filename: str, payload: bytes):
+            key = self._export_cache_key(name, version, fmt)
+            with export_cache_lock:
+                export_cache[key] = (filename, payload)
+
+        def _run_export_job(self, job_id: str, fmt: str):
+            """Run export job: generate resources, store in cache, clean up."""
+            def update(**values):
+                with export_jobs_lock:
+                    job = export_jobs.get(job_id)
+                    if not job: return None
+                    job.update(values); job["updatedAt"] = time.time()
+                    return dict(job)
+
+            job = update(status="running", progress=5, message="准备导出…")
+            if not job: return
+            try:
+                name = str(job.get("name", ""))
+                version = str(job.get("version", ""))
+                document = job.get("document") or {}
+                markdown = str(job.get("markdown", "") or "")
+
+                if fmt == "json":
+                    update(progress=20, message="正在打包 JSON+附件…")
+                    graph_images = self._capture_export_graph_images(f"{job_id}-img", name, document)
+                    filename, payload = storage.build_export_bundle_from_document(name, document, graph_images=graph_images)
+
+                elif fmt == "markdown":
+                    update(progress=15, message="正在生成截图…")
+                    graph_images = self._capture_export_graph_images(f"{job_id}-img", name, document)
+                    update(progress=60, message="正在打包 MD+截图+附件…")
+                    if markdown:
+                        from blm_core.docx import DocxImage
+                        md_with_images = storage._markdown_with_graph_images(markdown, graph_images)
+                        import io, zipfile
+                        buf = io.BytesIO()
+                        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                            archive.writestr(f"{name}.md", md_with_images.encode("utf-8"))
+                            for img in graph_images:
+                                archive.writestr(f"images/{img.name}", img.payload)
+                        payload = buf.getvalue()
+                        filename = f"{name}-md.zip"
+                    else:
+                        filename, payload = storage.build_export_bundle_from_document(name, document, graph_images=graph_images)
+
+                else:  # docx
+                    update(progress=12, message="正在读取冻结文档和附件。")
+                    time.sleep(0.05)
+                    update(progress=32, message="正在转换图形为静态图片。")
+                    graph_images = self._capture_export_graph_images(str(job_id), name, document)
+                    update(progress=72, message="静态图形已生成，正在写入 DOCX。")
+                    filename, payload = storage.build_export_docx_from_document(name, document, graph_images=graph_images)
+
+                # 存入缓存
+                self._store_export_cache(name, version, fmt, filename, payload)
+                update(status="done", progress=100, message="导出完成。", filename=filename, payload=payload)
+
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("Export job %s failed: %s", job_id, exc)
+                update(status="failed", progress=100, message="导出失败。", error=str(exc))
+
+        def _start_export(self, body: bytes, fmt: str):
+            payload = self._decode_json(body)
+            if isinstance(payload, tuple):
+                return self._json(payload[0], payload[1])
+            name = str(payload.get("name", "")).strip()
+            version = str(payload.get("version", "")).strip()
+            markdown_text = str(payload.get("markdown", "") or "")
+            if not name:
+                return self._json({"error": "name is required"}, 400)
+            try:
+                safe_name = storage._validate_name(name)
+                # 检查缓存
+                cached = self._check_export_cache(safe_name, version, fmt)
+                if cached:
+                    return self._json({"id": f"cached:{safe_name}:{version}:{fmt}", "status": "done", "cached": True, **{}})
+                frozen_document = storage.load(safe_name)
+            except (InvalidDocumentNameError, FileNotFoundError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            job_id = uuid.uuid4().hex
+            job = {
+                "id": job_id,
+                "name": safe_name,
+                "version": version,
+                "status": "queued",
+                "progress": 5,
+                "message": "已加入导出队列。",
+                "filename": "",
+                "document": frozen_document,
+                "markdown": markdown_text,
+                "payload": None,
+                "error": "",
+                "createdAt": time.time(),
+                "updatedAt": time.time(),
+            }
+            with export_jobs_lock:
+                export_jobs[job_id] = job
+            thread = threading.Thread(target=self._run_export_job, args=(job_id, fmt), daemon=True)
+            thread.start()
+            return self._json(self._public_export_job(job))
 
         def _public_export_job(self, job: dict) -> dict:
             return {
