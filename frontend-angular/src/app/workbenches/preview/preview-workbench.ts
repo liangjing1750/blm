@@ -1,12 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { sanitizeRichTextHtml } from '../../shared/rich-text/rich-text-utils';
 import { ApiService } from '../../core/api/api.service';
 import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-registry';
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
-import { sanitizeRichTextHtml } from '../../shared/rich-text/rich-text-utils';
-import { PreviewGraphHostComponent } from './preview-graph-host.component';
 
 interface PreviewOutlineItem {
   id: string;
@@ -18,7 +17,7 @@ interface PreviewOutlineItem {
 @Component({
   selector: 'app-preview-workbench',
   standalone: true,
-  imports: [CommonModule, WaitDialogComponent, PreviewGraphHostComponent],
+  imports: [CommonModule, WaitDialogComponent],
   templateUrl: './preview-workbench.html',
   styleUrl: './preview-workbench.scss',
 })
@@ -36,6 +35,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   protected readonly collapsedOutlineIds = signal<Set<string>>(new Set());
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly markdown = computed(() => this.buildMarkdown());
+  protected readonly previewHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMarkdown(this.buildMarkdown())));
   protected readonly metaHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMeta(this.runtime.doc?.meta || {})));
   protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
 
@@ -417,7 +417,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
         body: JSON.stringify({ name, version, markdown: this.markdown() }),
       }).then((r) => r.json());
       if (job?.id) {
-        const done = await this.waitForExportJob(job.id);
+        const done = await this.waitForExportJob(job.id, job);
         if (done?.status === 'done') {
           const resp = await this.api.downloadExportJob(job.id);
           if (resp.ok) this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.zip`);
@@ -443,7 +443,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
         body: JSON.stringify({ name, version, markdown: this.markdown() }),
       }).then((r) => r.json());
       if (job?.id) {
-        const done = await this.waitForExportJob(job.id);
+        const done = await this.waitForExportJob(job.id, job);
         if (done?.status === 'done') {
           const resp = await this.api.downloadExportJob(job.id);
           if (resp.ok) this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.zip`);
@@ -473,7 +473,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
         body: JSON.stringify({ name, version, markdown: this.markdown() }),
       }).then((r) => r.json());
       if (!job?.id) return;
-      const latestJob = await this.waitForExportJob(job.id);
+      const latestJob = await this.waitForExportJob(job.id, job);
       if (latestJob?.status !== 'done') return;
       this.exportWait.set({
         title: 'DOCX 已生成，正在下载...',
@@ -1152,6 +1152,86 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       ${components.length ? `<h3>业务组件</h3><table><thead><tr><th>组件</th><th>类型</th><th>说明</th></tr></thead><tbody>${components.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.kind || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
       ${constructs.length ? `<h3>业务构件</h3><table><thead><tr><th>构件</th><th>所属组件</th><th>说明</th></tr></thead><tbody>${constructs.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.businessComponentUid || '')}</td><td>${this.esc(item.desc || item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}
       ${taskDefinitions.length ? `<h3>任务定义</h3><table><thead><tr><th>任务</th><th>构件</th><th>地址</th><th>目标</th><th>参数</th><th>详细设计</th></tr></thead><tbody>${taskDefinitions.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.constructUid || item.businessConstructUid || '')}</td><td>${this.esc(item.address || '')}</td><td>${this.esc(item.target || '')}</td><td>${this.esc(this.taskParameterSummary(item.parameters))}</td><td>${this.richTextCell(item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}`;
+  }
+
+  /** 将结构化 Markdown 渲染为 HTML（所见即所得，预览=导出） */
+  private renderMarkdown(md: string): string {
+    const lines = md.split('\n');
+    const html: string[] = [];
+    let inTable = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // 图片引用 → 占位框
+      const imgMatch = trimmed.match(/^!\[(.+?)\]\((.+?)\)$/);
+      if (imgMatch) {
+        if (inTable) { html.push('</tbody></table>'); inTable = false; }
+        html.push(`<div class="pv-export-graph"><div class="pv-export-graph-label">📷 ${this.esc(imgMatch[1])}</div><div class="pv-export-graph-hint">导出后此处替换为静态截图</div></div>`);
+        continue;
+      }
+
+      // 表格行
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        const cells = trimmed.split('|').filter((c) => c.trim() || c === '').map((c) => c.trim());
+        const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
+        const isSeparator = nextLine.startsWith('|') && nextLine.split('|').every((c) => /^:?-{2,}:?$/.test(c.trim()));
+        if (isSeparator) {
+          // 表头
+          html.push('<table><thead><tr>');
+          cells.forEach((c) => html.push(`<th>${this._mdInline(c)}</th>`));
+          html.push('</tr></thead><tbody>');
+          i += 1; // skip separator
+          inTable = true;
+          continue;
+        }
+        if (inTable) {
+          html.push('<tr>');
+          cells.forEach((c) => html.push(`<td>${this._mdInline(c)}</td>`));
+          html.push('</tr>');
+          continue;
+        }
+        // 不在表格中的 | 行当普通文本
+        if (inTable) { html.push('</tbody></table>'); inTable = false; }
+        html.push(`<p>${this._mdInline(trimmed)}</p>`);
+        continue;
+      }
+
+      if (inTable) { html.push('</tbody></table>'); inTable = false; }
+
+      // 空行
+      if (!trimmed) { html.push(''); continue; }
+
+      // 标题
+      if (trimmed.startsWith('##### ')) { html.push(`<h5>${this._mdInline(trimmed.slice(6))}</h5>`); continue; }
+      if (trimmed.startsWith('#### ')) { html.push(`<h4>${this._mdInline(trimmed.slice(5))}</h4>`); continue; }
+      if (trimmed.startsWith('### ')) { html.push(`<h3>${this._mdInline(trimmed.slice(4))}</h3>`); continue; }
+      if (trimmed.startsWith('## ')) { html.push(`<h2>${this._mdInline(trimmed.slice(3))}</h2>`); continue; }
+      if (trimmed.startsWith('# ')) { html.push(`<h1>${this._mdInline(trimmed.slice(2))}</h1>`); continue; }
+
+      // 列表项
+      if (trimmed.startsWith('- ')) {
+        html.push(`<li>${this._mdInline(trimmed.slice(2))}</li>`);
+        continue;
+      }
+      if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
+        html.push(`<p><strong>${this._mdInline(trimmed.slice(2, -2))}</strong></p>`);
+        continue;
+      }
+
+      // 普通段落
+      html.push(`<p>${this._mdInline(trimmed)}</p>`);
+    }
+    if (inTable) html.push('</tbody></table>');
+    return html.join('\n');
+  }
+
+  /** 行内 Markdown 转 HTML（粗体、代码、行内代码） */
+  private _mdInline(text: string): string {
+    let s = this.esc(text);
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return s;
   }
 
   /** 构建结构化 Markdown，与预览大纲和正文顺序一致，含表格和图形引用 */

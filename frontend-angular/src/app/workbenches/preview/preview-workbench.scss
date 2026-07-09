@@ -288,3 +288,25 @@
 .pv-center {
   text-align: center;
 }
+
+/* 导出图形占位符 */
+.pv-export-graph {
+  margin: 14px 0;
+  padding: 20px;
+  border: 2px dashed #bfdbfe;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8faff, #eff6ff);
+  text-align: center;
+}
+
+.pv-export-graph-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1d4ed8;
+  margin-bottom: 4px;
+}
+
+.pv-export-graph-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
