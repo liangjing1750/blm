@@ -132,6 +132,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly editingEdgeLabelId = signal<string>('');
   protected readonly cardRolePickerNodeId = signal<string>('');
   protected readonly selectedStageId = signal<string>('');
+  private lastProcessId = '';
   protected readonly attachmentDrawerOpen = signal(false);
   protected readonly zoomValue = signal(1);
   protected readonly dragState = signal<FlowDragState | null>(null);
@@ -363,9 +364,15 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
 
   protected currentStageId(): string {
     this.version();
+    const process = this.currentProcess();
+    const procId = process ? this.processId(process) : '';
+    // 流程发生变化时清除手动选中的阶段，让阶段下拉框跟随流程
+    if (procId && procId !== this.lastProcessId) {
+      this.lastProcessId = procId;
+      this.selectedStageId.set('');
+    }
     const explicit = this.selectedStageId();
     if (explicit) return explicit;
-    const process = this.currentProcess();
     const refs = process ? this.stageIdsForProcess(process) : [];
     return refs[0] || this.stageId(this.stages()[0]) || '';
   }
@@ -806,31 +813,40 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected addTask(): void {
     const process = this.currentProcess();
     if (!process) return;
-    const rightEdge = this.flowNodes(process).reduce((max, n) => Math.max(max, n.x + n.width), this.graphNodeStartX);
     const task = this.flowModel.addTask(process);
     const id = this.taskId(task);
-    const graphIndex = Math.max(0, this.flowOrder(process).indexOf(id) - 1);
-    const baseX = this.graphNodeStartX + graphIndex * this.columnGap;
+    const rightEdge = this.flowNodes(process).filter((n) => n.baseId !== id).reduce((max, n) => Math.max(max, n.x + n.width), this.graphNodeStartX);
+    const orderIndex = Math.max(0, this.flowOrder(process).indexOf(id) - 1);
+    const baseX = this.graphNodeStartX + orderIndex * this.columnGap;
     const dx = Math.max(0, rightEdge + this.columnGap - baseX);
     if (dx > 0) this.flowModel.setFlowOffset(process, id, dx, 0);
     this.adapter.touch();
     this.selectedElementId.set(id);
     this.refresh();
+    this.scrollToNewElement();
   }
 
   protected addGateway(): void {
     const process = this.currentProcess();
     if (!process) return;
-    const rightEdge = this.flowNodes(process).reduce((max, n) => Math.max(max, n.x + n.width), this.graphNodeStartX);
     const gateway = this.flowModel.addGateway(process);
     const id = this.gatewayId(gateway);
-    const graphIndex = Math.max(0, this.flowOrder(process).indexOf(id) - 1);
-    const baseX = this.graphNodeStartX + graphIndex * this.columnGap;
+    const rightEdge = this.flowNodes(process).filter((n) => n.baseId !== id).reduce((max, n) => Math.max(max, n.x + n.width), this.graphNodeStartX);
+    const orderIndex = Math.max(0, this.flowOrder(process).indexOf(id) - 1);
+    const baseX = this.graphNodeStartX + orderIndex * this.columnGap;
     const dx = Math.max(0, rightEdge + this.columnGap - baseX);
     if (dx > 0) this.flowModel.setFlowOffset(process, id, dx, 0);
     this.adapter.touch();
     this.selectedElementId.set(id);
     this.refresh();
+    this.scrollToNewElement();
+  }
+
+  private scrollToNewElement(): void {
+    setTimeout(() => {
+      const shell = document.querySelector('[data-testid="process-flow-canvas-shell"]');
+      if (shell) shell.scrollLeft = shell.scrollWidth;
+    }, 0);
   }
 
   protected startConnect(nodeId: string): void {
@@ -896,12 +912,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     const clone = task ? this.flowModel.duplicateTask(process, task) : gateway ? this.flowModel.duplicateGateway(process, gateway) : null;
     if (!clone) return;
     const cloneId = String(clone.uid || clone.id || '').trim();
-    const existingNodes = this.flowNodes(process).filter((n) => n.baseId !== cloneId);
-    const rightEdge = existingNodes.length ? Math.max(...existingNodes.map((n) => n.x + n.width)) : this.graphNodeStartX;
-    const orderIndex = Math.max(0, this.flowOrder(process).indexOf(cloneId) - 1);
-    const baseX = this.graphNodeStartX + orderIndex * this.columnGap;
-    const dx = Math.max(0, rightEdge + this.columnGap - baseX);
-    if (dx > 0) this.flowModel.setFlowOffset(process, cloneId, dx, 0);
+    cloneId ? this.flowModel.setFlowOffset(process, cloneId, this.columnGap, 0) : null;
     this.adapter.touch();
     this.selectedElementId.set(cloneId);
     this.refresh();
@@ -1050,25 +1061,31 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   private flowOrder(process: LegacyProcess): string[] {
-    // Module intent: match legacy swimlane ordering so migrated documents keep the same structure.
-    // Key flow: first detect back/return edges, then topologically order the remaining main graph.
-    // Boundary detail: when no edge exists, keep stable list order instead of inventing hidden semantics.
+    // 模块意图：有边线关联的节点按拓扑排序，无关联的新增节点排在最后，不改变既有节点顺序。
+    // 关键流程：先对有关联的节点拓扑排序，再按原列表顺序追加无关联节点。
     const taskIds = this.tasks(process).map((task) => this.taskId(task)).filter(Boolean);
     const gatewayIds = this.gateways(process).map((gateway) => this.gatewayId(gateway)).filter(Boolean);
     const allIds = ['START', ...taskIds, ...gatewayIds, 'END'];
     const rawEdges = this.edges(process)
       .map((edge) => ({ from: String(edge.from || ''), to: String(edge.to || '') }))
       .filter((edge) => allIds.includes(edge.from) && allIds.includes(edge.to));
-    const rankProbeIds = this.orderFlowNodeIds(allIds, rawEdges);
+    // 收集有关联的节点 ID
+    const connected = new Set<string>();
+    for (const edge of rawEdges) { connected.add(edge.from); connected.add(edge.to); }
+    const connectedIds = allIds.filter((id) => connected.has(id));
+    const disconnectedIds = allIds.filter((id) => !connected.has(id));
+    // 只对有关联的节点做拓扑排序
+    const rankProbeIds = this.orderFlowNodeIds(connectedIds, rawEdges);
     const rankProbe = new Map(rankProbeIds.map((id, index) => [id, index]));
     const mainEdges = rawEdges.filter((edge) => edge.to === 'END' || (rankProbe.get(edge.to) || 0) > (rankProbe.get(edge.from) || 0));
-    const ordered = this.orderFlowNodeIds(allIds, mainEdges);
-    for (const id of allIds) {
-      if (!ordered.includes(id)) ordered.push(id);
+    const ordered = this.orderFlowNodeIds(connectedIds, mainEdges);
+    // 合并：拓扑排序的结果在前，无关联节点按原顺序在后
+    const result = [...ordered];
+    for (const id of disconnectedIds) {
+      if (!result.includes(id)) result.push(id);
     }
-    // Boundary detail: legacy branch diagrams may encounter END before a later branch task.
-    // END is a visual boundary, so keep it as the rightmost column after all real nodes.
-    return [...ordered.filter((id) => id !== 'END'), 'END'];
+    // 边界细节：END 始终在最后
+    return [...result.filter((id) => id !== 'END'), 'END'];
   }
 
   private orderFlowNodeIds(ids: string[], edges: Array<{ from: string; to: string }>): string[] {
@@ -1186,17 +1203,14 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   private clampNodePosition(process: LegacyProcess, nodeId: string, x: number, y: number, width: number, height: number, roleName: string): { x: number; y: number } {
-    // Module intent: every rendered element must stay inside the swimlane canvas; snapping may align, but it may not push nodes outside the diagram.
+    // Module intent: prevent nodes from going off the left side (lane title). Right side is unclamped (relies on canvasWidth auto-expand).
     const minX = nodeId === 'START' ? this.laneTitleWidth + 8 : this.laneTitleWidth + 24;
-    const maxX = Math.max(minX, this.canvasWidth(process) - width - 24);
     const laneBottom = this.lanes(process).length * this.laneHeight;
     let minY = 0;
     let maxY = Math.max(minY, laneBottom + 180 - height - 24);
 
-    // Boundary detail: dragging only changes private layout offsets. Role/lane ownership is still edited through role controls, so legacy diagrams that already moved nodes outside a lane keep rendering correctly.
-
     return {
-      x: Math.min(maxX, Math.max(minX, x)),
+      x: Math.max(minX, x),
       y: Math.min(maxY, Math.max(minY, y)),
     };
   }
