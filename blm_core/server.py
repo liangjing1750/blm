@@ -742,7 +742,13 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     time.sleep(0.05)
                     update(progress=32, message="正在转换图形为静态图片。")
                     graph_images = self._capture_export_graph_images(str(job_id), name, document)
-                    update(progress=72, message="静态图形已生成，正在写入 DOCX。")
+                    update(progress=72, message=f"截图完成 ({len(graph_images)} 张)，正在写入 DOCX。")
+                    # 同时保存一份图片到 images/ 目录供审查
+                    if graph_images:
+                        export_img_dir = storage.workspace_dir / name / "export-images"
+                        export_img_dir.mkdir(parents=True, exist_ok=True)
+                        for img in graph_images:
+                            (export_img_dir / img.name).write_bytes(img.payload)
                     filename, payload = storage.build_export_docx_from_document(name, document, graph_images=graph_images)
 
                 # 存入缓存
