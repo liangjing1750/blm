@@ -40,7 +40,513 @@
       </aside>
 
       <div id="preview-rendered" class="preview-rendered pv-content" data-testid="preview-rendered">
-        <div [innerHTML]="previewHtml()"></div>
+        <h1 id="preview-top">{{ title() }}</h1>
+        <div [innerHTML]="metaHtml()"></div>
+
+        <!-- ════ 引言 ════ -->
+        @if (stages().length || roles().length || terms().length) {
+          <section id="preview-intro" class="pv-section">
+            <h2>{{ outlineNumber('preview-intro') }} 引言</h2>
+
+            @if (stages().length) {
+              <section id="preview-stage-panorama" class="pv-graph-card">
+                <h3>{{ outlineNumber('preview-stage-panorama') }} 全景视图</h3>
+                @defer (on viewport) {
+                  <app-preview-graph-host kind="stage-panorama" [exportGraphId]="stageGraphId('stage-panorama')"></app-preview-graph-host>
+                } @placeholder {
+                  <div class="pv-graph-placeholder">滚动到这里后生成全景视图</div>
+                }
+              </section>
+            }
+
+            @if (roles().length) {
+              <section id="preview-roles" class="pv-subsection">
+                <h3>角色</h3>
+                <table>
+                  <thead><tr><th>角色</th><th>分组</th><th>说明</th><th>所属业务组件</th></tr></thead>
+                  <tbody>
+                    @for (role of roles(); track identityOf(role, role.name || $index)) {
+                      <tr>
+                        <td>{{ role.name || role.id || '' }}</td>
+                        <td>{{ role.group || '' }}</td>
+                        <td>{{ role.desc || role.description || '' }}</td>
+                        <td>{{ asArray(role.subDomains).join('、') }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </section>
+            }
+
+            @if (terms().length) {
+              <section id="preview-language" class="pv-subsection">
+                <h3>统一语言/术语表</h3>
+                <table>
+                  <thead><tr><th>术语</th><th>定义</th></tr></thead>
+                  <tbody>
+                    @for (item of terms(); track identityOf(item, item.name || $index)) {
+                      <tr><td>{{ item.term || item.name || '' }}</td><td>{{ item.definition || item.desc || '' }}</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </section>
+            }
+          </section>
+        }
+
+        <!-- ════ 价值流（每个价值流线一个顶级章节） ════ -->
+        @for (lane of valueStreamLanes(); track lane.id) {
+          @if (stagesInLane(lane.id).length) {
+          <section class="pv-section pv-graph-section" [id]="'preview-lane-' + lane.id">
+            <h2>{{ outlineNumber('preview-lane-' + lane.id) }} {{ lane.name }}</h2>
+            @for (stage of stagesInLane(lane.id); track identityOf(stage, 'stage-' + $index); let i = $index) {
+              <section [id]="stageAnchor(stage, i)" class="pv-graph-card">
+              <h3>{{ outlineNumber(stageAnchor(stage, i)) }} 阶段：{{ displayName(stage, '未命名业务阶段') }}</h3>
+                <p class="pv-note">
+                  <strong>所属业务域</strong>: {{ stage.subDomain || stage.businessDomain || '未归属业务域' }}
+                </p>
+                @defer (on viewport) {
+                  <app-preview-graph-host kind="stage-flow" [targetId]="identityOf(stage, 'stage-' + (i + 1))" [exportGraphId]="stageGraphId('stage-flow', stage, i)"></app-preview-graph-host>
+                } @placeholder {
+                  <div class="pv-graph-placeholder">滚动到这里后生成阶段视图</div>
+                }
+
+                <!-- 流程分组与流程 -->
+                @for (group of stageProcessGroups(stage); track group.name) {
+                  @if (group.name) {
+                    <div class="pv-process-group" style="margin-top:14px" [id]="groupAnchorId(stage, group.name)">
+                      <h4>{{ outlineNumber(groupAnchorId(stage, group.name)) }} 流程组：{{ group.name }}</h4>
+                    </div>
+                  }
+                  @for (process of group.processes; track identityOf(process, 'proc-' + $index); let pi = $index) {
+                    <div class="pv-process-section pv-graph-card" style="margin-top:10px" [id]="procAnchorId(stage, process)">
+                      <h4>{{ outlineNumber(procAnchorId(stage, process)) }} {{ displayName(process, '未命名流程') }}</h4>
+                      @defer (on viewport) {
+                        <app-preview-graph-host kind="process-flow" [targetId]="identityOf(process, 'stage-proc-' + pi)" [exportGraphId]="processGraphId(process, i + pi + 1000)"></app-preview-graph-host>
+                      } @placeholder {
+                        <div class="pv-graph-placeholder">滚动到这里后生成流程图</div>
+                      }
+                      @if (process.trigger || process.outcome) {
+                        <p class="pv-note"><strong>触发</strong>: {{ process.trigger || '—' }} -> <strong>预期结果</strong>: {{ process.outcome || '—' }}</p>
+                      }
+
+                      @if (processNodes(process).length) {
+                        <div class="pv-tasks">
+                          @for (node of processNodes(process); track identityOf(node, 'node-' + $index); let ni = $index) {
+                            <div class="pv-task-detail">
+                              <h4>流程节点: {{ displayName(node, '未命名节点 ' + (ni + 1)) }}</h4>
+                              @if (node.description) {
+                                <div class="pv-task-description" [innerHTML]="richText(node.description)"></div>
+                              }
+
+                              <!-- ① 办理步骤 -->
+                              @if (asArray(node.userSteps || node.steps).length) {
+                                <h5>办理步骤</h5>
+                                <table>
+                                  <thead><tr><th>#</th><th>操作步骤</th><th>类型</th><th>条件/备注</th></tr></thead>
+                                  <tbody>
+                                    @for (step of asArray(node.userSteps || node.steps); track identityOf(step, 'step-' + $index); let si = $index) {
+                                      <tr>
+                                        <td>{{ si + 1 }}</td>
+                                        <td>{{ step.name || '' }}</td>
+                                        <td>{{ step.type || '' }}</td>
+                                        <td [innerHTML]="richText(step.note || '')"></td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              }
+
+                              <!-- ② 办理表单 -->
+                              @if (asArray(node.forms).length) {
+                                <h5>办理表单</h5>
+                                @for (form of asArray(node.forms); track identityOf(form, 'form-' + $index)) {
+                                  <div class="pv-form-card" style="margin:8px 0;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                                    <strong>{{ form.name || '未命名表单' }}</strong>
+                                    @if (form.purpose) {
+                                      <span class="pv-note" style="margin-left:8px">用途：{{ form.purpose }}</span>
+                                    }
+                                    @for (section of asArray(form.sections); track identityOf(section, 'sec-' + $index)) {
+                                      @if (section.name) {
+                                        <div style="margin:6px 0 2px;font-weight:700;font-size:12px;color:#334155">{{ section.name }}</div>
+                                      }
+                                      @if (asArray(section.fields).length) {
+                                        <table style="font-size:11px">
+                                          <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>选项</th></tr></thead>
+                                          <tbody>
+                                            @for (field of asArray(section.fields); track identityOf(field, 'fld-' + $index)) {
+                                              <tr>
+                                                <td>{{ field.name || '' }}</td>
+                                                <td>{{ field.type || '' }}</td>
+                                                <td class="pv-center">{{ field.required ? '✓' : '' }}</td>
+                                                <td>{{ asArray(field.options).join('、') }}</td>
+                                              </tr>
+                                            }
+                                          </tbody>
+                                        </table>
+                                      }
+                                    }
+                                  </div>
+                                }
+                              }
+
+                              <!-- ③ 办理附件 -->
+                              @if (asArray(process?.prototypeFiles).length || asArray(node?.prototypeFiles).length) {
+                                <h5>办理附件</h5>
+                                <ul style="margin:6px 0;padding-left:20px">
+                                  @for (pf of asArray(process?.prototypeFiles); track identityOf(pf, 'pf-' + $index)) {
+                                    <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li>
+                                  }
+                                  @for (pf of asArray(node?.prototypeFiles); track identityOf(pf, 'nf-' + $index) ; let first = $first) {
+                                    <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li>
+                                  }
+                                </ul>
+                              }
+
+                              <!-- ④ 办理规则 -->
+                              @if (asArray(node.businessRules).length) {
+                                <h5>办理规则</h5>
+                                <table class="pv-rule-table" style="font-size:12px">
+                                  <thead><tr><th>规则名称</th><th>规则内容</th></tr></thead>
+                                  <tbody>
+                                    @for (rule of asArray(node.businessRules); track identityOf(rule, 'rule-' + $index)) {
+                                      <tr>
+                                        <td>{{ rule.name || '规则' + ($index + 1) }}</td>
+                                        <td [innerHTML]="richText(rule.content || rule.description || rule.note || rule)"></td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              }
+                            </div>
+                          }
+                        </div>
+                      } @else {
+                        <div class="diag-empty">暂无流程节点</div>
+                      }
+                    </div>
+                  }
+                }
+              </section>
+            }
+          </section>
+          }
+        }
+
+        <!-- ════ 孤立流程 ════ -->
+        @if (orphanProcesses().length) {
+          <section id="preview-processes" class="pv-section pv-graph-section">
+            <h2>{{ outlineNumber('preview-processes') }} 流程视图</h2>
+            @for (process of orphanProcesses(); track identityOf(process, 'process-' + $index); let i = $index) {
+              <section [id]="processAnchor(process, i)" class="pv-graph-card">
+                <h3>{{ displayName(process, '未命名流程') }}</h3>
+                @defer (on viewport) {
+                  <app-preview-graph-host kind="process-flow" [targetId]="identityOf(process, 'process-' + (i + 1))" [exportGraphId]="processGraphId(process, i)"></app-preview-graph-host>
+                } @placeholder {
+                  <div class="pv-graph-placeholder">滚动到这里后生成流程图</div>
+                }
+                @if (process.trigger || process.outcome) {
+                  <p class="pv-note"><strong>触发</strong>: {{ process.trigger || '—' }} -> <strong>预期结果</strong>: {{ process.outcome || '—' }}</p>
+                }
+                @if (processNodes(process).length) {
+                  <div class="pv-tasks">
+                    @for (node of processNodes(process); track identityOf(node, 'node-' + $index); let nodeIndex = $index) {
+                      <div class="pv-task-detail">
+                        <h4>流程节点: {{ displayName(node, '未命名节点 ' + (nodeIndex + 1)) }}</h4>
+                        @if (node.description) {
+                          <div class="pv-task-description" [innerHTML]="richText(node.description)"></div>
+                        }
+                        @if (asArray(node.userSteps || node.steps).length) {
+                          <h5>办理步骤</h5>
+                          <table>
+                            <thead><tr><th>#</th><th>操作步骤</th><th>类型</th><th>条件/备注</th></tr></thead>
+                            <tbody>
+                              @for (step of asArray(node.userSteps || node.steps); track identityOf(step, 'step-' + $index); let stepIndex = $index) {
+                                <tr>
+                                  <td>{{ stepIndex + 1 }}</td>
+                                  <td>{{ step.name || '' }}</td>
+                                  <td>{{ step.type || '' }}</td>
+                                  <td [innerHTML]="richText(step.note || '')"></td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        }
+                        @if (asArray(node.forms).length) {
+                          <h5>办理表单</h5>
+                          @for (form of asArray(node.forms); track identityOf(form, 'form-' + $index)) {
+                            <div class="pv-form-card" style="margin:8px 0;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                              <strong>{{ form.name || '未命名表单' }}</strong>
+                              @if (form.purpose) { <span class="pv-note" style="margin-left:8px">用途：{{ form.purpose }}</span> }
+                              @for (section of asArray(form.sections); track identityOf(section, 'sec-' + $index)) {
+                                @if (section.name) { <div style="margin:6px 0 2px;font-weight:700;font-size:12px;color:#334155">{{ section.name }}</div> }
+                                @if (asArray(section.fields).length) {
+                                  <table style="font-size:11px">
+                                    <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>选项</th></tr></thead>
+                                    <tbody>
+                                      @for (field of asArray(section.fields); track identityOf(field, 'fld-' + $index)) {
+                                        <tr><td>{{ field.name || '' }}</td><td>{{ field.type || '' }}</td><td class="pv-center">{{ field.required ? '✓' : '' }}</td><td>{{ asArray(field.options).join('、') }}</td></tr>
+                                      }
+                                    </tbody>
+                                  </table>
+                                }
+                              }
+                            </div>
+                          }
+                        }
+                        @if (asArray(process?.prototypeFiles).length || asArray(node?.prototypeFiles).length) {
+                          <h5>办理附件</h5>
+                          <ul style="margin:6px 0;padding-left:20px">
+                            @for (pf of asArray(process?.prototypeFiles); track identityOf(pf, 'pf-' + $index)) { <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li> }
+                            @for (pf of asArray(node?.prototypeFiles); track identityOf(pf, 'nf-' + $index)) { <li style="font-size:12px;color:#475569">{{ attachmentLabel(pf) }}</li> }
+                          </ul>
+                        }
+                        @if (asArray(node.businessRules).length) {
+                          <h5>办理规则</h5>
+                          <table class="pv-rule-table" style="font-size:12px">
+                            <thead><tr><th>规则名称</th><th>规则内容</th></tr></thead>
+                            <tbody>
+                              @for (rule of asArray(node.businessRules); track identityOf(rule, 'rule-' + $index); let ruleIndex = $index) {
+                                <tr>
+                                  <td>{{ rule.name || '规则' + (ruleIndex + 1) }}</td>
+                                  <td [innerHTML]="richText(rule.content || rule.description || rule.note || rule)"></td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <div class="diag-empty">暂无流程节点</div>
+                }
+              </section>
+            }
+          </section>
+        }
+
+        <!-- ════ 组件建模（组件→构件→实体、任务） ════ -->
+        @if (entities().length || components().length || constructs().length || taskDefinitions().length) {
+          <section id="preview-components" class="pv-section">
+            <h2>{{ outlineNumber('preview-components') }} 组件建模</h2>
+
+            @if (components().length) {
+              <section id="preview-business-components" class="pv-subsection">
+                <h3>{{ outlineNumber('preview-business-components') }} 业务组件</h3>
+                <div class="pv-component-grid">
+                  @for (component of components(); track identityOf(component, 'component-' + $index)) {
+                    <article class="pv-component-card">
+                      <div class="pv-component-head">
+                        <strong>{{ displayName(component, '未命名组件') }}</strong>
+                        <span>{{ componentKindLabel(component) }}</span>
+                      </div>
+                      <p>{{ component.desc || component.note || '暂无说明' }}</p>
+                    </article>
+                  }
+                </div>
+              </section>
+            }
+
+            @if (constructs().length) {
+              @for (construct of constructs(); track identityOf(construct, 'construct-' + $index)) {
+                <section [id]="'preview-construct-' + identityOf(construct, '')" class="pv-graph-card" style="margin:12px 0">
+                  <h3>{{ outlineNumber('preview-construct-' + identityOf(construct, '')) }} 构件：{{ displayName(construct, '未命名构件') }}</h3>
+                  <p class="pv-note" style="margin:4px 0 8px">
+                    所属组件：{{ componentNameById(construct.businessComponentUid || construct.componentUid || '') }}
+                    @if (construct.desc || construct.note) { | {{ construct.desc || construct.note }} }
+                  </p>
+
+                  @if (constructEntities(construct).length) {
+                    <h4>实体</h4>
+                    @for (entity of constructEntities(construct); track identityOf(entity, 'entity-' + $index); let ei = $index) {
+                      <section [id]="entityAnchor(entity, ei)" class="pv-entity-section pv-graph-card" style="margin:8px 0">
+                        <h4>{{ outlineNumber(entityAnchor(entity, ei)) }} 实体：{{ displayName(entity, '未命名实体') }}</h4>
+                        @if (entity.note) { <p class="pv-note">{{ entity.note }}</p> }
+                        @if (fieldRows(entity).length) {
+                          <table>
+                            <thead><tr><th>字段</th><th>类型</th><th>主键</th><th>说明</th></tr></thead>
+                            <tbody>
+                              @for (field of fieldRows(entity); track identityOf(field, field.name || $index)) {
+                                <tr>
+                                  <td>{{ field.name || '' }}</td>
+                                  <td>{{ field.type || '' }}</td>
+                                  <td class="pv-center">{{ field.is_key || field.isKey ? '✓' : '' }}</td>
+                                  <td>{{ field.note || field.desc || '' }}</td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        }
+                        @defer (on viewport) {
+                          <app-preview-graph-host kind="entity-state" [targetId]="identityOf(entity, 'entity-' + (ei + 1))" [exportGraphId]="entityGraphId('entity-state', entity, ei)"></app-preview-graph-host>
+                        } @placeholder {
+                          <div class="pv-graph-placeholder">滚动到这里后生成实体状态图</div>
+                        }
+                      </section>
+                    }
+                  }
+
+                  @if (constructTasks(construct).length) {
+                    <h4>任务</h4>
+                    @for (task of constructTasks(construct); track identityOf(task, 'task-' + $index); let ti = $index) {
+                      <div [id]="anchorId('task', identityOf(task, ''))" class="pv-task-detail" style="margin:6px 0;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                        <h4>{{ outlineNumber(anchorId('task', identityOf(task, ''))) }} 任务：{{ task.name || '未命名任务' }}</h4>
+                        <p class="pv-note">地址：{{ task.address || '—' }} | 目标：{{ task.target || '—' }} | {{ taskParameterSummary(task.parameters) }}</p>
+                        @if (task.note || task.detail) { <div [innerHTML]="richText(task.note || task.detail || '')" style="margin-top:4px"></div> }
+                      </div>
+                    }
+                  }
+                </section>
+              }
+            }
+
+            @if (orphanEntities().length) {
+              <section class="pv-subsection" style="margin-top:16px">
+                <h3>{{ outlineNumber('preview-entity-overview') }} 实体关系图</h3>
+                <section id="preview-entity-overview" class="pv-graph-card">
+                  @defer (on viewport) {
+                    <app-preview-graph-host kind="entity-relation" [exportGraphId]="entityGraphId('entity-relation')"></app-preview-graph-host>
+                  } @placeholder {
+                    <div class="pv-graph-placeholder">滚动到这里后生成实体关系图</div>
+                  }
+                </section>
+              </section>
+            }
+
+            @if (orphanTasks().length) {
+              <section id="preview-task-definitions" class="pv-subsection">
+                <h3>{{ outlineNumber('preview-task-definitions') }} 任务定义</h3>
+                <table>
+                  <thead><tr><th>任务</th><th>构件</th><th>地址</th><th>目标</th><th>参数</th><th>详细设计</th></tr></thead>
+                  <tbody>
+                    @for (task of orphanTasks(); track identityOf(task, 'task-' + $index)) {
+                      <tr>
+                        <td>{{ task.name || '' }}</td>
+                        <td>{{ constructNameById(task.constructUid || task.businessConstructUid || '') }}</td>
+                        <td>{{ task.address || '' }}</td>
+                        <td>{{ task.target || '' }}</td>
+                        <td>{{ taskParameterSummary(task.parameters) }}</td>
+                        <td [innerHTML]="richText(task.note || task.detail || '')"></td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </section>
+            }
+          </section>
+        }
+
+        <!-- ════ 应用服务（服务组→接口JSON视图） ════ -->
+        @if (services().length || applicationInterfaceRows().length) {
+          <section id="preview-applications" class="pv-section">
+            <h2>{{ outlineNumber('preview-applications') }} 应用服务</h2>
+
+            @if (serviceGroups().length) {
+              @for (group of serviceGroups(); track group.uid) {
+                @if (servicesByGroup(group.uid).length) {
+                  <section [id]="'preview-app-svc-' + group.uid" class="pv-graph-card" style="margin:12px 0">
+                    <h3>{{ outlineNumber('preview-app-svc-' + group.uid) }} {{ group.name || displayName(group, '未命名服务组') }}</h3>
+                    <table style="font-size:12px">
+                      <thead><tr><th>接口名称</th><th>方法</th><th>路径</th><th>请求参数</th><th>响应参数</th></tr></thead>
+                      <tbody>
+                        @for (svc of servicesByGroup(group.uid); track svc.uid || $index) {
+                          <tr>
+                            <td><strong>{{ svc.name || '' }}</strong></td>
+                            <td><code>{{ svc.method || '' }}</code></td>
+                            <td><code>{{ svc.path || svc.url || '' }}</code></td>
+                            <td style="max-width:260px;word-break:break-all;font-size:11px">
+                              @if (svc.rawRequest) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawRequest }}</pre>}
+                              @else if (asArray(svc.requestParams || svc.inputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.requestParams || svc.inputs) }}</pre>}
+                              @else {<span class="pv-note">—</span>}
+                            </td>
+                            <td style="max-width:260px;word-break:break-all;font-size:11px">
+                              @if (svc.rawResponse) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawResponse }}</pre>}
+                              @else if (asArray(svc.responseParams || svc.outputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.responseParams || svc.outputs) }}</pre>}
+                              @else {<span class="pv-note">—</span>}
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </section>
+                }
+              }
+            } @else {
+              <section class="pv-graph-card" style="margin:12px 0">
+                <table style="font-size:12px">
+                  <thead><tr><th>接口名称</th><th>方法</th><th>路径</th><th>请求参数</th><th>响应参数</th></tr></thead>
+                  <tbody>
+                    @for (svc of services(); track svc.uid || $index) {
+                      <tr>
+                        <td><strong>{{ svc.name || '' }}</strong></td>
+                        <td><code>{{ svc.method || '' }}</code></td>
+                        <td><code>{{ svc.path || svc.url || '' }}</code></td>
+                        <td style="max-width:260px;word-break:break-all;font-size:11px">
+                          @if (svc.rawRequest) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawRequest }}</pre>}
+                          @else if (asArray(svc.requestParams || svc.inputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.requestParams || svc.inputs) }}</pre>}
+                          @else {<span class="pv-note">—</span>}
+                        </td>
+                        <td style="max-width:260px;word-break:break-all;font-size:11px">
+                          @if (svc.rawResponse) {<pre style="margin:0;white-space:pre-wrap">{{ svc.rawResponse }}</pre>}
+                          @else if (asArray(svc.responseParams || svc.outputs).length) {<pre style="margin:0;white-space:pre-wrap">{{ formatParams(svc.responseParams || svc.outputs) }}</pre>}
+                          @else {<span class="pv-note">—</span>}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </section>
+            }
+          </section>
+        }
+
+        <!-- ════ 附录 ════ -->
+        @if (processesWithAttachments().length) {
+          <section id="preview-appendix" class="pv-section">
+            <h2>{{ outlineNumber('preview-appendix') }} 附录</h2>
+            @for (process of processesWithAttachments(); track identityOf(process, 'proc-' + $index)) {
+              @if (asArray(process?.prototypeFiles).length || hasNodeAttachments(process)) {
+                <section [id]="'preview-appendix-proc-' + identityOf(process, '')" class="pv-graph-card" style="margin:12px 0">
+                  <h3>{{ outlineNumber('preview-appendix-proc-' + identityOf(process, '')) }} {{ displayName(process, '未命名流程') }}</h3>
+
+                  <!-- 流程级附件 -->
+                  @for (pf of asArray(process?.prototypeFiles); track pf.uid || $index) {
+                    <div [id]="'preview-appendix-file-' + (pf.uid || pf.name)" class="pv-appendix-file" style="margin:8px 0;padding:10px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                        <span style="font-weight:700;font-size:13px">{{ outlineNumber('preview-appendix-file-' + (pf.uid || pf.name)) }} {{ attachmentLabel(pf) }}</span>
+                        <a [href]="attachmentUrl(pf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">↗ 浏览器打开</a>
+                      </div>
+                      @if (isImageAttachment(pf)) {
+                        <img [src]="attachmentUrl(pf)" alt="{{ pf.name || '附件图片' }}" style="max-width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px" />
+                      }
+                    </div>
+                  }
+
+                  <!-- 节点级附件 -->
+                  @for (node of asArray(process?.nodes || process?.tasks); track identityOf(node, 'node-' + $index)) {
+                    @if (asArray(node?.prototypeFiles).length) {
+                      <div [id]="'preview-appendix-node-' + identityOf(node, '')" style="margin:10px 0 6px 16px;padding:8px 10px;border-left:3px solid #93c5fd;background:#f8fafc;border-radius:0 8px 8px 0">
+                        <h4>{{ outlineNumber('preview-appendix-node-' + identityOf(node, '')) }} 节点：{{ displayName(node, '未命名节点') }}</h4>
+                      </div>
+                      @for (nf of asArray(node?.prototypeFiles); track nf.uid || $index) {
+                        <div [id]="'preview-appendix-file-' + (nf.uid || nf.name)" class="pv-appendix-file" style="margin:8px 0 8px 16px;padding:10px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <span style="font-weight:700;font-size:13px">{{ outlineNumber('preview-appendix-file-' + (nf.uid || nf.name)) }} {{ attachmentLabel(nf) }}</span>
+                            <a [href]="attachmentUrl(nf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">↗ 浏览器打开</a>
+                          </div>
+                          @if (isImageAttachment(nf)) {
+                            <img [src]="attachmentUrl(nf)" alt="{{ nf.name || '附件图片' }}" style="max-width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px" />
+                          }
+                        </div>
+                      }
+                    }
+                  }
+                </section>
+              }
+            }
+          </section>
+        }
       </div>
     </div>
   } @else {

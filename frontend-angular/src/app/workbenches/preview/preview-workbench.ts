@@ -6,6 +6,7 @@ import { ApiService } from '../../core/api/api.service';
 import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-registry';
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
+import { PreviewGraphHostComponent } from './preview-graph-host.component';
 
 interface PreviewOutlineItem {
   id: string;
@@ -17,7 +18,7 @@ interface PreviewOutlineItem {
 @Component({
   selector: 'app-preview-workbench',
   standalone: true,
-  imports: [CommonModule, WaitDialogComponent],
+  imports: [CommonModule, WaitDialogComponent, PreviewGraphHostComponent],
   templateUrl: './preview-workbench.html',
   styleUrl: './preview-workbench.scss',
 })
@@ -35,7 +36,6 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   protected readonly collapsedOutlineIds = signal<Set<string>>(new Set());
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly markdown = computed(() => this.buildMarkdown());
-  protected readonly previewHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMarkdown(this.buildMarkdown())));
   protected readonly metaHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMeta(this.runtime.doc?.meta || {})));
   protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
 
