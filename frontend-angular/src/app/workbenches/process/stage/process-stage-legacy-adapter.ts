@@ -293,13 +293,17 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
       const doc = document();
       doc.processes ||= [];
       doc.stageFlowRefs ||= [];
-      const procId = nextProcessId();
+      // 防重复：检查是否已有同名副本（防止快速多次点击）
+      const baseName = String(source.name || '未命名流程').replace(/\s*[-–—]?\s*副本(\d*)$/, '');
+      const existingNames = new Set(doc.processes.map((p) => String(p.name || '').trim()));
+      let copies = doc.processes.filter((p) => String(p.name || '').startsWith(baseName)).length;
+      let cloneName = `${baseName}${copies > 0 ? ` - 副本${copies}` : ' - 副本'}`;
+      while (existingNames.has(cloneName)) { copies++; cloneName = `${baseName} - 副本${copies}`; }
+      const procId = `P${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const clone = JSON.parse(JSON.stringify(source)) as LegacyProcess;
       clone.id = procId;
       clone.uid = procId;
-      const baseName = String(source.name || '未命名流程').replace(/\s*[-–—]?\s*副本(\d*)$/, '');
-      const copies = doc.processes.filter((p) => String(p.name || '').startsWith(baseName)).length;
-      clone.name = `${baseName}${copies > 0 ? ` - 副本${copies}` : ' - 副本'}`;
+      clone.name = cloneName;
       const raw = clone as any;
       raw.stageUid = '';
       raw.stageId = '';
@@ -333,9 +337,13 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
         const to = edge.to && edge.to !== 'START' && edge.to !== 'END' ? (taskIdMap.get(edge.to) || gatewayIdMap.get(edge.to) || '') : (edge.to || '');
         return from && to ? { ...edge, id: eid, uid: eid, from, to } : null;
       }).filter(Boolean);
-      // 复制 stageFlowRefs
+      // 复制 stageFlowRefs，按 stage 去重
       const existingRefs = (doc.stageFlowRefs || []).filter((ref) => ref.processUid === targetProcessId || ref.processId === targetProcessId || ref.processId === source.id || ref.processUid === source.uid);
+      const seenStages = new Set<string>();
       for (const ref of existingRefs) {
+        const stageKey = ref.stageUid || ref.stageId || '';
+        if (!stageKey || seenStages.has(stageKey)) continue;
+        seenStages.add(stageKey);
         doc.stageFlowRefs.push({
           id: nextRefId(),
           stageId: ref.stageId || '',

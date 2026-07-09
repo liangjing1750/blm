@@ -25,25 +25,10 @@
                 }
                 <span class="stage-detail-title-suffix"> · 阶段详情</span>
               </div>
+              <span class="stage-detail-hint">提示：流程卡片底部具备复制流程、迁移流程至其他阶段等功能</span>
             </div>
 
             <div class="stage-graph stage-flow-guide" [class.is-editing]="editing()" data-testid="stage-detail-graph">
-              @if (editing()) {
-                <div class="stage-flow-canvas-tools" data-testid="stage-flow-canvas-tools">
-                  <div class="stage-flow-domain-readonly" data-testid="stage-business-domain-readonly">
-                    <span>所属业务域</span>
-                    <strong>{{ businessDomainLabel(stage) }}</strong>
-                  </div>
-                  <div class="stage-flow-tool-group stage-flow-node-tools">
-                    <select data-testid="stage-process-select" (change)="addExistingProcess($any($event.target).value); $any($event.target).value = ''">
-                      <option value="">选择流程加入当前阶段...</option>
-                      @for (process of availableProcesses(); track adapter.processId(process)) {
-                        <option [value]="adapter.processId(process)">{{ process.name || '未命名流程' }}</option>
-                      }
-                    </select>
-                  </div>
-                </div>
-              }
               @if (flowNodes().length) {
                 <div class="stage-graph-zoom-shell stage-flow-zoom-shell" [ngStyle]="flowBoardStyle()">
                   <div class="stage-graph-zoom-target" [ngStyle]="flowBoardStyle()">

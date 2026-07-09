@@ -14,6 +14,17 @@
   min-width: max-content;
 }
 
+.stage-flow-zoom-shell {
+  overflow: scroll;
+}
+
+.stage-detail-hint {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .stage-migrate-picker {
   position: absolute;
   z-index: 20;
