@@ -11,7 +11,8 @@ import { PreviewGraphHostComponent } from './preview-graph-host.component';
 interface PreviewOutlineItem {
   id: string;
   label: string;
-  depth: 0 | 1 | 2;
+  depth: 0 | 1 | 2 | 3;
+  number: string;
 }
 
 @Component({
@@ -32,18 +33,79 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   protected readonly exportWait = signal<{ title: string; description: string } | null>(null);
   protected readonly showRaw = signal(false);
   private readonly loadedPreviewSections = signal<Set<string>>(new Set());
+  protected readonly collapsedOutlineIds = signal<Set<string>>(new Set());
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly markdown = computed(() => this.buildMarkdown());
   protected readonly metaHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMeta(this.runtime.doc?.meta || {})));
   protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
+
+  /** 根据大纲条目 ID 获取序号，正文标题使用 */
+  protected outlineNumber(id: string): string {
+    const items = this.outlineItems();
+    const found = items.find((item) => item.id === id);
+    return found?.number || '';
+  }
+
+  /** 流程组在 outline 中的 anchor ID，与 buildOutlineItems 保持一致 */
+  protected groupAnchorId(stage: any, groupName: string): string {
+    const stageId = this.identityOf(stage, `stage-${this.stages().indexOf(stage)}`);
+    return `preview-group-${stageId}-${groupName}`;
+  }
+
+  /** 流程在 outline 中的 anchor ID，与 buildOutlineItems 保持一致 */
+  protected procAnchorId(stage: any, process: any): string {
+    const stageId = this.identityOf(stage, `stage-${this.stages().indexOf(stage)}`);
+    return this.anchorId('proc', this.identityOf(process, `${stageId}-${process.flowGroup || 'proc'}`));
+  }
 
   protected toggleRaw(): void {
     this.showRaw.update((value) => !value);
     if (!this.showRaw()) window.setTimeout(() => this.initPreviewLazyRendering(), 0);
   }
 
+  /** 展开全部折叠 */
+  protected expandAll(): void {
+    this.collapsedOutlineIds.set(new Set());
+  }
+
+  /** 切换大纲条目折叠/展开，depth 0/1 可折叠（对应 2 级折叠） */
+  protected toggleOutline(item: PreviewOutlineItem): void {
+    if (item.depth > 1) return;
+    this.collapsedOutlineIds.update((ids) => {
+      const next = new Set(ids);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+  }
+
+  protected isOutlineCollapsed(item: PreviewOutlineItem): boolean {
+    if (item.depth > 1) return false;
+    return this.collapsedOutlineIds().has(item.id);
+  }
+
+  /** 点击大纲：跳转正文 + depth 0/1 折叠切换 */
+  protected handleOutlineClick(item: PreviewOutlineItem): void {
+    this.jumpTo(item.id);
+    if (item.depth <= 1) this.toggleOutline(item);
+  }
+
+  /** 判断大纲条目是否应隐藏（自身被折叠或任一祖先被折叠） */
+  protected isOutlineHidden(item: PreviewOutlineItem, index: number): boolean {
+    if (item.depth === 0) return false;
+    const collapsed = this.collapsedOutlineIds();
+    if (collapsed.size === 0) return false;
+    const items = this.outlineItems();
+    for (let i = index - 1; i >= 0; i--) {
+      const prev = items[i];
+      if (prev.depth < item.depth && collapsed.has(prev.id)) return true;
+    }
+    return false;
+  }
+
   protected jumpTo(anchorId: string): void {
-    document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const el = document.getElementById(anchorId);
+    if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
   }
 
   ngAfterViewInit(): void {
@@ -66,8 +128,64 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return this.asArray(this.runtime.doc?.stages);
   }
 
+  // 模块意图：从 panorama.columns 提取价值流线（仓单监管@杨伟），用于大纲和正文的价值流分组。
+  // 关键流程：列是价值流（仓单监管、交割服务机构监管），行是业务域（交割智慧监管平台）。
+  protected valueStreamLanes(): Array<{id: string; name: string}> {
+    const doc = this.runtime.doc || {};
+    const columns = this.asArray(doc.panorama?.columns).map((item: any, index: number) => ({
+      id: String(item.uid || item.id || `col-${index + 1}`),
+      name: String(item.name || item.title || item.id || `价值流${index + 1}`),
+    }));
+    if (columns.length) return columns;
+    // 降级：panoramaColumnUid
+    const ids = Array.from(new Set(this.stages().map((s) => String(s.panoramaColumnUid || s.columnUid || '')).filter(Boolean)));
+    return ids.length ? ids.map((id) => ({ id, name: id })) : [];
+  }
+
+  // 模块意图：根据价值流 columnUid 过滤阶段。
+  protected stagesInLane(laneId: string): any[] {
+    return this.stages().filter((s) => {
+      const colUid = String(s.panoramaColumnUid || s.columnUid || '').trim();
+      return colUid ? colUid === laneId : false;
+    });
+  }
+
   protected processes(): any[] {
     return this.asArray(this.runtime.doc?.processes);
+  }
+
+  /** 返回阶段下的流程分组（含空字符串键的无组流程），模板直接遍历 */
+  protected stageProcessGroups(stage: any): Array<{name: string; processes: any[]}> {
+    const doc = this.runtime.doc || {};
+    const groups = new Map<string, any[]>();
+    this.stageProcessRefs(stage, doc).forEach((ref) => {
+      const process = this.findProcessByRef(ref, doc) || ref;
+      const group = String(process?.flowGroup || '').trim();
+      const key = group || '__ungrouped__';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(process);
+    });
+    const result: Array<{name: string; processes: any[]}> = [];
+    const ungrouped = groups.get('__ungrouped__');
+    if (ungrouped) result.push({name: '', processes: ungrouped});
+    groups.forEach((procs, key) => {
+      if (key !== '__ungrouped__') result.push({name: key, processes: procs});
+    });
+    return result;
+  }
+
+  /** 未被任何阶段引用的独立流程 */
+  protected orphanProcesses(): any[] {
+    const doc = this.runtime.doc || {};
+    const stages = this.stages();
+    const refd = new Set<string>();
+    stages.forEach((stage) => {
+      this.stageProcessRefs(stage, doc).forEach((ref) => {
+        const p = this.findProcessByRef(ref, doc);
+        if (p) refd.add(this.identityOf(p, ''));
+      });
+    });
+    return this.processes().filter((p) => !refd.has(this.identityOf(p, '')));
   }
 
   protected entities(): any[] {
@@ -218,54 +336,132 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
 
   private buildOutlineItems(): PreviewOutlineItem[] {
     const doc = this.runtime.doc || {};
-    const items: PreviewOutlineItem[] = [{ id: 'preview-top', label: this.title(), depth: 0 }];
-    const outlinedProcessAnchors = new Set<string>();
-    if (this.asArray(doc.roles).length) items.push({ id: 'preview-roles', label: '角色', depth: 0 });
-    if (this.asArray(doc.terms || doc.language).length) items.push({ id: 'preview-language', label: '统一语言/术语表', depth: 0 });
-    if (this.asArray(doc.stages).length) {
-      items.push({ id: 'preview-stages', label: '业务全景', depth: 0 });
-      items.push({ id: 'preview-stage-panorama', label: '全景视图', depth: 1 });
-      this.asArray(doc.stages).forEach((stage, index) => {
-        const stageId = this.identityOf(stage, `stage-${index + 1}`);
-        items.push({ id: this.anchorId('stage', stageId), label: `阶段 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 1 });
-        this.stageProcessRefs(stage, doc).forEach((ref, refIndex) => {
-          const process = this.findProcessByRef(ref, doc) || ref;
-          const processAnchor = this.anchorId('proc', this.identityOf(process, `${stageId}-process-${refIndex + 1}`));
-          if (!outlinedProcessAnchors.has(processAnchor)) {
-            outlinedProcessAnchors.add(processAnchor);
-            items.push({ id: processAnchor, label: `流程 · ${this.displayName(process, '未命名流程')}`, depth: 2 });
-          }
+    const raw: Array<{id: string; label: string; depth: number}> = [];
+    const outlinedAnchors = new Set<string>();
+
+    // ── 引言 ──
+    const hasIntro = this.asArray(doc.roles).length || this.asArray(doc.terms || doc.language).length || this.stages().length;
+    if (hasIntro) {
+      raw.push({ id: 'preview-intro', label: '引言', depth: 0 });
+      raw.push({ id: 'preview-stage-panorama', label: '全景视图', depth: 1 });
+      if (this.asArray(doc.roles).length) raw.push({ id: 'preview-roles', label: '角色', depth: 1 });
+      if (this.asArray(doc.terms || doc.language).length) raw.push({ id: 'preview-language', label: '统一语言/术语表', depth: 1 });
+      // Note: 数据字典目前没有单独 section，暂不加入
+    }
+
+    // ── 价值流（每个价值流线作为顶级章节）──
+    const stages = this.stages();
+    if (stages.length) {
+      const lanes = this.valueStreamLanes();
+      if (lanes.length) {
+        lanes.forEach((lane) => {
+          const laneStages = this.stagesInLane(lane.id);
+          if (!laneStages.length) return;
+          raw.push({ id: `preview-lane-${lane.id}`, label: lane.name, depth: 0 });
+          laneStages.forEach((stage) => {
+            const stageId = this.identityOf(stage, `stage-${this.stages().indexOf(stage)}`);
+            raw.push({ id: this.anchorId('stage', stageId), label: `阶段 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 1 });
+            const groups = this.groupRefsByFlowGroup(stage);
+            groups.forEach((processes, groupName) => {
+              if (groupName) {
+                raw.push({ id: `preview-group-${stageId}-${groupName}`, label: `流程组 · ${groupName}`, depth: 2 });
+              }
+              processes.forEach((p) => {
+                const anchor = this.anchorId('proc', this.identityOf(p, `${stageId}-${p.flowGroup || 'proc'}`));
+                if (!outlinedAnchors.has(anchor)) {
+                  outlinedAnchors.add(anchor);
+                  raw.push({ id: anchor, label: this.displayName(p, '未命名流程'), depth: groupName ? 3 : 2 });
+                }
+              });
+            });
+          });
         });
+      } else {
+        // 无价值流时阶段降级为深度 0
+        stages.forEach((stage, index) => {
+          raw.push({ id: this.stageAnchor(stage, index), label: `阶段 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 0 });
+        });
+      }
+    }
+
+    // 孤立流程（不属于任何阶段的）
+    const orphanProcesses = this.orphanProcesses();
+    if (orphanProcesses.length) {
+      raw.push({ id: 'preview-processes', label: '流程视图', depth: 0 });
+      orphanProcesses.forEach((process, index) => {
+        raw.push({ id: this.processAnchor(process, index), label: this.displayName(process, '未命名流程'), depth: 1 });
       });
     }
-    if (this.asArray(doc.processes).length) {
-      items.push({ id: 'preview-processes', label: '流程视图', depth: 0 });
-      this.asArray(doc.processes).forEach((process, index) => {
-        const processAnchor = this.anchorId('proc', this.identityOf(process, `process-${index + 1}`));
-        if (!outlinedProcessAnchors.has(processAnchor)) {
-          items.push({ id: processAnchor, label: this.displayName(process, '未命名流程'), depth: 1 });
-        }
-      });
+
+    // ── 构件建模（含实体、构件、任务） ──
+    const hasComponents = this.asArray(doc.entities).length || this.asArray(doc.businessComponents).length || this.asArray(doc.businessConstructs).length || this.asArray(doc.taskDefinitions).length;
+    if (hasComponents) {
+      raw.push({ id: 'preview-components', label: '组件建模', depth: 0 });
+      if (this.asArray(doc.businessComponents).length) raw.push({ id: 'preview-business-components', label: '业务组件', depth: 1 });
+      if (this.asArray(doc.businessConstructs).length) raw.push({ id: 'preview-business-constructs', label: '业务构件', depth: 1 });
+      if (this.asArray(doc.entities).length) {
+        raw.push({ id: 'preview-entity-overview', label: '实体关系图', depth: 1 });
+        this.asArray(doc.entities).forEach((entity, index) => {
+          raw.push({ id: this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)), label: this.displayName(entity, '未命名实体'), depth: 2 });
+        });
+      }
+      if (this.asArray(doc.taskDefinitions).length) raw.push({ id: 'preview-task-definitions', label: '任务定义', depth: 1 });
     }
-    if (this.asArray(doc.entities).length) {
-      items.push({ id: 'preview-entities', label: '数据建模', depth: 0 });
-      items.push({ id: 'preview-entity-overview', label: '实体关系图', depth: 1 });
-      this.asArray(doc.entities).forEach((entity, index) => {
-        items.push({ id: this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)), label: this.displayName(entity, '未命名实体'), depth: 1 });
-      });
-    }
-    if (this.asArray(doc.businessComponents).length || this.asArray(doc.businessConstructs).length || this.asArray(doc.taskDefinitions).length) {
-      items.push({ id: 'preview-components', label: '构件建模', depth: 0 });
-      if (this.asArray(doc.businessComponents).length) items.push({ id: 'preview-business-components', label: '业务组件', depth: 1 });
-      if (this.asArray(doc.businessConstructs).length) items.push({ id: 'preview-business-constructs', label: '业务构件', depth: 1 });
-      if (this.asArray(doc.taskDefinitions).length) items.push({ id: 'preview-task-definitions', label: '任务定义', depth: 1 });
-    }
+
+    // ── 应用建模 ──
     if (this.services().length || this.interfaces().length) {
-      items.push({ id: 'preview-applications', label: '应用建模', depth: 0 });
-      if (this.services().length) items.push({ id: 'preview-application-services', label: '应用服务', depth: 1 });
-      if (this.interfaces().length) items.push({ id: 'preview-application-interfaces', label: '应用接口', depth: 1 });
+      raw.push({ id: 'preview-applications', label: '应用建模', depth: 0 });
+      if (this.services().length) raw.push({ id: 'preview-application-services', label: '应用服务', depth: 1 });
+      if (this.interfaces().length) raw.push({ id: 'preview-application-interfaces', label: '应用接口', depth: 1 });
     }
-    return items;
+
+    // ── 赋序号 ──
+    const counters = [0, 0, 0, 0];
+    return raw.map((item, index) => {
+      const d = item.depth;
+      if (d === 0) {  // 深度 0 每项自增序号
+        counters[0] += 1;
+        counters[1] = 0; counters[2] = 0; counters[3] = 0;
+      } else {
+        for (let p = index - 1; p >= 0; p--) {
+          if (raw[p].depth < d) {
+            counters[d] = (counters[d] || 0) + 1;
+            for (let r = d + 1; r <= 3; r++) counters[r] = 0;
+            break;
+          }
+        }
+      }
+      const parts: string[] = [];
+      for (let i = 0; i <= d; i++) {
+        if (counters[i] > 0) parts.push(String(counters[i]));
+      }
+      return {
+        id: item.id,
+        label: item.label,
+        depth: d as 0 | 1 | 2 | 3,
+        number: parts.join('.'),
+      };
+    });
+  }
+
+  /** 按流程组整理阶段下的流程引用，返回 Map<groupName, processes[]> */
+  private groupRefsByFlowGroup(stage: any): Map<string, any[]> {
+    const groups = new Map<string, any[]>();
+    const doc = this.runtime.doc || {};
+    this.stageProcessRefs(stage, doc).forEach((ref) => {
+      const process = this.findProcessByRef(ref, doc) || ref;
+      const group = String(process?.flowGroup || '').trim();
+      const key = group || '__ungrouped__';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(process);
+    });
+    // 把 ungrouped 移到空字符串键
+    const ungrouped = groups.get('__ungrouped__');
+    if (ungrouped) {
+      groups.delete('__ungrouped__');
+      groups.set('', ungrouped);
+    }
+    return groups;
   }
 
   private renderDocumentHtml(): string {
@@ -853,7 +1049,7 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private anchorId(prefix: string, value: string): string {
+  protected anchorId(prefix: string, value: string): string {
     const safe = String(value || '')
       .trim()
       .toLowerCase()

@@ -1,13 +1,55 @@
 // 模块意图：阶段视图继续复用 legacy 的核心 class，本文件只补 Angular 渲染需要的局部边界。
+// 关键流程：host 参与父 flex 链撑高，让全景矩阵和详情画布填满可用屏幕区域。
+// 补充说明：.stage-main 曾是大链中缺失的一环，不加入则内部 flex: 1 全部失效。
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   min-width: 0;
+  min-height: 0;
+}
+
+.stage-workbench {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+// stage-main 是全景/详情容器链的关键缺口，不参与 flex 撑高则内部 card→graph→scroll 的 flex:1 全部无效
+.stage-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.stage-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.stage-graph {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.value-stream-scroll-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .value-stream-scroll {
-  max-height: calc(100vh - 190px);
-  overflow: scroll;
-  scrollbar-gutter: stable;
+  flex: 1;
+  overflow: auto;
+  max-height: none;
+  min-height: 0;
 }
 
 .value-stream-matrix {
@@ -15,13 +57,20 @@
 }
 
 .stage-flow-zoom-shell {
-  overflow: scroll;
-  max-height: calc(100vh - 200px);
-  height: auto;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
 }
 
-.stage-graph.stage-flow-guide {
+/* 覆盖全局 workbench-scroll-body 的 overflow:scroll（始终显示滚动条），
+   阶段视图需要滚动条时才出现。
+   关键：用 flex:1 替代 height:100%，避免 flex 链中百分比高度失效。 */
+.stage-workbench .stage-main-shell.workbench-scroll-body {
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .stage-detail-hint {
