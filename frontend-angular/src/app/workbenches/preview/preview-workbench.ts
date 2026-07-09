@@ -1082,22 +1082,286 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       ${taskDefinitions.length ? `<h3>任务定义</h3><table><thead><tr><th>任务</th><th>构件</th><th>地址</th><th>目标</th><th>参数</th><th>详细设计</th></tr></thead><tbody>${taskDefinitions.map((item) => `<tr><td>${this.esc(item.name || '')}</td><td>${this.esc(item.constructUid || item.businessConstructUid || '')}</td><td>${this.esc(item.address || '')}</td><td>${this.esc(item.target || '')}</td><td>${this.esc(this.taskParameterSummary(item.parameters))}</td><td>${this.richTextCell(item.note || '')}</td></tr>`).join('')}</tbody></table>` : ''}`;
   }
 
+  /** 构建结构化 Markdown，与预览大纲和正文顺序一致，含表格和图形引用 */
   private buildMarkdown(): string {
     const doc = this.runtime.doc || {};
-    const lines = [`# ${this.title()}`, '', '## 概览'];
-    [
-      ['角色', this.asArray(doc.roles).length],
-      ['阶段', this.asArray(doc.stages).length],
-      ['流程', this.asArray(doc.processes).length],
-      ['实体', this.asArray(doc.entities).length],
-      ['构件', this.asArray(doc.businessConstructs).length || this.asArray(doc.businessComponents).length],
-      ['任务', this.asArray(doc.taskDefinitions).length],
-    ].forEach(([label, value]) => lines.push(`- ${label}: ${value}`));
-    lines.push('', '## 流程');
-    this.asArray(doc.processes).forEach((item) => lines.push(`- ${this.displayName(item, '未命名流程')}: 节点 ${this.asArray(item.nodes || item.tasks).length}`));
-    lines.push('', '## 实体');
-    this.asArray(doc.entities).forEach((item) => lines.push(`- ${this.displayName(item, '未命名实体')}: 字段 ${this.asArray(item.fields).length}`));
+    const L = (line = '') => lines.push(line);
+    const lines: string[] = [];
+    const stages = this.stages();
+    const processes = this.processes();
+
+    L(`# ${this.title()}`);
+    L();
+
+    // ════ 引言 ════
+    if (stages.length || this.asArray(doc.roles).length || this.asArray(doc.terms || doc.language).length) {
+      L(`## ${this.outlineNumber('preview-intro')} 引言`);
+      L();
+
+      if (stages.length) {
+        L(`### ${this.outlineNumber('preview-stage-panorama')} 全景视图`);
+        L();
+        L(`![全景视图](${exportGraphId('stage-panorama')}.png)`);
+        L();
+      }
+
+      if (this.asArray(doc.roles).length) {
+        L('### 角色');
+        L('| 角色 | 分组 | 说明 | 所属业务组件 |');
+        L('|------|------|------|--------------|');
+        this.asArray(doc.roles).forEach((role: any) => {
+          L(`| ${this.mdEscape(role.name || role.id || '')} | ${this.mdEscape(role.group || '')} | ${this.mdEscape(role.desc || role.description || '')} | ${this.mdEscape(this.asArray(role.subDomains).join('、'))} |`);
+        });
+        L();
+      }
+
+      if (this.asArray(doc.terms || doc.language).length) {
+        L('### 统一语言/术语表');
+        L('| 术语 | 定义 |');
+        L('|------|------|');
+        this.asArray(doc.terms || doc.language).forEach((item: any) => {
+          L(`| ${this.mdEscape(item.term || item.name || '')} | ${this.mdEscape(item.definition || item.desc || '')} |`);
+        });
+        L();
+      }
+    }
+
+    // ════ 价值流 ════
+    if (stages.length) {
+      const lanes = this.valueStreamLanes();
+      if (lanes.length) {
+        lanes.forEach((lane) => {
+          const laneStages = this.stagesInLane(lane.id);
+          if (!laneStages.length) return;
+          L(`## ${this.outlineNumber(`preview-lane-${lane.id}`)} ${lane.name}`);
+          L();
+
+          laneStages.forEach((stage, si) => {
+            const stageAnchor = this.stageAnchor(stage, si);
+            L(`### ${this.outlineNumber(stageAnchor)} 阶段：${this.displayName(stage, '未命名业务阶段')}`);
+            L();
+            // 阶段流程图
+            const stageGraphId = this.stageGraphId('stage-flow', stage, si);
+            L(`![阶段：${this.displayName(stage, '未命名业务阶段')}](${stageGraphId}.png)`);
+            L();
+
+            // 流程分组
+            const groups = this.stageProcessGroups(stage);
+            groups.forEach((group) => {
+              group.processes.forEach((process, pi) => {
+                const procAnchor = this.procAnchorId(stage, process);
+                if (group.name) {
+                  const groupAnchor = this.groupAnchorId(stage, group.name);
+                  L(`#### ${this.outlineNumber(groupAnchor)} 流程组：${group.name}`);
+                  L();
+                }
+                L(`##### ${this.outlineNumber(procAnchor)} ${this.displayName(process, '未命名流程')}`);
+                L();
+                // 流程图
+                const procGraphId = this.processGraphId(process, pi);
+                L(`![流程图：${this.displayName(process, '未命名流程')}](${procGraphId}.png)`);
+                L();
+                if (process.trigger || process.outcome) {
+                  L(`**触发**：${this.mdEscape(process.trigger || '—')} → **预期结果**：${this.mdEscape(process.outcome || '—')}`);
+                  L();
+                }
+
+                // 流程节点
+                const nodes = this.processNodes(process);
+                if (nodes.length) {
+                  nodes.forEach((node: any, ni: number) => {
+                    L(`##### 流程节点：${this.displayName(node, `未命名节点 ${ni + 1}`)}`);
+                    L();
+                    if (node.description) {
+                      L(`${this.mdRichText(node.description)}`);
+                      L();
+                    }
+
+                    // 办理步骤
+                    const steps = this.asArray(node.userSteps || node.steps);
+                    if (steps.length) {
+                      L('**办理步骤**');
+                      L('| # | 操作步骤 | 类型 | 条件/备注 |');
+                      L('|---|----------|------|----------|');
+                      steps.forEach((step: any, si: number) => {
+                        L(`| ${si + 1} | ${this.mdEscape(step.name || '')} | ${this.mdEscape(step.type || '')} | ${this.mdRichText(step.note || '')} |`);
+                      });
+                      L();
+                    }
+
+                    // 办理表单
+                    const forms = this.asArray(node.forms);
+                    if (forms.length) {
+                      L('**办理表单**');
+                      forms.forEach((form: any) => {
+                        L(`- **${form.name || '未命名表单'}**${form.purpose ? ` 用途：${form.purpose}` : ''}`);
+                        this.asArray(form.sections).forEach((sec: any) => {
+                          if (this.asArray(sec.fields).length) {
+                            L('  | 字段 | 类型 | 必填 | 选项 |');
+                            L('  |------|------|------|------|');
+                            this.asArray(sec.fields).forEach((fld: any) => {
+                              L(`  | ${this.mdEscape(fld.name || '')} | ${this.mdEscape(fld.type || '')} | ${fld.required ? '✓' : ''} | ${this.mdEscape(this.asArray(fld.options).join('、'))} |`);
+                            });
+                          }
+                        });
+                      });
+                      L();
+                    }
+
+                    // 办理附件
+                    const procFiles = this.asArray(process?.prototypeFiles);
+                    const nodeFiles = this.asArray(node?.prototypeFiles);
+                    if (procFiles.length || nodeFiles.length) {
+                      L('**办理附件**');
+                      [...procFiles, ...nodeFiles].forEach((pf: any) => {
+                        L(`- ${this.attachmentLabel(pf)}`);
+                      });
+                      L();
+                    }
+
+                    // 办理规则
+                    const rules = this.normalizedBusinessRules(node);
+                    if (rules.length) {
+                      L('**办理规则**');
+                      L('| 规则名称 | 规则内容 |');
+                      L('|----------|----------|');
+                      rules.forEach((rule) => {
+                        L(`| ${this.mdEscape(rule.name)} | ${this.mdRichText(rule.content)} |`);
+                      });
+                      L();
+                    }
+                  });
+                } else {
+                  L('*暂无流程节点*');
+                  L();
+                }
+              });
+            });
+          });
+        });
+      }
+    }
+
+    // 孤立流程
+    const orphans = this.orphanProcesses();
+    if (orphans.length) {
+      L(`## ${this.outlineNumber('preview-processes')} 流程视图`);
+      L();
+      orphans.forEach((process, index) => {
+        L(`### ${this.processAnchor(process, index)} ${this.displayName(process, '未命名流程')}`);
+        L();
+      });
+    }
+
+    // ════ 组件建模 ════
+    const hasComponents = this.asArray(doc.entities).length || this.asArray(doc.businessComponents).length || this.asArray(doc.businessConstructs).length || this.asArray(doc.taskDefinitions).length;
+    if (hasComponents) {
+      L(`## ${this.outlineNumber('preview-components')} 组件建模`);
+      L();
+
+      if (this.asArray(doc.businessComponents).length) {
+        L(`### ${this.outlineNumber('preview-business-components')} 业务组件`);
+        L('| 组件 | 类型 | 说明 |');
+        L('|------|------|------|');
+        this.asArray(doc.businessComponents).forEach((c: any) => {
+          L(`| ${this.mdEscape(c.name || '')} | ${this.mdEscape(c.kind || '')} | ${this.mdEscape(c.desc || c.note || '')} |`);
+        });
+        L();
+      }
+
+      // 构件→实体、任务
+      const constructs = this.asArray(doc.businessConstructs);
+      constructs.forEach((c: any) => {
+        const cAnchor = `preview-construct-${this.identityOf(c, '')}`;
+        L(`### ${this.outlineNumber(cAnchor)} 构件：${this.displayName(c, '未命名构件')}`);
+        L();
+
+        const entities = this.constructEntities(c);
+        if (entities.length) {
+          L('**实体**');
+          entities.forEach((e: any) => {
+            const eAnchor = this.anchorId('entity', this.identityOf(e, ''));
+            L(`- **${this.outlineNumber(eAnchor)} 实体：${this.displayName(e, '未命名实体')}**`);
+            if (e.note) L(`  ${this.mdEscape(e.note)}`);
+            if (this.asArray(e.fields).length) {
+              L('  | 字段 | 类型 | 主键 | 说明 |');
+              L('  |------|------|------|------|');
+              this.asArray(e.fields).forEach((f: any) => {
+                L(`  | ${this.mdEscape(f.name || '')} | ${this.mdEscape(f.type || '')} | ${f.is_key || f.isKey ? '✓' : ''} | ${this.mdEscape(f.note || f.desc || '')} |`);
+              });
+            }
+          });
+          L();
+        }
+
+        const tasks = this.constructTasks(c);
+        if (tasks.length) {
+          L('**任务**');
+          tasks.forEach((t: any) => {
+            const tAnchor = this.anchorId('task', this.identityOf(t, ''));
+            L(`- **${this.outlineNumber(tAnchor)} 任务：${this.displayName(t, '未命名任务')}** 地址：${this.mdEscape(t.address || '—')} 目标：${this.mdEscape(t.target || '—')}`);
+          });
+          L();
+        }
+      });
+
+      // 孤立实体
+      const orphanEntities = this.orphanEntities();
+      if (orphanEntities.length) {
+        L(`### ${this.outlineNumber('preview-entity-overview')} 实体关系图`);
+        L();
+        L(`![实体关系图](${exportGraphId('entity-relation')}.png)`);
+        L();
+      }
+
+      // 孤立任务
+      const orphanTasks = this.orphanTasks();
+      if (orphanTasks.length) {
+        L(`### ${this.outlineNumber('preview-task-definitions')} 任务定义`);
+        L('| 任务 | 构件 | 地址 | 目标 | 参数 |');
+        L('|------|------|------|------|------|');
+        orphanTasks.forEach((t: any) => {
+          L(`| ${this.mdEscape(t.name || '')} | ${this.mdEscape(this.constructNameById(t.constructUid || t.businessConstructUid || ''))} | ${this.mdEscape(t.address || '')} | ${this.mdEscape(t.target || '')} | ${this.taskParameterSummary(t.parameters)} |`);
+        });
+        L();
+      }
+    }
+
+    // ════ 应用服务 ════
+    const svcGroups = this.serviceGroups();
+    if (this.services().length || svcGroups.length) {
+      L(`## ${this.outlineNumber('preview-applications')} 应用服务`);
+      L();
+      if (svcGroups.length) {
+        svcGroups.forEach((g: any) => {
+          const groupSvcs = this.servicesByGroup(g.uid);
+          if (!groupSvcs.length) return;
+          L(`### ${this.outlineNumber(`preview-app-svc-${g.uid}`)} ${g.name || '未命名服务组'}`);
+          L('| 接口名称 | 方法 | 路径 | 请求参数 | 响应参数 |');
+          L('|----------|------|------|----------|----------|');
+          groupSvcs.forEach((svc: any) => {
+            L(`| ${this.mdEscape(svc.name || '')} | \`${svc.method || ''}\` | \`${svc.path || svc.url || ''}\` | ${svc.rawRequest ? '```' + svc.rawRequest + '```' : '—'} | ${svc.rawResponse ? '```' + svc.rawResponse + '```' : '—'} |`);
+          });
+          L();
+        });
+      }
+    }
+
     return `${lines.join('\n')}\n`;
+  }
+
+  /** Markdown 转义（表格单元格内安全） */
+  private mdEscape(value: unknown): string {
+    return String(value ?? '')
+      .replace(/\|/g, '\\|')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, '');
+  }
+
+  /** 富文本转纯文本（去 HTML 标签，用于 Markdown） */
+  private mdRichText(value: unknown): string {
+    const html = String(value ?? '');
+    return this.mdEscape(html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"'));
   }
 
   private richTextCell(value: unknown): string {
