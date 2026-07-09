@@ -373,7 +373,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     this.writeFormSectionServiceIds(section, value ? [value] : [], task);
     section.serviceName = service?.name || '';
     this.adapter.touch();
-    this.refresh();
   }
 
   protected selectedFormSectionServices(section: LegacyTaskFormSection, task: LegacyProcessNode): ProcessApplicationService[] {
@@ -480,7 +479,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     checked ? selected.add(serviceUid) : selected.delete(serviceUid);
     this.writeFormSectionServiceIds(section, Array.from(selected), task);
     this.adapter.touch();
-    this.refresh();
   }
 
   protected jumpToApplicationService(serviceOrUid: ProcessApplicationService | string): void {
@@ -1368,12 +1366,10 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setProcessField(field: 'name' | 'trigger' | 'outcome', value: string): void {
     this.adapter.setProcessField(field, value);
-    this.refresh();
   }
 
   protected setTaskField(task: LegacyProcessNode, field: 'name' | 'role' | 'description', value: string): void {
     this.adapter.setTaskField(task, field, value);
-    this.refresh();
   }
 
   protected addTask(afterTaskId?: string): void {
@@ -1398,7 +1394,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setGateway(gateway: LegacyFlowGateway, field: 'title' | 'role_id', value: string): void {
     this.adapter.setGateway(gateway, field, value);
-    this.refresh();
   }
 
   protected moveGateway(gatewayId: string, delta: number): void {
@@ -1418,7 +1413,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setEdge(edge: LegacyFlowEdge, field: 'from' | 'to' | 'label', value: string): void {
     this.adapter.setEdge(edge, field, value);
-    this.refresh();
   }
 
   protected moveEdge(edgeId: string, delta: number): void {
@@ -1454,7 +1448,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setUserStep(task: LegacyProcessNode, index: number, value: string): void {
     this.adapter.setUserStep(task, index, value);
-    this.refresh();
   }
 
   protected setUserStepName(task: LegacyProcessNode, index: number, value: string): void {
@@ -1504,7 +1497,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected setFormName(task: LegacyProcessNode, form: LegacyTaskForm, value: string): void {
     if (!this.editing) return;
     this.adapter.setFormName(task, form, value);
-    this.refresh();
   }
 
   protected async removeForm(task: LegacyProcessNode, form: LegacyTaskForm): Promise<void> {
@@ -1589,7 +1581,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     if (!this.editing) return;
     form.purpose = value;
     this.adapter.touch();
-    this.refresh();
   }
 
   protected toggleFormCopyMenu(form: LegacyTaskForm, event: MouseEvent): void {
@@ -1766,7 +1757,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     if (!this.editing) return;
     section[key] = value;
     this.adapter.touch();
-    this.refresh();
   }
 
   protected setFormSectionEntity(form: LegacyTaskForm, section: LegacyTaskFormSection, value: string): void {
@@ -1793,13 +1783,11 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     if (!this.editing) return;
     field[key] = value;
     this.adapter.touch();
-    this.refresh();
   }
 
   protected setFormFieldRequired(field: LegacyFormField, value: boolean): void {
     if (!this.editing) return;
     this.adapter.setFormFieldRequired(field, value);
-    this.refresh();
   }
 
   protected moveFormField(section: LegacyTaskFormSection, field: LegacyFormField, delta: number): void {
@@ -1827,7 +1815,6 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setTaskDefinition(taskDefinition: LegacyTaskDefinition, key: 'name' | 'target' | 'address', value: string): void {
     this.adapter.setTaskDefinition(taskDefinition, key, value);
-    this.refresh();
   }
 
   protected removeTaskDefinition(task: LegacyProcessNode, taskDefinition: LegacyTaskDefinition): void {

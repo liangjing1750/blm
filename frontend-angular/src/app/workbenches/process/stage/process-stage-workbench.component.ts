@@ -72,11 +72,17 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
+    document.addEventListener('click', this.onDocumentClick);
   }
 
   ngOnDestroy(): void {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+    document.removeEventListener('click', this.onDocumentClick);
   }
+
+  private readonly onDocumentClick = (): void => {
+    this.closeMigratePicker();
+  };
   // 模块意图：阶段视图的 Angular 渲染层。流程工作台壳仍由 legacy 控制，本组件负责阶段全景和阶段详情画布。
   protected readonly version = signal(0);
   protected readonly renamingStageId = signal('');
