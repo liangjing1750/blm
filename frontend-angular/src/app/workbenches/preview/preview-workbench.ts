@@ -216,6 +216,22 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return result;
   }
 
+  /** 未被任何构件引用的独立实体 */
+  protected orphanEntities(): any[] {
+    const constructs = this.constructs();
+    const linked = new Set<string>();
+    constructs.forEach((c) => this.constructEntities(c).forEach((e) => linked.add(this.identityOf(e, ''))));
+    return this.entities().filter((e) => !linked.has(this.identityOf(e, '')));
+  }
+
+  /** 未被任何构件引用的独立任务 */
+  protected orphanTasks(): any[] {
+    const constructs = this.constructs();
+    const linked = new Set<string>();
+    constructs.forEach((c) => this.constructTasks(c).forEach((t) => linked.add(this.identityOf(t, ''))));
+    return this.taskDefinitions().filter((t) => !linked.has(this.identityOf(t, '')));
+  }
+
   /** 未被任何阶段引用的独立流程 */
   protected orphanProcesses(): any[] {
     const doc = this.runtime.doc || {};
@@ -435,19 +451,45 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       });
     }
 
-    // ── 构件建模（含实体、构件、任务） ──
-    const hasComponents = this.asArray(doc.entities).length || this.asArray(doc.businessComponents).length || this.asArray(doc.businessConstructs).length || this.asArray(doc.taskDefinitions).length;
+    // ── 组件建模（组件→构件→实体、任务） ──
+    const constructs = this.asArray(doc.businessConstructs);
+    const hasComponents = this.asArray(doc.entities).length || this.asArray(doc.businessComponents).length || constructs.length || this.asArray(doc.taskDefinitions).length;
     if (hasComponents) {
       raw.push({ id: 'preview-components', label: '组件建模', depth: 0 });
       if (this.asArray(doc.businessComponents).length) raw.push({ id: 'preview-business-components', label: '业务组件', depth: 1 });
-      if (this.asArray(doc.businessConstructs).length) raw.push({ id: 'preview-business-constructs', label: '业务构件', depth: 1 });
-      if (this.asArray(doc.entities).length) {
-        raw.push({ id: 'preview-entity-overview', label: '实体关系图', depth: 1 });
-        this.asArray(doc.entities).forEach((entity, index) => {
-          raw.push({ id: this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)), label: this.displayName(entity, '未命名实体'), depth: 2 });
+
+      // 构件→实体、任务（大纲）; 标记已归属的实体和任务
+      const outlinedEntities = new Set<string>();
+      const outlinedTasks = new Set<string>();
+      if (constructs.length) {
+        constructs.forEach((c) => {
+          const cId = this.identityOf(c, '');
+          raw.push({ id: `preview-construct-${cId}`, label: `构件：${this.displayName(c, '未命名构件')}`, depth: 1 });
+          this.constructEntities(c).forEach((e) => {
+            const eAnchor = this.anchorId('entity', this.identityOf(e, ''));
+            outlinedEntities.add(eAnchor);
+            raw.push({ id: eAnchor, label: `实体：${this.displayName(e, '未命名实体')}`, depth: 2 });
+          });
+          this.constructTasks(c).forEach((t) => {
+            const tAnchor = this.anchorId('task', this.identityOf(t, ''));
+            outlinedTasks.add(tAnchor);
+            raw.push({ id: tAnchor, label: `任务：${this.displayName(t, '未命名任务')}`, depth: 2 });
+          });
         });
       }
-      if (this.asArray(doc.taskDefinitions).length) raw.push({ id: 'preview-task-definitions', label: '任务定义', depth: 1 });
+
+      // 未归属实体的实体
+      const orphanEntities = this.asArray(doc.entities).filter((e) => !outlinedEntities.has(this.anchorId('entity', this.identityOf(e, ''))));
+      if (orphanEntities.length) {
+        raw.push({ id: 'preview-entity-overview', label: '实体关系图', depth: 1 });
+        orphanEntities.forEach((entity, index) => {
+          raw.push({ id: this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)), label: `实体：${this.displayName(entity, '未命名实体')}`, depth: 2 });
+        });
+      }
+
+      // 未归属的任务
+      const orphanTasks = this.asArray(doc.taskDefinitions).filter((t) => !outlinedTasks.has(this.anchorId('task', this.identityOf(t, ''))));
+      if (orphanTasks.length) raw.push({ id: 'preview-task-definitions', label: '任务定义', depth: 1 });
     }
 
     // ── 应用建模 ──

@@ -327,49 +327,10 @@
           </section>
         }
 
-        <!-- ════ 组件建模（合并实体 + 构件 + 任务） ════ -->
+        <!-- ════ 组件建模（组件→构件→实体、任务） ════ -->
         @if (entities().length || components().length || constructs().length || taskDefinitions().length) {
           <section id="preview-components" class="pv-section">
             <h2>{{ outlineNumber('preview-components') }} 组件建模</h2>
-
-            @if (entities().length) {
-              <section class="pv-subsection">
-                <h3>{{ outlineNumber('preview-entity-overview') }} 实体关系图</h3>
-                <section id="preview-entity-overview" class="pv-graph-card">
-                  @defer (on viewport) {
-                    <app-preview-graph-host kind="entity-relation" [exportGraphId]="entityGraphId('entity-relation')"></app-preview-graph-host>
-                  } @placeholder {
-                    <div class="pv-graph-placeholder">滚动到这里后生成实体关系图</div>
-                  }
-                </section>
-                @for (entity of entities(); track identityOf(entity, 'entity-' + $index); let i = $index) {
-                  <section [id]="entityAnchor(entity, i)" class="pv-entity-section pv-graph-card">
-                    <h4>{{ outlineNumber(entityAnchor(entity, i)) }} 实体: {{ displayName(entity, '未命名实体') }}</h4>
-                    @if (entity.note) { <p class="pv-note">{{ entity.note }}</p> }
-                    @if (fieldRows(entity).length) {
-                      <table>
-                        <thead><tr><th>字段</th><th>类型</th><th>主键</th><th>说明</th></tr></thead>
-                        <tbody>
-                          @for (field of fieldRows(entity); track identityOf(field, field.name || $index)) {
-                            <tr>
-                              <td>{{ field.name || '' }}</td>
-                              <td>{{ field.type || '' }}</td>
-                              <td class="pv-center">{{ field.is_key || field.isKey ? '✓' : '' }}</td>
-                              <td>{{ field.note || field.desc || '' }}</td>
-                            </tr>
-                          }
-                        </tbody>
-                      </table>
-                    }
-                    @defer (on viewport) {
-                      <app-preview-graph-host kind="entity-state" [targetId]="identityOf(entity, 'entity-' + (i + 1))" [exportGraphId]="entityGraphId('entity-state', entity, i)"></app-preview-graph-host>
-                    } @placeholder {
-                      <div class="pv-graph-placeholder">滚动到这里后生成实体状态图</div>
-                    }
-                  </section>
-                }
-              </section>
-            }
 
             @if (components().length) {
               <section id="preview-business-components" class="pv-subsection">
@@ -389,32 +350,78 @@
             }
 
             @if (constructs().length) {
-              <section id="preview-business-constructs" class="pv-subsection">
-                <h3>{{ outlineNumber('preview-business-constructs') }} 业务构件</h3>
-                <table>
-                  <thead><tr><th>构件</th><th>所属组件</th><th>实体</th><th>任务</th><th>说明</th></tr></thead>
-                  <tbody>
-                    @for (construct of constructs(); track identityOf(construct, 'construct-' + $index)) {
-                      <tr>
-                        <td>{{ displayName(construct, '未命名构件') }}</td>
-                        <td>{{ componentNameById(construct.businessComponentUid || construct.componentUid || '') }}</td>
-                        <td>{{ constructEntityNames(construct) }}</td>
-                        <td>{{ constructTaskNames(construct) }}</td>
-                        <td>{{ construct.desc || construct.note || '' }}</td>
-                      </tr>
+              @for (construct of constructs(); track identityOf(construct, 'construct-' + $index)) {
+                <section [id]="'preview-construct-' + identityOf(construct, '')" class="pv-graph-card" style="margin:12px 0">
+                  <h3>{{ outlineNumber('preview-construct-' + identityOf(construct, '')) }} 构件：{{ displayName(construct, '未命名构件') }}</h3>
+                  <p class="pv-note" style="margin:4px 0 8px">
+                    所属组件：{{ componentNameById(construct.businessComponentUid || construct.componentUid || '') }}
+                    @if (construct.desc || construct.note) { | {{ construct.desc || construct.note }} }
+                  </p>
+
+                  @if (constructEntities(construct).length) {
+                    <h4>实体</h4>
+                    @for (entity of constructEntities(construct); track identityOf(entity, 'entity-' + $index); let ei = $index) {
+                      <section [id]="entityAnchor(entity, ei)" class="pv-entity-section pv-graph-card" style="margin:8px 0">
+                        <h4>{{ outlineNumber(entityAnchor(entity, ei)) }} 实体：{{ displayName(entity, '未命名实体') }}</h4>
+                        @if (entity.note) { <p class="pv-note">{{ entity.note }}</p> }
+                        @if (fieldRows(entity).length) {
+                          <table>
+                            <thead><tr><th>字段</th><th>类型</th><th>主键</th><th>说明</th></tr></thead>
+                            <tbody>
+                              @for (field of fieldRows(entity); track identityOf(field, field.name || $index)) {
+                                <tr>
+                                  <td>{{ field.name || '' }}</td>
+                                  <td>{{ field.type || '' }}</td>
+                                  <td class="pv-center">{{ field.is_key || field.isKey ? '✓' : '' }}</td>
+                                  <td>{{ field.note || field.desc || '' }}</td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        }
+                        @defer (on viewport) {
+                          <app-preview-graph-host kind="entity-state" [targetId]="identityOf(entity, 'entity-' + (ei + 1))" [exportGraphId]="entityGraphId('entity-state', entity, ei)"></app-preview-graph-host>
+                        } @placeholder {
+                          <div class="pv-graph-placeholder">滚动到这里后生成实体状态图</div>
+                        }
+                      </section>
                     }
-                  </tbody>
-                </table>
+                  }
+
+                  @if (constructTasks(construct).length) {
+                    <h4>任务</h4>
+                    @for (task of constructTasks(construct); track identityOf(task, 'task-' + $index); let ti = $index) {
+                      <div [id]="anchorId('task', identityOf(task, ''))" class="pv-task-detail" style="margin:6px 0;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                        <h4>{{ outlineNumber(anchorId('task', identityOf(task, ''))) }} 任务：{{ task.name || '未命名任务' }}</h4>
+                        <p class="pv-note">地址：{{ task.address || '—' }} | 目标：{{ task.target || '—' }} | {{ taskParameterSummary(task.parameters) }}</p>
+                        @if (task.note || task.detail) { <div [innerHTML]="richText(task.note || task.detail || '')" style="margin-top:4px"></div> }
+                      </div>
+                    }
+                  }
+                </section>
+              }
+            }
+
+            @if (orphanEntities().length) {
+              <section class="pv-subsection" style="margin-top:16px">
+                <h3>{{ outlineNumber('preview-entity-overview') }} 实体关系图</h3>
+                <section id="preview-entity-overview" class="pv-graph-card">
+                  @defer (on viewport) {
+                    <app-preview-graph-host kind="entity-relation" [exportGraphId]="entityGraphId('entity-relation')"></app-preview-graph-host>
+                  } @placeholder {
+                    <div class="pv-graph-placeholder">滚动到这里后生成实体关系图</div>
+                  }
+                </section>
               </section>
             }
 
-            @if (taskDefinitions().length) {
+            @if (orphanTasks().length) {
               <section id="preview-task-definitions" class="pv-subsection">
                 <h3>{{ outlineNumber('preview-task-definitions') }} 任务定义</h3>
                 <table>
                   <thead><tr><th>任务</th><th>构件</th><th>地址</th><th>目标</th><th>参数</th><th>详细设计</th></tr></thead>
                   <tbody>
-                    @for (task of taskDefinitions(); track identityOf(task, 'task-' + $index)) {
+                    @for (task of orphanTasks(); track identityOf(task, 'task-' + $index)) {
                       <tr>
                         <td>{{ task.name || '' }}</td>
                         <td>{{ constructNameById(task.constructUid || task.businessConstructUid || '') }}</td>
