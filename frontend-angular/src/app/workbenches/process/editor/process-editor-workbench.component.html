@@ -232,6 +232,9 @@
                           <button type="button" (click)="pasteFormToCurrentTask(task)">粘贴到当前节点</button>
                         </div>
                       }
+                      <button class="step-action task-form-icon-action" type="button" title="在下方插入表单" data-testid="task-form-add-after" [disabled]="!editing" (click)="addFormAfter(task, form)">+</button>
+                      <button class="step-action task-form-icon-action" type="button" title="上移" data-testid="task-form-move-up" [disabled]="!editing || formIndex === 0" (click)="moveForm(task, form, -1)">↑</button>
+                      <button class="step-action task-form-icon-action" type="button" title="下移" data-testid="task-form-move-down" [disabled]="!editing || formIndex === forms(task).length - 1" (click)="moveForm(task, form, 1)">↓</button>
                       <button class="step-del task-form-icon-action" type="button" data-testid="task-form-delete" aria-label="删除表单" title="删除表单" [disabled]="!editing" (click)="removeForm(task, form)">×</button>
                     </div>
                     @if (!isFormCollapsed(form)) {
@@ -297,6 +300,15 @@
                               <button class="step-action" type="button" data-testid="task-form-section-add-after" title="插入分组" [disabled]="!editing" (click)="addFormSection(form, section)">+</button>
                               <button class="step-action" type="button" data-testid="task-form-section-move-up" title="上移" [disabled]="!editing || sectionIndex === 0" (click)="moveFormSection(form, section, -1)">↑</button>
                               <button class="step-action" type="button" data-testid="task-form-section-move-down" title="下移" [disabled]="!editing || sectionIndex === sections(form).length - 1" (click)="moveFormSection(form, section, 1)">↓</button>
+                              @let sectionId = section.id || section.uid || section.name || sectionIndex;
+                              <button class="step-action" type="button" data-testid="task-form-section-copy" title="复制分组片段" [disabled]="!editing" (click)="toggleSectionCopyMenu(formKey(form) + '::' + sectionId); $event.stopPropagation()">⧉</button>
+                              @if (sectionCopyMenuKey() === formKey(form) + '::' + sectionId) {
+                                <div class="form-copy-menu" data-testid="task-form-section-copy-menu" (click)="$event.stopPropagation()">
+                                  <button type="button" (click)="copySectionToCurrentForm(form, section); sectionCopyMenuKey.set(''); $event.stopPropagation()">复制到当前表单</button>
+                                  <button type="button" (click)="copySectionToClipboard(form, section); sectionCopyMenuKey.set(''); $event.stopPropagation()">复制到其他表单</button>
+                                  <button type="button" (click)="pasteSectionToForm(form); sectionCopyMenuKey.set(''); $event.stopPropagation()">粘贴到当前表单</button>
+                                </div>
+                              }
                               <button class="step-del" type="button" data-testid="task-form-section-delete" title="删除分组" [disabled]="!editing || sections(form).length <= 1" (click)="removeFormSection(form, section)">×</button>
                             </div>
                           </div>

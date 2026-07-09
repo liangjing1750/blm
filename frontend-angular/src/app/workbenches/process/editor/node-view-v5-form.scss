@@ -226,9 +226,9 @@
 }
 
 .node-task-form-card .task-form-field-count {
-  min-width: 66px;
-  padding: 0 8px;
+  padding: 0 6px;
   justify-content: center;
+  white-space: nowrap;
 }
 
 .task-form-collapse-toggle {
@@ -278,8 +278,9 @@
 }
 
 .node-task-form-card .task-form-section-head {
+  position: relative;
   display: grid;
-  grid-template-columns: 38px minmax(86px, .42fr) minmax(120px, .56fr) minmax(190px, 1fr) 32px auto auto auto;
+  grid-template-columns: 38px minmax(86px, .42fr) minmax(120px, .56fr) minmax(150px, 1fr) auto auto auto;
   gap: 6px;
   align-items: center;
   margin: 0 -7px 7px;

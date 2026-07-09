@@ -168,6 +168,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected readonly collapsedFormSections = signal<ReadonlySet<string>>(new Set());
   protected readonly sectionServicePicker = signal<SectionServicePickerState | null>(null);
   protected readonly formCopyMenuId = signal('');
+  protected readonly sectionCopyPayload = signal<{ section: LegacyTaskFormSection; sourceForm: LegacyTaskForm } | null>(null);
+  protected readonly sectionCopyMenuKey = signal('');
   protected readonly formNotice = signal('');
   protected readonly renameNodeTarget = signal<LegacyProcessNode | null>(null);
   protected readonly renameNodeValue = signal('');
@@ -1516,6 +1518,31 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     this.refresh();
   }
 
+  protected addFormAfter(task: LegacyProcessNode, form: LegacyTaskForm): void {
+    if (!this.editing) return;
+    task.forms ||= [];
+    const insertIndex = Math.min(Math.max(task.forms.indexOf(form) + 1, 0), task.forms.length);
+    const id = this.nextLocalId('F', task.forms);
+    task.forms.splice(insertIndex, 0, {
+      id, uid: id,
+      name: `表单${task.forms.length + 1}`, purpose: '',
+      sections: [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', serviceUid: '', serviceId: '', serviceName: '', entity_id: '', fields: [] }],
+    });
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected moveForm(task: LegacyProcessNode, form: LegacyTaskForm, delta: -1 | 1): void {
+    if (!this.editing) return;
+    const forms = task.forms || [];
+    const index = forms.indexOf(form);
+    const nextIndex = index + delta;
+    if (index < 0 || nextIndex < 0 || nextIndex >= forms.length) return;
+    [forms[index], forms[nextIndex]] = [forms[nextIndex], forms[index]];
+    this.adapter.touch();
+    this.refresh();
+  }
+
   protected duplicateForm(task: LegacyProcessNode, form: LegacyTaskForm): void {
     if (!this.editing) return;
     task.forms ||= [];
@@ -1627,10 +1654,54 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     }
   }
 
+  // ── 表单分组复制 ─────────────────────────────────────────
+  protected toggleSectionCopyMenu(sectionKey: string): void {
+    this.sectionCopyMenuKey.set(this.sectionCopyMenuKey() === sectionKey ? '' : sectionKey);
+  }
+
+  protected copySectionToCurrentForm(form: LegacyTaskForm, section: LegacyTaskFormSection): void {
+    if (!this.editing) return;
+    const clone = structuredClone(section);
+    const sections = this.sections(form);
+    const insertIndex = Math.min(Math.max(sections.indexOf(section) + 1, 0), sections.length);
+    clone.id = `SEC${Date.now()}`;
+    clone.uid = clone.id;
+    sections.splice(insertIndex, 0, clone);
+    this.adapter.touch();
+    this.refresh();
+  }
+
+  protected copySectionToClipboard(form: LegacyTaskForm, section: LegacyTaskFormSection): void {
+    if (!this.editing) return;
+    this.sectionCopyPayload.set({ section: structuredClone(section), sourceForm: form });
+    this.showFormNotice('已复制分组，可在当前或其他表单粘贴');
+  }
+
+  protected pasteSectionToForm(targetForm: LegacyTaskForm): void {
+    if (!this.editing) return;
+    const payload = this.sectionCopyPayload();
+    if (!payload) { this.showFormNotice('请先复制一个分组'); return; }
+    const clone = structuredClone(payload.section);
+    clone.id = `SEC${Date.now()}`;
+    clone.uid = clone.id;
+    this.sections(targetForm).push(clone);
+    this.adapter.touch();
+    this.refresh();
+    this.showFormNotice('已粘贴分组');
+  }
+
+  @HostListener('document:click')
+  protected closeCopyMenus(): void {
+    this.formCopyMenuId.set('');
+    this.sectionCopyMenuKey.set('');
+  }
+
   @HostListener('document:keydown', ['$event'])
   protected handleFormClipboardShortcut(event: KeyboardEvent): void {
     if (!(event.ctrlKey || event.metaKey) || !['c', 'v'].includes(event.key.toLowerCase())) return;
     const target = event.target as HTMLElement | null;
+    // 输入框内按 Ctrl+C/V 是文字编辑，不拦截为表单复制
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     const card = target?.closest?.('[data-testid="process-form-card"]') as HTMLElement | null;
     const task = this.currentTask();
     if (!card || !task) return;
