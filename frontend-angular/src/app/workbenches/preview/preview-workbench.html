@@ -481,16 +481,13 @@
 
                   <!-- 流程级附件 -->
                   @for (pf of asArray(process?.prototypeFiles); track pf.uid || $index) {
-                    <div [id]="'preview-appendix-file-' + (pf.uid || pf.name)" class="pv-appendix-file" style="margin:8px 0;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
-                      <h4>{{ outlineNumber('preview-appendix-file-' + (pf.uid || pf.name)) }} {{ attachmentLabel(pf) }}</h4>
+                    <div [id]="'preview-appendix-file-' + (pf.uid || pf.name)" class="pv-appendix-file" style="margin:8px 0;padding:10px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                        <span style="font-weight:700;font-size:13px">{{ outlineNumber('preview-appendix-file-' + (pf.uid || pf.name)) }} {{ attachmentLabel(pf) }}</span>
+                        <a [href]="attachmentUrl(pf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">↗ 浏览器打开</a>
+                      </div>
                       @if (isImageAttachment(pf)) {
-                        <img [src]="attachmentUrl(pf)" alt="{{ pf.name || '附件图片' }}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:6px" />
-                      } @else if (isHtmlAttachment(pf)) {
-                        <iframe [src]="attachmentUrl(pf)" style="width:100%;height:400px;border:1px solid #dbe5f0;border-radius:6px" sandbox="allow-same-origin"></iframe>
-                      } @else {
-                        <a [href]="attachmentUrl(pf) + '?download=1'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">
-                          <span>⬇</span> 下载附件 {{ pf.name || '' }}
-                        </a>
+                        <img [src]="attachmentUrl(pf)" alt="{{ pf.name || '附件图片' }}" style="max-width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px" />
                       }
                     </div>
                   }
@@ -502,16 +499,13 @@
                         <h4>{{ outlineNumber('preview-appendix-node-' + identityOf(node, '')) }} 节点：{{ displayName(node, '未命名节点') }}</h4>
                       </div>
                       @for (nf of asArray(node?.prototypeFiles); track nf.uid || $index) {
-                        <div [id]="'preview-appendix-file-' + (nf.uid || nf.name)" class="pv-appendix-file" style="margin:8px 0 8px 16px;padding:8px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
-                          <h4>{{ outlineNumber('preview-appendix-file-' + (nf.uid || nf.name)) }} {{ nf.name || '未命名附件' }}</h4>
+                        <div [id]="'preview-appendix-file-' + (nf.uid || nf.name)" class="pv-appendix-file" style="margin:8px 0 8px 16px;padding:10px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
+                          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <span style="font-weight:700;font-size:13px">{{ outlineNumber('preview-appendix-file-' + (nf.uid || nf.name)) }} {{ attachmentLabel(nf) }}</span>
+                            <a [href]="attachmentUrl(nf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">↗ 浏览器打开</a>
+                          </div>
                           @if (isImageAttachment(nf)) {
-                            <img [src]="attachmentUrl(nf)" alt="{{ nf.name || '附件图片' }}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:6px" />
-                          } @else if (isHtmlAttachment(nf)) {
-                            <iframe [src]="attachmentUrl(nf)" style="width:100%;height:400px;border:1px solid #dbe5f0;border-radius:6px" sandbox="allow-same-origin"></iframe>
-                          } @else {
-                            <a [href]="attachmentUrl(nf) + '?download=1'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">
-                              <span>⬇</span> 下载附件 {{ nf.name || '' }}
-                            </a>
+                            <img [src]="attachmentUrl(nf)" alt="{{ nf.name || '附件图片' }}" style="max-width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px" />
                           }
                         </div>
                       }
