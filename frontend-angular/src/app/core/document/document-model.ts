@@ -317,38 +317,72 @@ function normalizeServiceParameters(parameters: ServiceParameter[] | null | unde
     .filter((parameter) => parameter.name);
 }
 
-/** 从流程节点表单分组的 serviceUid 引用回写 service.nodeRefs，兼容旧文档缺失情况 */
+/** 双向同步服务与节点表单分组的关联关系，兼容旧文档缺失情况 */
 function rebuildServiceNodeRefs(document: BlmDocument): void {
   const servicesById = new Map<string, ApplicationService>();
   for (const service of document.services) {
     if (service.uid) servicesById.set(service.uid, service);
   }
   if (!servicesById.size) return;
+  // 方向一：从 section.serviceUids → 回写 service.nodeRefs
+  // 方向二：从 service.nodeRefs / node.serviceUids → 回写 section.serviceUids
   for (const process of document.processes) {
     for (const node of process.nodes || []) {
       const nodeUid = (node.uid || node.id || '').trim();
       if (!nodeUid) continue;
-      const linkedServiceUids = new Set<string>();
+      const sectionServiceUids = new Set<string>();
+      const sections: Array<Record<string, any>> = [];
       for (const form of node.forms || []) {
-        const sections: Array<Record<string, any>> = Array.isArray((form as any).sections) ? (form as any).sections : [];
-        for (const section of sections) {
-          const ids = [
+        for (const section of (Array.isArray((form as any).sections) ? (form as any).sections : [])) {
+          sections.push(section);
+          for (const id of [
             ...(Array.isArray(section['serviceUids']) ? section['serviceUids'] : []),
             ...(Array.isArray(section['serviceIds']) ? section['serviceIds'] : []),
             section['serviceUid'],
             section['serviceId'],
-          ].filter(Boolean);
-          for (const id of ids) linkedServiceUids.add(String(id).trim());
+          ]) {
+            const tid = String(id || '').trim();
+            if (tid) sectionServiceUids.add(tid);
+          }
         }
-        if (form.serviceUid) linkedServiceUids.add(String(form.serviceUid).trim());
-        if (form.serviceId) linkedServiceUids.add(String(form.serviceId).trim());
+        if (form.serviceUid) sectionServiceUids.add(String(form.serviceUid).trim());
+        if (form.serviceId) sectionServiceUids.add(String(form.serviceId).trim());
       }
-      for (const suid of linkedServiceUids) {
-        if (!suid) continue;
+      // 方向一：section 中引用的服务 → 回写 service.nodeRefs
+      for (const suid of sectionServiceUids) {
         const service = servicesById.get(suid);
         if (service) {
           service.nodeRefs = service.nodeRefs || [];
           if (!service.nodeRefs.includes(nodeUid)) service.nodeRefs.push(nodeUid);
+        }
+      }
+      // 方向二：node 级别或 service.nodeRefs 中的服务 → 补齐到 section.serviceUids
+      const nodeLevelIds = new Set([
+        ...sectionServiceUids,
+        ...((node as any).serviceUids || []).filter(Boolean),
+        ...((node as any).serviceIds || []).filter(Boolean),
+        ...([] as string[]),
+      ]);
+      // 从 service.nodeRefs 反向收集
+      for (const service of servicesById.values()) {
+        if ((service.nodeRefs || []).includes(nodeUid)) nodeLevelIds.add(service.uid);
+      }
+      // 对每个 form 的第一个 section 补齐缺失的 serviceUid
+      for (const form of node.forms || []) {
+        const formSections = Array.isArray((form as any).sections) ? (form as any).sections : [];
+        for (const section of formSections) {
+          const existing = new Set([
+            ...(Array.isArray(section['serviceUids']) ? section['serviceUids'] : []),
+            ...(Array.isArray(section['serviceIds']) ? section['serviceIds'] : []),
+            section['serviceUid'],
+            section['serviceId'],
+          ].map((id) => String(id || '').trim()).filter(Boolean));
+          const missing = [...nodeLevelIds].filter((id) => !existing.has(id));
+          if (!missing.length) continue;
+          section['serviceUids'] = [...existing, ...missing];
+          section['serviceIds'] = [...existing, ...missing];
+          if (!section['serviceUid']) section['serviceUid'] = missing[0];
+          if (!section['serviceId']) section['serviceId'] = missing[0];
         }
       }
     }
