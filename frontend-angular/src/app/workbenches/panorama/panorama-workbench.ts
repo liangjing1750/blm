@@ -10,6 +10,7 @@ import { RoleWorkbenchComponent } from '../role/role-workbench';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 import { ExportService } from '../../core/export/export.service';
 import { PanoramaExporter } from '../../core/export/exporters/panorama-exporter';
+import { exportRoleDocx, exportRoleZip } from '../../core/export/exporters/role-exporter';
 
 type PanoramaSubtab = 'overview' | 'roles' | 'terms' | 'dictionary' | 'rules';
 
@@ -117,30 +118,35 @@ export class PanoramaWorkbench {
     this.exportMenuOpen.set(false);
   }
 
-  /** 局部导出（调试功能，使用 ExportService + PanoramaExporter） */
-  protected async exportPanoramaDocx(): Promise<void> {
+  /** 统一导出入口：根据当前 subtab 派发到对应 exporter */
+  private async runExport(fmt: 'docx' | 'zip'): Promise<void> {
     this.closeExportMenu();
-    this.exportWait.set({ title: '正在截图…', description: '', progress: 20 });
-    await new Promise((r) => setTimeout(r, 10));
-    try {
-      await this.exportSvc.exportView(new PanoramaExporter(), 'docx');
-      this.exportWait.set({ title: '完成', description: '', progress: 100 });
-    } catch (e) { /* */ }
-    await new Promise((r) => setTimeout(r, 300));
+    const tab = this.activeTab();
+    const updater = (pct: number, msg: string) => this.exportWait.set({ title: msg, description: '', progress: pct });
+
+    if (tab === 'overview') {
+      updater(20, '正在截图…');
+      await new Promise((r) => setTimeout(r, 10));
+      try {
+        await this.exportSvc.exportView(new PanoramaExporter(), fmt);
+        this.exportWait.set({ title: '完成', description: '', progress: 100 });
+      } catch (e) { /* */ }
+      await new Promise((r) => setTimeout(r, 300));
+    } else if (tab === 'roles') {
+      this.exportWait.set({ title: '正在导出角色视图…', description: '', progress: 5 });
+      await new Promise((r) => setTimeout(r, 10));
+      try {
+        if (fmt === 'docx') await exportRoleDocx(updater);
+        else await exportRoleZip(updater);
+        this.exportWait.set({ title: '完成', description: '', progress: 100 });
+      } catch (e) { /* */ }
+      await new Promise((r) => setTimeout(r, 300));
+    }
     this.exportWait.set(null);
   }
 
-  protected async exportPanoramaZip(): Promise<void> {
-    this.closeExportMenu();
-    this.exportWait.set({ title: '正在截图…', description: '', progress: 20 });
-    await new Promise((r) => setTimeout(r, 10));
-    try {
-      await this.exportSvc.exportView(new PanoramaExporter(), 'zip');
-      this.exportWait.set({ title: '完成', description: '', progress: 100 });
-    } catch (e) { /* */ }
-    await new Promise((r) => setTimeout(r, 300));
-    this.exportWait.set(null);
-  }
+  protected async exportPanoramaDocx(): Promise<void> { return this.runExport('docx'); }
+  protected async exportPanoramaZip(): Promise<void> { return this.runExport('zip'); }
 
   @HostListener('window:resize')
   protected onWindowResize(): void {

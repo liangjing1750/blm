@@ -1,8 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, Input, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
-import { exportRoleDocx, exportRoleZip } from '../../core/export/exporters/role-exporter';
 
 interface LegacyRole {
   id?: string;
@@ -134,15 +133,7 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly version = signal(0);
   protected readonly createOpen = signal(false);
   protected readonly renamingRoleId = signal('');
-  protected readonly roleExportMenuOpen = signal(false);
   @Input() editing = true;
-
-  protected toggleRoleExportMenu(event: MouseEvent): void {
-    event.stopPropagation();
-    this.roleExportMenuOpen.update((v) => !v);
-  }
-  protected async exportRoleDocx(): Promise<void> { this.roleExportMenuOpen.set(false); await exportRoleDocx(); }
-  protected async exportRoleZip(): Promise<void> { this.roleExportMenuOpen.set(false); await exportRoleZip(); }
   protected newRoleName = '';
   protected selectedGroup = this.defaultRoleGroup();
   protected customGroup = '';
@@ -163,11 +154,6 @@ export class RoleWorkbenchComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
-  }
-
-  @HostListener('document:click')
-  protected closeRoleExportMenu(): void {
-    this.roleExportMenuOpen.set(false);
   }
 
   protected roles(): LegacyRole[] {

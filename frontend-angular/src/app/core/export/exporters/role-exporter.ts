@@ -62,7 +62,7 @@ export class RoleUsecaseExporter implements ViewExporter {
 // ── 导出入口（供 role-workbench 调用） ──
 
 /** 收集视图模式下的角色按钮，逐个截取"只看参与流程"的用例图 */
-async function captureEachRoleUsecase(): Promise<Array<{ name: string; png: Uint8Array }>> {
+async function captureEachRoleUsecase(onStep?: (done: number, total: number) => void): Promise<Array<{ name: string; png: Uint8Array }>> {
   await switchMode('[data-testid="role-management-entry"]', 'role-usecase-map');
   await new Promise((r) => setTimeout(r, 500));
 
@@ -86,6 +86,7 @@ async function captureEachRoleUsecase(): Promise<Array<{ name: string; png: Uint
     // 截图
     const png = await captureScreenshot('[data-testid="role-usecase-map"]');
     results.push({ name, png });
+    onStep?.(results.length, roleBtns.length);
 
     // 取消勾选
     if (toggle && wasChecked === false) {
@@ -97,41 +98,39 @@ async function captureEachRoleUsecase(): Promise<Array<{ name: string; png: Uint
   return results;
 }
 
-export async function exportRoleDocx(): Promise<void> {
-  const encoder = new TextEncoder();
-  // 1. 角色范围
+export async function exportRoleDocx(onProgress?: (pct: number, msg: string) => void): Promise<void> {
+  onProgress?.(5, '正在截图角色范围…');
   const scopePng = await captureScreenshot('[data-testid="role-summary-card"]');
-  // 2. 每个角色的参与流程
-  const usecases = await captureEachRoleUsecase();
-  // 3. 切回管理模式
-  await switchMode('[data-testid="role-view-entry"]', 'role-summary-card');
-  // 4. 输出第一个角色的 DOCX 作为主文档，完整 zip 作为补充
-  const docx = usecases.length > 0
-    ? buildSimpleDocx(usecases[0].png, 'role-' + usecases[0].name)
-    : buildSimpleDocx(scopePng, 'role-scope');
-  downloadBlob(docx, 'role.docx');
-  // 完整 zip：角色范围 + 每个角色的用例图
-  const files: Array<{ name: string; data: Uint8Array }> = [
-    { name: 'role-scope.png', data: scopePng },
-  ];
-  usecases.forEach((u) => {
-    files.push({ name: `role-${u.name}.png`, data: u.png });
+  onProgress?.(20, '正在切换至角色用例图…');
+  const usecases = await captureEachRoleUsecase((done, total) => {
+    onProgress?.(20 + Math.round(60 * done / total), `正在截图角色用例图 (${done}/${total})…`);
   });
-  downloadBlob(buildZip(files), 'role-all.zip');
+  onProgress?.(85, '正在生成 DOCX…');
+  await switchMode('[data-testid="role-view-entry"]', 'role-summary-card');
+  // 只生成一个 DOCX（含角色范围图）
+  const docx = buildSimpleDocx(scopePng, 'role-scope');
+  onProgress?.(100, '下载中…');
+  downloadBlob(docx, 'role.docx');
 }
 
-export async function exportRoleZip(): Promise<void> {
+export async function exportRoleZip(onProgress?: (pct: number, msg: string) => void): Promise<void> {
   const encoder = new TextEncoder();
+  onProgress?.(5, '正在截图角色范围…');
   const scopePng = await captureScreenshot('[data-testid="role-summary-card"]');
-  const usecases = await captureEachRoleUsecase();
+  onProgress?.(20, '正在切换至角色用例图…');
+  const usecases = await captureEachRoleUsecase((done, total) => {
+    onProgress?.(20 + Math.round(60 * done / total), `正在截图角色用例图 (${done}/${total})…`);
+  });
+  onProgress?.(85, '正在打包 ZIP…');
   await switchMode('[data-testid="role-view-entry"]', 'role-summary-card');
   const files: Array<{ name: string; data: Uint8Array }> = [
-    { name: 'role-scope.md', data: encoder.encode('# 角色范围\n\n![role-scope](role-scope.png)\n') },
-    { name: 'role-scope.png', data: scopePng },
+    { name: '角色范围.md', data: encoder.encode('# 角色范围\n\n![角色范围](角色范围.png)\n') },
+    { name: '角色范围.png', data: scopePng },
   ];
   usecases.forEach((u) => {
-    files.push({ name: `role-${u.name}.md`, data: encoder.encode(`# ${u.name}\n\n![${u.name}](role-${u.name}.png)\n`) });
-    files.push({ name: `role-${u.name}.png`, data: u.png });
+    files.push({ name: `${u.name}.md`, data: encoder.encode(`# ${u.name}\n\n![${u.name}](${u.name}.png)\n`) });
+    files.push({ name: `${u.name}.png`, data: u.png });
   });
+  onProgress?.(100, '下载中…');
   downloadBlob(buildZip(files), 'role-all.zip');
 }
