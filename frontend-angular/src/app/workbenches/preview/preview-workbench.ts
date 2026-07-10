@@ -7,7 +7,6 @@ import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-r
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 import { PreviewGraphHostComponent } from './preview-graph-host.component';
-import html2canvas from 'html2canvas';
 
 interface PreviewOutlineItem {
   id: string;
@@ -403,11 +402,13 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   private async runExport(fmt: string, label: string): Promise<void> {
     if (!await this.confirmExport()) return;
     const name = this.runtime.currentFile;
+    if (!name) { this.exportWait.set(null); return; }
     const version = this.currentVersion();
     // 检查缓存
     const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}&format=${fmt}`);
     if (cached.ok) {
       const blob = await cached.blob();
+      this.exportWait.set(null);
       this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.${fmt === 'docx' ? 'docx' : 'zip'}`);
       return;
     }
@@ -417,21 +418,27 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
       screenshots = await this.captureAllGraphs();
     } catch (e) { /* 截图失败继续 */ }
 
-    this.exportWait.set({ title: label, description: '截图完成，正在提交导出任务。', progress: 30 });
+    this.exportWait.set({ title: label, description: `截图完成（${screenshots.length} 张），正在提交导出任务。`, progress: 30 });
     try {
       const endpoint = fmt === 'docx' ? '/api/export-docx/start' : `/api/export/${fmt}/start`;
-      const job: any = await fetch(endpoint, {
+      const resp = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, version, markdown: this.markdown(), screenshots }),
-      }).then((r) => r.json());
-      if (!job?.id) return;
-      const done = await this.waitForExportJob(job.id, job);
-      if (done?.status !== 'done') return;
-      const resp = await this.api.downloadExportJob(job.id);
-      if (resp.ok) {
-        const ext = fmt === 'docx' ? 'docx' : 'zip';
-        this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.${ext}`);
+      });
+      const job: any = await resp.json();
+      if (!job?.id) {
+        this.exportWait.set(null);
+        return;
       }
+      const done = await this.waitForExportJob(job.id, job);
+      if (done?.status !== 'done') { this.exportWait.set(null); return; }
+      const dlResp = await this.api.downloadExportJob(job.id);
+      if (dlResp.ok) {
+        const ext = fmt === 'docx' ? 'docx' : 'zip';
+        this.downloadBlob(await dlResp.blob(), done.filename || `${this.baseFileName()}.${ext}`);
+      }
+    } catch (e) {
+      // 网络或其他错误，清理等待状态
     } finally { this.exportWait.set(null); }
   }
 
@@ -447,19 +454,20 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return this.runExport('docx', '正在生成 DOCX...');
   }
 
-  /** 遍历所有 [data-export-graph-id] 元素，用 html2canvas 截图 */
+  /** 遍历所有 [data-export-graph-id] 元素，用 html2canvas 截图（动态导入，避免 CJS 阻塞组件加载） */
   private async captureAllGraphs(): Promise<Array<{id: string; dataUrl: string}>> {
     const results: Array<{id: string; dataUrl: string}> = [];
-    const elements = document.querySelectorAll<HTMLElement>('[data-export-graph-id]');
-    for (const el of Array.from(elements)) {
-      try {
-        const graphId = el.getAttribute('data-export-graph-id') || '';
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-        results.push({ id: graphId, dataUrl: canvas.toDataURL('image/png') });
-      } catch (e) {
-        // 单个截图失败不阻塞整体
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const elements = document.querySelectorAll<HTMLElement>('[data-export-graph-id]');
+      for (const el of Array.from(elements)) {
+        try {
+          const graphId = el.getAttribute('data-export-graph-id') || '';
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          results.push({ id: graphId, dataUrl: canvas.toDataURL('image/png') });
+        } catch (e) { /* 单个截图失败不阻塞 */ }
       }
-    }
+    } catch (e) { /* html2canvas 不可用时降级 */ }
     return results;
   }
 

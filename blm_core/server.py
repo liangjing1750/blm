@@ -775,63 +775,70 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 update(status="failed", progress=100, message="导出失败。", error=str(exc))
 
         def _start_export(self, body: bytes, fmt: str):
-            payload = self._decode_json(body)
-            if isinstance(payload, tuple):
-                return self._json(payload[0], payload[1])
-            name = str(payload.get("name", "")).strip()
-            version = str(payload.get("version", "")).strip()
-            markdown_text = str(payload.get("markdown", "") or "")
-            screenshots_raw = payload.get("screenshots") or []
-            if not name:
-                return self._json({"error": "name is required"}, 400)
             try:
-                safe_name = storage._validate_name(name)
-                # 检查缓存
-                cached = self._check_export_cache(safe_name, version, fmt)
-                if cached:
-                    return self._json({"id": f"cached:{safe_name}:{version}:{fmt}", "status": "done", "cached": True, **{}})
-                frozen_document = storage.load(safe_name)
-            except (InvalidDocumentNameError, FileNotFoundError) as exc:
-                return self._json({"error": str(exc)}, 400)
-            # 解析前端截图 base64 → DocxImage
-            graph_images: list = []
-            for item in screenshots_raw:
-                if not isinstance(item, dict):
-                    continue
-                data_url = str(item.get("dataUrl") or "")
-                if not data_url.startswith("data:image/png;base64,"):
-                    continue
-                raw = base64.b64decode(data_url[len("data:image/png;base64,"):])
-                graph_id = str(item.get("id") or "")
-                safe_name_part = re.sub(r"[^A-Za-z0-9._-]+", "-", graph_id).strip("-._")
-                graph_images.append(DocxImage(
-                    name=f"{safe_name_part}.png",
-                    content_type="image/png",
-                    payload=raw,
-                    width=0, height=0,
-                ))
-            job_id = uuid.uuid4().hex
-            job = {
-                "id": job_id,
-                "name": safe_name,
-                "version": version,
-                "status": "queued",
-                "progress": 5,
-                "message": "已加入导出队列。",
-                "filename": "",
-                "document": frozen_document,
-                "markdown": markdown_text,
-                "graphImages": graph_images,
-                "payload": None,
-                "error": "",
-                "createdAt": time.time(),
-                "updatedAt": time.time(),
-            }
-            with export_jobs_lock:
-                export_jobs[job_id] = job
-            thread = threading.Thread(target=self._run_export_job, args=(job_id, fmt), daemon=True)
-            thread.start()
-            return self._json(self._public_export_job(job))
+                payload = self._decode_json(body)
+                if isinstance(payload, tuple):
+                    return self._json(payload[0], payload[1])
+                name = str(payload.get("name", "")).strip()
+                version = str(payload.get("version", "")).strip()
+                markdown_text = str(payload.get("markdown", "") or "")
+                screenshots_raw = payload.get("screenshots") or []
+                if not name:
+                    return self._json({"error": "name is required"}, 400)
+                try:
+                    safe_name = storage._validate_name(name)
+                    # 检查缓存
+                    cached = self._check_export_cache(safe_name, version, fmt)
+                    if cached:
+                        return self._json({"id": f"cached:{safe_name}:{version}:{fmt}", "status": "done", "message": "已缓存，可直接下载"})
+                    frozen_document = storage.load(safe_name)
+                except InvalidDocumentNameError as exc:
+                    return self._json({"error": str(exc)}, 400)
+                except FileNotFoundError:
+                    return self._json({"error": "document not found: %s" % name}, 404)
+                # 解析前端截图 base64 → DocxImage
+                graph_images: list = []
+                for item in screenshots_raw:
+                    if not isinstance(item, dict):
+                        continue
+                    data_url = str(item.get("dataUrl") or "")
+                    if not data_url.startswith("data:image/png;base64,"):
+                        continue
+                    raw = base64.b64decode(data_url[len("data:image/png;base64,"):])
+                    graph_id = str(item.get("id") or "")
+                    safe_name_part = re.sub(r"[^A-Za-z0-9._-]+", "-", graph_id).strip("-._")
+                    graph_images.append(DocxImage(
+                        name=f"{safe_name_part}.png",
+                        content_type="image/png",
+                        payload=raw,
+                        width=0, height=0,
+                    ))
+                job_id = uuid.uuid4().hex
+                job = {
+                    "id": job_id,
+                    "name": safe_name,
+                    "version": version,
+                    "status": "queued",
+                    "progress": 5,
+                    "message": "已加入导出队列。",
+                    "filename": "",
+                    "document": frozen_document,
+                    "markdown": markdown_text,
+                    "graphImages": graph_images,
+                    "payload": None,
+                    "error": "",
+                    "createdAt": time.time(),
+                    "updatedAt": time.time(),
+                }
+                with export_jobs_lock:
+                    export_jobs[job_id] = job
+                thread = threading.Thread(target=self._run_export_job, args=(job_id, fmt), daemon=True)
+                thread.start()
+                return self._json(self._public_export_job(job))
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                return self._json({"error": str(exc)}, 500)
 
         def _public_export_job(self, job: dict) -> dict:
             return {
