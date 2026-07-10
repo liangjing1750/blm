@@ -229,8 +229,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
     feedback_store = FeedbackStore(storage.workspace_dir)
     export_jobs: dict[str, dict] = {}
     export_jobs_lock = threading.RLock()
-    export_cache: dict[str, tuple[str, bytes]] = {}
-    export_cache_lock = threading.RLock()
+    # 导出产物缓存按版本写入 manifest/export-{fmt}/ 磁盘目录
 
     class BlmRequestHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -325,7 +324,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                                 return self._binary(payload, ctype, filename=filename)
                         except (InvalidDocumentNameError, FileNotFoundError):
                             pass
-                        return self._json({"cached": False}, 200)
+                        return self._json({"cached": False}, 404)
                     return self._handle_export_bundle(path)
                 if path.startswith("/api/export/"):
                     return self._handle_export(path)
@@ -682,10 +681,6 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 update(status="failed", progress=100, message="DOCX 生成失败。", error=str(exc), payload=None)
 
         # ── 统一导出：JSON / Markdown / DOCX ──
-        # 缓存 key = "{name}_{version}_{format}"
-        def _export_cache_key(self, name: str, version: str, fmt: str) -> str:
-            return f"{name}_{version}_{fmt}"
-
         def _export_dir(self, name: str, fmt: str) -> Path:
             """返回 manifest/export-{fmt}/ 目录"""
             pkg = storage._package_dir(name) / "manifest" / f"export-{fmt}"
