@@ -542,6 +542,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   private writeFormSectionServiceIds(section: LegacyTaskFormSection, serviceUids: string[], task: LegacyProcessNode): void {
+    const prevIds = this.formSectionServiceIds(section);
     const normalized = Array.from(new Set(serviceUids.map((item) => String(item || '').trim()).filter(Boolean)));
     section.serviceUids = normalized;
     section.serviceIds = normalized;
@@ -549,6 +550,20 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     section.serviceId = normalized[0] || '';
     const first = this.formServiceOptions(task).find((service) => this.serviceId(service) === section.serviceUid);
     section.serviceName = first?.name || '';
+    // 同步更新 service.nodeRefs，使应用工作台的"关联节点"能正确显示
+    const taskUid = this.taskId(task);
+    for (const service of this.applicationServices()) {
+      const sid = this.serviceId(service);
+      const wasLinked = prevIds.includes(sid);
+      const isLinked = normalized.includes(sid);
+      if (wasLinked === isLinked) continue;
+      service.nodeRefs = service.nodeRefs || [];
+      if (isLinked && !service.nodeRefs.includes(taskUid)) {
+        service.nodeRefs.push(taskUid);
+      } else if (!isLinked) {
+        service.nodeRefs = service.nodeRefs.filter((ref) => ref !== taskUid);
+      }
+    }
   }
 
   private referenceKeys(values: Array<string | undefined>): string[] {
@@ -1490,6 +1505,11 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
       purpose: '',
       sections: [{ id: 'SEC1', uid: 'SEC1', name: '基本信息', note: '', serviceUid: defaultServiceId, serviceId: defaultServiceId, serviceName: defaultService?.name || '', entity_id: '', fields: [] }],
     });
+    if (defaultService) {
+      const taskUid = this.taskId(task);
+      defaultService.nodeRefs = defaultService.nodeRefs || [];
+      if (!defaultService.nodeRefs.includes(taskUid)) defaultService.nodeRefs.push(taskUid);
+    }
     this.adapter.touch();
     this.refresh();
   }
