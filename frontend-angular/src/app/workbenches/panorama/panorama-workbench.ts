@@ -154,7 +154,7 @@ export class PanoramaWorkbench {
       this.exportWait.set({ title: '正在生成 DOCX…', description: '后端正在生成。', progress: 70 });
       const resp = await fetch('/api/export/panorama-docx', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: this.document()?.meta?.domain || 'panorama', screenshot: dataUrl }),
+        body: JSON.stringify({ name: this.document()?.meta?.domain || 'panorama', docName: getAngularRuntimeState().currentFile || '', screenshot: dataUrl }),
       });
       if (resp.ok) {
         this.exportWait.set({ title: '正在下载…', description: '', progress: 95 });
