@@ -100,6 +100,73 @@ export class PanoramaWorkbench {
   });
   protected readonly zoomValue = computed(() => this.manualZoom() ?? this.fitZoom());
   protected readonly zoomPercent = computed(() => Math.round(this.zoomValue() * 100));
+  protected readonly exportMenuOpen = signal(false);
+
+  // ── 局部导出（调试功能，不涉及服务器存储） ──
+  protected toggleExportMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    this.exportMenuOpen.update((v) => !v);
+  }
+
+  protected closeExportMenu(): void {
+    this.exportMenuOpen.set(false);
+  }
+
+  protected async exportPanoramaMd(): Promise<void> {
+    this.closeExportMenu();
+    const doc = this.document();
+    const model = this.panoramaModel();
+    const lines: string[] = [];
+    lines.push('# 全景视图\n');
+    lines.push(`**文档**: ${doc?.meta?.domain || '未命名'} | **价值流数**: ${model.columns.length} | **业务域数**: ${model.lanes.length}\n`);
+    lines.push('| 业务域 / 价值流 | ' + model.columns.map((c) => c.name || c.uid).join(' | ') + ' |');
+    lines.push('|' + model.columns.map(() => '---').join('|') + '|');
+    model.lanes.forEach((lane) => {
+      const row = [lane.name || lane.uid];
+      model.columns.forEach((col) => {
+        const stages = this.cellStages(this.laneUid(lane), this.columnUid(col));
+        row.push(stages.length ? stages.map((s) => s.name).join('、') : '—');
+      });
+      lines.push('| ' + row.join(' | ') + ' |');
+    });
+    lines.push('');
+    this.downloadBlob(new Blob([lines.join('\n')], { type: 'text/markdown' }), (doc?.meta?.domain || 'panorama') + '.md');
+  }
+
+  protected async exportPanoramaDocx(): Promise<void> {
+    this.closeExportMenu();
+    try {
+      const h2c = (await import('html2canvas')).default;
+      const el = document.querySelector<HTMLElement>('[data-testid="panorama-overview-rich"]');
+      if (!el) return;
+      const canvas = await h2c(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const resp = await fetch('/api/export/panorama-docx', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: this.document()?.meta?.domain || 'panorama', screenshot: reader.result }),
+          });
+          if (resp.ok) {
+            const dl = await resp.blob();
+            this.downloadBlob(dl, (this.document()?.meta?.domain || 'panorama') + '.docx');
+          }
+        };
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) { /* 截图不可用 */ }
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
 
   @HostListener('window:resize')
   protected onWindowResize(): void {
@@ -139,10 +206,11 @@ export class PanoramaWorkbench {
   }
 
   @HostListener('document:click', ['$event'])
-  protected closeEditMenuFromDocument(event: MouseEvent): void {
+  protected closeMenusFromDocument(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (target?.closest('[data-testid="panorama-edit-menu-wrap"]')) return;
     this.editMenuOpen.set(false);
+    this.exportMenuOpen.set(false);
   }
 
   protected zoom(delta: number): void {

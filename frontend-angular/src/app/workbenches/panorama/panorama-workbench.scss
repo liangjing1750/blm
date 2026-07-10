@@ -9,6 +9,23 @@
   gap: 4px;
 }
 
+.panorama-export-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: #1e293b;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.panorama-export-item:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .panorama-toolbar-button {
   min-height: 0;
   height: 26px;
