@@ -458,6 +458,15 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
   private async captureAllGraphs(): Promise<Array<{id: string; dataUrl: string}>> {
     const results: Array<{id: string; dataUrl: string}> = [];
     try {
+      // 先触发所有 @defer 懒加载图形组件的渲染
+      const placeholders = document.querySelectorAll<HTMLElement>('.pv-graph-placeholder');
+      for (const ph of Array.from(placeholders)) {
+        ph.scrollIntoView({ behavior: 'instant', block: 'center' });
+      }
+      if (placeholders.length) {
+        // 等待 Angular 渲染 @defer 内容
+        await new Promise((r) => setTimeout(r, 500));
+      }
       const html2canvas = (await import('html2canvas')).default;
       const elements = document.querySelectorAll<HTMLElement>('[data-export-graph-id]');
       for (const el of Array.from(elements)) {
