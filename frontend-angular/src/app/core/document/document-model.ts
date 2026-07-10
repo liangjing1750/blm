@@ -99,6 +99,7 @@ export function normalizeDocument(raw: Partial<BlmDocument> | null | undefined):
   document.businessConstructs = document.businessConstructs.map((construct, index) => normalizeConstruct(construct, index));
   document.taskDefinitions = document.taskDefinitions.map((taskDefinition, index) => normalizeTaskDefinition(taskDefinition, index));
   migrateLegacyNodeTaskOrchestration(document);
+  rebuildServiceNodeRefs(document);
   document.serviceGroups = document.serviceGroups.map((group, index) => normalizeServiceGroup(group, index));
   document.services = document.services.map((service, index) => normalizeService(document, service, index));
   document.terms = document.terms.map((term, index) => ({
@@ -314,6 +315,44 @@ function normalizeServiceParameters(parameters: ServiceParameter[] | null | unde
       };
     })
     .filter((parameter) => parameter.name);
+}
+
+/** 从流程节点表单分组的 serviceUid 引用回写 service.nodeRefs，兼容旧文档缺失情况 */
+function rebuildServiceNodeRefs(document: BlmDocument): void {
+  const servicesById = new Map<string, ApplicationService>();
+  for (const service of document.services) {
+    if (service.uid) servicesById.set(service.uid, service);
+  }
+  if (!servicesById.size) return;
+  for (const process of document.processes) {
+    for (const node of process.nodes || []) {
+      const nodeUid = (node.uid || node.id || '').trim();
+      if (!nodeUid) continue;
+      const linkedServiceUids = new Set<string>();
+      for (const form of node.forms || []) {
+        const sections: Array<Record<string, any>> = Array.isArray((form as any).sections) ? (form as any).sections : [];
+        for (const section of sections) {
+          const ids = [
+            ...(Array.isArray(section['serviceUids']) ? section['serviceUids'] : []),
+            ...(Array.isArray(section['serviceIds']) ? section['serviceIds'] : []),
+            section['serviceUid'],
+            section['serviceId'],
+          ].filter(Boolean);
+          for (const id of ids) linkedServiceUids.add(String(id).trim());
+        }
+        if (form.serviceUid) linkedServiceUids.add(String(form.serviceUid).trim());
+        if (form.serviceId) linkedServiceUids.add(String(form.serviceId).trim());
+      }
+      for (const suid of linkedServiceUids) {
+        if (!suid) continue;
+        const service = servicesById.get(suid);
+        if (service) {
+          service.nodeRefs = service.nodeRefs || [];
+          if (!service.nodeRefs.includes(nodeUid)) service.nodeRefs.push(nodeUid);
+        }
+      }
+    }
+  }
 }
 
 function normalizeService(document: BlmDocument, service: ApplicationService, index: number): ApplicationService {
