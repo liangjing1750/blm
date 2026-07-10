@@ -22,6 +22,13 @@ class DocumentIdentityTests(unittest.TestCase):
         self.assertEqual(LEGACY_FIELD_RENAMES["capabilityUnitId"], "businessComponentId")
         self.assertEqual(semantic_key("process", {"uid": "P1", "name": "入库预约申请"}), "入库预约申请")
 
+    def test_semantic_key_fallback_uses_uid_not_id(self):
+        """未注册类型默认用 uid 匹配，避免 id=null 误匹配"""
+        self.assertEqual(semantic_key("unknown_type", {"uid": "u1", "id": None}), "u1")
+        self.assertEqual(semantic_key("unknown_type", {"uid": "u2", "id": "legacy"}), "u2")
+        self.assertEqual(semantic_key("unknown_type", {"uid": "", "name": "fallback"}), "fallback")
+        self.assertNotEqual(semantic_key("unknown_type", {"id": "only-id"}), "only-id")
+
     def test_migrate_document_assigns_hidden_document_and_node_uids(self):
         document = migrate_document(
             {

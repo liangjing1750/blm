@@ -279,7 +279,7 @@ def collection_label(item_type: str) -> str:
 
 
 def semantic_key(item_type: str, item: dict) -> str:
-    for fields in SEMANTIC_KEY_FIELDS.get(item_type, [("name",), ("id",)]):
+    for fields in SEMANTIC_KEY_FIELDS.get(item_type, [("name",), ("uid",)]):
         parts = [str(item.get(field, "")).strip() for field in fields]
         if len(parts) == 1:
             candidate = parts[0]

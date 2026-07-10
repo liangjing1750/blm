@@ -438,8 +438,8 @@ def canonicalize_model_references(document: dict | None) -> dict:
     for ref in doc.get("stageFlowRefs", []):
         if not isinstance(ref, dict):
             continue
-        ref["stageId"] = mapped(ref.get("stageUid") or ref.get("stageId"), stage_map)
-        ref["processId"] = mapped(ref.get("processUid") or ref.get("processId"), process_map)
+        ref["stageUid"] = mapped(ref.get("stageUid") or ref.get("stageId"), stage_map)
+        ref["processUid"] = mapped(ref.get("processUid") or ref.get("processId"), process_map)
 
     ref_rewrite: dict[str, str] = {}
     seen_stage_process_refs: set[tuple[str, str]] = set()
@@ -447,8 +447,8 @@ def canonicalize_model_references(document: dict | None) -> dict:
     for ref in doc.get("stageFlowRefs", []) if isinstance(doc.get("stageFlowRefs"), list) else []:
         if not isinstance(ref, dict):
             continue
-        stage_id = str(ref.get("stageId", "")).strip()
-        process_id = str(ref.get("processId", "")).strip()
+        stage_id = str(ref.get("stageUid", "")).strip()
+        process_id = str(ref.get("processUid", "")).strip()
         ref_uid = str(ref.get("uid", "")).strip()
         if not stage_id or not process_id or not ref_uid:
             continue
@@ -458,8 +458,8 @@ def canonicalize_model_references(document: dict | None) -> dict:
                 (
                     str(item.get("uid", "")).strip()
                     for item in deduped_stage_refs
-                    if str(item.get("stageId", "")).strip() == stage_id
-                    and str(item.get("processId", "")).strip() == process_id
+                    if str(item.get("stageUid", "")).strip() == stage_id
+                    and str(item.get("processUid", "")).strip() == process_id
                 ),
                 "",
             )

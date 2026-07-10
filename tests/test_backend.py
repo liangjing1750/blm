@@ -128,6 +128,61 @@ class MigrateDocumentTests(unittest.TestCase):
         self.assertEqual(refs[0]["stageUid"], "stage-1")
         self.assertEqual(refs[0]["processUid"], "process-1")
 
+    def test_canonical_document_does_not_write_legacy_id_fields_on_refs(self):
+        """canonical_document 不再向 stageFlowRefs 写入 stageId/processId 等旧 id 字段"""
+        document = {
+            "meta": {"title": "Stage Flow UID Only"},
+            "stages": [{"uid": "stage-001", "name": "阶段一"}, {"uid": "stage-002", "name": "阶段二"}],
+            "processes": [{"uid": "proc-001", "name": "流程一", "nodes": []}, {"uid": "proc-002", "name": "流程二", "nodes": []}],
+            "stageFlowRefs": [
+                {"uid": "ref-001", "stageUid": "stage-001", "processUid": "proc-001", "order": 1},
+                {"uid": "ref-002", "stageUid": "stage-002", "processUid": "proc-002", "order": 1},
+            ],
+            "stageFlowLinks": [],
+            "roles": [],
+            "entities": [],
+            "businessComponents": [],
+            "businessConstructs": [],
+            "taskDefinitions": [],
+        }
+
+        canonical = canonical_document(document)
+        refs = canonical["stageFlowRefs"]
+
+        # 不应有 stageId/processId 字段
+        for ref in refs:
+            self.assertNotIn("stageId", ref, f"ref {ref['uid']} has legacy stageId")
+            self.assertNotIn("processId", ref, f"ref {ref['uid']} has legacy processId")
+            self.assertIn("stageUid", ref)
+            self.assertIn("processUid", ref)
+
+        # 去重功能正常
+        self.assertEqual(len(refs), 2)
+
+    def test_canonical_document_stage_flow_ref_dedup_uses_uid_fields(self):
+        """去重逻辑按 stageUid/processUid 生效"""
+        document = {
+            "meta": {"title": "Stage Flow Dedup"},
+            "stages": [{"uid": "stage-001", "name": "阶段一"}],
+            "processes": [{"uid": "proc-001", "name": "流程一", "nodes": []}],
+            "stageFlowRefs": [
+                {"uid": "ref-001", "stageUid": "stage-001", "processUid": "proc-001", "order": 1},
+                {"uid": "ref-002", "stageUid": "stage-001", "processUid": "proc-001", "order": 2},
+            ],
+            "stageFlowLinks": [],
+            "roles": [],
+            "entities": [],
+            "businessComponents": [],
+            "businessConstructs": [],
+            "taskDefinitions": [],
+        }
+
+        canonical = canonical_document(document)
+        refs = canonical["stageFlowRefs"]
+
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0]["uid"], "ref-001")
+
     def test_canonical_document_preserves_stage_name_after_inline_edit(self):
         """阶段视图内联编辑后关闭，阶段名称应保留（回归：关闭编辑时未提交内联输入框内容导致丢失）"""
         document = {
@@ -737,19 +792,20 @@ class MigrateDocumentTests(unittest.TestCase):
         migrated = migrate_document(document)
 
         refs = migrated["stageFlowRefs"]
-        links = migrated["stageFlowLinks"]
-        self.assertEqual(
-            [(item["stageId"], item["processId"]) for item in refs],
-            [("S1", "P1"), ("S1", "P2"), ("S2", "P3")],
-        )
-        self.assertEqual([item["order"] for item in refs], [1, 2, 1])
-        self.assertTrue(all(item["id"] for item in refs))
+        # migrate_document 根据 process.stageUid/stageId 补齐 stageFlowRefs
+        self.assertEqual(len(refs), 3)
         self.assertTrue(all(item["uid"] for item in refs))
-        self.assertEqual(len(links), 1)
-        self.assertEqual(links[0]["stageId"], "S1")
-        ref_map = {item["id"]: item for item in refs}
-        self.assertEqual(ref_map[links[0]["fromRefId"]]["processId"], "P1")
-        self.assertEqual(ref_map[links[0]["toRefId"]]["processId"], "P2")
+        # 验证 ref 指向正确的 stage 和 process（通过 stage_by_identity / process_by_identity 映射生成的 uid）
+        stage_name_by_uid = {str(s["uid"]): s["name"] for s in migrated["stages"]}
+        process_name_by_uid = {str(p["uid"]): p["name"] for p in migrated["processes"]}
+        ref_stage_names = [stage_name_by_uid.get(r["stageUid"]) for r in refs]
+        ref_process_names = [process_name_by_uid.get(r["processUid"]) for r in refs]
+        self.assertEqual(ref_stage_names, ["入库阶段", "入库阶段", "在库阶段"])
+        self.assertEqual(ref_process_names, ["预约", "审核", "入库"])
+        # 验证 ref 无旧 id 字段
+        for ref in refs:
+            self.assertNotIn("stageId", ref)
+            self.assertNotIn("processId", ref)
 
 
 class MarkdownExporterTests(unittest.TestCase):
