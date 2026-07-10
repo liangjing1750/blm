@@ -686,18 +686,27 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
         def _export_cache_key(self, name: str, version: str, fmt: str) -> str:
             return f"{name}_{version}_{fmt}"
 
+        def _export_dir(self, name: str, fmt: str) -> Path:
+            """返回 manifest/export-{fmt}/ 目录"""
+            pkg = storage._package_dir(name) / "manifest" / f"export-{fmt}"
+            pkg.mkdir(parents=True, exist_ok=True)
+            return pkg
+
         def _check_export_cache(self, name: str, version: str, fmt: str):
-            key = self._export_cache_key(name, version, fmt)
-            with export_cache_lock:
-                entry = export_cache.get(key)
-                if entry:
-                    return entry  # (filename, payload)
+            """从磁盘检查已缓存的导出产物"""
+            ext = ".docx" if fmt == "docx" else ".zip"
+            v = version.replace("/", "-").replace("\\", "-") or "latest"
+            path = self._export_dir(name, fmt) / f"{name}-{v}{ext}"
+            if path.exists():
+                return (path.name, path.read_bytes())
             return None
 
         def _store_export_cache(self, name: str, version: str, fmt: str, filename: str, payload: bytes):
-            key = self._export_cache_key(name, version, fmt)
-            with export_cache_lock:
-                export_cache[key] = (filename, payload)
+            """导出产物写入磁盘，永久缓存"""
+            ext = ".docx" if fmt == "docx" else ".zip"
+            v = version.replace("/", "-").replace("\\", "-") or "latest"
+            path = self._export_dir(name, fmt) / f"{name}-{v}{ext}"
+            path.write_bytes(payload)
 
         def _run_export_job(self, job_id: str, fmt: str):
             """Run export job: generate resources, store in cache, clean up."""
@@ -741,17 +750,20 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
 
                 else:  # docx
                     update(progress=60, message="正在读取冻结文档和附件。")
-                    time.sleep(0.05)
                     # 使用前端 html2canvas 截的图（已在 job["graphImages"] 中）
                     graph_images = job.get("graphImages") or []
                     update(progress=72, message=f"使用前端截图 ({len(graph_images)} 张)，正在写入 DOCX。")
-                    # 同时保存一份图片到 images/ 目录供审查
-                    if graph_images:
-                        export_img_dir = storage.workspace_dir / name / "export-images"
-                        export_img_dir.mkdir(parents=True, exist_ok=True)
-                        for img in graph_images:
-                            (export_img_dir / img.name).write_bytes(img.payload)
                     filename, payload = storage.build_export_docx_from_document(name, document, graph_images=graph_images)
+
+                # 保存图片到 manifest/export-images/ + index.json
+                if graph_images:
+                    img_dir = self._export_dir(name, "images")
+                    idx: dict[str, str] = {}
+                    for img in graph_images:
+                        (img_dir / img.name).write_bytes(img.payload)
+                        stem = img.name.rsplit(".", 1)[0] if "." in img.name else img.name
+                        idx[stem] = img.name
+                    (img_dir / "index.json").write_text(json.dumps(idx, ensure_ascii=False, indent=2), "utf-8")
 
                 # 存入缓存
                 self._store_export_cache(name, version, fmt, filename, payload)
