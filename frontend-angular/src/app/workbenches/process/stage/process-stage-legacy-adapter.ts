@@ -258,12 +258,13 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
     },
     addProcess(targetStageId: string) {
       const id = nextProcessId();
+      const refId = nextRefId();
       const stage = findStage(targetStageId);
       const doc = document();
       doc.processes ||= [];
       doc.stageFlowRefs ||= [];
-      doc.processes.push({ id, name: `新流程${doc.processes.length + 1}`, stageId: stage?.id || targetStageId, flowGroup: '', nodes: [] });
-      doc.stageFlowRefs.push({ id: nextRefId(), stageId: stage?.id || targetStageId, processId: id, order: refsForStage(targetStageId).length + 1 });
+      doc.processes.push({ uid: id, id, name: `新流程${doc.processes.length + 1}`, stageId: stage?.id || targetStageId, flowGroup: '', nodes: [] });
+      doc.stageFlowRefs.push({ uid: refId, id: refId, stageId: stage?.id || targetStageId, processUid: id, processId: id, order: refsForStage(targetStageId).length + 1 });
       markModified(true);
     },
     addExistingProcess(targetStageId: string, targetProcessId: string) {
