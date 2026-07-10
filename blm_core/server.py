@@ -391,6 +391,8 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._start_export(body, "markdown")
                 if path == "/api/export-docx/start":
                     return self._start_export(body, "docx")
+                if path == "/api/export/panorama-docx":
+                    return self._handle_panorama_docx(body)
                 if path == "/api/agent/handoff":
                     return self._handle_agent_handoff(body)
                 if getattr(self.__class__, '_ai_routes_post', None):
@@ -839,6 +841,34 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 thread = threading.Thread(target=self._run_export_job, args=(job_id, fmt), daemon=True)
                 thread.start()
                 return self._json(self._public_export_job(job))
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                return self._json({"error": str(exc)}, 500)
+
+        def _handle_panorama_docx(self, body: bytes):
+            """接收全景视图截图，返回简易 DOCX（局部调试功能）。"""
+            try:
+                payload = self._decode_json(body)
+                if isinstance(payload, tuple):
+                    return self._json(payload[0], payload[1])
+                name = str(payload.get("name", "") or "panorama").strip()
+                data_url = str(payload.get("screenshot", "") or "")
+                if not data_url.startswith("data:image/png;base64,"):
+                    return self._json({"error": "invalid screenshot"}, 400)
+                raw = base64.b64decode(data_url[len("data:image/png;base64,"):])
+                from blm_core.docx import DocxImage, build_docx_with_screenshots
+                img = DocxImage(name=f"{name}.png", content_type="image/png", payload=raw, width=1200, height=800)
+                docx_bytes = build_docx_with_screenshots(
+                    f"# {name}\n\n![{name}]({name}.png)",
+                    title=name,
+                    screenshots=[img],
+                )
+                return self._binary(
+                    docx_bytes,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    filename=f"{name}.docx",
+                )
             except Exception as exc:
                 import traceback
                 traceback.print_exc()
