@@ -6,6 +6,15 @@
         (click)="toggleMode()">
         {{ mode() === 'view' ? '切换角色管理' : '查看角色参与流程' }}
       </button>
+      <div class="panorama-export-menu-wrap" style="position:relative;display:inline-block">
+        <button class="btn btn-outline btn-sm" type="button" data-testid="role-export-btn" (click)="toggleRoleExportMenu($event)">导出 ▾</button>
+        @if (roleExportMenuOpen()) {
+          <div class="panorama-export-dropdown" data-testid="role-export-dropdown" style="position:absolute;top:100%;right:0;z-index:100;min-width:120px;border:1px solid #d7e1ee;border-radius:8px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12);padding:4px" (click)="$event.stopPropagation()">
+            <button type="button" class="panorama-export-item" (click)="exportRoleZip()">导出 ZIP</button>
+            <button type="button" class="panorama-export-item" (click)="exportRoleDocx()">导出 DOCX</button>
+          </div>
+        }
+      </div>
     </div>
     <div class="role-angular-actions">
       @if (mode() === 'management' && editing) {
