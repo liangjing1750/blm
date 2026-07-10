@@ -7,6 +7,7 @@ import { getAngularRuntimeState, switchAngularMainTab } from '../../core/runtime
 import { ValueDomainCell, ValueDomainColumn, ValueDomainLane, getValueDomainColumnUid, getValueDomainLaneUid } from '../../core/document/value-domain-model';
 import { KnowledgeWorkbenchComponent } from '../knowledge/knowledge-workbench';
 import { RoleWorkbenchComponent } from '../role/role-workbench';
+import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 
 type PanoramaSubtab = 'overview' | 'roles' | 'terms' | 'dictionary' | 'rules';
 
@@ -25,7 +26,7 @@ interface PanoramaDocument extends BlmDocument {
 
 @Component({
   selector: 'app-panorama-workbench',
-  imports: [CommonModule, KnowledgeWorkbenchComponent, RoleWorkbenchComponent],
+  imports: [CommonModule, KnowledgeWorkbenchComponent, RoleWorkbenchComponent, WaitDialogComponent],
   templateUrl: './panorama-workbench.html',
   styleUrls: ['../../shared/layout/workbench-section.scss', './panorama-workbench.scss'],
 })
@@ -101,6 +102,7 @@ export class PanoramaWorkbench {
   protected readonly zoomValue = computed(() => this.manualZoom() ?? this.fitZoom());
   protected readonly zoomPercent = computed(() => Math.round(this.zoomValue() * 100));
   protected readonly exportMenuOpen = signal(false);
+  protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
 
   // ── 局部导出（调试功能，不涉及服务器存储） ──
   protected toggleExportMenu(event: MouseEvent): void {
@@ -114,6 +116,8 @@ export class PanoramaWorkbench {
 
   protected async exportPanoramaMd(): Promise<void> {
     this.closeExportMenu();
+    this.exportWait.set({ title: '生成 Markdown…', description: '', progress: 10 });
+    await new Promise((r) => setTimeout(r, 10)); // 让 Angular 渲染
     const doc = this.document();
     const model = this.panoramaModel();
     const lines: string[] = [];
@@ -130,32 +134,35 @@ export class PanoramaWorkbench {
       lines.push('| ' + row.join(' | ') + ' |');
     });
     lines.push('');
+    this.exportWait.set({ title: '正在下载…', description: '', progress: 80 });
+    await new Promise((r) => setTimeout(r, 10));
     this.downloadBlob(new Blob([lines.join('\n')], { type: 'text/markdown' }), (doc?.meta?.domain || 'panorama') + '.md');
+    this.exportWait.set(null);
   }
 
   protected async exportPanoramaDocx(): Promise<void> {
     this.closeExportMenu();
+    this.exportWait.set({ title: '正在截图…', description: 'html2canvas 截取全景视图。', progress: 20 });
+    await new Promise((r) => setTimeout(r, 10));
     try {
       const h2c = (await import('html2canvas')).default;
       const el = document.querySelector<HTMLElement>('[data-testid="panorama-overview-rich"]');
-      if (!el) return;
+      if (!el) { this.exportWait.set(null); return; }
+      this.exportWait.set({ title: '截图完成，正在提交…', description: '', progress: 50 });
       const canvas = await h2c(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const resp = await fetch('/api/export/panorama-docx', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: this.document()?.meta?.domain || 'panorama', screenshot: reader.result }),
-          });
-          if (resp.ok) {
-            const dl = await resp.blob();
-            this.downloadBlob(dl, (this.document()?.meta?.domain || 'panorama') + '.docx');
-          }
-        };
-        reader.readAsDataURL(blob);
+      const dataUrl = canvas.toDataURL('image/png');
+      this.exportWait.set({ title: '正在生成 DOCX…', description: '后端正在生成。', progress: 70 });
+      const resp = await fetch('/api/export/panorama-docx', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this.document()?.meta?.domain || 'panorama', screenshot: dataUrl }),
       });
+      if (resp.ok) {
+        this.exportWait.set({ title: '正在下载…', description: '', progress: 95 });
+        const dl = await resp.blob();
+        this.downloadBlob(dl, (this.document()?.meta?.domain || 'panorama') + '.docx');
+      }
     } catch (e) { /* 截图不可用 */ }
+    this.exportWait.set(null);
   }
 
   private downloadBlob(blob: Blob, filename: string): void {

@@ -166,4 +166,11 @@
   } @else {
     <app-knowledge-workbench initialTab="rules" [editing]="editing()" />
   }
+  <app-wait-dialog
+    *ngIf="exportWait() as wait"
+    [title]="wait.title"
+    [description]="wait.description"
+    [progress]="wait.progress ?? -1"
+    [remainingSeconds]="wait.remainingSeconds ?? 0"
+  ></app-wait-dialog>
 </section>
