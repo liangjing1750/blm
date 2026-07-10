@@ -13,9 +13,47 @@ core/export/
   exporters/
     view-exporter.ts           ← interface ViewExporter { label, capture(), toMarkdown() }
     panorama-exporter.ts       ← PanoramaExporter（全景视图）
+    role-exporter.ts           ← RoleExporter（角色视图：范围 + 每角色用例图）
     stage-exporter.ts          ← （待实现）
     process-exporter.ts        ← （待实现）
     ...
+```
+
+## 导出按钮位置（踩坑记录）
+
+⚠️ **不要在每个视图组件内部加导出按钮。** 导出按钮应统一放在父级工作台的工具栏（`proc-view-actions` / `role-head-actions`），根据当前激活的 subtab 动态派发到不同 exporter。
+
+### 正确做法
+
+父级工作台（`panorama-workbench`）维护一个导出菜单，切换不同 subtab 时改变导出行为：
+
+```typescript
+// panorama-workbench.ts
+private async runExport(fmt: 'docx' | 'zip'): Promise<void> {
+  const tab = this.activeTab();
+  if (tab === 'overview') {
+    await this.exportSvc.exportView(new PanoramaExporter(), fmt);
+  } else if (tab === 'roles') {
+    await exportRoleDocx(updater);  // 独立导出函数，非 ViewExporter
+  }
+}
+```
+
+### 错误做法
+
+❌ 在 `role-workbench` 组件里加导出按钮 → 导致父工作台和子组件各有一个"导出"，出现重复按钮。
+
+## 导出选项隔离（踩坑记录）
+
+⚠️ **一个导出操作只输出一个文件。** "导出 DOCX"只产生 `.docx`，"导出 ZIP"只产生 `.zip`。
+
+```typescript
+// ❌ 错误：点击"导出 DOCX"同时下载了 docx 和 zip
+downloadBlob(docx, 'role.docx');
+downloadBlob(zip, 'role-all.zip');  // 不该在这里！
+
+// ✅ 正确：只输出一个文件
+downloadBlob(docx, 'role.docx');
 ```
 
 ## 添加新视图导出器的步骤
@@ -41,9 +79,14 @@ export class StageExporter implements ViewExporter {
 }
 ```
 
-### 2. 在组件中挂载导出按钮
+### 2. 注册到父级工作台的导出入口
 
-在对应的工具栏（如"打开编辑"旁边）加"导出 ▾"下拉菜单，调用 `ExportService.exportView()`。
+不直接在组件加按钮，而是在父级工作台（`panorama-workbench` / `process-workbench-shell`）的导出菜单中，按 `activeTab` 分发：
+
+```typescript
+if (tab === 'overview') { /* PanoramaExporter */ }
+else if (tab === 'roles') { /* RoleExporter 导出函数 */ }
+```
 
 ### 3. 注册到"导出全部"
 
@@ -109,6 +152,67 @@ const lib = (await import('html2canvas')).default;
 ### EOCD 字段
 
 EOCD 的 central directory size 字段必须为实际值，不能写 0。Word 严格校验此字段，WPS 忽略。
+
+## 复杂导出流程（多截图 + 进度条）
+
+对于需要截多张图的视图（如角色视图：先截范围、再逐个截每角色用例图），使用**进度回调模式**：
+
+```typescript
+export async function exportRoleDocx(
+  onProgress?: (pct: number, msg: string) => void,  // ← 进度回调
+): Promise<void> {
+  onProgress?.(5, '正在截图角色范围…');
+  const png1 = await captureScreenshot('[data-testid="..."]');
+
+  // 逐个截图，每完成一个更新进度
+  for (const item of items) {
+    onProgress?.(pct, `正在截图 (${done}/${total})…`);
+    const png = await captureScreenshot('[data-testid="..."]');
+    results.push(png);
+  }
+
+  onProgress?.(100, '下载中…');
+  downloadBlob(docx, 'output.docx');
+}
+```
+
+父组件绑定进度到 `exportWait` signal：
+
+```typescript
+const updater = (pct: number, msg: string) =>
+  this.exportWait.set({ title: msg, description: '', progress: pct });
+await exportRoleDocx(updater);
+```
+
+### 交互类截图（踩坑记录）
+
+对于需要切换状态再截图的场景（如角色视图：勾选"只看参与流程"再截图）：
+
+```typescript
+// 1. 切换到目标模式
+await switchMode('[data-testid="mode-toggle"]', 'target-testid');
+
+// 2. 逐个处理
+for (const btn of roleBtns) {
+  btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await sleep(300);  // 等 Angular 渲染
+
+  // 勾选过滤开关
+  toggle.dispatchEvent(new MouseEvent('change', { bubbles: true }));
+  await sleep(400);
+
+  // 截图
+  const png = await captureScreenshot('[data-testid="target-area"]');
+
+  // 取消勾选
+  toggle.dispatchEvent(new MouseEvent('change', { bubbles: true }));
+}
+```
+
+注意：
+- 使用 `dispatchEvent(new MouseEvent(...))` 触发 Angular 事件处理，不依赖 Angular 的变更检测
+- 每次交互后需要 `await sleep(300-500ms)` 等待 DOM 更新
+- 截图后记得恢复状态（取消勾选、切回初始模式）
 
 ## 导出文件命名
 
