@@ -74,15 +74,14 @@ export function buildZip(files: Array<{ name: string; data: Uint8Array }>): Blob
   return new Blob(parts, { type: 'application/zip' });
 }
 
-/** 生成仅含一张图片的简易 DOCX */
+/** 生成仅含一张图片的简易 DOCX（图片自适应页面宽度） */
 export function buildSimpleDocx(pngBytes: Uint8Array, filename = 'snapshot'): Blob {
   const encoder = new TextEncoder();
-  const EMU = 9525;
-  // 限制图片最大宽度为页面宽度的 90%
-  const maxCx = Math.round(11906 * 0.9 * EMU / 914400 * EMU); // ~90% of A4 width
-  const naturalCx = Math.round(1200 * EMU * 0.85);
-  const cx = Math.min(maxCx, naturalCx);
-  const cy = Math.round(cx * 800 / 1200);
+  // A4 页面宽 11906 twips，左右边距各 720 twips，内容区宽度 = 10466 twips
+  // 1 twip = 635 EMU（1 inch = 914400 EMU，1 inch = 1440 twips）
+  const contentWidthEMU = (11906 - 720 - 720) * 635;
+  const cx = contentWidthEMU;
+  const cy = Math.round(cx * 800 / 1200); // 按 3:2 比例（html2canvas @2x 的典型比例）
 
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"

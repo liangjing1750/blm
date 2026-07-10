@@ -28,8 +28,8 @@
           </button>
           @if (exportMenuOpen()) {
             <div class="panorama-export-dropdown" data-testid="panorama-export-dropdown" style="position:absolute;top:100%;right:0;z-index:100;min-width:120px;border:1px solid #d7e1ee;border-radius:8px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12);padding:4px" (click)="$event.stopPropagation()">
-              <button type="button" class="panorama-export-item" (click)="exportPanoramaZip()">导出 ZIP（MD+截图）</button>
-              <button type="button" class="panorama-export-item" (click)="exportPanoramaDocx()">导出 DOCX（仅截图）</button>
+              <button type="button" class="panorama-export-item" (click)="exportPanoramaZip()">导出 ZIP</button>
+              <button type="button" class="panorama-export-item" (click)="exportPanoramaDocx()">导出 DOCX</button>
             </div>
           }
         </div>
