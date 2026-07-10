@@ -74,14 +74,22 @@ export function buildZip(files: Array<{ name: string; data: Uint8Array }>): Blob
   return new Blob(parts, { type: 'application/zip' });
 }
 
-/** 生成仅含一张图片的简易 DOCX（图片自适应页面宽度） */
+/** 从 PNG 字节中读取实际像素尺寸 */
+export function readPngSize(bytes: Uint8Array): { w: number; h: number } {
+  if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50) return { w: 1200, h: 800 };
+  const v = (off: number) => (bytes[off] << 24) | (bytes[off + 1] << 16) | (bytes[off + 2] << 8) | bytes[off + 3];
+  return { w: v(16), h: v(20) };
+}
+
+/** 生成仅含一张图片的简易 DOCX（图片自适应页面宽度，按实际像素等比缩放） */
 export function buildSimpleDocx(pngBytes: Uint8Array, filename = 'snapshot'): Blob {
   const encoder = new TextEncoder();
-  // A4 页面宽 11906 twips，左右边距各 720 twips，内容区宽度 = 10466 twips
+  const img = readPngSize(pngBytes);
+  // A4 页面：宽 11906 twips，左右边距各 720 twips，内容区宽度 = 10466 twips
   // 1 twip = 635 EMU（1 inch = 914400 EMU，1 inch = 1440 twips）
-  const contentWidthEMU = (11906 - 720 - 720) * 635;
-  const cx = contentWidthEMU;
-  const cy = Math.round(cx * 800 / 1200); // 按 3:2 比例（html2canvas @2x 的典型比例）
+  const maxW = (11906 - 720 - 720) * 635;
+  const cx = maxW;
+  const cy = img.h > 0 ? Math.round(cx * img.h / img.w) : Math.round(cx * 800 / 1200);
 
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
