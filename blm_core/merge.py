@@ -1041,6 +1041,18 @@ def repair_document_consistency(document: dict) -> tuple[dict, list[dict]]:
             add_repair("stage_flow_ref", f"stageFlowRefs.{ref_uid}", "remove dangling stage flow ref")
     doc["stageFlowRefs"] = stage_flow_refs
 
+    # 去重：按 (stageUid, processUid) 保留第一条，修复因合并冲突或前端 bug 产生的重复 ref
+    deduped_refs = []
+    seen_pairs = set()
+    for ref in doc.get("stageFlowRefs", []):
+        pair = (str(ref.get("stageUid", "")).strip(), str(ref.get("processUid", "")).strip())
+        if pair in seen_pairs:
+            add_repair("stage_flow_ref", f"stageFlowRefs.{ref.get('uid', '')}", "remove duplicate stage flow ref")
+            continue
+        seen_pairs.add(pair)
+        deduped_refs.append(ref)
+    doc["stageFlowRefs"] = deduped_refs
+
     stage_flow_ref_by_uid = {
         str(ref.get("uid", "")).strip(): ref
         for ref in doc.get("stageFlowRefs", [])

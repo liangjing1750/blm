@@ -338,12 +338,24 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
         return from && to ? { ...edge, id: eid, uid: eid, from, to } : null;
       }).filter(Boolean);
       // 复制 stageFlowRefs，按 stage 去重
-      const existingRefs = (doc.stageFlowRefs || []).filter((ref) => ref.processUid === targetProcessId || ref.processId === targetProcessId || ref.processId === source.id || ref.processUid === source.uid);
+      // 使用 Set 聚合源流程的所有标识符，过滤掉 null/undefined，避免 null===null 误匹配全部 ref
+      const sourceIds = new Set([targetProcessId, source.uid, source.id, source.uid || source.id].filter(Boolean));
+      const existingRefs = (doc.stageFlowRefs || []).filter((ref) => {
+        const puid = ref.processUid || ref.processId || '';
+        return puid && sourceIds.has(puid);
+      });
       const seenStages = new Set<string>();
       for (const ref of existingRefs) {
         const stageKey = ref.stageUid || ref.stageId || '';
         if (!stageKey || seenStages.has(stageKey)) continue;
         seenStages.add(stageKey);
+        // 防重复：检查是否已有同 (stageUid, processUid) 的 ref
+        const alreadyLinked = (doc.stageFlowRefs || []).some((r) => {
+          const rpuid = r.processUid || r.processId || '';
+          const rsid = r.stageUid || r.stageId || '';
+          return rpuid === procId && rsid === stageKey;
+        });
+        if (alreadyLinked) continue;
         doc.stageFlowRefs.push({
           id: nextRefId(),
           stageId: ref.stageId || '',
