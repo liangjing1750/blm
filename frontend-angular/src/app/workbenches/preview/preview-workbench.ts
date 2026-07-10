@@ -7,6 +7,7 @@ import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-r
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 import { PreviewGraphHostComponent } from './preview-graph-host.component';
+import html2canvas from 'html2canvas';
 
 interface PreviewOutlineItem {
   id: string;
@@ -398,92 +399,68 @@ export class PreviewWorkbench implements AfterViewInit, OnDestroy {
     return true;
   }
 
-  protected async exportJson(): Promise<void> {
-    if (!await this.confirmExport()) return;
-    const name = this.runtime.currentFile;
-    const version = this.currentVersion();
-    // 尝试缓存
-    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}`);
-    if (cached.ok) {
-      const blob = await cached.blob();
-      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.zip`);
-      return;
-    }
-    // 无缓存，发起异步生成
-    this.exportWait.set({ title: '正在打包 JSON+附件...', description: '系统会冻结当前版本，并自动下载。' });
-    try {
-      const job: any = await fetch(`/api/export/json/start`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, version, markdown: this.markdown() }),
-      }).then((r) => r.json());
-      if (job?.id) {
-        const done = await this.waitForExportJob(job.id, job);
-        if (done?.status === 'done') {
-          const resp = await this.api.downloadExportJob(job.id);
-          if (resp.ok) this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.zip`);
-        }
-      }
-    } finally { this.exportWait.set(null); }
-  }
-
-  protected async exportMarkdown(): Promise<void> {
-    if (!await this.confirmExport()) return;
-    const name = this.runtime.currentFile;
-    const version = this.currentVersion();
-    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}&format=md`);
-    if (cached.ok) {
-      const blob = await cached.blob();
-      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.zip`);
-      return;
-    }
-    this.exportWait.set({ title: '正在打包 MD+截图+附件...', description: '系统会冻结当前版本、生成截图并自动下载。' });
-    try {
-      const job: any = await fetch(`/api/export/markdown/start`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, version, markdown: this.markdown() }),
-      }).then((r) => r.json());
-      if (job?.id) {
-        const done = await this.waitForExportJob(job.id, job);
-        if (done?.status === 'done') {
-          const resp = await this.api.downloadExportJob(job.id);
-          if (resp.ok) this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.zip`);
-        }
-      }
-    } finally { this.exportWait.set(null); }
-  }
-
-  protected async exportDocx(): Promise<void> {
+  /** 统一导出流程：截图 → 发送 → 轮询 → 下载 */
+  private async runExport(fmt: string, label: string): Promise<void> {
     if (!await this.confirmExport()) return;
     const name = this.runtime.currentFile;
     const version = this.currentVersion();
     // 检查缓存
-    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}&format=docx`);
+    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}&format=${fmt}`);
     if (cached.ok) {
       const blob = await cached.blob();
-      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.docx`);
+      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.${fmt === 'docx' ? 'docx' : 'zip'}`);
       return;
     }
-    this.exportWait.set({
-      title: '正在提交 DOCX 导出任务...',
-      description: '系统会冻结当前已保存版本，并在生成完成后自动下载。',
-    });
+    this.exportWait.set({ title: '正在截图…', description: '正在用 html2canvas 截取图形。', progress: 5 });
+    let screenshots: Array<{id: string; dataUrl: string}> = [];
     try {
-      const job: any = await fetch(`/api/export-docx/start`, {
+      screenshots = await this.captureAllGraphs();
+    } catch (e) { /* 截图失败继续 */ }
+
+    this.exportWait.set({ title: label, description: '截图完成，正在提交导出任务。', progress: 30 });
+    try {
+      const endpoint = fmt === 'docx' ? '/api/export-docx/start' : `/api/export/${fmt}/start`;
+      const job: any = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, version, markdown: this.markdown() }),
+        body: JSON.stringify({ name, version, markdown: this.markdown(), screenshots }),
       }).then((r) => r.json());
       if (!job?.id) return;
-      const latestJob = await this.waitForExportJob(job.id, job);
-      if (latestJob?.status !== 'done') return;
-      this.exportWait.set({
-        title: 'DOCX 已生成，正在下载...',
-        description: latestJob.message || '',
-      });
-      const response = await this.api.downloadExportJob(job.id);
-      if (!response.ok) return;
-      const blob = await response.blob();
-      this.downloadBlob(blob, latestJob.filename || this.responseFilename(response) || `${this.baseFileName()}.docx`);
+      const done = await this.waitForExportJob(job.id, job);
+      if (done?.status !== 'done') return;
+      const resp = await this.api.downloadExportJob(job.id);
+      if (resp.ok) {
+        const ext = fmt === 'docx' ? 'docx' : 'zip';
+        this.downloadBlob(await resp.blob(), done.filename || `${this.baseFileName()}.${ext}`);
+      }
     } finally { this.exportWait.set(null); }
+  }
+
+  protected async exportJson(): Promise<void> {
+    return this.runExport('json', '正在打包 JSON+附件...');
+  }
+
+  protected async exportMarkdown(): Promise<void> {
+    return this.runExport('markdown', '正在打包 MD+截图+附件...');
+  }
+
+  protected async exportDocx(): Promise<void> {
+    return this.runExport('docx', '正在生成 DOCX...');
+  }
+
+  /** 遍历所有 [data-export-graph-id] 元素，用 html2canvas 截图 */
+  private async captureAllGraphs(): Promise<Array<{id: string; dataUrl: string}>> {
+    const results: Array<{id: string; dataUrl: string}> = [];
+    const elements = document.querySelectorAll<HTMLElement>('[data-export-graph-id]');
+    for (const el of Array.from(elements)) {
+      try {
+        const graphId = el.getAttribute('data-export-graph-id') || '';
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        results.push({ id: graphId, dataUrl: canvas.toDataURL('image/png') });
+      } catch (e) {
+        // 单个截图失败不阻塞整体
+      }
+    }
+    return results;
   }
 
   private buildOutlineItems(): PreviewOutlineItem[] {

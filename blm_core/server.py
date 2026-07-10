@@ -6,6 +6,7 @@ import http.server
 import json
 import base64
 import mimetypes
+import re
 import threading
 import time
 import uuid
@@ -21,6 +22,7 @@ from blm_core.document import canonical_document, migrate_document
 from blm_core.collab import CollaborationManager
 from blm_core.export_graphs import list_export_graphs
 from blm_core.feedback import FeedbackStore
+from blm_core.docx import DocxImage
 from blm_core.graph_screenshot import capture_graph_images
 from blm_core.merge import analyze_merge, apply_merge, validate_document
 from blm_core.storage import (
@@ -714,15 +716,15 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 document = job.get("document") or {}
                 markdown = str(job.get("markdown", "") or "")
 
+                # 使用前端 html2canvas 截的图
+                graph_images = job.get("graphImages") or []
+
                 if fmt == "json":
-                    update(progress=20, message="正在打包 JSON+附件…")
-                    graph_images = self._capture_export_graph_images(f"{job_id}-img", name, document)
+                    update(progress=50, message="正在打包 JSON+附件…")
                     filename, payload = storage.build_export_bundle_from_document(name, document, graph_images=graph_images)
 
                 elif fmt == "markdown":
-                    update(progress=15, message="正在生成截图…")
-                    graph_images = self._capture_export_graph_images(f"{job_id}-img", name, document)
-                    update(progress=60, message="正在打包 MD+截图+附件…")
+                    update(progress=50, message="正在打包 MD+截图+附件…")
                     if markdown:
                         from blm_core.docx import DocxImage
                         md_with_images = storage._markdown_with_graph_images(markdown, graph_images)
@@ -738,11 +740,11 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                         filename, payload = storage.build_export_bundle_from_document(name, document, graph_images=graph_images)
 
                 else:  # docx
-                    update(progress=12, message="正在读取冻结文档和附件。")
+                    update(progress=60, message="正在读取冻结文档和附件。")
                     time.sleep(0.05)
-                    update(progress=32, message="正在转换图形为静态图片。")
-                    graph_images = self._capture_export_graph_images(str(job_id), name, document)
-                    update(progress=72, message=f"截图完成 ({len(graph_images)} 张)，正在写入 DOCX。")
+                    # 使用前端 html2canvas 截的图（已在 job["graphImages"] 中）
+                    graph_images = job.get("graphImages") or []
+                    update(progress=72, message=f"使用前端截图 ({len(graph_images)} 张)，正在写入 DOCX。")
                     # 同时保存一份图片到 images/ 目录供审查
                     if graph_images:
                         export_img_dir = storage.workspace_dir / name / "export-images"
@@ -767,6 +769,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             name = str(payload.get("name", "")).strip()
             version = str(payload.get("version", "")).strip()
             markdown_text = str(payload.get("markdown", "") or "")
+            screenshots_raw = payload.get("screenshots") or []
             if not name:
                 return self._json({"error": "name is required"}, 400)
             try:
@@ -778,6 +781,23 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 frozen_document = storage.load(safe_name)
             except (InvalidDocumentNameError, FileNotFoundError) as exc:
                 return self._json({"error": str(exc)}, 400)
+            # 解析前端截图 base64 → DocxImage
+            graph_images: list = []
+            for item in screenshots_raw:
+                if not isinstance(item, dict):
+                    continue
+                data_url = str(item.get("dataUrl") or "")
+                if not data_url.startswith("data:image/png;base64,"):
+                    continue
+                raw = base64.b64decode(data_url[len("data:image/png;base64,"):])
+                graph_id = str(item.get("id") or "")
+                safe_name_part = re.sub(r"[^A-Za-z0-9._-]+", "-", graph_id).strip("-._")
+                graph_images.append(DocxImage(
+                    name=f"{safe_name_part}.png",
+                    content_type="image/png",
+                    payload=raw,
+                    width=0, height=0,
+                ))
             job_id = uuid.uuid4().hex
             job = {
                 "id": job_id,
@@ -789,6 +809,7 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 "filename": "",
                 "document": frozen_document,
                 "markdown": markdown_text,
+                "graphImages": graph_images,
                 "payload": None,
                 "error": "",
                 "createdAt": time.time(),

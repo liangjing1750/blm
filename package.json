@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "dom-to-image-more": "^3.10.0",
+    "html2canvas": "^1.4.1",
+    "modern-screenshot": "^4.7.0"
+  }
+}
