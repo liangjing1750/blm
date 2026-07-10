@@ -408,12 +408,29 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
 
   protected async deleteProcess(node: FlowNode): Promise<void> {
     if (!node.processId) return;
-    const confirmed = await confirmRuntimeAction(`确认删除流程“${node.label || node.processId}”吗？相关阶段引用和阶段连线也会一并移除。`, {
-      title: '删除流程',
-      confirmLabel: '删除',
+    const doc = this.adapter.document();
+    const pid = node.processId;
+    const refs = (doc.stageFlowRefs || []).filter((ref) => {
+      const puid = ref.processUid || ref.processId || '';
+      return puid && puid === pid;
     });
-    if (!confirmed) return;
-    this.adapter.deleteProcess(node.processId);
+    const stage = this.currentStage();
+    const currentStageId = stage ? this.stageId(stage) : '';
+    if (refs.length > 1) {
+      const confirmed = await confirmRuntimeAction(`确认从本阶段移除流程”${node.label || pid}”吗？（该流程还存在于其他 ${refs.length - 1} 个阶段）`, {
+        title: '从本阶段移除',
+        confirmLabel: '移除',
+      });
+      if (!confirmed) return;
+      this.adapter.removeProcessFromStage(currentStageId, pid);
+    } else {
+      const confirmed = await confirmRuntimeAction(`确认删除流程”${node.label || pid}”吗？相关阶段引用和阶段连线也会一并移除。`, {
+        title: '删除流程',
+        confirmLabel: '删除',
+      });
+      if (!confirmed) return;
+      this.adapter.deleteProcess(pid);
+    }
     this.refresh();
   }
 
