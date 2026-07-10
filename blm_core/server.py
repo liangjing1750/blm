@@ -787,15 +787,24 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                     return self._json({"error": "name is required"}, 400)
                 try:
                     safe_name = storage._validate_name(name)
-                    # 检查缓存
-                    cached = self._check_export_cache(safe_name, version, fmt)
-                    if cached:
-                        return self._json({"id": f"cached:{safe_name}:{version}:{fmt}", "status": "done", "message": "已缓存，可直接下载"})
                     frozen_document = storage.load(safe_name)
                 except InvalidDocumentNameError as exc:
                     return self._json({"error": str(exc)}, 400)
                 except FileNotFoundError:
                     return self._json({"error": "document not found: %s" % name}, 404)
+                # 检查磁盘缓存
+                cache_entry = self._check_export_cache(safe_name, version, fmt)
+                if cache_entry:
+                    cache_filename, cache_payload = cache_entry
+                    job_id = uuid.uuid4().hex
+                    with export_jobs_lock:
+                        export_jobs[job_id] = {
+                            "id": job_id, "name": safe_name, "status": "done", "progress": 100,
+                            "message": "缓存命中，可直接下载。", "filename": cache_filename,
+                            "payload": cache_payload, "error": "", "version": version,
+                        }
+                    return self._json({"id": job_id, "status": "done", "progress": 100,
+                                       "message": "缓存命中，可直接下载。", "filename": cache_filename})
                 # 解析前端截图 base64 → DocxImage
                 graph_images: list = []
                 for item in screenshots_raw:
