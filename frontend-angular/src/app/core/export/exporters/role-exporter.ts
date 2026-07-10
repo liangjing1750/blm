@@ -61,38 +61,77 @@ export class RoleUsecaseExporter implements ViewExporter {
 
 // ── 导出入口（供 role-workbench 调用） ──
 
+/** 收集视图模式下的角色按钮，逐个截取"只看参与流程"的用例图 */
+async function captureEachRoleUsecase(): Promise<Array<{ name: string; png: Uint8Array }>> {
+  await switchMode('[data-testid="role-management-entry"]', 'role-usecase-map');
+  await new Promise((r) => setTimeout(r, 500));
+
+  const results: Array<{ name: string; png: Uint8Array }> = [];
+  const roleBtns = document.querySelectorAll<HTMLElement>('.role-usecase-role');
+  const toggle = document.querySelector<HTMLInputElement>('[data-testid="role-participating-only-toggle"]');
+
+  for (const btn of Array.from(roleBtns)) {
+    const name = btn.querySelector('.role-usecase-role-name')?.textContent?.trim() || 'unknown';
+    // 点击角色按钮
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+
+    // 勾选"只看参与流程"
+    const wasChecked = toggle?.checked;
+    if (toggle && !toggle.checked) {
+      toggle.dispatchEvent(new MouseEvent('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
+    // 截图
+    const png = await captureScreenshot('[data-testid="role-usecase-map"]');
+    results.push({ name, png });
+
+    // 取消勾选
+    if (toggle && wasChecked === false) {
+      toggle.dispatchEvent(new MouseEvent('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+
+  return results;
+}
+
 export async function exportRoleDocx(): Promise<void> {
   const encoder = new TextEncoder();
-  // 1. 截角色范围
+  // 1. 角色范围
   const scopePng = await captureScreenshot('[data-testid="role-summary-card"]');
-  // 2. 切换到"角色参与流程"模式
-  await switchMode('[data-testid="role-management-entry"]', 'role-usecase-map');
-  const usecasePng = await captureScreenshot('[data-testid="role-usecase-map"]');
+  // 2. 每个角色的参与流程
+  const usecases = await captureEachRoleUsecase();
   // 3. 切回管理模式
   await switchMode('[data-testid="role-view-entry"]', 'role-summary-card');
-  // 4. 两张图合并为一个 zip（内含两个 PNG），再生成 DOCX（仅第一张）
-  const docx = buildSimpleDocx(scopePng, 'role-scope');
-  // 简单方式：只下载第一张图的 DOCX + 一个 zip 含双图
-  downloadBlob(docx, 'role-scope.docx');
-  // 额外提供一个完整 zip
-  const zip = buildZip([
+  // 4. 输出第一个角色的 DOCX 作为主文档，完整 zip 作为补充
+  const docx = usecases.length > 0
+    ? buildSimpleDocx(usecases[0].png, 'role-' + usecases[0].name)
+    : buildSimpleDocx(scopePng, 'role-scope');
+  downloadBlob(docx, 'role.docx');
+  // 完整 zip：角色范围 + 每个角色的用例图
+  const files: Array<{ name: string; data: Uint8Array }> = [
     { name: 'role-scope.png', data: scopePng },
-    { name: 'role-usecase.png', data: usecasePng },
-  ]);
-  downloadBlob(zip, 'role.zip');
+  ];
+  usecases.forEach((u) => {
+    files.push({ name: `role-${u.name}.png`, data: u.png });
+  });
+  downloadBlob(buildZip(files), 'role-all.zip');
 }
 
 export async function exportRoleZip(): Promise<void> {
   const encoder = new TextEncoder();
   const scopePng = await captureScreenshot('[data-testid="role-summary-card"]');
-  await switchMode('[data-testid="role-management-entry"]', 'role-usecase-map');
-  const usecasePng = await captureScreenshot('[data-testid="role-usecase-map"]');
+  const usecases = await captureEachRoleUsecase();
   await switchMode('[data-testid="role-view-entry"]', 'role-summary-card');
-  const zip = buildZip([
+  const files: Array<{ name: string; data: Uint8Array }> = [
     { name: 'role-scope.md', data: encoder.encode('# 角色范围\n\n![role-scope](role-scope.png)\n') },
     { name: 'role-scope.png', data: scopePng },
-    { name: 'role-usecase.md', data: encoder.encode('# 角色参与流程\n\n![role-usecase](role-usecase.png)\n') },
-    { name: 'role-usecase.png', data: usecasePng },
-  ]);
-  downloadBlob(zip, 'role.zip');
+  ];
+  usecases.forEach((u) => {
+    files.push({ name: `role-${u.name}.md`, data: encoder.encode(`# ${u.name}\n\n![${u.name}](role-${u.name}.png)\n`) });
+    files.push({ name: `role-${u.name}.png`, data: u.png });
+  });
+  downloadBlob(buildZip(files), 'role-all.zip');
 }
