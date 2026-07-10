@@ -37,13 +37,14 @@ export function buildZip(files: Array<{ name: string; data: Uint8Array }>): Blob
     localOffset += 30 + nameBytes.length + size;
   }
 
-  // Central directory
+  // Central directory — collect all entries and track total size
   const centralStart = localOffset;
+  let centralSize = 0;
   for (const m of centralMeta) {
-    // find filename for this entry
     const f = files[centralMeta.indexOf(m)];
     const nameBytes = encoder.encode(f.name);
-    const entry = new ArrayBuffer(46 + nameBytes.length);
+    const entryLen = 46 + nameBytes.length;
+    const entry = new ArrayBuffer(entryLen);
     const ev = new DataView(entry);
     ev.setUint32(0, 0x02014b50, true);
     ev.setUint16(4, 20, true); ev.setUint16(6, 20, true);
@@ -57,6 +58,7 @@ export function buildZip(files: Array<{ name: string; data: Uint8Array }>): Blob
     ev.setUint32(42, m.offset, true);
     new Uint8Array(entry).set(nameBytes, 46);
     parts.push(entry);
+    centralSize += entryLen;
   }
 
   // End of central directory
@@ -65,7 +67,7 @@ export function buildZip(files: Array<{ name: string; data: Uint8Array }>): Blob
   ev2.setUint32(0, 0x06054b50, true);
   ev2.setUint16(4, 0, true); ev2.setUint16(6, 0, true);
   ev2.setUint16(8, files.length, true); ev2.setUint16(10, files.length, true);
-  ev2.setUint32(12, 0, true); // central directory size (approximate)
+  ev2.setUint32(12, centralSize, true);
   ev2.setUint32(16, centralStart, true);
   ev2.setUint16(20, 0, true);
   parts.push(eocd);
