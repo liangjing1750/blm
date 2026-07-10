@@ -14,16 +14,33 @@ async function switchMode(
   await new Promise((r) => setTimeout(r, timeout));
 }
 
-/** 共享截图逻辑 */
+/** 共享截图逻辑（自动展开父容器 overflow，捕获完整内容） */
 async function captureScreenshot(selector: string): Promise<Uint8Array> {
   const el = document.querySelector<HTMLElement>(selector);
   if (!el) throw new Error(`element not found: ${selector}`);
-  const oldOverflow = el.style.overflow;
+
+  // 展开所有可能截断内容的祖先容器
+  const restoreFns: Array<() => void> = [];
+  let parent = el.parentElement;
+  while (parent && parent !== document.body) {
+    const cs = getComputedStyle(parent);
+    if (cs.overflow === 'hidden' || cs.overflowY === 'hidden' || cs.maxHeight !== 'none') {
+      const old = { overflow: parent.style.overflow, maxHeight: parent.style.maxHeight };
+      parent.style.overflow = 'visible';
+      parent.style.maxHeight = 'none';
+      restoreFns.push(() => { parent!.style.overflow = old.overflow; parent!.style.maxHeight = old.maxHeight; });
+    }
+    parent = parent.parentElement;
+  }
+
+  // 禁用 zoom
+  const oldElOverflow = el.style.overflow;
   el.style.overflow = 'visible';
   const zoomEls: HTMLElement[] = [];
   el.querySelectorAll<HTMLElement>('[style*="zoom"]').forEach((z) => {
     if (z.style.zoom !== '1') { zoomEls.push(z); (z.dataset as any).oldZoom = z.style.zoom; z.style.zoom = '1'; }
   });
+
   try {
     try {
       const d = (await import('dom-to-image-more')).default;
@@ -34,8 +51,9 @@ async function captureScreenshot(selector: string): Promise<Uint8Array> {
       return new Uint8Array(await new Promise<ArrayBuffer>((r) => c.toBlob((b) => r(b!.arrayBuffer()), 'image/png')!));
     }
   } finally {
-    el.style.overflow = oldOverflow;
+    el.style.overflow = oldElOverflow;
     zoomEls.forEach((z) => { z.style.zoom = (z.dataset as any).oldZoom || ''; delete (z.dataset as any).oldZoom; });
+    restoreFns.forEach((fn) => fn());
   }
 }
 function _d2b(d: string): Uint8Array {
@@ -72,15 +90,14 @@ async function captureEachRoleUsecase(onStep?: (done: number, total: number) => 
 
   for (const btn of Array.from(roleBtns)) {
     const name = btn.querySelector('.role-usecase-role-name')?.textContent?.trim() || 'unknown';
-    // 点击角色按钮
-    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 300));
+    // 点击角色按钮（原生 click 触发 Angular 事件）
+    btn.click();
+    await new Promise((r) => setTimeout(r, 400));
 
-    // 勾选"只看参与流程"
-    const wasChecked = toggle?.checked;
+    // 勾选"只看参与流程"（原生 click 触发 Angular change）
     if (toggle && !toggle.checked) {
-      toggle.dispatchEvent(new MouseEvent('change', { bubbles: true }));
-      await new Promise((r) => setTimeout(r, 400));
+      toggle.click();
+      await new Promise((r) => setTimeout(r, 500));
     }
 
     // 截图
@@ -89,8 +106,8 @@ async function captureEachRoleUsecase(onStep?: (done: number, total: number) => 
     onStep?.(results.length, roleBtns.length);
 
     // 取消勾选
-    if (toggle && wasChecked === false) {
-      toggle.dispatchEvent(new MouseEvent('change', { bubbles: true }));
+    if (toggle && toggle.checked) {
+      toggle.click();
       await new Promise((r) => setTimeout(r, 300));
     }
   }
