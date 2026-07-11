@@ -481,3 +481,14 @@
   color: #64748b;
   font-size: 13px;
 }
+
+.process-export-hidden-graphs {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  width: 1600px;
+  height: auto;
+  pointer-events: none;
+  overflow: visible;
+  z-index: -1;
+}

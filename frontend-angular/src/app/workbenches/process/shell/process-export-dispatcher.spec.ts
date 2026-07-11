@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BlmDocument } from '../../../core/document/document.model';
-import { createCurrentNodeExporter, createCurrentProcessExporter } from './process-export-dispatcher';
+import { createCurrentNodeExporter, createCurrentProcessExporter, createCurrentStageExporter } from './process-export-dispatcher';
 
 describe('createCurrentNodeExporter', () => {
   it('creates a NodeExporter for the selected process node', () => {
@@ -83,6 +83,33 @@ describe('createCurrentNodeExporter', () => {
     expect(exporter?.getContent().sections).toEqual(expect.arrayContaining([
       { type: 'heading4', text: '流程：订单办理' },
       { type: 'heading5', text: '节点：复核订单' },
+    ]));
+  });
+
+  it('creates a StageExporter for the selected stage', () => {
+    const document = {
+      meta: { domain: '订单中心' },
+      roles: [],
+      stages: [{ uid: 'stage-in', name: '入库阶段' }],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [],
+      services: [],
+      terms: [],
+      dataDictionaries: [],
+      rules: [],
+    } satisfies BlmDocument;
+
+    const exporter = createCurrentStageExporter(document, { stageId: 'stage-in' });
+
+    expect(exporter?.label).toBe('stage-入库阶段');
+    expect(exporter?.getContent().sections).toEqual(expect.arrayContaining([
+      { type: 'heading2', text: '阶段：入库阶段' },
+      { type: 'image', text: '阶段视图：入库阶段', imageIndex: 0 },
     ]));
   });
 });

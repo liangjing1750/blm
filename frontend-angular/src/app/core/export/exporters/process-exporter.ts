@@ -61,7 +61,7 @@ export function buildProcessContent(document: BlmDocument, process: Process): Vi
   return { title: `流程：${processTitle}`, sections };
 }
 
-async function captureProcessFlowGraph(graphId = ''): Promise<Uint8Array> {
+export async function captureProcessFlowGraph(graphId = ''): Promise<Uint8Array> {
   if (typeof document === 'undefined') return new Uint8Array();
   const selector = graphId
     ? `[data-export-graph-id="${cssEscape(graphId)}"]`
@@ -73,7 +73,7 @@ async function captureProcessFlowGraph(graphId = ''): Promise<Uint8Array> {
   return captureFullElement(el);
 }
 
-async function captureFullElement(el: HTMLElement): Promise<Uint8Array> {
+export async function captureFullElement(el: HTMLElement): Promise<Uint8Array> {
   const restoreFns: Array<() => void> = [];
   prepareElementForFullCapture(el, restoreFns);
   try {

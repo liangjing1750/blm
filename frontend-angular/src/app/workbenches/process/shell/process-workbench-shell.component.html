@@ -57,7 +57,12 @@
   @if (view() === 'valueDomain') {
     <app-value-domain-workbench />
   } @else if (view() === 'stage') {
-    <app-process-stage-workbench (processEditorRequested)="openFlowForProcess($event)" />
+    <app-process-stage-workbench [exportGraphId]="currentStageGraphId()" (processEditorRequested)="openFlowForProcess($event)" />
+    <div class="process-export-hidden-graphs" aria-hidden="true">
+      @for (process of stageProcessesForExport(); track processId(process)) {
+        <app-process-flow-workbench [editing]="false" [previewProcessId]="processId(process)" [exportGraphId]="processGraphId(process)" />
+      }
+    </div>
   } @else if (view() === 'flow') {
     <app-process-flow-workbench [editing]="flowEditing()" (taskEditorRequested)="openNode($event)" />
   } @else if (view() === 'node') {

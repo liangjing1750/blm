@@ -1,10 +1,12 @@
-import { BlmDocument, Process, ProcessNode } from '../../../core/document/document.model';
+import { BlmDocument, Process, ProcessNode, Stage } from '../../../core/document/document.model';
 import { identityOf } from '../../../core/document/document-model';
 import { NodeExporter } from '../../../core/export/exporters/node-exporter';
 import { ProcessExporter } from '../../../core/export/exporters/process-exporter';
+import { StageExporter } from '../../../core/export/exporters/stage-exporter';
 
 export interface ProcessExportUiState {
   procId?: string | null;
+  stageId?: string | null;
   taskId?: string | null;
 }
 
@@ -25,6 +27,22 @@ export function createCurrentProcessExporter(
   const process = findProcess(document, ui.procId || '');
   if (!process) return null;
   return new ProcessExporter(document, process);
+}
+
+export function createCurrentStageExporter(
+  document: BlmDocument,
+  ui: ProcessExportUiState,
+): StageExporter | null {
+  const stage = findStage(document, ui.stageId || '');
+  if (!stage) return null;
+  return new StageExporter(document, stage);
+}
+
+function findStage(document: BlmDocument, stageId: string): Stage | null {
+  const target = String(stageId || '').trim();
+  return document.stages.find((stage) => identityOf(stage) === target || stage.name === target) ||
+    document.stages[0] ||
+    null;
 }
 
 function findProcess(document: BlmDocument, processId: string): Process | null {

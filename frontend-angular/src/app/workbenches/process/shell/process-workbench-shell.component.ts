@@ -15,12 +15,15 @@ import { ProcessStageWorkbenchComponent } from '../stage/process-stage-workbench
 import { ValueDomainWorkbenchComponent } from '../value-domain/value-domain-workbench.component';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../../core/runtime/angular-runtime';
 import { ExportService } from '../../../core/export/export.service';
+import { exportGraphId } from '../../../core/export/graph-export-registry';
+import { identityOf } from '../../../core/document/document-model';
+import { processesForStage } from '../../../core/export/exporters/stage-exporter';
 import {
   ProcessShellView,
   ProcessWorkbenchShellLegacyAdapter,
   createProcessWorkbenchShellLegacyAdapter,
 } from './process-workbench-shell-legacy-adapter';
-import { createCurrentNodeExporter, createCurrentProcessExporter } from './process-export-dispatcher';
+import { createCurrentNodeExporter, createCurrentProcessExporter, createCurrentStageExporter } from './process-export-dispatcher';
 
 @Component({
   selector: 'app-process-workbench-shell',
@@ -139,6 +142,21 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
   protected stageRefs(process: LegacyProcess) {
     this.version();
     return this.editorAdapter.stageRefs(process);
+  }
+
+  protected currentStageGraphId(): string {
+    const stage = this.currentStageForExport();
+    return stage ? exportGraphId('stage-flow', identityOf(stage)) : '';
+  }
+
+  protected processGraphId(process: LegacyProcess): string {
+    return exportGraphId('process-flow', identityOf(process as any));
+  }
+
+  protected stageProcessesForExport(): LegacyProcess[] {
+    const stage = this.currentStageForExport();
+    if (!stage) return [];
+    return processesForStage(getAngularRuntimeState().doc, stage as any) as any;
   }
 
   protected gateways(process: LegacyProcess): LegacyFlowGateway[] {
@@ -332,7 +350,8 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
 
   protected canExportCurrentView(): boolean {
     return (this.view() === 'node' && !!this.currentTask()) ||
-      (this.view() === 'flow' && !!this.currentProcess());
+      (this.view() === 'flow' && !!this.currentProcess()) ||
+      (this.view() === 'stage' && !!getAngularRuntimeState().doc?.stages?.length);
   }
 
   protected async exportCurrentView(format: 'docx' | 'zip'): Promise<void> {
@@ -340,13 +359,16 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     const runtime = getAngularRuntimeState();
     const ui = {
       procId: runtime.ui['procId'],
+      stageId: runtime.ui['stageId'],
       taskId: runtime.ui['taskId'],
     };
     const exporter = this.view() === 'flow'
       ? createCurrentProcessExporter(runtime.doc, ui)
-      : this.view() === 'node'
-        ? createCurrentNodeExporter(runtime.doc, ui)
-        : null;
+      : this.view() === 'stage'
+        ? createCurrentStageExporter(runtime.doc, ui)
+        : this.view() === 'node'
+          ? createCurrentNodeExporter(runtime.doc, ui)
+          : null;
     if (!exporter) return;
     await this.exportSvc.exportView(exporter, format);
   }
@@ -418,6 +440,15 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     getAngularRuntimeState().ui['stageEditorCollapsed'] = !editing;
     this.valueDomainWorkbench?.setEditingFromShell(editing);
     this.refresh();
+  }
+
+  private currentStageForExport(): any | null {
+    this.version();
+    const runtime = getAngularRuntimeState();
+    const target = String(runtime.ui['stageId'] || '').trim();
+    return (runtime.doc?.stages || []).find((stage: any) => (
+      identityOf(stage) === target || stage.name === target
+    )) || runtime.doc?.stages?.[0] || null;
   }
 
   protected refresh(): void {
