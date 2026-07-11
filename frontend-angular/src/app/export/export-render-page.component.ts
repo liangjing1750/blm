@@ -3,10 +3,8 @@ import { AfterViewChecked, Component, OnInit, computed, signal } from '@angular/
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../core/api/api.service';
 import { emitRuntimeRefresh, replaceRuntimeDocument, getAngularRuntimeState } from '../core/runtime/angular-runtime';
-import { ExportGraphDescriptor, exportGraphId, listExportGraphs } from '../core/export/graph-export-registry';
-import { EntityDesignWorkbenchComponent } from '../workbenches/component/entity-design/entity-design-workbench.component';
-import { ProcessFlowWorkbenchComponent } from '../workbenches/process/flow/process-flow-workbench.component';
-import { ProcessStageWorkbenchComponent } from '../workbenches/process/stage/process-stage-workbench.component';
+import { ExportGraphDescriptor, listExportGraphs } from '../core/export/graph-export-registry';
+import { PreviewGraphHostComponent } from '../workbenches/preview/preview-graph-host.component';
 
 declare global {
   interface Window {
@@ -20,9 +18,7 @@ declare global {
   standalone: true,
   imports: [
     CommonModule,
-    ProcessStageWorkbenchComponent,
-    ProcessFlowWorkbenchComponent,
-    EntityDesignWorkbenchComponent,
+    PreviewGraphHostComponent,
   ],
   templateUrl: './export-render-page.component.html',
   styleUrl: './export-render-page.component.scss',
@@ -70,28 +66,13 @@ export class ExportRenderPageComponent implements OnInit, AfterViewChecked {
     this.markReadyWhenGraphRendered();
   }
 
-  protected stageGraphId(): string {
+  protected targetIdForGraph(): string {
     const graph = this.activeGraph();
     if (!graph) return '';
-    return graph.kind === 'stage-panorama' || graph.kind === 'stage-flow' ? graph.id : '';
-  }
-
-  protected processGraphId(): string {
-    const graph = this.activeGraph();
-    return graph?.kind === 'process-flow' ? graph.id : '';
-  }
-
-  protected entityGraphId(): string {
-    const graph = this.activeGraph();
-    return graph?.kind === 'entity-relation' || graph?.kind === 'entity-state' ? graph.id : '';
-  }
-
-  protected entityInitialView(): 'relation' | 'state' {
-    return this.activeGraph()?.kind === 'entity-state' ? 'state' : 'relation';
-  }
-
-  protected entityInitialId(): string {
-    return this.activeGraph()?.params['entityId'] || '';
+    if (graph.kind === 'stage-flow') return graph.params['stageId'] || '';
+    if (graph.kind === 'process-flow') return graph.params['processId'] || '';
+    if (graph.kind === 'entity-state') return graph.params['entityId'] || '';
+    return '';
   }
 
   private applyGraphRuntime(graph: ExportGraphDescriptor): void {

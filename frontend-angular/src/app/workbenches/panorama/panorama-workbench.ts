@@ -121,6 +121,8 @@ export class PanoramaWorkbench {
   /** 统一导出入口：根据当前 subtab 派发到对应 exporter */
   private async runExport(fmt: 'docx' | 'zip'): Promise<void> {
     this.closeExportMenu();
+    // 设置全局文档引用，供 Exporter.getContent() 使用
+    (window as any).__ngDocument = this.document();
     const tab = this.activeTab();
     const updater = (pct: number, msg: string) => this.exportWait.set({ title: msg, description: '', progress: pct });
 

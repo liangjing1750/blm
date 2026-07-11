@@ -9,6 +9,18 @@
       </div>
       <div class="proc-view-actions">
         <span class="inline-help toolbar-help" tabindex="0" data-testid="process-view-help" data-tip="流程工作台提供价值流、阶段、流程和节点视图；切换只改变前端视图状态，不改业务模型。">?</span>
+        <div class="process-export-menu-wrap" data-testid="process-export-menu-wrap">
+          <button class="btn btn-outline btn-sm" type="button" data-testid="process-export-btn" (click)="toggleExportMenu($event)">导出 ▾</button>
+          @if (exportMenuOpen()) {
+            <div class="process-export-dropdown" data-testid="process-export-dropdown" (click)="$event.stopPropagation()">
+              <button type="button" data-testid="process-export-docx" [disabled]="!canExportCurrentView()" (click)="exportCurrentView('docx')">导出 DOCX</button>
+              <button type="button" data-testid="process-export-zip" [disabled]="!canExportCurrentView()" (click)="exportCurrentView('zip')">导出 ZIP</button>
+              @if (!canExportCurrentView()) {
+                <div class="process-export-note">当前视图导出待实现</div>
+              }
+            </div>
+          }
+        </div>
         @if (view() === 'valueDomain') {
           @if (valueDomainEditing()) {
             <button class="btn btn-outline btn-sm editor-toggle active" type="button" data-testid="value-domain-editor-hide" (click)="setValueDomainEditing(false)">关闭编辑</button>

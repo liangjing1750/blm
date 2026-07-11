@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../../shared/rich-text/rich-text-editor.component';
 import { sanitizeRichTextHtml } from '../../../shared/rich-text/rich-text-utils';
+import { PROCESS_FORM_FIELD_TYPES, PROCESS_STEP_TYPES } from '../shared/process-node-options';
 import {
   LegacyEntity,
   LegacyProcess,
@@ -175,26 +176,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected readonly renameNodeValue = signal('');
   protected readonly pendingEntityFieldCopy = signal<PendingEntityFieldCopy | null>(null);
   protected readonly activeNodeSection = signal('node-role-section');
-  protected readonly stepTypes = [
-    { value: 'Click', label: '点击' },
-    { value: 'Query', label: '查询' },
-    { value: 'Check', label: '校验' },
-    { value: 'Fill', label: '填写' },
-    { value: 'Select', label: '选择' },
-    { value: 'Compute', label: '计算' },
-    { value: 'Mutate', label: '变更' },
-    { value: 'Display', label: '显示' },
-    { value: '__other__', label: '其它...' },
-  ];
-  protected readonly formFieldTypes = [
-    { value: 'Text', label: '输入框' },
-    { value: 'Select', label: '下拉选择' },
-    { value: 'Date', label: '日期' },
-    { value: 'Number', label: '数字' },
-    { value: 'File', label: '附件' },
-    { value: 'Readonly', label: '只读展示' },
-    { value: 'Note', label: '说明文本' },
-  ];
+  protected readonly stepTypes = PROCESS_STEP_TYPES;
+  protected readonly formFieldTypes = PROCESS_FORM_FIELD_TYPES;
   protected readonly entityFieldEmptyLabel = '\u4e0d\u6620\u5c04';
   protected readonly openStepDetails = signal<Set<string>>(new Set());
   protected readonly openRuleDetails = signal<Set<string>>(new Set());

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, ViewChild, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   LegacyFlowEdge,
@@ -14,11 +14,13 @@ import { ProcessFlowWorkbenchComponent } from '../flow/process-flow-workbench.co
 import { ProcessStageWorkbenchComponent } from '../stage/process-stage-workbench.component';
 import { ValueDomainWorkbenchComponent } from '../value-domain/value-domain-workbench.component';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../../core/runtime/angular-runtime';
+import { ExportService } from '../../../core/export/export.service';
 import {
   ProcessShellView,
   ProcessWorkbenchShellLegacyAdapter,
   createProcessWorkbenchShellLegacyAdapter,
 } from './process-workbench-shell-legacy-adapter';
+import { createCurrentNodeExporter } from './process-export-dispatcher';
 
 @Component({
   selector: 'app-process-workbench-shell',
@@ -35,6 +37,7 @@ import {
   styleUrl: './process-workbench-shell.component.scss',
 })
 export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
+  private readonly exportSvc = inject(ExportService);
 
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {
@@ -61,6 +64,7 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
   protected readonly adapter: ProcessWorkbenchShellLegacyAdapter = createProcessWorkbenchShellLegacyAdapter();
   protected readonly editorAdapter = createProcessEditorLegacyAdapter();
   protected readonly viewState = signal<ProcessShellView>(this.adapter.view());
+  protected readonly exportMenuOpen = signal(false);
   @ViewChild(ValueDomainWorkbenchComponent) private valueDomainWorkbench?: ValueDomainWorkbenchComponent;
   private lastObservedView = this.adapter.view();
   private readonly syncTimer = window.setInterval(() => this.syncExternalView(), 120);
@@ -315,6 +319,38 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     this.adapter.openFlow();
     this.viewState.set('flow');
     this.refresh();
+  }
+
+  protected toggleExportMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    this.exportMenuOpen.update((value) => !value);
+  }
+
+  protected closeExportMenu(): void {
+    this.exportMenuOpen.set(false);
+  }
+
+  protected canExportCurrentView(): boolean {
+    return this.view() === 'node' && !!this.currentTask();
+  }
+
+  protected async exportCurrentView(format: 'docx' | 'zip'): Promise<void> {
+    this.closeExportMenu();
+    if (this.view() !== 'node') return;
+    const runtime = getAngularRuntimeState();
+    const exporter = createCurrentNodeExporter(runtime.doc, {
+      procId: runtime.ui['procId'],
+      taskId: runtime.ui['taskId'],
+    });
+    if (!exporter) return;
+    await this.exportSvc.exportView(exporter, format);
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected closeProcessMenusFromDocument(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-testid="process-export-menu-wrap"]')) return;
+    this.closeExportMenu();
   }
 
   protected async deleteCurrentFlow(): Promise<void> {
