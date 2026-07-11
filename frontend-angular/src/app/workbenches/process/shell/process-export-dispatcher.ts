@@ -1,6 +1,7 @@
 import { BlmDocument, Process, ProcessNode } from '../../../core/document/document.model';
 import { identityOf } from '../../../core/document/document-model';
 import { NodeExporter } from '../../../core/export/exporters/node-exporter';
+import { ProcessExporter } from '../../../core/export/exporters/process-exporter';
 
 export interface ProcessExportUiState {
   procId?: string | null;
@@ -15,6 +16,15 @@ export function createCurrentNodeExporter(
   const node = findNode(process, ui.taskId || '');
   if (!process || !node) return null;
   return new NodeExporter(document, node, { process });
+}
+
+export function createCurrentProcessExporter(
+  document: BlmDocument,
+  ui: ProcessExportUiState,
+): ProcessExporter | null {
+  const process = findProcess(document, ui.procId || '');
+  if (!process) return null;
+  return new ProcessExporter(document, process);
 }
 
 function findProcess(document: BlmDocument, processId: string): Process | null {

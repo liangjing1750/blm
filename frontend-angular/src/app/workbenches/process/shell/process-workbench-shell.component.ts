@@ -20,7 +20,7 @@ import {
   ProcessWorkbenchShellLegacyAdapter,
   createProcessWorkbenchShellLegacyAdapter,
 } from './process-workbench-shell-legacy-adapter';
-import { createCurrentNodeExporter } from './process-export-dispatcher';
+import { createCurrentNodeExporter, createCurrentProcessExporter } from './process-export-dispatcher';
 
 @Component({
   selector: 'app-process-workbench-shell',
@@ -331,17 +331,22 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
   }
 
   protected canExportCurrentView(): boolean {
-    return this.view() === 'node' && !!this.currentTask();
+    return (this.view() === 'node' && !!this.currentTask()) ||
+      (this.view() === 'flow' && !!this.currentProcess());
   }
 
   protected async exportCurrentView(format: 'docx' | 'zip'): Promise<void> {
     this.closeExportMenu();
-    if (this.view() !== 'node') return;
     const runtime = getAngularRuntimeState();
-    const exporter = createCurrentNodeExporter(runtime.doc, {
+    const ui = {
       procId: runtime.ui['procId'],
       taskId: runtime.ui['taskId'],
-    });
+    };
+    const exporter = this.view() === 'flow'
+      ? createCurrentProcessExporter(runtime.doc, ui)
+      : this.view() === 'node'
+        ? createCurrentNodeExporter(runtime.doc, ui)
+        : null;
     if (!exporter) return;
     await this.exportSvc.exportView(exporter, format);
   }
