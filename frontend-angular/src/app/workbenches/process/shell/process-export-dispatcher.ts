@@ -3,6 +3,7 @@ import { identityOf } from '../../../core/document/document-model';
 import { NodeExporter } from '../../../core/export/exporters/node-exporter';
 import { ProcessExporter } from '../../../core/export/exporters/process-exporter';
 import { StageExporter } from '../../../core/export/exporters/stage-exporter';
+import { ValueStreamExporter } from '../../../core/export/exporters/value-stream-exporter';
 
 export interface ProcessExportUiState {
   procId?: string | null;
@@ -36,6 +37,10 @@ export function createCurrentStageExporter(
   const stage = findStage(document, ui.stageId || '');
   if (!stage) return null;
   return new StageExporter(document, stage);
+}
+
+export function createValueStreamExporter(document: BlmDocument): ValueStreamExporter {
+  return new ValueStreamExporter(document);
 }
 
 function findStage(document: BlmDocument, stageId: string): Stage | null {

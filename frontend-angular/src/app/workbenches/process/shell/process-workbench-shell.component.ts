@@ -18,12 +18,13 @@ import { ExportService } from '../../../core/export/export.service';
 import { exportGraphId } from '../../../core/export/graph-export-registry';
 import { identityOf } from '../../../core/document/document-model';
 import { processesForStage } from '../../../core/export/exporters/stage-exporter';
+import { stagesForValueStream } from '../../../core/export/exporters/value-stream-exporter';
 import {
   ProcessShellView,
   ProcessWorkbenchShellLegacyAdapter,
   createProcessWorkbenchShellLegacyAdapter,
 } from './process-workbench-shell-legacy-adapter';
-import { createCurrentNodeExporter, createCurrentProcessExporter, createCurrentStageExporter } from './process-export-dispatcher';
+import { createCurrentNodeExporter, createCurrentProcessExporter, createCurrentStageExporter, createValueStreamExporter } from './process-export-dispatcher';
 
 @Component({
   selector: 'app-process-workbench-shell',
@@ -68,6 +69,8 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
   protected readonly editorAdapter = createProcessEditorLegacyAdapter();
   protected readonly viewState = signal<ProcessShellView>(this.adapter.view());
   protected readonly exportMenuOpen = signal(false);
+  /** 控制隐藏预渲染区：只有导出时才设为 true，避免切换视图时一次性渲染全部阶段/流程组件 */
+  protected readonly exportCaptureReady = signal(false);
   @ViewChild(ValueDomainWorkbenchComponent) private valueDomainWorkbench?: ValueDomainWorkbenchComponent;
   private lastObservedView = this.adapter.view();
   private readonly syncTimer = window.setInterval(() => this.syncExternalView(), 120);
@@ -149,6 +152,22 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     return stage ? exportGraphId('stage-flow', identityOf(stage)) : '';
   }
 
+  protected valueStreamGraphId(): string {
+    return exportGraphId('stage-panorama');
+  }
+
+  protected allStagesForExport(): any[] {
+    return stagesForValueStream(getAngularRuntimeState().doc);
+  }
+
+  protected stageGraphId(stage: any): string {
+    return exportGraphId('stage-flow', identityOf(stage));
+  }
+
+  protected stagePreviewId(stage: any): string {
+    return identityOf(stage);
+  }
+
   protected processGraphId(process: LegacyProcess): string {
     return exportGraphId('process-flow', identityOf(process as any));
   }
@@ -157,6 +176,16 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     const stage = this.currentStageForExport();
     if (!stage) return [];
     return processesForStage(getAngularRuntimeState().doc, stage as any) as any;
+  }
+
+  protected allProcessesForExport(): LegacyProcess[] {
+    const processes = new Map<string, LegacyProcess>();
+    for (const stage of this.allStagesForExport()) {
+      for (const process of processesForStage(getAngularRuntimeState().doc, stage as any) as any) {
+        processes.set(identityOf(process), process);
+      }
+    }
+    return [...processes.values()];
   }
 
   protected gateways(process: LegacyProcess): LegacyFlowGateway[] {
@@ -351,7 +380,8 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
   protected canExportCurrentView(): boolean {
     return (this.view() === 'node' && !!this.currentTask()) ||
       (this.view() === 'flow' && !!this.currentProcess()) ||
-      (this.view() === 'stage' && !!getAngularRuntimeState().doc?.stages?.length);
+      (this.view() === 'stage' && !!getAngularRuntimeState().doc?.stages?.length) ||
+      (this.view() === 'valueDomain' && !!getAngularRuntimeState().doc?.stages?.length);
   }
 
   protected async exportCurrentView(format: 'docx' | 'zip'): Promise<void> {
@@ -366,11 +396,61 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
       ? createCurrentProcessExporter(runtime.doc, ui)
       : this.view() === 'stage'
         ? createCurrentStageExporter(runtime.doc, ui)
-        : this.view() === 'node'
-          ? createCurrentNodeExporter(runtime.doc, ui)
-          : null;
+        : this.view() === 'valueDomain'
+          ? createValueStreamExporter(runtime.doc)
+          : this.view() === 'node'
+            ? createCurrentNodeExporter(runtime.doc, ui)
+            : null;
     if (!exporter) return;
-    await this.exportSvc.exportView(exporter, format);
+
+    // 价值流/阶段视图需要预渲染隐藏的图形组件才能截图：
+    // 平时不渲染（切换视图不卡），只在导出时临时打开→等待→截图→关闭
+    const needsPreRender = this.view() === 'valueDomain' || this.view() === 'stage';
+    if (needsPreRender) {
+      this.exportCaptureReady.set(true);
+      await this.waitForExportGraphs(this.requiredExportGraphIds());
+    }
+
+    try {
+      await this.exportSvc.exportView(exporter, format);
+    } finally {
+      if (needsPreRender) {
+        this.exportCaptureReady.set(false);
+      }
+    }
+  }
+
+  private requiredExportGraphIds(): string[] {
+    if (this.view() === 'valueDomain') {
+      return [
+        this.valueStreamGraphId(),
+        ...this.allStagesForExport().map((stage) => this.stageGraphId(stage)),
+        ...this.allProcessesForExport().map((process) => this.processGraphId(process)),
+      ];
+    }
+    if (this.view() === 'stage') {
+      return [
+        this.currentStageGraphId(),
+        ...this.stageProcessesForExport().map((process) => this.processGraphId(process)),
+      ];
+    }
+    return [];
+  }
+
+  /** 等待本次导出实际需要的 export-graph 元素渲染就绪（尺寸 > 0）。 */
+  private async waitForExportGraphs(graphIds: string[]): Promise<void> {
+    if (!graphIds.length) return;
+    const selectors = graphIds.map((id) => `[data-export-graph-id="${String(id).replace(/"/g, '\\"')}"]`);
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const allReady = selectors.every((selector) => {
+        const el = document.querySelector<HTMLElement>(selector);
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+      if (allReady) return;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
 
   @HostListener('document:click', ['$event'])

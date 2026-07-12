@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, signal, OnInit, OnDestroy } from '@angular/core';
 import { createValueDomainLegacyAdapter } from './value-domain-legacy-adapter';
 import {
   ValueDomainCell,
@@ -63,6 +63,7 @@ export class ValueDomainWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly dragTarget = signal<StageDragTarget | null>(null);
 
   private readonly legacyAdapter = createValueDomainLegacyAdapter();
+  @Input() exportGraphId = '';
   private readonly actions = this.legacyAdapter.actions();
   private readonly stageSlotWidth = 184;
   private readonly stageSlotHeight = 38;

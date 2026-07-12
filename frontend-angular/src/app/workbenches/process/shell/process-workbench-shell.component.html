@@ -55,14 +55,26 @@
   </div>
 
   @if (view() === 'valueDomain') {
-    <app-value-domain-workbench />
+    <app-value-domain-workbench [exportGraphId]="valueStreamGraphId()" />
+    @if (exportCaptureReady()) {
+      <div class="process-export-hidden-graphs" aria-hidden="true">
+        @for (stage of allStagesForExport(); track stageGraphId(stage)) {
+          <app-process-stage-workbench previewMode="detail" [previewStageId]="stagePreviewId(stage)" [exportGraphId]="stageGraphId(stage)" />
+        }
+        @for (process of allProcessesForExport(); track processId(process)) {
+          <app-process-flow-workbench [editing]="false" [previewProcessId]="processId(process)" [exportGraphId]="processGraphId(process)" />
+        }
+      </div>
+    }
   } @else if (view() === 'stage') {
     <app-process-stage-workbench [exportGraphId]="currentStageGraphId()" (processEditorRequested)="openFlowForProcess($event)" />
-    <div class="process-export-hidden-graphs" aria-hidden="true">
-      @for (process of stageProcessesForExport(); track processId(process)) {
-        <app-process-flow-workbench [editing]="false" [previewProcessId]="processId(process)" [exportGraphId]="processGraphId(process)" />
-      }
-    </div>
+    @if (exportCaptureReady()) {
+      <div class="process-export-hidden-graphs" aria-hidden="true">
+        @for (process of stageProcessesForExport(); track processId(process)) {
+          <app-process-flow-workbench [editing]="false" [previewProcessId]="processId(process)" [exportGraphId]="processGraphId(process)" />
+        }
+      </div>
+    }
   } @else if (view() === 'flow') {
     <app-process-flow-workbench [editing]="flowEditing()" (taskEditorRequested)="openNode($event)" />
   } @else if (view() === 'node') {

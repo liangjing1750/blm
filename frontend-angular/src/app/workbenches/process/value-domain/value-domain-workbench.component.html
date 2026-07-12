@@ -3,7 +3,7 @@
     <div class="stage-main-shell">
       <div class="stage-main">
         <div class="stage-card">
-          <div class="value-domain-matrix" data-testid="value-domain-matrix" [class.is-editing]="editing()" [style.grid-template-columns]="gridTemplateColumns()">
+          <div class="value-domain-matrix" data-testid="value-domain-matrix" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [class.is-editing]="editing()" [style.grid-template-columns]="gridTemplateColumns()">
             <div class="value-domain-corner">业务域 / 价值流</div>
             @for (column of columns(); track columnUid(column); let columnIndex = $index) {
               <div class="value-domain-head" [class.is-editing]="editing()" data-testid="value-stream-header">

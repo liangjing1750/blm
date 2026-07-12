@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BlmDocument } from '../../../core/document/document.model';
-import { createCurrentNodeExporter, createCurrentProcessExporter, createCurrentStageExporter } from './process-export-dispatcher';
+import { createCurrentNodeExporter, createCurrentProcessExporter, createCurrentStageExporter, createValueStreamExporter } from './process-export-dispatcher';
 
 describe('createCurrentNodeExporter', () => {
   it('creates a NodeExporter for the selected process node', () => {
@@ -110,6 +110,33 @@ describe('createCurrentNodeExporter', () => {
     expect(exporter?.getContent().sections).toEqual(expect.arrayContaining([
       { type: 'heading2', text: '阶段：入库阶段' },
       { type: 'image', text: '阶段视图：入库阶段', imageIndex: 0 },
+    ]));
+  });
+
+  it('creates a ValueStreamExporter for the value domain view', () => {
+    const document = {
+      meta: { domain: '订单中心' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [],
+      services: [],
+      terms: [],
+      dataDictionaries: [],
+      rules: [],
+    } satisfies BlmDocument;
+
+    const exporter = createValueStreamExporter(document);
+
+    expect(exporter.label).toBe('value-stream');
+    expect(exporter.getContent().sections).toEqual(expect.arrayContaining([
+      { type: 'heading1', text: '价值流环节' },
+      { type: 'image', text: '价值流视图', imageIndex: 0 },
     ]));
   });
 });
