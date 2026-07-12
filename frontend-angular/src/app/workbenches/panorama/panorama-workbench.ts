@@ -8,11 +8,8 @@ import { ValueDomainCell, ValueDomainColumn, ValueDomainLane, getValueDomainColu
 import { KnowledgeWorkbenchComponent } from '../knowledge/knowledge-workbench';
 import { RoleWorkbenchComponent } from '../role/role-workbench';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
-import { ExportService } from '../../core/export/export.service';
-import { PanoramaExporter } from '../../core/export/exporters/panorama-exporter';
-import { exportRoleDocx, exportRoleZip } from '../../core/export/exporters/role-exporter';
-
-type PanoramaSubtab = 'overview' | 'roles' | 'terms' | 'dictionary' | 'rules';
+import { ExportProgress, ExportService } from '../../core/export/export.service';
+import { createCurrentPanoramaExporter, type PanoramaSubtab } from './panorama-export-dispatcher';
 
 interface PanoramaSubtabItem {
   id: PanoramaSubtab;
@@ -107,6 +104,7 @@ export class PanoramaWorkbench {
   protected readonly zoomPercent = computed(() => Math.round(this.zoomValue() * 100));
   protected readonly exportMenuOpen = signal(false);
   protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
+  protected readonly exportCaptureReady = signal(false);
 
   // ── 局部导出（调试功能，不涉及服务器存储） ──
   protected toggleExportMenu(event: MouseEvent): void {
@@ -121,30 +119,58 @@ export class PanoramaWorkbench {
   /** 统一导出入口：根据当前 subtab 派发到对应 exporter */
   private async runExport(fmt: 'docx' | 'zip'): Promise<void> {
     this.closeExportMenu();
-    // 设置全局文档引用，供 Exporter.getContent() 使用
-    (window as any).__ngDocument = this.document();
+    const document = this.document();
     const tab = this.activeTab();
-    const updater = (pct: number, msg: string) => this.exportWait.set({ title: msg, description: '', progress: pct });
 
-    if (tab === 'overview') {
-      updater(20, '正在截图…');
-      await new Promise((r) => setTimeout(r, 10));
-      try {
-        await this.exportSvc.exportView(new PanoramaExporter(), fmt);
-        this.exportWait.set({ title: '完成', description: '', progress: 100 });
-      } catch (e) { /* */ }
-      await new Promise((r) => setTimeout(r, 300));
-    } else if (tab === 'roles') {
-      this.exportWait.set({ title: '正在导出角色视图…', description: '', progress: 5 });
-      await new Promise((r) => setTimeout(r, 10));
-      try {
-        if (fmt === 'docx') await exportRoleDocx(updater);
-        else await exportRoleZip(updater);
-        this.exportWait.set({ title: '完成', description: '', progress: 100 });
-      } catch (e) { /* */ }
-      await new Promise((r) => setTimeout(r, 300));
+    const exporter = createCurrentPanoramaExporter(document as any, tab);
+    if (!exporter) {
+      this.exportWait.set({ title: '当前视图暂不支持导出', description: '', progress: 0 });
+      await new Promise((r) => setTimeout(r, 2000));
+      this.exportWait.set(null);
+      return;
     }
+
+    const needsHiddenRoleMap = tab === 'overview' || tab === 'roles';
+    if (needsHiddenRoleMap) {
+      this.exportCaptureReady.set(true);
+      await this.waitForRoleUsecaseMap();
+    }
+
+    this.exportWait.set({ title: `正在导出${exporter.label}…`, description: '', progress: 5 });
+    await new Promise((r) => setTimeout(r, 10));
+    try {
+      await this.exportSvc.exportView(exporter, fmt, (progress) => this.updateExportProgress(progress));
+      this.exportWait.set({ title: '完成', description: '', progress: 100 });
+    } catch (e) { /* */ }
+    if (needsHiddenRoleMap) this.exportCaptureReady.set(false);
+    await new Promise((r) => setTimeout(r, 300));
     this.exportWait.set(null);
+  }
+
+  private updateExportProgress(progress: ExportProgress): void {
+    const phaseBase = progress.phase === 'content' ? 10 : progress.phase === 'capture' ? 20 : progress.phase === 'assemble' ? 84 : 94;
+    const phaseSpan = progress.phase === 'capture' ? 60 : progress.phase === 'assemble' ? 10 : 6;
+    const ratio = progress.total > 0 ? progress.current / progress.total : 0;
+    this.exportWait.set({
+      title: `正在导出 ${progress.label}`,
+      description: this.exportPhaseText(progress),
+      progress: Math.min(99, Math.round(phaseBase + phaseSpan * ratio)),
+    });
+  }
+
+  private exportPhaseText(progress: ExportProgress): string {
+    if (progress.phase === 'capture') return `正在截图 ${progress.current}/${progress.total}`;
+    if (progress.phase === 'assemble') return '正在生成文件';
+    if (progress.phase === 'download') return '正在下载';
+    return '正在准备内容';
+  }
+
+  private async waitForRoleUsecaseMap(): Promise<void> {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const el = document.querySelector<HTMLElement>('[data-testid="role-usecase-map"]');
+      if (el && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
   }
 
   protected async exportPanoramaDocx(): Promise<void> { return this.runExport('docx'); }

@@ -65,4 +65,30 @@ describe('buildProcessContent', () => {
     expect(exporter.getContent().title).toBe('流程：申请流程');
     expect(await exporter.captureAll()).toHaveLength(1);
   });
+
+  it('prefixes composed process and node headings when a hierarchy prefix is provided', () => {
+    const document = {
+      meta: {},
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'process-a', name: 'Process A', nodes: [{ uid: 'node-a', name: 'Node A' }] }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [],
+      services: [],
+      terms: [],
+      dataDictionaries: [],
+      rules: [],
+    } satisfies BlmDocument;
+
+    const content = buildProcessContent(document, document.processes[0], { headingPrefix: '2.1.1.1' });
+
+    expect(content.sections).toEqual(expect.arrayContaining([
+      { type: 'heading4', text: '2.1.1.1 流程：Process A' },
+      { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
+    ]));
+  });
 });

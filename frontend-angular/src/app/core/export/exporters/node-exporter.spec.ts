@@ -85,7 +85,7 @@ describe('buildNodeContent', () => {
         ['所属流程', '订单办理'],
       ]) },
       { type: 'heading6', text: '办理步骤' },
-      { type: 'table', headers: ['序号', '步骤', '类型', '说明'], richTextColumns: [3], rows: [
+      { type: 'table', headers: ['序号', '步骤', '类型', '说明'], columnWidths: [6, 24, 14, 56], richTextColumns: [3], rows: [
         ['1', '录入订单', '点击', '填写基础信息'],
         ['2', '复核订单', '人工', '复核提交内容'],
       ] },
@@ -129,5 +129,43 @@ describe('buildNodeContent', () => {
     expect(exporter.label).toBe('node-复核订单');
     expect(exporter.getContent().title).toBe('节点：复核订单');
     expect(await exporter.captureAll()).toEqual([]);
+  });
+
+  it('narrows the step number column and prefixes composed node headings', () => {
+    const node: ProcessNode = {
+      uid: 'node-a',
+      name: 'Node A',
+      userSteps: [{ uid: 'step-a', name: 'Input', type: 'Click', note: 'Long description' }],
+    } as any;
+    const document = {
+      meta: {},
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'process-a', name: 'Process A', nodes: [node] }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [],
+      services: [],
+      terms: [],
+      dataDictionaries: [],
+      rules: [],
+    } satisfies BlmDocument;
+
+    const content = buildNodeContent(document, node, {
+      process: document.processes[0],
+      headingPrefix: '2.1.1.1.1',
+    });
+    const stepTable = content.sections.find((section) =>
+      section.type === 'table' && section.headers?.join('|') === '序号|步骤|类型|说明'
+    );
+
+    expect(content.sections).toEqual(expect.arrayContaining([
+      { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
+      { type: 'heading6', text: '2.1.1.1.1.1 办理步骤' },
+    ]));
+    expect(stepTable?.columnWidths).toEqual([6, 24, 14, 56]);
   });
 });

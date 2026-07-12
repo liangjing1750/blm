@@ -6,6 +6,8 @@ const COLLAB_DRAFT_DB_NAME = 'blm-collab-drafts';
 const COLLAB_DRAFT_STORE_NAME = 'drafts';
 const COLLAB_DRAFT_STORAGE_PREFIX = 'blm.collab.draft.';
 const COLLAB_USER_PROFILE_KEY = 'blm.user.profile';
+const COLLAB_USER_ID_KEY = 'blm.collab.userId';
+const COLLAB_USER_NAME_KEY = 'blm.collab.userName';
 const COLLAB_USER_SESSION_KEY = 'blm.user.sessionId';
 const COLLAB_LEGACY_SESSION_KEY = 'blm.collab.sessionId';
 
@@ -116,8 +118,8 @@ export class LocalCollabDraftService {
     } catch {
       profile = null;
     }
-    const id = String(profile?.id || '').trim() || 'anonymous';
-    const name = String(profile?.name || '').trim();
+    const id = String(localStorage.getItem(COLLAB_USER_ID_KEY) || profile?.id || '').trim() || 'anonymous';
+    const name = String(localStorage.getItem(COLLAB_USER_NAME_KEY) || profile?.name || '').trim();
     let sessionId = sessionStorage.getItem(COLLAB_USER_SESSION_KEY) || sessionStorage.getItem(COLLAB_LEGACY_SESSION_KEY) || '';
     if (!sessionId) {
       sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -133,8 +135,21 @@ export class LocalCollabDraftService {
     return `${String(docName || '').trim()}::${String(userId || 'anonymous').trim() || 'anonymous'}`;
   }
 
-  private storageKey(docName: string): string {
-    return `${COLLAB_DRAFT_STORAGE_PREFIX}${encodeURIComponent(this.draftKey(docName))}`;
+  private draftKeys(docName: string): string[] {
+    const keys = [this.draftKey(docName)];
+    try {
+      const legacy = JSON.parse(localStorage.getItem(COLLAB_USER_PROFILE_KEY) || 'null');
+      const legacyId = String(legacy?.id || '').trim();
+      if (legacyId) keys.push(this.draftKey(docName, legacyId));
+    } catch {
+      // Ignore malformed legacy profile records.
+    }
+    keys.push(this.draftKey(docName, 'anonymous'));
+    return Array.from(new Set(keys));
+  }
+
+  private storageKey(docName: string, key = this.draftKey(docName)): string {
+    return `${COLLAB_DRAFT_STORAGE_PREFIX}${encodeURIComponent(key)}`;
   }
 
   private async putDraftRecord(record: LocalCollabDraftRecord): Promise<void> {
@@ -148,39 +163,57 @@ export class LocalCollabDraftService {
       }).finally(() => db.close());
       return;
     }
-    localStorage.setItem(this.storageKey(record.docName), JSON.stringify(record));
+    localStorage.setItem(this.storageKey(record.docName, record.key), JSON.stringify(record));
   }
 
   private async getDraftRecord(docName: string): Promise<LocalCollabDraftRecord | null> {
-    const key = this.draftKey(docName);
+    const keys = this.draftKeys(docName);
     const db = await this.openDraftDb();
     if (db) {
       try {
         return await new Promise<LocalCollabDraftRecord | null>((resolve, reject) => {
           const tx = db.transaction(COLLAB_DRAFT_STORE_NAME, 'readonly');
-          const request = tx.objectStore(COLLAB_DRAFT_STORE_NAME).get(key);
-          request.onsuccess = () => resolve(request.result || null);
-          request.onerror = () => reject(request.error || new Error('draft db read failed'));
+          const store = tx.objectStore(COLLAB_DRAFT_STORE_NAME);
+          let settled = false;
+          let pending = keys.length;
+          const finish = (value: LocalCollabDraftRecord | null) => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+          };
+          for (const key of keys) {
+            const request = store.get(key);
+            request.onsuccess = () => {
+              if (request.result) finish(request.result);
+              else if (--pending === 0) finish(null);
+            };
+            request.onerror = () => reject(request.error || new Error('draft db read failed'));
+          }
         }).finally(() => db.close());
       } catch {
         // IndexedDB 读取失败时回落到旧版 localStorage fallback。
       }
     }
-    try {
-      return JSON.parse(localStorage.getItem(this.storageKey(docName)) || 'null');
-    } catch {
-      return null;
+    for (const key of keys) {
+      try {
+        const draft = JSON.parse(localStorage.getItem(this.storageKey(docName, key)) || 'null');
+        if (draft) return draft;
+      } catch {
+        // Continue with the next compatibility key.
+      }
     }
+    return null;
   }
 
   private async deleteDraftRecord(docName: string): Promise<void> {
-    const key = this.draftKey(docName);
+    const keys = this.draftKeys(docName);
     const db = await this.openDraftDb();
     if (db) {
       try {
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction(COLLAB_DRAFT_STORE_NAME, 'readwrite');
-          tx.objectStore(COLLAB_DRAFT_STORE_NAME).delete(key);
+          const store = tx.objectStore(COLLAB_DRAFT_STORE_NAME);
+          for (const key of keys) store.delete(key);
           tx.oncomplete = () => resolve();
           tx.onerror = () => reject(tx.error || new Error('draft db delete failed'));
         }).finally(() => db.close());
@@ -188,7 +221,9 @@ export class LocalCollabDraftService {
         // 保留 fallback 清理，避免 IndexedDB 临时失败导致草稿一直残留。
       }
     }
-    localStorage.removeItem(this.storageKey(docName));
+    for (const key of keys) {
+      localStorage.removeItem(this.storageKey(docName, key));
+    }
   }
 
   private openDraftDb(): Promise<IDBDatabase | null> {

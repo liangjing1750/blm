@@ -10,6 +10,7 @@ import { ViewContent, ViewExporter, ViewSection } from './view-exporter';
 
 export interface NodeExportOptions {
   process?: Process | null;
+  headingPrefix?: string;
 }
 
 export class NodeExporter implements ViewExporter {
@@ -55,8 +56,9 @@ export function buildNodeContent(
 ): ViewContent {
   const process = options.process || findOwningProcess(document, node);
   const nodeTitle = display(node.name, identityOf(node), '未命名节点');
+  const prefix = display(options.headingPrefix, '', '');
   const sections: ViewSection[] = [
-    { type: 'heading5', text: `节点：${nodeTitle}` },
+    { type: 'heading5', text: headingText(prefix, `节点：${nodeTitle}`) },
     {
       type: 'table',
       headers: ['字段', '内容'],
@@ -67,15 +69,15 @@ export function buildNodeContent(
     },
   ];
 
-  appendHandlingSteps(node, sections);
-  appendHandlingMaterials(document, node, sections);
-  appendHandlingRules(node, sections);
+  appendHandlingSteps(node, sections, childPrefix(prefix, 1));
+  appendHandlingMaterials(document, node, sections, childPrefix(prefix, 2));
+  appendHandlingRules(node, sections, childPrefix(prefix, 3));
 
   return { title: `节点：${nodeTitle}`, sections };
 }
 
-function appendHandlingSteps(node: ProcessNode, sections: ViewSection[]): void {
-  sections.push({ type: 'heading6', text: '办理步骤' });
+function appendHandlingSteps(node: ProcessNode, sections: ViewSection[], prefix = ''): void {
+  sections.push({ type: 'heading6', text: headingText(prefix, '办理步骤') });
   const rows = asArray((node as any).userSteps).map((step: any, index) => [
     String(index + 1),
     display(step.name, step.uid || step.id, `步骤${index + 1}`),
@@ -85,13 +87,14 @@ function appendHandlingSteps(node: ProcessNode, sections: ViewSection[]): void {
   sections.push({
     type: 'table',
     headers: ['序号', '步骤', '类型', '说明'],
+    columnWidths: [6, 24, 14, 56],
     richTextColumns: [3],
     rows: rows.length ? rows : [['', '未配置', '', '']],
   });
 }
 
-function appendHandlingMaterials(document: BlmDocument, node: ProcessNode, sections: ViewSection[]): void {
-  sections.push({ type: 'heading6', text: '办理材料' });
+function appendHandlingMaterials(document: BlmDocument, node: ProcessNode, sections: ViewSection[], prefix = ''): void {
+  sections.push({ type: 'heading6', text: headingText(prefix, '办理材料') });
   const forms = node.forms || [];
   if (!forms.length) {
     sections.push({
@@ -104,7 +107,7 @@ function appendHandlingMaterials(document: BlmDocument, node: ProcessNode, secti
     return;
   }
   forms.forEach((form, index) => {
-    sections.push({ type: 'heading7', text: `表单${index + 1}：${display(form.name, form.uid, '未命名表单')}` });
+    sections.push({ type: 'heading7', text: headingText(childPrefix(prefix, index + 1), `表单${index + 1}：${display(form.name, form.uid, '未命名表单')}`) });
     const rows = formFieldRows(form);
     sections.push({
       type: 'table',
@@ -116,8 +119,8 @@ function appendHandlingMaterials(document: BlmDocument, node: ProcessNode, secti
   });
 }
 
-function appendHandlingRules(node: ProcessNode, sections: ViewSection[]): void {
-  sections.push({ type: 'heading6', text: '办理规则' });
+function appendHandlingRules(node: ProcessNode, sections: ViewSection[], prefix = ''): void {
+  sections.push({ type: 'heading6', text: headingText(prefix, '办理规则') });
   const rows = asArray((node as any).businessRules).map((rule: any, index) => {
     if (typeof rule === 'string') return [`规则${index + 1}`, rule];
     return [
@@ -201,6 +204,14 @@ function asArray<T = any>(value: T[] | null | undefined): T[] {
 
 function display(primary: unknown, fallback: unknown, empty: string): string {
   return String(primary || fallback || empty).trim();
+}
+
+function childPrefix(prefix: string, index: number): string {
+  return prefix ? `${prefix}.${index}` : '';
+}
+
+function headingText(prefix: string, text: string): string {
+  return prefix ? `${prefix} ${text}` : text;
 }
 
 function safeFileSegment(value: string): string {

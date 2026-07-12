@@ -75,3 +75,38 @@ describe('StageExporter', () => {
     expect(await exporter.captureAll()).toHaveLength(3);
   });
 });
+
+describe('buildStageContent numbering', () => {
+  it('prefixes stage, flow group, process and node headings', () => {
+    const document = {
+      meta: {},
+      roles: [],
+      stages: [{ uid: 'stage-a', name: 'Stage A' }],
+      stageFlowRefs: [{ uid: 'ref-a', stageUid: 'stage-a', processUid: 'process-a', order: 1 }],
+      processes: [{
+        uid: 'process-a',
+        name: 'Process A',
+        flowGroup: 'Group A',
+        nodes: [{ uid: 'node-a', name: 'Node A' }],
+      } as any],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [],
+      services: [],
+      terms: [],
+      dataDictionaries: [],
+      rules: [],
+    } satisfies BlmDocument;
+
+    const content = buildStageContent(document, document.stages[0], { headingPrefix: '2.1' });
+
+    expect(content.sections).toEqual(expect.arrayContaining([
+      { type: 'heading2', text: '2.1 阶段：Stage A' },
+      { type: 'heading3', text: '2.1.1 流程组：Group A' },
+      { type: 'heading4', text: '2.1.1.1 流程：Process A' },
+      { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
+    ]));
+  });
+});

@@ -3,6 +3,10 @@ import { identityOf } from '../../document/document-model';
 import { buildNodeContent } from './node-exporter';
 import { ViewContent, ViewExporter, ViewSection } from './view-exporter';
 
+export interface ProcessExportBuildOptions {
+  headingPrefix?: string;
+}
+
 export class ProcessExporter implements ViewExporter {
   readonly label: string;
 
@@ -39,10 +43,15 @@ export class ProcessExporter implements ViewExporter {
  * 关键流程：流程自身输出四级标题和流程图 image，然后按流程节点顺序拼接 buildNodeContent() 的五级节点片段。
  * 边界细节：阶段/价值流标题不在这里补齐，避免局部流程导出冒充上层上下文。
  */
-export function buildProcessContent(document: BlmDocument, process: Process): ViewContent {
+export function buildProcessContent(
+  document: BlmDocument,
+  process: Process,
+  options: ProcessExportBuildOptions = {},
+): ViewContent {
   const processTitle = display(process.name, identityOf(process), '未命名流程');
+  const prefix = display(options.headingPrefix, '', '');
   const sections: ViewSection[] = [
-    { type: 'heading4', text: `流程：${processTitle}` },
+    { type: 'heading4', text: headingText(prefix, `流程：${processTitle}`) },
     {
       type: 'table',
       headers: ['字段', '内容'],
@@ -54,9 +63,12 @@ export function buildProcessContent(document: BlmDocument, process: Process): Vi
     { type: 'image', text: `流程图：${processTitle}`, imageIndex: 0 },
   ];
 
-  for (const node of process.nodes || []) {
-    sections.push(...buildNodeContent(document, node, { process }).sections);
-  }
+  (process.nodes || []).forEach((node, index) => {
+    sections.push(...buildNodeContent(document, node, {
+      process,
+      headingPrefix: childPrefix(prefix, index + 1),
+    }).sections);
+  });
 
   return { title: `流程：${processTitle}`, sections };
 }
@@ -70,7 +82,13 @@ export async function captureProcessFlowGraph(graphId = ''): Promise<Uint8Array>
     document.querySelector<HTMLElement>('[data-testid="process-flow-canvas"]');
   if (!el) return new Uint8Array();
 
-  return captureFullElement(el);
+  return captureProcessElement(el);
+}
+
+async function captureProcessElement(el: HTMLElement): Promise<Uint8Array> {
+  const bounds = processContentBounds(el);
+  if (!bounds) return captureFullElement(el);
+  return captureElementRegion(el, bounds);
 }
 
 export async function captureFullElement(el: HTMLElement): Promise<Uint8Array> {
@@ -106,6 +124,34 @@ export async function captureFullElement(el: HTMLElement): Promise<Uint8Array> {
         canvas.toBlob((blob) => resolve(blob!.arrayBuffer()), 'image/png'),
       ));
     }
+  } finally {
+    restoreFns.reverse().forEach((restore) => restore());
+  }
+}
+
+async function captureElementRegion(
+  el: HTMLElement,
+  region: { x: number; y: number; width: number; height: number },
+): Promise<Uint8Array> {
+  const restoreFns: Array<() => void> = [];
+  prepareElementForFullCapture(el, restoreFns);
+  try {
+    const html2canvas = (await import('html2canvas')).default;
+    const canvas = await html2canvas(el, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      x: region.x,
+      y: region.y,
+      width: region.width,
+      height: region.height,
+      windowWidth: el.scrollWidth || el.offsetWidth,
+      windowHeight: el.scrollHeight || el.offsetHeight,
+      scrollX: 0,
+      scrollY: 0,
+    });
+    return new Uint8Array(await new Promise<ArrayBuffer>((resolve) =>
+      canvas.toBlob((blob) => resolve(blob!.arrayBuffer()), 'image/png'),
+    ));
   } finally {
     restoreFns.reverse().forEach((restore) => restore());
   }
@@ -147,8 +193,44 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
   return bytes;
 }
 
+function processContentBounds(el: HTMLElement): { x: number; y: number; width: number; height: number } | null {
+  const targets = Array.from(el.querySelectorAll<HTMLElement>(
+    '[data-testid="process-flow-terminal"], [data-testid="process-flow-node"], [data-testid="process-flow-gateway"], [data-testid="process-flow-edge-label"]',
+  ));
+  if (!targets.length) return null;
+
+  const hostRect = el.getBoundingClientRect();
+  const rects = targets
+    .map((target) => target.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  if (!rects.length) return null;
+
+  const pad = 72;
+  const minX = Math.max(0, Math.floor(Math.min(...rects.map((rect) => rect.left)) - hostRect.left - pad));
+  const minY = Math.max(0, Math.floor(Math.min(...rects.map((rect) => rect.top)) - hostRect.top - pad));
+  const maxX = Math.min(
+    el.scrollWidth || el.offsetWidth,
+    Math.ceil(Math.max(...rects.map((rect) => rect.right)) - hostRect.left + pad),
+  );
+  const maxY = Math.min(
+    el.scrollHeight || el.offsetHeight,
+    Math.ceil(Math.max(...rects.map((rect) => rect.bottom)) - hostRect.top + pad),
+  );
+  const width = Math.max(320, maxX - minX);
+  const height = Math.max(220, maxY - minY);
+  return { x: minX, y: minY, width, height };
+}
+
 function display(primary: unknown, fallback: unknown, empty: string): string {
   return String(primary || fallback || empty).trim();
+}
+
+function childPrefix(prefix: string, index: number): string {
+  return prefix ? `${prefix}.${index}` : '';
+}
+
+function headingText(prefix: string, text: string): string {
+  return prefix ? `${prefix} ${text}` : text;
 }
 
 function safeFileSegment(value: string): string {

@@ -116,8 +116,13 @@ describe('createCurrentNodeExporter', () => {
   it('creates a ValueStreamExporter for the value domain view', () => {
     const document = {
       meta: { domain: '订单中心' },
+      panorama: {
+        columns: [{ uid: 'col-in', name: '入库', badge: '入库' }],
+        lanes: [{ uid: 'lane-main', name: '主线' }],
+        cells: [],
+      },
       roles: [],
-      stages: [],
+      stages: [{ uid: 'stage-in', name: '入库阶段', panoramaColumnUid: 'col-in', panoramaLaneUid: 'lane-main' }],
       stageFlowRefs: [],
       processes: [],
       entities: [],
@@ -135,8 +140,9 @@ describe('createCurrentNodeExporter', () => {
 
     expect(exporter.label).toBe('value-stream');
     expect(exporter.getContent().sections).toEqual(expect.arrayContaining([
-      { type: 'heading1', text: '价值流环节' },
       { type: 'image', text: '价值流视图', imageIndex: 0 },
+      { type: 'heading1', text: '2.价值流环节：入库' },
+      { type: 'heading2', text: '2.1 阶段：入库阶段' },
     ]));
   });
 });

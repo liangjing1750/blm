@@ -5,6 +5,11 @@ import { buildStageContent, StageExporter } from './stage-exporter';
 import { captureFullElement } from './process-exporter';
 import { ViewContent, ViewExporter, ViewSection } from './view-exporter';
 
+interface ValueStreamChapter {
+  title: string;
+  stages: Stage[];
+}
+
 export class ValueStreamExporter implements ViewExporter {
   readonly label = 'value-stream';
 
@@ -25,10 +30,16 @@ export class ValueStreamExporter implements ViewExporter {
     return captureValueStreamGraph();
   }
 
-  async captureAll(): Promise<Uint8Array[]> {
+  async captureAll(onProgress?: (done: number, total: number, label?: string) => void): Promise<Uint8Array[]> {
     const screenshots: Uint8Array[] = [await this.capture()];
-    for (const stage of stagesForValueStream(this.document)) {
-      screenshots.push(...await new StageExporter(this.document, stage).captureAll());
+    const stages = stagesForValueStream(this.document);
+    const total = 1 + stages.reduce((sum, stage) => sum + 1 + processesForStageCount(this.document, stage), 0);
+    onProgress?.(1, Math.max(1, total), '价值流视图');
+    for (const stage of stages) {
+      const before = screenshots.length;
+      screenshots.push(...await new StageExporter(this.document, stage).captureAll((done, stageTotal, label) => {
+        onProgress?.(before + done, Math.max(total, before + stageTotal), label);
+      }));
     }
     return screenshots;
   }
@@ -41,27 +52,52 @@ export class ValueStreamExporter implements ViewExporter {
  */
 export function buildValueStreamContent(document: BlmDocument): ViewContent {
   const sections: ViewSection[] = [
-    { type: 'heading1', text: '价值流环节' },
     { type: 'image', text: '价值流视图', imageIndex: 0 },
   ];
 
   let imageOffset = 1;
-  for (const stage of stagesForValueStream(document)) {
-    const stageContent = buildStageContent(document, stage);
-    sections.push(...offsetImageSections(stageContent.sections, imageOffset));
-    imageOffset += countImages(stageContent.sections);
-  }
+  valueStreamChapters(document).forEach((chapter, chapterIndex) => {
+    const chapterNo = chapterIndex + 2;
+    sections.push({ type: 'heading1', text: `${chapterNo}.价值流环节：${chapter.title}` });
+    chapter.stages.forEach((stage, stageIndex) => {
+      const stageContent = buildStageContent(document, stage, {
+        headingPrefix: `${chapterNo}.${stageIndex + 1}`,
+      });
+      sections.push(...offsetImageSections(stageContent.sections, imageOffset));
+      imageOffset += countImages(stageContent.sections);
+    });
+  });
 
   return { title: '价值流环节', sections };
 }
 
 export function stagesForValueStream(document: BlmDocument): Stage[] {
+  return valueStreamChapters(document).flatMap((chapter) => chapter.stages);
+}
+
+export function valueStreamChapters(document: BlmDocument): ValueStreamChapter[] {
+  const columns = Array.isArray((document as any).panorama?.columns)
+    ? (document as any).panorama.columns
+    : [];
   const stages = (document.stages || []).filter((stage: any) => !stage?.virtual);
-  return [...stages].sort((left: any, right: any) => {
-    const leftKey = stageOrderKey(left);
-    const rightKey = stageOrderKey(right);
-    return leftKey.localeCompare(rightKey);
+  const columnIds = columns.map((column: any) => String(column.uid || column.id || '').trim()).filter(Boolean);
+  const chapters: ValueStreamChapter[] = columns.map((column: any, index: number) => {
+    const columnId = String(column.uid || column.id || '').trim();
+    return {
+      title: display(column.badge || column.name || column.scope, columnId, `环节${index + 1}`),
+      stages: sortStages(stages.filter((stage: any) => String(stage.panoramaColumnUid || stage.panoramaColumnId || '').trim() === columnId)),
+    };
   });
+  const unassigned = sortStages(stages.filter((stage: any) => {
+    const columnId = String(stage.panoramaColumnUid || stage.panoramaColumnId || '').trim();
+    return !columnId || !columnIds.includes(columnId);
+  }));
+  if (unassigned.length) chapters.push({ title: '未归属', stages: unassigned });
+  return chapters.filter((chapter) => chapter.stages.length);
+}
+
+function sortStages(stages: Stage[]): Stage[] {
+  return [...stages].sort((left: any, right: any) => stageOrderKey(left).localeCompare(stageOrderKey(right)));
 }
 
 async function captureValueStreamGraph(): Promise<Uint8Array> {
@@ -83,6 +119,16 @@ function countImages(sections: ViewSection[]): number {
   return sections.filter((section) => section.type === 'image').length;
 }
 
+function processesForStageCount(document: BlmDocument, stage: Stage): number {
+  const stageId = identityOf(stage);
+  if (!stageId) return 0;
+  const processIds = new Set((document.stageFlowRefs || [])
+    .filter((ref: any) => String(ref.stageUid || ref.stageId || '').trim() === stageId)
+    .map((ref: any) => String(ref.processUid || ref.processId || '').trim())
+    .filter(Boolean));
+  return (document.processes || []).filter((process) => processIds.has(identityOf(process))).length;
+}
+
 function stageOrderKey(stage: any): string {
   const lane = String(stage.panoramaLaneUid || stage.panoramaLaneId || '').trim();
   const column = String(stage.panoramaColumnUid || stage.panoramaColumnId || '').trim();
@@ -98,4 +144,8 @@ function stageOrderKey(stage: any): string {
 
 function cssEscape(value: string): string {
   return String(value || '').replace(/["\\]/g, '\\$&');
+}
+
+function display(primary: unknown, fallback: unknown, empty: string): string {
+  return String(primary || fallback || empty).trim();
 }

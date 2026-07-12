@@ -7,7 +7,7 @@ export interface ViewExporter {
   capture(): Promise<Uint8Array>;
 
   /** 可选：截取多张截图（优先级高于 capture），索引与 getContent 的 imageIndex 对应 */
-  captureAll?(): Promise<Uint8Array[]>;
+  captureAll?(onProgress?: (done: number, total: number, label?: string) => void): Promise<Uint8Array[]>;
 
   /** 结构化 Markdown 文本（旧接口，逐步迁移到 getContent） */
   toMarkdown(): string;

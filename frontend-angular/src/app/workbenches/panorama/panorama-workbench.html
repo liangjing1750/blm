@@ -1,4 +1,4 @@
-<section class="workbench panorama-workbench">
+﻿<section class="workbench panorama-workbench">
   <div class="proc-view-toolbar panorama-view-toolbar">
     <div class="proc-view-toolbar-main">
       <div class="view-toggle-group" data-testid="panorama-subtabs" aria-label="全景工作台视图">
@@ -24,12 +24,12 @@
         }
         <div class="panorama-export-menu-wrap" style="position:relative;display:inline-block">
           <button class="btn btn-outline btn-sm panorama-toolbar-button" type="button" data-testid="panorama-export-btn" (click)="toggleExportMenu($event)">
-            导出 ▾
+            &#23548;&#20986;
           </button>
           @if (exportMenuOpen()) {
             <div class="panorama-export-dropdown" data-testid="panorama-export-dropdown" style="position:absolute;top:100%;right:0;z-index:100;min-width:120px;border:1px solid #d7e1ee;border-radius:8px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12);padding:4px" (click)="$event.stopPropagation()">
-              <button type="button" class="panorama-export-item" (click)="exportPanoramaZip()">导出 ZIP</button>
-              <button type="button" class="panorama-export-item" (click)="exportPanoramaDocx()">导出 DOCX</button>
+              <button type="button" class="panorama-export-item" (click)="exportPanoramaZip()">&#23548;&#20986;MD</button>
+              <button type="button" class="panorama-export-item" (click)="exportPanoramaDocx()">&#23548;&#20986;Docx</button>
             </div>
           }
         </div>
@@ -165,6 +165,11 @@
     <app-knowledge-workbench initialTab="dictionaryManagement" [editing]="editing()" />
   } @else {
     <app-knowledge-workbench initialTab="rules" [editing]="editing()" />
+  }
+  @if (exportCaptureReady()) {
+    <div class="panorama-export-hidden-role" aria-hidden="true">
+      <app-role-workbench [editing]="false" />
+    </div>
   }
   <app-wait-dialog
     *ngIf="exportWait() as wait"

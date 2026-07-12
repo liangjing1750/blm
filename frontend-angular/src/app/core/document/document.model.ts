@@ -1,3 +1,5 @@
+import { ValueDomainColumn, ValueDomainLane, ValueDomainCell } from './value-domain-model';
+
 export type WorkbenchId =
   | 'panorama'
   | 'process'
@@ -22,6 +24,14 @@ export interface BlmDocument {
   terms: KnowledgeTerm[];
   dataDictionaries: DataDictionary[];
   rules: BusinessRule[];
+  /** 价值流与业务域矩阵（全景视图使用） */
+  panorama?: {
+    columns?: ValueDomainColumn[];
+    lanes?: ValueDomainLane[];
+    cells?: ValueDomainCell[];
+  };
+  stageLinks?: Array<{ fromStageUid?: string; toStageUid?: string }>;
+  stageFlowLinks?: Array<{ stageUid?: string; fromRefUid?: string; toRefUid?: string }>;
 }
 
 export interface DocumentMeta {

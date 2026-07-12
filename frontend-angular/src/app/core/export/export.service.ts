@@ -9,6 +9,7 @@ export interface ExportProgress {
   current: number;
   total: number;
   label: string;
+  phase?: 'content' | 'capture' | 'assemble' | 'download';
 }
 
 export interface ExportZipFile {
@@ -61,18 +62,31 @@ export class ExportService {
    * - captureAll() / capture() 获取截图
    * - 按截图数补全 image section，保证 index 不越界
    */
-  async exportView(exporter: ViewExporter, format: 'docx' | 'zip'): Promise<void> {
+  async exportView(
+    exporter: ViewExporter,
+    format: 'docx' | 'zip',
+    onProgress?: (p: ExportProgress) => void,
+  ): Promise<void> {
+    onProgress?.({ current: 1, total: 4, label: exporter.label, phase: 'content' });
     const content = exporter.getContent();
-    const pngs = exporter.captureAll ? await exporter.captureAll() : [await exporter.capture()];
+    onProgress?.({ current: 2, total: 4, label: exporter.label, phase: 'capture' });
+    const pngs = exporter.captureAll
+      ? await exporter.captureAll((done, total, label) => {
+        onProgress?.({ current: done, total, label: label || exporter.label, phase: 'capture' });
+      })
+      : [await exporter.capture()];
 
     // 防御：截图数 > content 中声明的 image 数时，自动补全 image section
     ensureImageSections(content, pngs.length);
+    onProgress?.({ current: 3, total: 4, label: exporter.label, phase: 'assemble' });
 
     if (format === 'docx') {
       const blob = await buildSingleViewDocxBlob(content, pngs);
+      onProgress?.({ current: 4, total: 4, label: exporter.label, phase: 'download' });
       downloadBlob(blob, `${exporter.label}.docx`);
     } else {
       const blob = buildZip(buildSingleViewZipFiles(exporter.label, content, pngs));
+      onProgress?.({ current: 4, total: 4, label: exporter.label, phase: 'download' });
       downloadBlob(blob, `${exporter.label}.zip`);
     }
   }

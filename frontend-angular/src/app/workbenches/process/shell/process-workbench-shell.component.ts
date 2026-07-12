@@ -14,7 +14,8 @@ import { ProcessFlowWorkbenchComponent } from '../flow/process-flow-workbench.co
 import { ProcessStageWorkbenchComponent } from '../stage/process-stage-workbench.component';
 import { ValueDomainWorkbenchComponent } from '../value-domain/value-domain-workbench.component';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified } from '../../../core/runtime/angular-runtime';
-import { ExportService } from '../../../core/export/export.service';
+import { ExportProgress, ExportService } from '../../../core/export/export.service';
+import { WaitDialogComponent } from '../../../core/shell/wait-dialog/wait-dialog.component';
 import { exportGraphId } from '../../../core/export/graph-export-registry';
 import { identityOf } from '../../../core/document/document-model';
 import { processesForStage } from '../../../core/export/exporters/stage-exporter';
@@ -36,6 +37,7 @@ import { createCurrentNodeExporter, createCurrentProcessExporter, createCurrentS
     ProcessFlowWorkbenchComponent,
     ProcessEditorWorkbenchComponent,
     ValueDomainWorkbenchComponent,
+    WaitDialogComponent,
   ],
   templateUrl: './process-workbench-shell.component.html',
   styleUrl: './process-workbench-shell.component.scss',
@@ -69,6 +71,7 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
   protected readonly editorAdapter = createProcessEditorLegacyAdapter();
   protected readonly viewState = signal<ProcessShellView>(this.adapter.view());
   protected readonly exportMenuOpen = signal(false);
+  protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
   /** 控制隐藏预渲染区：只有导出时才设为 true，避免切换视图时一次性渲染全部阶段/流程组件 */
   protected readonly exportCaptureReady = signal(false);
   @ViewChild(ValueDomainWorkbenchComponent) private valueDomainWorkbench?: ValueDomainWorkbenchComponent;
@@ -401,23 +404,53 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
           : this.view() === 'node'
             ? createCurrentNodeExporter(runtime.doc, ui)
             : null;
-    if (!exporter) return;
+    if (!exporter) {
+      this.exportWait.set({ title: '当前视图暂不支持导出', description: '', progress: 0 });
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      this.exportWait.set(null);
+      return;
+    }
 
     // 价值流/阶段视图需要预渲染隐藏的图形组件才能截图：
     // 平时不渲染（切换视图不卡），只在导出时临时打开→等待→截图→关闭
     const needsPreRender = this.view() === 'valueDomain' || this.view() === 'stage';
     if (needsPreRender) {
+      this.exportWait.set({ title: `正在导出 ${exporter.label}`, description: '正在准备截图区域', progress: 5 });
       this.exportCaptureReady.set(true);
       await this.waitForExportGraphs(this.requiredExportGraphIds());
     }
 
     try {
-      await this.exportSvc.exportView(exporter, format);
+      this.exportWait.set({ title: `正在导出 ${exporter.label}`, description: '准备导出内容', progress: 8 });
+      await this.exportSvc.exportView(exporter, format, (progress) => this.updateExportProgress(progress));
+      this.exportWait.set({ title: '完成', description: '', progress: 100 });
+    } catch (error) {
+      this.exportWait.set({ title: '导出失败', description: error instanceof Error ? error.message : String(error), progress: 0 });
     } finally {
       if (needsPreRender) {
         this.exportCaptureReady.set(false);
       }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      this.exportWait.set(null);
     }
+  }
+
+  private updateExportProgress(progress: ExportProgress): void {
+    const phaseBase = progress.phase === 'content' ? 10 : progress.phase === 'capture' ? 20 : progress.phase === 'assemble' ? 84 : 94;
+    const phaseSpan = progress.phase === 'capture' ? 60 : progress.phase === 'assemble' ? 10 : 6;
+    const ratio = progress.total > 0 ? progress.current / progress.total : 0;
+    this.exportWait.set({
+      title: `正在导出 ${progress.label}`,
+      description: this.exportPhaseText(progress),
+      progress: Math.min(99, Math.round(phaseBase + phaseSpan * ratio)),
+    });
+  }
+
+  private exportPhaseText(progress: ExportProgress): string {
+    if (progress.phase === 'capture') return `正在截图 ${progress.current}/${progress.total}`;
+    if (progress.phase === 'assemble') return '正在生成文件';
+    if (progress.phase === 'download') return '正在下载';
+    return '正在准备内容';
   }
 
   private requiredExportGraphIds(): string[] {

@@ -1,4 +1,3 @@
-import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAngularRuntimeState } from '../runtime/angular-runtime';
 import { LocalCollabDraftService } from './local-collab-draft.service';
@@ -22,8 +21,10 @@ describe('LocalCollabDraftService', () => {
     runtime.collab.draftBaseSeqOverride = undefined;
   });
 
+  const createService = () => new LocalCollabDraftService({ load: vi.fn() } as any);
+
   it('persists drafts with the legacy doc-and-user key in localStorage fallback', async () => {
-    const service = TestBed.inject(LocalCollabDraftService);
+    const service = createService();
     const runtime = getAngularRuntimeState();
     runtime.doc = { meta: { title: '本地草稿' }, processes: [{ uid: 'p1' }] };
 
@@ -43,7 +44,7 @@ describe('LocalCollabDraftService', () => {
   });
 
   it('returns a recoverable draft only when it differs from the server document', async () => {
-    const service = TestBed.inject(LocalCollabDraftService);
+    const service = createService();
     const runtime = getAngularRuntimeState();
 
     runtime.doc = { meta: { title: '本地草稿' } };
@@ -57,8 +58,39 @@ describe('LocalCollabDraftService', () => {
     expect(localStorage.getItem(`blm.collab.draft.${encodeURIComponent('订单流程::user-test')}`)).toBeNull();
   });
 
+  it('finds and clears legacy-profile drafts after collaboration user id migration', async () => {
+    const service = createService();
+    localStorage.setItem('blm.user.profile', JSON.stringify({ id: 'legacy-user', name: '旧用户' }));
+    localStorage.setItem('blm.collab.userId', 'current-user');
+    localStorage.setItem('blm.collab.userName', '当前用户');
+    const legacyKey = `blm.collab.draft.${encodeURIComponent('订单流程::legacy-user')}`;
+    const currentKey = `blm.collab.draft.${encodeURIComponent('订单流程::current-user')}`;
+    const legacyDraft = {
+      key: '订单流程::legacy-user',
+      docName: '订单流程',
+      userId: 'legacy-user',
+      userName: '旧用户',
+      sessionId: 'session-test',
+      baseSeq: 2,
+      generation: 1,
+      updatedAt: '2026-07-12T01:00:00.000Z',
+      contentHash: '',
+      document: { meta: { title: '旧 key 草稿' } },
+    };
+    localStorage.setItem(legacyKey, JSON.stringify(legacyDraft));
+    localStorage.setItem(currentKey, JSON.stringify({ ...legacyDraft, key: '订单流程::current-user', userId: 'current-user' }));
+
+    expect((await service.findRecoverableDraft('订单流程', { meta: { title: '服务端' } }))?.document)
+      .toEqual({ meta: { title: '旧 key 草稿' } });
+
+    await service.clearDraft('订单流程');
+
+    expect(localStorage.getItem(legacyKey)).toBeNull();
+    expect(localStorage.getItem(currentKey)).toBeNull();
+  });
+
   it('applies a recovered draft to runtime with pending snapshot and draft base seq', async () => {
-    const service = TestBed.inject(LocalCollabDraftService);
+    const service = createService();
 
     service.applyRecoveredDraft('订单流程', {
       key: '订单流程::user-test',

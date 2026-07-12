@@ -4,6 +4,10 @@ import { exportGraphId } from '../graph-export-registry';
 import { buildProcessContent, captureFullElement, captureProcessFlowGraph } from './process-exporter';
 import { ViewContent, ViewExporter, ViewSection } from './view-exporter';
 
+export interface StageExportBuildOptions {
+  headingPrefix?: string;
+}
+
 interface StageProcessEntry {
   process: Process;
   order: number;
@@ -35,10 +39,13 @@ export class StageExporter implements ViewExporter {
     return captureStageGraph(this.graphId || exportGraphId('stage-flow', identityOf(this.stage)));
   }
 
-  async captureAll(): Promise<Uint8Array[]> {
+  async captureAll(onProgress?: (done: number, total: number, label?: string) => void): Promise<Uint8Array[]> {
     const screenshots: Uint8Array[] = [await this.capture()];
-    for (const process of processesForStage(this.document, this.stage)) {
+    const processes = processesForStage(this.document, this.stage);
+    onProgress?.(1, Math.max(1, processes.length + 1), `阶段视图：${display(this.stage.name, identityOf(this.stage), '')}`);
+    for (const process of processes) {
       screenshots.push(await captureProcessFlowGraph(exportGraphId('process-flow', identityOf(process))));
+      onProgress?.(screenshots.length, processes.length + 1, `流程图：${display(process.name, identityOf(process), '')}`);
     }
     return screenshots;
   }
@@ -49,22 +56,30 @@ export class StageExporter implements ViewExporter {
  * 关键流程：阶段自身输出二级标题和阶段视图图片，之后按 flowGroup 分组，把 buildProcessContent() 的图片索引整体后移。
  * 边界细节：节点标题层级由 NodeExporter 维护，这里只处理阶段/流程组/流程三层，避免局部导出重复定义节点格式。
  */
-export function buildStageContent(document: BlmDocument, stage: Stage): ViewContent {
+export function buildStageContent(
+  document: BlmDocument,
+  stage: Stage,
+  options: StageExportBuildOptions = {},
+): ViewContent {
   const stageTitle = display(stage.name, identityOf(stage), '未命名阶段');
+  const prefix = display(options.headingPrefix, '', '');
   const sections: ViewSection[] = [
-    { type: 'heading2', text: `阶段：${stageTitle}` },
+    { type: 'heading2', text: headingText(prefix, `阶段：${stageTitle}`) },
     { type: 'image', text: `阶段视图：${stageTitle}`, imageIndex: 0 },
   ];
 
   let imageOffset = 1;
-  for (const group of groupedStageProcesses(document, stage)) {
-    sections.push({ type: 'heading3', text: `流程组：${group.name}` });
-    for (const process of group.processes) {
-      const processContent = buildProcessContent(document, process);
+  groupedStageProcesses(document, stage).forEach((group, groupIndex) => {
+    const groupPrefix = childPrefix(prefix, groupIndex + 1);
+    sections.push({ type: 'heading3', text: headingText(groupPrefix, `流程组：${group.name}`) });
+    group.processes.forEach((process, processIndex) => {
+      const processContent = buildProcessContent(document, process, {
+        headingPrefix: childPrefix(groupPrefix, processIndex + 1),
+      });
       sections.push(...offsetImageSections(processContent.sections, imageOffset));
       imageOffset += countImages(processContent.sections);
-    }
-  }
+    });
+  });
 
   return { title: `阶段：${stageTitle}`, sections };
 }
@@ -147,6 +162,14 @@ function objectKeys(value: { uid?: string; id?: string; name?: string }): Set<st
 
 function display(primary: unknown, fallback: unknown, empty: string): string {
   return String(primary || fallback || empty).trim();
+}
+
+function childPrefix(prefix: string, index: number): string {
+  return prefix ? `${prefix}.${index}` : '';
+}
+
+function headingText(prefix: string, text: string): string {
+  return prefix ? `${prefix} ${text}` : text;
 }
 
 function safeFileSegment(value: string): string {

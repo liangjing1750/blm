@@ -26,6 +26,17 @@
   color: #1d4ed8;
 }
 
+.panorama-export-hidden-role {
+  position: fixed;
+  left: -20000px;
+  top: 0;
+  width: 1280px;
+  min-height: 720px;
+  background: #fff;
+  pointer-events: none;
+  z-index: -1;
+}
+
 .panorama-toolbar-button {
   min-height: 0;
   height: 26px;
