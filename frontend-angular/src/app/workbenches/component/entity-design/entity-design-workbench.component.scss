@@ -959,10 +959,17 @@
 }
 
 .entity-edit-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 8px;
   color: #0f172a;
   font-size: 13px;
   font-weight: 700
+}
+
+.entity-relation-debug-toggle {
+  margin-left: auto
 }
 
 .entity-section-head {
@@ -1198,6 +1205,59 @@
 
 .no-refs {
   font-style: italic
+}
+
+.entity-relation-debug {
+  max-height: 220px;
+  margin: 8px 0 10px;
+  overflow: auto;
+  border: 1px solid #dbe7f3;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 11px
+}
+
+.entity-relation-debug-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  border-bottom: 1px solid #dbe7f3;
+  background: #eef5ff;
+  color: #17406d;
+  font-weight: 800
+}
+
+.entity-relation-debug table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse
+}
+
+.entity-relation-debug th,
+.entity-relation-debug td {
+  padding: 5px 6px;
+  border-bottom: 1px solid #e5edf6;
+  color: #334155;
+  text-align: left;
+  vertical-align: top
+}
+
+.entity-relation-debug th {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 800;
+  white-space: nowrap
+}
+
+.entity-relation-debug code {
+  color: #475569;
+  white-space: pre-wrap;
+  word-break: break-all
+}
+
+.entity-relation-debug .visible-row td {
+  background: #ecfdf5
 }
 
 .rel-row {

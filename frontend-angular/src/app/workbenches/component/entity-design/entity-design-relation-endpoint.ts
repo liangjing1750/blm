@@ -2,6 +2,8 @@ export interface RelationEndpointEntity {
   uid?: string;
   id?: string | null;
   name?: string | null;
+  title?: string | null;
+  label?: string | null;
 }
 
 export interface RelationEndpointValue {
@@ -49,14 +51,17 @@ function matchEndpointByIdentity(entities: RelationEndpointEntity[], raw: string
 function matchEndpointByName(entities: RelationEndpointEntity[], raw: string): string {
   const target = String(raw || '').trim();
   if (!target) return '';
-  const entity = entities.find((item) => String(item.name || '').trim() === target);
+  const entity = entities.find((item) => {
+    const labels = [item.name, item.title, item.label].map((value) => String(value || '').trim()).filter(Boolean);
+    return labels.includes(target);
+  });
   return entity ? entityId(entity) : '';
 }
 
 export function resolveRelationEndpoint(entities: RelationEndpointEntity[], relation: RelationEndpointValue, side: 'from' | 'to'): string {
   // 模块意图：把多代实体关系字段归一成当前下拉框使用的 uid/id，避免旧显示名覆盖真实端点。
   // 关键流程：先在所有候选字段里查找可匹配实体 uid/id 的值，再兼容只保存名称的旧数据。
-  // 边界细节：如果候选值都无法匹配实体，返回第一个原始值，保留未知旧数据而不是静默清空。
+  // 边界细节：如果候选值都无法匹配实体，返回空值，避免 select 把未知旧文本误显示成第一项。
   const candidates = side === 'from'
     ? [
       relation.sourceEntityUid,
@@ -95,5 +100,5 @@ export function resolveRelationEndpoint(entities: RelationEndpointEntity[], rela
   if (identityMatched) return identityMatched;
   const nameMatched = rawValues.map((value) => matchEndpointByName(entities, value)).find(Boolean);
   if (nameMatched) return nameMatched;
-  return rawValues[0] || '';
+  return '';
 }

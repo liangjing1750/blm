@@ -294,13 +294,55 @@
           </section>
 
           <section class="form-section entity-edit-section">
-            <h4>实体关系 <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-relation" (click)="addRelation(entity)" [disabled]="entities().length < 2">＋</button></h4>
+            <h4>
+              实体关系
+              <button class="btn btn-outline btn-sm" type="button" data-testid="entity-design-add-relation" (click)="addRelation(entity)" [disabled]="entities().length < 2">＋</button>
+              <button class="btn btn-ghost-sm entity-relation-debug-toggle" type="button" data-testid="entity-relation-debug-toggle" (click)="toggleRelationDebug()">
+                {{ relationDebugEnabled() ? '关闭诊断' : '诊断' }}
+              </button>
+            </h4>
             <p class="rel-scope-tip">仅显示与当前实体直接相关的关系，减少全局噪音。</p>
+            @if (relationDebugEnabled()) {
+              <div class="entity-relation-debug" data-testid="entity-relation-debug">
+                <div class="entity-relation-debug-title">关系调试：{{ entity.name || entityId(entity) }} / {{ entityId(entity) }}</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>来源</th>
+                      <th>序号</th>
+                      <th>归属</th>
+                      <th>原始值</th>
+                      <th>解析 from</th>
+                      <th>解析 to</th>
+                      <th>select from</th>
+                      <th>select to</th>
+                      <th>命中当前</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of relationDebugRows(entity); track row.scope + '-' + row.index + '-' + row.owner) {
+                      <tr [class.visible-row]="row.visible">
+                        <td>{{ row.scope }}</td>
+                        <td>{{ row.index }}</td>
+                        <td>{{ row.owner || '-' }}</td>
+                        <td><code>{{ row.raw }}</code></td>
+                        <td>{{ row.resolvedFrom || '-' }}</td>
+                        <td>{{ row.resolvedTo || '-' }}</td>
+                        <td>{{ row.fromSelectValue || '-' }}</td>
+                        <td>{{ row.toSelectValue || '-' }}</td>
+                        <td>{{ row.visible ? '是' : '否' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
             @for (relation of relationsForEntity(entity); track relation.uid || relation.id || $index; let index = $index) {
               <div class="rel-row entity-relation-row" data-testid="entity-design-relation-row">
                 <select [value]="relationFromValue(relation) || entityId(entity)" (change)="setRelation(relation, 'from', $any($event.target).value)">
+                  <option value="" disabled>请选择实体</option>
                   @for (source of entities(); track entityId(source)) {
-                    <option [value]="entityId(source)">{{ source.name || entityId(source) }}</option>
+                    <option [value]="entityId(source)" [selected]="entityId(source) === (relationFromValue(relation) || entityId(entity))">{{ source.name || entityId(source) }}</option>
                   }
                 </select>
                 <select class="rel-type-select" (change)="setRelation(relation, 'type', $any($event.target).value)" [value]="relationTypeValue(relation)">
@@ -309,8 +351,9 @@
                   <option value="N:N">N:N</option>
                 </select>
                 <select [value]="relationToValue(relation)" (change)="setRelation(relation, 'to', $any($event.target).value)">
+                  <option value="" disabled>请选择实体</option>
                   @for (target of entities(); track entityId(target)) {
-                    <option [value]="entityId(target)">{{ target.name || entityId(target) }}</option>
+                    <option [value]="entityId(target)" [selected]="entityId(target) === relationToValue(relation)">{{ target.name || entityId(target) }}</option>
                   }
                 </select>
                 <input type="text" data-testid="entity-relation-label" class="rel-label-input" placeholder="关系说明" [value]="relation.label || ''" (input)="setRelation(relation, 'label', $any($event.target).value)">

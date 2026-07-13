@@ -59,6 +59,18 @@ interface EntityFrame {
   entityIds?: string[];
 }
 
+interface EntityRelationDebugRow {
+  scope: string;
+  index: number;
+  owner: string;
+  raw: string;
+  resolvedFrom: string;
+  resolvedTo: string;
+  fromSelectValue: string;
+  toSelectValue: string;
+  visible: boolean;
+}
+
 interface StateNodeLayout {
   name: string;
   fieldName: string;
@@ -240,6 +252,7 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly selectedTransitionIndex = signal<number | null>(null);
   protected readonly editorOpen = signal(false);
   protected readonly stateEditorOpen = signal(false);
+  protected readonly relationDebugOpen = signal(false);
   private readonly externalEditing = signal(false);
   protected readonly stateFieldName = signal('');
   protected readonly drawerWidth = signal(620);
@@ -915,6 +928,63 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
         to: this.relationTo(relation) || eid,
       })),
     ];
+  }
+
+  protected relationDebugEnabled(): boolean {
+    try {
+      const search = typeof window === 'undefined' ? '' : window.location.search;
+      return this.relationDebugOpen() || search.includes('entityRelationDebug=1') || window.localStorage?.getItem('blm.entityRelationDebug') === '1';
+    } catch {
+      return this.relationDebugOpen();
+    }
+  }
+
+  protected toggleRelationDebug(): void {
+    const next = !this.relationDebugEnabled();
+    this.relationDebugOpen.set(next);
+    try {
+      if (next) window.localStorage?.setItem('blm.entityRelationDebug', '1');
+      else window.localStorage?.removeItem('blm.entityRelationDebug');
+    } catch {
+      // 调试开关不能依赖 localStorage；写入失败时仍保留本次页面内状态。
+    }
+  }
+
+  protected relationDebugRows(entity: EntityDesignEntity): EntityRelationDebugRow[] {
+    const currentEntityId = this.entityId(entity);
+    const rows: EntityRelationDebugRow[] = [];
+    const pushRow = (scope: string, relation: EntityDesignRelation, index: number, owner = '') => {
+      const resolvedFrom = this.relationFrom(relation);
+      const resolvedTo = this.relationTo(relation);
+      rows.push({
+        scope,
+        index,
+        owner,
+        raw: JSON.stringify({
+          uid: relation.uid,
+          id: relation.id,
+          from: relation.from,
+          to: relation.to,
+          source: relation.source,
+          target: relation.target,
+          sourceEntityUid: relation.sourceEntityUid,
+          targetEntityUid: relation.targetEntityUid,
+          fromEntityUid: relation.fromEntityUid,
+          toEntityUid: relation.toEntityUid,
+        }),
+        resolvedFrom,
+        resolvedTo,
+        fromSelectValue: resolvedFrom || currentEntityId,
+        toSelectValue: resolvedTo,
+        visible: resolvedFrom === currentEntityId || resolvedTo === currentEntityId,
+      });
+    };
+    this.adapter.relations().forEach((relation, index) => pushRow('doc.relations', relation, index));
+    this.entities().forEach((item) => {
+      const owner = `${item.name || '未命名实体'}(${this.entityId(item)})`;
+      (item.relations || []).forEach((relation, index) => pushRow('entity.relations', relation, index, owner));
+    });
+    return rows;
   }
 
   protected nodeStyle(node: EntityNodeLayout): Record<string, string> {

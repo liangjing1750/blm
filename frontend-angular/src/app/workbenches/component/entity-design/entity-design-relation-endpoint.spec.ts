@@ -60,4 +60,18 @@ describe('entity design relation endpoint resolution', () => {
     expect(resolveRelationEndpoint(entities, relation, 'from')).toBe('entity-point-type');
     expect(resolveRelationEndpoint(entities, relation, 'to')).toBe('entity-point-type');
   });
+
+  it('returns empty when stale display text cannot be matched to any entity option', () => {
+    const entities = [
+      { uid: 'entity-order', name: '订单' },
+      { uid: 'entity-detail', name: '订单明细' },
+    ];
+    const relation = {
+      from: '点位类型',
+      to: '点位类型',
+    };
+
+    expect(resolveRelationEndpoint(entities, relation, 'from')).toBe('');
+    expect(resolveRelationEndpoint(entities, relation, 'to')).toBe('');
+  });
 });
