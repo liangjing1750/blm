@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BlmDocument, ProcessNode } from '../../document/document.model';
-import { buildProcessContent, captureProcessFlowGraph, ProcessExporter } from './process-exporter';
+import { buildProcessContent, captureProcessFlowGraph, processContentBounds, ProcessExporter } from './process-exporter';
 
 vi.mock('dom-to-image-more', () => ({
   default: {
@@ -100,6 +101,34 @@ describe('buildProcessContent', () => {
       { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
     ]));
   });
+  it('omits the trigger and outcome table when both fields are blank', () => {
+    const document = {
+      meta: {},
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{ uid: 'process-empty', name: 'Empty Process', trigger: '  ', outcome: '', nodes: [] }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [],
+      services: [],
+      terms: [],
+      dataDictionaries: [],
+      rules: [],
+    } satisfies BlmDocument;
+
+    const content = buildProcessContent(document, document.processes[0]);
+
+    expect(content.sections.some((section) =>
+      section.type === 'table'
+      && section.headers?.length === 2
+      && section.rows?.length === 2
+      && section.rows.every((row) => !String(row[1] || '').trim()),
+    )).toBe(false);
+    expect(content.sections.some((section) => section.type === 'image')).toBe(true);
+  });
 });
 
 describe('captureProcessFlowGraph', () => {
@@ -145,5 +174,32 @@ describe('captureProcessFlowGraph', () => {
     const bytes = await captureProcessFlowGraph('process-flow:target-process');
 
     expect(new TextDecoder().decode(bytes)).toBe('target-process');
+  });
+});
+
+describe('processContentBounds', () => {
+  it('includes shared node badges that overflow outside the node card', () => {
+    const host = document.createElement('div');
+    const node = document.createElement('div');
+    const badge = document.createElement('span');
+    host.setAttribute('data-testid', 'process-flow-canvas');
+    node.setAttribute('data-testid', 'process-flow-node');
+    badge.className = 'shared-badge';
+    host.appendChild(node);
+    node.appendChild(badge);
+    Object.defineProperties(host, {
+      offsetWidth: { value: 400 },
+      offsetHeight: { value: 220 },
+      scrollWidth: { value: 400 },
+      scrollHeight: { value: 220 },
+    });
+    host.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 220, width: 400, height: 220 } as DOMRect);
+    node.getBoundingClientRect = () => ({ left: 100, top: 80, right: 200, bottom: 140, width: 100, height: 60 } as DOMRect);
+    badge.getBoundingClientRect = () => ({ left: 188, top: 62, right: 390, bottom: 78, width: 202, height: 16 } as DOMRect);
+
+    const bounds = processContentBounds(host);
+
+    expect(bounds?.x).toBeLessThanOrEqual(28);
+    expect((bounds?.x || 0) + (bounds?.width || 0)).toBeGreaterThanOrEqual(390);
   });
 });

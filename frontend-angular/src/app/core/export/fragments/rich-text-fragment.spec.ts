@@ -92,4 +92,13 @@ describe('rich-text-fragment', () => {
       '并展示状态',
     ].join('\n'));
   });
+  it('preserves textarea line breaks for node export rich-text columns', () => {
+    const text = ['line one', 'line two', '', 'line four'].join('\n');
+
+    expect(exportRichTextToMarkdown(text)).toBe(text);
+    expect(exportRichTextToPlainText(text)).toBe(text);
+    expect(normalizeExportRichText(text)).toEqual([
+      { type: 'paragraph', runs: [{ text: 'line one\nline two\n\nline four' }] },
+    ]);
+  });
 });

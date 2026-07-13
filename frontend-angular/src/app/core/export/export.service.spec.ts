@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSingleViewDocxBlob, buildSingleViewZipFiles } from './export.service';
+import { buildDetachedAttachmentZipFiles, buildSingleViewDocxBlob, buildSingleViewZipFiles } from './export.service';
 import { ViewContent } from './exporters/view-exporter';
 
 describe('buildSingleViewZipFiles', () => {
@@ -25,4 +25,45 @@ describe('buildSingleViewZipFiles', () => {
 
     expect(blob.type).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   });
+
+  it('uses explicit zip file paths for detached attachment packages', () => {
+    const content: ViewContent = {
+      title: '价值流环节',
+      sections: [{ type: 'heading1', text: '价值流环节' }],
+      attachments: [{
+        id: 'att-1',
+        name: '说明.pdf',
+        contentType: 'application/pdf',
+        data: new TextEncoder().encode('attachment bytes'),
+        path: '价值流环节/阶段：入库/流程：入库流程/说明.pdf',
+      }],
+    };
+
+    const files = buildSingleViewZipFiles('attachments', content, []);
+
+    expect(files.map((file) => file.name)).toEqual([
+      'attachments.md',
+      '价值流环节/阶段：入库/流程：入库流程/说明.pdf',
+    ]);
+    expect(new TextDecoder().decode(files[1].data)).toBe('attachment bytes');
+  });
+
+  it('builds detached attachment zip files without markdown index files', () => {
+    const content: ViewContent = {
+      title: '价值流环节',
+      sections: [{ type: 'heading1', text: '价值流环节' }],
+      attachments: [{
+        id: 'att-1',
+        name: '说明.pdf',
+        contentType: 'application/pdf',
+        data: new TextEncoder().encode('attachment bytes'),
+        path: '价值流环节/阶段：入库/流程：入库流程/说明.pdf',
+      }],
+    };
+
+    const files = buildDetachedAttachmentZipFiles(content);
+
+    expect(files.map((file) => file.name)).toEqual(['价值流环节/阶段：入库/流程：入库流程/说明.pdf']);
+  });
+
 });

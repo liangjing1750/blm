@@ -36,35 +36,52 @@
 
 .attachment-process-list {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
   max-height: min(620px, calc(100vh - 260px));
+  min-height: 220px;
   overflow: auto;
-  padding: 12px;
+  padding: 14px 16px 16px;
 }
 
 .attachment-process-card {
   background: #fff;
-  border: 1px solid #dbe7f5;
-  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   overflow: hidden;
+  transition: border-color .15s, box-shadow .15s;
+
+  &:hover {
+    border-color: #99d7c2;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, .07);
+  }
+
+  &.is-expanded {
+    border-color: #86d4b6;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, .09);
+    grid-column: 1 / -1;
+  }
 }
 
 .attachment-process-summary {
   align-items: center;
-  background: #fbfdff;
+  background:
+    linear-gradient(90deg, rgba(16, 185, 129, .08), transparent 42%),
+    #fff;
   border: 0;
+  color: #1e293b;
   cursor: pointer;
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(180px, 1fr) auto 22px;
-  padding: 11px 13px;
+  padding: 13px 15px;
   text-align: left;
   width: 100%;
 }
 
 .attachment-process-card.is-expanded .attachment-process-summary {
-  background: #f3f7fc;
-  border-bottom: 1px solid #dbe7f5;
+  background: #f0fdf4;
+  border-bottom: 1px solid #d9f2e6;
 }
 
 .attachment-process-name {
@@ -78,10 +95,19 @@
 }
 
 .attachment-process-meta {
-  color: #64748b;
+  align-items: center;
+  color: #0f766e;
+  display: inline-flex;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+
+  span {
+    background: #ccfbf1;
+    border: 1px solid #99f6e4;
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
 }
 
 .attachment-card-arrow {
@@ -97,31 +123,74 @@
 
 .attachment-card-list {
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  padding: 12px 14px 14px;
 }
 
 .attachment-card,
 .attachment-version-item {
-  background: #fff;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, .82), rgba(255, 255, 255, .98)),
+    #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 10px;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 28px minmax(0, 1fr);
-  padding: 10px;
+  gap: 9px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  min-height: 118px;
+  padding: 11px;
+  position: relative;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+
+  &::before {
+    background: #38bdf8;
+    border-radius: 10px 0 0 10px;
+    bottom: 0;
+    content: "";
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 3px;
+  }
+
+  &:hover {
+    border-color: #bae6fd;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, .08);
+    transform: translateY(-1px);
+  }
+}
+
+.attachment-card.is-process-attachment::before {
+  background: #2563eb;
+}
+
+.attachment-card.is-node-attachment::before {
+  background: #10b981;
 }
 
 .attachment-file-icon {
   align-items: center;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 7px;
-  color: #1d4ed8;
+  background: #ecfeff;
+  border: 1px solid #bae6fd;
+  border-radius: 9px;
+  color: #0369a1;
   display: inline-flex;
-  height: 28px;
+  height: 30px;
   justify-content: center;
-  width: 28px;
+  width: 30px;
+
+  .is-process-attachment & {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+  }
+
+  .is-node-attachment & {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #047857;
+  }
 }
 
 .attachment-card-body {
@@ -129,7 +198,7 @@
 }
 
 .attachment-card-head {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: 8px;
   justify-content: space-between;
@@ -155,6 +224,18 @@
   padding: 1px 8px;
 }
 
+.attachment-card.is-process-attachment .attachment-file-scope {
+  background: #dbeafe;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.attachment-card.is-node-attachment .attachment-file-scope {
+  background: #d1fae5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
 .attachment-file-tags {
   display: flex;
   flex-wrap: wrap;
@@ -167,6 +248,12 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+
+  .btn {
+    background: #fff;
+    border-color: #dbeafe;
+    color: #1d4ed8;
+  }
 }
 
 .attachment-version-list {

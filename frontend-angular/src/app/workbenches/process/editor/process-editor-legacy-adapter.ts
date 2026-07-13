@@ -329,6 +329,11 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     else emitRuntimeRefresh();
   };
 
+  const refreshUiOnly = () => {
+    if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
+    else emitRuntimeRefresh();
+  };
+
   function processId(process: LegacyProcess | null | undefined): string {
     return String(process?.uid || process?.id || '').trim();
   }
@@ -802,7 +807,7 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     },
     selectTask(targetTaskId) {
       ui().taskId = targetTaskId;
-      dirty();
+      refreshUiOnly();
     },
     closeEditor() {
       ui().procView = 'flow';

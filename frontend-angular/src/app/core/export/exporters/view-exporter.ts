@@ -32,6 +32,7 @@ export interface ViewAttachment {
   name: string;
   contentType: string;
   data: Uint8Array;
+  path?: string;
 }
 
 /** 内容片段类型。 */

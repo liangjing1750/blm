@@ -4,6 +4,22 @@ import * as CFB from 'cfb';
 import { buildDocxFragment, fitImageToDocxPage } from './docx-fragment';
 
 describe('buildDocxFragment', () => {
+  it('overrides Word heading four to avoid default italics', async () => {
+    const blob = await buildDocxFragment({
+      title: 'process',
+      sections: [{ type: 'heading4', text: '流程：入库' }],
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const stylesXml = await zip.file('word/styles.xml')?.async('string') || '';
+    const documentXml = await zip.file('word/document.xml')?.async('string') || '';
+    const heading4Style = stylesXml.match(/<w:style[^>]+w:styleId="Heading4"[\s\S]*?<\/w:style>/)?.[0] || '';
+
+    expect(documentXml).toContain('<w:pStyle w:val="Heading4"/>');
+    expect(heading4Style).toContain('<w:i w:val="false"/>');
+    expect(heading4Style).not.toContain('<w:i/>');
+    expect(heading4Style).not.toContain('<w:iCs/>');
+  });
+
   it('embeds attachment binaries into the docx package and links them from the document', async () => {
     const blob = await buildDocxFragment({
       title: '附录',
@@ -99,6 +115,25 @@ describe('buildDocxFragment', () => {
     expect(orderedListNumIds[0]).toBe(orderedListNumIds[1]);
     expect(orderedListNumIds[2]).toBe(orderedListNumIds[3]);
     expect(orderedListNumIds[0]).not.toBe(orderedListNumIds[2]);
+  });
+
+  it('renders textarea newlines in rich text cells as native Word line breaks', async () => {
+    const blob = await buildDocxFragment({
+      title: 'node',
+      sections: [{
+        type: 'table',
+        headers: ['name', 'content'],
+        richTextColumns: [1],
+        rows: [['step', ['line one', 'line two', '', 'line four'].join('\n')]],
+      }],
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await zip.file('word/document.xml')?.async('string') || '';
+
+    expect(documentXml).toContain('<w:t xml:space="preserve">line one</w:t>');
+    expect(documentXml).toContain('<w:br/>');
+    expect(documentXml).toContain('<w:t xml:space="preserve">line two</w:t>');
+    expect(documentXml).toContain('<w:t xml:space="preserve">line four</w:t>');
   });
 
   it('renders five-level headings and preferred material table widths', async () => {

@@ -30,9 +30,16 @@ export function buildSingleViewZipFiles(
     files.push({ name: `${label}-${index + 1}.png`, data: png });
   });
   for (const attachment of content.attachments || []) {
-    files.push({ name: `attachments/${safeAttachmentFileName(attachment.name)}`, data: attachment.data });
+    files.push({ name: attachment.path || `attachments/${safeAttachmentFileName(attachment.name)}`, data: attachment.data });
   }
   return files;
+}
+
+export function buildDetachedAttachmentZipFiles(content: ViewContent): ExportZipFile[] {
+  return (content.attachments || []).map((attachment) => ({
+    name: attachment.path || `attachments/${safeAttachmentFileName(attachment.name)}`,
+    data: attachment.data,
+  }));
 }
 
 export async function buildSingleViewDocxBlob(content: ViewContent, screenshots: Uint8Array[]): Promise<Blob> {
@@ -89,6 +96,8 @@ export class ExportService {
       const blob = await buildSingleViewDocxBlob(content, pngs);
       onProgress?.({ current: 4, total: 4, label: exporter.label, phase: 'download' });
       downloadBlob(blob, `${exporter.label}.docx`);
+      const attachmentFiles = buildDetachedAttachmentZipFiles(content);
+      if (attachmentFiles.length) downloadBlob(buildZip(attachmentFiles), `${exporter.label}-attachments.zip`);
     } else {
       const blob = buildZip(buildSingleViewZipFiles(exporter.label, content, pngs));
       onProgress?.({ current: 4, total: 4, label: exporter.label, phase: 'download' });
@@ -132,6 +141,9 @@ export class ExportService {
       const blob = await this.assembler.assembleAllDocx(contents, allScreenshots);
       onProgress?.({ current: exporters.length, total: exporters.length, label: '完整文档', phase: 'download' });
       downloadBlob(blob, 'full-document.docx');
+      const merged = this.assembler.mergeContents(contents, allScreenshots);
+      const attachmentFiles = buildDetachedAttachmentZipFiles(merged.content);
+      if (attachmentFiles.length) downloadBlob(buildZip(attachmentFiles), 'full-document-attachments.zip');
     } else {
       const merged = this.assembler.mergeContents(contents, allScreenshots);
       const files: ExportZipFile[] = [
@@ -141,7 +153,7 @@ export class ExportService {
         files.push({ name: `screenshot-${index + 1}.png`, data: png });
       });
       for (const attachment of merged.content.attachments || []) {
-        files.push({ name: `attachments/${safeAttachmentFileName(attachment.name)}`, data: attachment.data });
+        files.push({ name: attachment.path || `attachments/${safeAttachmentFileName(attachment.name)}`, data: attachment.data });
       }
       const blob = buildZip(files);
       onProgress?.({ current: exporters.length, total: exporters.length, label: '完整文档', phase: 'download' });

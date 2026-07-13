@@ -76,7 +76,6 @@ export class AttachmentManagementWorkbench implements OnInit, OnDestroy {
     const parts = [`${group.attachments.length} 个附件`];
     if (group.processAttachmentCount) parts.push(`流程附件 ${group.processAttachmentCount}`);
     if (group.nodeAttachmentCount) parts.push(`节点附件 ${group.nodeAttachmentCount}`);
-    if (group.attachedNodeCount) parts.push(`涉及节点 ${group.attachedNodeCount}`);
     return parts.join(' · ');
   }
 

@@ -224,8 +224,31 @@ export async function buildDocxFragment(
     ],
   });
 
-  const blob = await Packer.toBlob(doc);
-  return content.attachments?.length ? embedAttachments(blob, content) : blob;
+  const blob = await patchHeading4Style(await Packer.toBlob(doc));
+  return content.attachments?.length && content.sections.some((section) => section.type === 'attachment')
+    ? embedAttachments(blob, content)
+    : blob;
+}
+
+async function patchHeading4Style(blob: Blob): Promise<Blob> {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const styles = await zip.file('word/styles.xml')?.async('string');
+  if (!styles) return blob;
+  const patched = styles.replace(
+    /(<w:style[^>]+w:styleId="Heading4"[\s\S]*?<w:rPr>)([\s\S]*?)(<\/w:rPr>)/,
+    (_match, start: string, runProps: string, end: string) => {
+      const cleanRunProps = runProps
+        .replace(/<w:i\/>/g, '')
+        .replace(/<w:iCs\/>/g, '')
+        .replace(/<w:i\s+w:val="true"\/>/g, '')
+        .replace(/<w:iCs\s+w:val="true"\/>/g, '');
+      return `${start}${cleanRunProps}<w:i w:val="false"/>${end}`;
+    },
+  );
+  zip.file('word/styles.xml', patched);
+  return new Blob([await zip.generateAsync({ type: 'arraybuffer' })], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
 }
 
 export function fitImageToDocxPage(
@@ -454,12 +477,26 @@ function parseInlineText(
   let pendingBreak = options.breakBefore;
 
   const pushRun = (config: ConstructorParameters<typeof TextRun>[0]) => {
-    parts.push(new TextRun({
+    const base = {
       ...(typeof config === 'string' ? { text: config } : config),
       size: typeof config === 'string' ? options.size : config.size ?? options.size,
       color: typeof config === 'string' ? options.color : config.color ?? options.color,
       break: pendingBreak ? 1 : (typeof config === 'string' ? undefined : config.break),
-    }));
+    };
+    const runText = String(base.text || '');
+    if (!runText.includes('\n')) {
+      parts.push(new TextRun(base));
+      pendingBreak = false;
+      return;
+    }
+    const segments = runText.replace(/\r\n?/g, '\n').split('\n');
+    segments.forEach((segment, index) => {
+      parts.push(new TextRun({
+        ...base,
+        text: segment,
+        break: index === 0 ? base.break : 1,
+      }));
+    });
     pendingBreak = false;
   };
 

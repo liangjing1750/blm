@@ -83,7 +83,12 @@
         @if (isExpanded(group.processId)) {
           <div class="attachment-card-list">
             @for (attachment of group.attachments; track attachment.id; let index = $index) {
-              <div class="attachment-card" data-testid="panorama-attachment-row">
+              <div
+                class="attachment-card"
+                data-testid="panorama-attachment-row"
+                [class.is-process-attachment]="attachment.scope.includes('流程')"
+                [class.is-node-attachment]="attachment.scope.includes('节点')"
+              >
                 <span class="attachment-file-icon">📎</span>
                 <div class="attachment-card-body">
                   <div class="attachment-card-head">

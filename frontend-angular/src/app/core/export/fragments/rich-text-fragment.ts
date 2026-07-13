@@ -208,7 +208,7 @@ function collectInlineRuns(
   const runs: ExportRichTextRun[] = [];
   for (const node of nodes) {
     if (node.type === 'text') {
-      runs.push({ text: node.text.replace(/\s+/g, ' '), bold: context.bold || undefined });
+      runs.push({ text: normalizeTextWhitespace(node.text), bold: context.bold || undefined });
       continue;
     }
     if (node.tag === 'strong' || node.tag === 'b') {
@@ -224,15 +224,21 @@ function collectInlineRuns(
 
 function normalizeRuns(runs: ExportRichTextRun[]): ExportRichTextRun[] {
   return runs
-    .map((run) => ({ text: run.text.replace(/[ \t]+/g, ' '), bold: run.bold || undefined }))
+    .map((run) => ({ text: normalizeTextWhitespace(run.text), bold: run.bold || undefined }))
     .filter((run) => run.text.trim())
     .map((run) => run.bold ? run : { text: run.text });
 }
 
 function renderText(text: string, context: RenderContext): string {
-  const normalized = text.replace(/\s+/g, ' ');
+  const normalized = normalizeTextWhitespace(text);
   if (context.mode !== 'markdown' || !context.bold || !normalized.trim()) return normalized;
   return `**${normalized}**`;
+}
+
+function normalizeTextWhitespace(text: string): string {
+  return String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ');
 }
 
 function normalizeInline(value: string): string {

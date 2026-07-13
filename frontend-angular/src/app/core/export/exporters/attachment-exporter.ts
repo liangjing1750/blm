@@ -50,12 +50,12 @@ export class AttachmentExporter implements ViewExporter {
 }
 
 /**
- * 模块意图：把流程和节点上的附件统一组织为附录，供全景导出拼接复用。
- * 关键流程：阶段 -> 流程 -> 附件标题，同时把有本地二进制的附件注册进 ViewContent.attachments。
- * 边界细节：老数据可能只有附件引用没有 content，此时保留描述并提示未内嵌，不阻断整份导出。
+ * 模块意图：把流程和节点上的附件统一组织为“文档索引 + ZIP 附件包”，供全景导出拼接复用。
+ * 关键流程：价值流环节 -> 阶段 -> 流程 -> 附件标题；真实文件只登记 ZIP 文件路径，不再尝试嵌入 DOCX。
+ * 边界细节：老数据可能只有附件引用没有 content，此时保留描述和附件包路径，不阻断整份导出。
  */
 export function buildAttachmentContent(document: BlmDocument): ViewContent {
-  const sections: ViewSection[] = [{ type: 'heading1', text: '附录' }];
+  const sections: ViewSection[] = [{ type: 'heading1', text: '价值流环节' }];
   const attachments: ViewAttachment[] = [];
   let hasAttachment = false;
 
@@ -67,8 +67,10 @@ export function buildAttachmentContent(document: BlmDocument): ViewContent {
     hasAttachment = true;
     sections.push({ type: 'heading2', text: `阶段：${group.stageName}` });
     for (const item of processGroups) {
-      sections.push({ type: 'heading3', text: `流程：${display((item.process as any).name, identityOf(item.process), '未命名流程')}` });
+      const processName = display((item.process as any).name, identityOf(item.process), '未命名流程');
+      sections.push({ type: 'heading3', text: `流程：${processName}` });
       for (const attachment of item.attachments) {
+        const zipPath = attachmentZipPath(group.stageName, processName, attachment);
         sections.push({ type: 'heading4', text: `附件名称：${attachment.name}` });
         sections.push({
           type: 'table',
@@ -80,6 +82,7 @@ export function buildAttachmentContent(document: BlmDocument): ViewContent {
             ['版本', attachment.version],
             ['上传时间', attachment.uploadedAt],
             ['大小', attachment.size],
+            ['附件包路径', zipPath],
           ],
         });
         if (attachment.data?.length) {
@@ -89,8 +92,8 @@ export function buildAttachmentContent(document: BlmDocument): ViewContent {
             name: attachment.name,
             contentType: attachment.contentType || 'application/octet-stream',
             data: attachment.data,
+            path: zipPath,
           });
-          sections.push({ type: 'attachment', text: `附件：${attachment.name}`, attachmentId });
         } else {
           sections.push({ type: 'paragraph', text: '附件内容未内嵌：当前文档仅保存了附件引用或缺少本地二进制内容。' });
         }
@@ -101,7 +104,7 @@ export function buildAttachmentContent(document: BlmDocument): ViewContent {
   if (!hasAttachment) {
     sections.push({ type: 'paragraph', text: '暂无附件。' });
   }
-  return { title: '附录', sections, attachments };
+  return { title: '价值流环节', sections, attachments };
 }
 
 export function stageAttachmentGroups(document: BlmDocument): Array<{ stageId: string; stageName: string; processes: Process[] }> {
@@ -145,6 +148,22 @@ export function processAttachmentRows(process: Process): AttachmentRow[] {
     }
   }
   return rows;
+}
+
+function attachmentZipPath(stageName: string, processName: string, attachment: AttachmentRow): string {
+  return [
+    '价值流环节',
+    `阶段：${safePathSegment(stageName)}`,
+    `流程：${safePathSegment(processName)}`,
+    safePathSegment(attachment.name),
+  ].join('/');
+}
+
+function safePathSegment(value: string): string {
+  return String(value || '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim() || '未命名';
 }
 
 function processesForStage(document: BlmDocument, stage: Stage): Process[] {

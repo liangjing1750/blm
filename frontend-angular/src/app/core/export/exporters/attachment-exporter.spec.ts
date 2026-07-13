@@ -60,18 +60,21 @@ describe('buildAttachmentContent', () => {
     vi.restoreAllMocks();
   });
 
-  it('groups process and node attachments as appendix headings with embedded files', () => {
+  it('groups process and node attachments as value-stream headings with zip package files', () => {
     const content = buildAttachmentContent(createDocument());
 
     expect(content.sections).toEqual(expect.arrayContaining([
-      { type: 'heading1', text: '附录' },
+      { type: 'heading1', text: '价值流环节' },
       { type: 'heading2', text: '阶段：入库' },
       { type: 'heading3', text: '流程：入库流程' },
       { type: 'heading4', text: '附件名称：流程图附件.png' },
       { type: 'heading4', text: '附件名称：审核说明.pdf' },
     ]));
-    expect(content.sections.filter((section) => section.type === 'attachment')).toHaveLength(2);
-    expect(content.attachments?.map((attachment) => attachment.name)).toEqual(['流程图附件.png', '审核说明.pdf']);
+    expect(content.sections.filter((section) => section.type === 'attachment')).toHaveLength(0);
+    expect(content.attachments?.map((attachment) => attachment.path)).toEqual([
+      '价值流环节/阶段：入库/流程：入库流程/流程图附件.png',
+      '价值流环节/阶段：入库/流程：入库流程/审核说明.pdf',
+    ]);
     expect(new TextDecoder().decode(content.attachments?.[0].data)).toBe('process attachment');
   });
 
@@ -111,7 +114,7 @@ describe('buildAttachmentContent', () => {
 
     const content = await new AttachmentExporter(document, 'demo.blm').prepareContent();
 
-    expect(content.sections.filter((section) => section.type === 'attachment')).toHaveLength(2);
+    expect(content.sections.filter((section) => section.type === 'attachment')).toHaveLength(0);
     expect(new TextDecoder().decode(content.attachments?.[0].data)).toBe('downloaded process attachment');
   });
 });

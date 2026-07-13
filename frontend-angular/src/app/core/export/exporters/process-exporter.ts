@@ -50,6 +50,8 @@ export function buildProcessContent(
 ): ViewContent {
   const processTitle = display(process.name, identityOf(process), '未命名流程');
   const prefix = display(options.headingPrefix, '', '');
+  const trigger = display((process as any).trigger, '', '');
+  const outcome = display((process as any).outcome, '', '');
   const sections: ViewSection[] = [
     { type: 'heading4', text: headingText(prefix, `流程：${processTitle}`) },
     {
@@ -62,6 +64,8 @@ export function buildProcessContent(
     },
     { type: 'image', text: `流程图：${processTitle}`, imageIndex: 0 },
   ];
+
+  if (!trigger && !outcome) sections.splice(1, 1);
 
   (process.nodes || []).forEach((node, index) => {
     sections.push(...buildNodeContent(document, node, {
@@ -222,9 +226,9 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
   return bytes;
 }
 
-function processContentBounds(el: HTMLElement): { x: number; y: number; width: number; height: number } | null {
+export function processContentBounds(el: HTMLElement): { x: number; y: number; width: number; height: number } | null {
   const targets = Array.from(el.querySelectorAll<HTMLElement>(
-    '[data-testid="process-flow-terminal"], [data-testid="process-flow-node"], [data-testid="process-flow-gateway"], [data-testid="process-flow-edge-label"]',
+    '.flow-lane-title, .shared-badge, [data-testid="process-flow-terminal"], [data-testid="process-flow-node"], [data-testid="process-flow-gateway"], [data-testid="process-flow-edge-label"]',
   ));
   if (!targets.length) return null;
 
