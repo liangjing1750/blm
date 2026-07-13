@@ -29,6 +29,9 @@ export function buildSingleViewZipFiles(
   screenshots.forEach((png, index) => {
     files.push({ name: `${label}-${index + 1}.png`, data: png });
   });
+  for (const attachment of content.attachments || []) {
+    files.push({ name: `attachments/${safeAttachmentFileName(attachment.name)}`, data: attachment.data });
+  }
   return files;
 }
 
@@ -68,7 +71,9 @@ export class ExportService {
     onProgress?: (p: ExportProgress) => void,
   ): Promise<void> {
     onProgress?.({ current: 1, total: 4, label: exporter.label, phase: 'content' });
-    const content = exporter.getContent();
+    const content = exporter.prepareContent
+      ? await exporter.prepareContent()
+      : exporter.getContent();
     onProgress?.({ current: 2, total: 4, label: exporter.label, phase: 'capture' });
     const pngs = exporter.captureAll
       ? await exporter.captureAll((done, total, label) => {
@@ -107,22 +112,47 @@ export class ExportService {
 
     for (let i = 0; i < exporters.length; i++) {
       const ex = exporters[i];
-      onProgress?.({ current: i + 1, total: exporters.length, label: ex.label });
+      onProgress?.({ current: i + 1, total: exporters.length, label: ex.label, phase: 'content' });
 
-      const c = ex.getContent();
-      const pngs = ex.captureAll ? await ex.captureAll() : [await ex.capture()];
+      const c = ex.prepareContent
+        ? await ex.prepareContent()
+        : ex.getContent();
+      const pngs = ex.captureAll
+        ? await ex.captureAll((done, total, label) => {
+          onProgress?.({ current: done, total, label: label || ex.label, phase: 'capture' });
+        })
+        : [await ex.capture()];
       ensureImageSections(c, pngs.length);
       contents.push(c);
       allScreenshots.push(pngs);
     }
 
+    onProgress?.({ current: exporters.length, total: exporters.length, label: '完整文档', phase: 'assemble' });
     if (format === 'docx') {
       const blob = await this.assembler.assembleAllDocx(contents, allScreenshots);
+      onProgress?.({ current: exporters.length, total: exporters.length, label: '完整文档', phase: 'download' });
       downloadBlob(blob, 'full-document.docx');
     } else {
-      const md = this.assembler.assembleAllMarkdown(contents);
-      const blob = buildZip([{ name: 'full-document.md', data: this.encoder.encode(md) }]);
+      const merged = this.assembler.mergeContents(contents, allScreenshots);
+      const files: ExportZipFile[] = [
+        { name: 'full-document.md', data: this.encoder.encode(this.assembler.assembleAllMarkdown(contents, allScreenshots)) },
+      ];
+      merged.screenshots.forEach((png, index) => {
+        files.push({ name: `screenshot-${index + 1}.png`, data: png });
+      });
+      for (const attachment of merged.content.attachments || []) {
+        files.push({ name: `attachments/${safeAttachmentFileName(attachment.name)}`, data: attachment.data });
+      }
+      const blob = buildZip(files);
+      onProgress?.({ current: exporters.length, total: exporters.length, label: '完整文档', phase: 'download' });
       downloadBlob(blob, 'full-document.zip');
     }
   }
+}
+
+function safeAttachmentFileName(name: string): string {
+  return String(name || 'attachment')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim() || 'attachment';
 }

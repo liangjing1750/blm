@@ -78,8 +78,11 @@ export async function captureProcessFlowGraph(graphId = ''): Promise<Uint8Array>
   const selector = graphId
     ? `[data-export-graph-id="${cssEscape(graphId)}"]`
     : '[data-testid="process-flow-canvas"]';
+  // 模块意图：局部流程导出可以截当前画布，阶段/价值流批量导出必须截指定流程的隐藏画布。
+  // 关键流程：一旦调用方传入 graphId，就只允许命中对应 data-export-graph-id，不能退回页面当前流程。
+  // 边界细节：否则隐藏预渲染尚未就绪或 id 失配时，会把当前流程图误当成被遍历流程的截图。
   const el = document.querySelector<HTMLElement>(selector) ||
-    document.querySelector<HTMLElement>('[data-testid="process-flow-canvas"]');
+    (graphId ? null : document.querySelector<HTMLElement>('[data-testid="process-flow-canvas"]'));
   if (!el) return new Uint8Array();
 
   return captureProcessElement(el);
@@ -88,7 +91,11 @@ export async function captureProcessFlowGraph(graphId = ''): Promise<Uint8Array>
 async function captureProcessElement(el: HTMLElement): Promise<Uint8Array> {
   const bounds = processContentBounds(el);
   if (!bounds) return captureFullElement(el);
-  return captureElementRegion(el, bounds);
+  const full = await captureFullElement(el);
+  return cropCapturedPng(full, bounds, {
+    width: el.scrollWidth || el.offsetWidth,
+    height: el.scrollHeight || el.offsetHeight,
+  }).catch(() => full);
 }
 
 export async function captureFullElement(el: HTMLElement): Promise<Uint8Array> {
@@ -129,32 +136,54 @@ export async function captureFullElement(el: HTMLElement): Promise<Uint8Array> {
   }
 }
 
-async function captureElementRegion(
-  el: HTMLElement,
+async function cropCapturedPng(
+  bytes: Uint8Array,
   region: { x: number; y: number; width: number; height: number },
+  sourceSize: { width: number; height: number },
 ): Promise<Uint8Array> {
-  const restoreFns: Array<() => void> = [];
-  prepareElementForFullCapture(el, restoreFns);
+  if (typeof document === 'undefined') return bytes;
+  const blob = new Blob([bytesToArrayBuffer(bytes)], { type: 'image/png' });
+  const url = URL.createObjectURL(blob);
   try {
-    const html2canvas = (await import('html2canvas')).default;
-    const canvas = await html2canvas(el, {
-      backgroundColor: '#ffffff',
-      scale: 2,
-      x: region.x,
-      y: region.y,
-      width: region.width,
-      height: region.height,
-      windowWidth: el.scrollWidth || el.offsetWidth,
-      windowHeight: el.scrollHeight || el.offsetHeight,
-      scrollX: 0,
-      scrollY: 0,
-    });
-    return new Uint8Array(await new Promise<ArrayBuffer>((resolve) =>
-      canvas.toBlob((blob) => resolve(blob!.arrayBuffer()), 'image/png'),
-    ));
+    const img = await loadImage(url);
+    const ratioX = sourceSize.width > 0 ? img.naturalWidth / sourceSize.width : 1;
+    const ratioY = sourceSize.height > 0 ? img.naturalHeight / sourceSize.height : 1;
+    const sx = Math.max(0, Math.round(region.x * ratioX));
+    const sy = Math.max(0, Math.round(region.y * ratioY));
+    const sw = Math.min(img.naturalWidth - sx, Math.max(1, Math.round(region.width * ratioX)));
+    const sh = Math.min(img.naturalHeight - sy, Math.max(1, Math.round(region.height * ratioY)));
+    if (sw <= 0 || sh <= 0) return bytes;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return bytes;
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    return new Uint8Array(await new Promise<ArrayBuffer>((resolve, reject) => {
+      canvas.toBlob((cropped) => {
+        if (!cropped) reject(new Error('Failed to crop process screenshot'));
+        else resolve(cropped.arrayBuffer());
+      }, 'image/png');
+    }));
   } finally {
-    restoreFns.reverse().forEach((restore) => restore());
+    URL.revokeObjectURL(url);
   }
+}
+
+function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load process screenshot'));
+    img.src = url;
+  });
 }
 
 function prepareElementForFullCapture(el: HTMLElement, restoreFns: Array<() => void>): void {

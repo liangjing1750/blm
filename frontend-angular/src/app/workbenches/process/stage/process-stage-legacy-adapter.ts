@@ -132,7 +132,7 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
   }
 
   function processId(process: LegacyProcess | null | undefined): string {
-    return String(process?.id || process?.uid || '').trim();
+    return String(process?.uid || process?.id || '').trim();
   }
 
   function refId(ref: LegacyStageFlowRef | null | undefined): string {
@@ -147,6 +147,13 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
     return (document().processes || []).find((process) => processId(process) === targetId || process.id === targetId || process.uid === targetId);
   }
 
+  function normalizeStageId(targetStageId: string): string {
+    const target = String(targetStageId || '').trim();
+    if (!target) return '';
+    const stage = findStage(target);
+    return stage ? stageId(stage) : target;
+  }
+
   function refsForStage(targetStageId: string): LegacyStageFlowRef[] {
     const stage = findStage(targetStageId);
     const keys = new Set([targetStageId, stage?.uid, stage?.id].filter(Boolean));
@@ -157,6 +164,21 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
 
   function processForRef(ref: LegacyStageFlowRef): LegacyProcess | null {
     return findProcess(ref.processUid || ref.processId || '') || null;
+  }
+
+  function stageIdForProcess(targetProcessId: string): string {
+    const process = findProcess(targetProcessId);
+    const keys = new Set([targetProcessId, process?.uid, process?.id].filter(Boolean).map(String));
+    const currentStageId = normalizeStageId(String(ui().stageId || '').trim());
+    const currentRef = (document().stageFlowRefs || []).find((ref) => (
+      normalizeStageId(String(ref.stageUid || ref.stageId || '').trim()) === currentStageId
+      && (keys.has(String(ref.processUid || '')) || keys.has(String(ref.processId || '')))
+    ));
+    if (currentRef) return normalizeStageId(String(currentRef.stageUid || currentRef.stageId || currentStageId).trim());
+    const ref = (document().stageFlowRefs || [])
+      .filter((item) => keys.has(String(item.processUid || '')) || keys.has(String(item.processId || '')))
+      .sort((left, right) => Number(left.order || 0) - Number(right.order || 0))[0];
+    return normalizeStageId(String(ref?.stageUid || ref?.stageId || process?.stageUid || process?.stageId || '').trim());
   }
 
   function nextProcessId(): string {
@@ -225,8 +247,11 @@ export function createProcessStageLegacyAdapter(legacyWindow: LegacyWindow = get
       else emitRuntimeRefresh();
     },
     openProcess(targetProcessId: string) {
-      if (legacyWindow.navigate) legacyWindow.navigate('process', { procId: targetProcessId, taskId: null });
-      else navigateAngularWorkbench('process', { procId: targetProcessId, taskId: null });
+      const nextStageId = stageIdForProcess(targetProcessId);
+      if (nextStageId) ui().stageId = nextStageId;
+      const options = { procView: 'flow', procId: targetProcessId, stageId: nextStageId || undefined, taskId: null };
+      if (legacyWindow.navigate) legacyWindow.navigate('process', options);
+      else navigateAngularWorkbench('process', options);
     },
     setStageName(targetStageId: string, value: string) {
       const stage = findStage(targetStageId);

@@ -10,6 +10,7 @@ import { RoleWorkbenchComponent } from '../role/role-workbench';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 import { ExportProgress, ExportService } from '../../core/export/export.service';
 import { createCurrentPanoramaExporter, type PanoramaSubtab } from './panorama-export-dispatcher';
+import { AttachmentManagementWorkbench } from './attachment-management-workbench';
 
 interface PanoramaSubtabItem {
   id: PanoramaSubtab;
@@ -26,7 +27,7 @@ interface PanoramaDocument extends BlmDocument {
 
 @Component({
   selector: 'app-panorama-workbench',
-  imports: [CommonModule, KnowledgeWorkbenchComponent, RoleWorkbenchComponent, WaitDialogComponent],
+  imports: [CommonModule, KnowledgeWorkbenchComponent, RoleWorkbenchComponent, WaitDialogComponent, AttachmentManagementWorkbench],
   templateUrl: './panorama-workbench.html',
   styleUrls: ['../../shared/layout/workbench-section.scss', './panorama-workbench.scss'],
 })
@@ -38,6 +39,7 @@ export class PanoramaWorkbench {
     { id: 'terms', label: '术语管理' },
     { id: 'dictionary', label: '字典管理' },
     { id: 'rules', label: '规则管理' },
+    { id: 'attachments', label: '附件管理' },
   ];
   protected readonly activeTab = signal<PanoramaSubtab>('overview');
   protected readonly editing = signal(false);
@@ -122,7 +124,7 @@ export class PanoramaWorkbench {
     const document = this.document();
     const tab = this.activeTab();
 
-    const exporter = createCurrentPanoramaExporter(document as any, tab);
+    const exporter = createCurrentPanoramaExporter(document as any, tab, getAngularRuntimeState().currentFile || '');
     if (!exporter) {
       this.exportWait.set({ title: '当前视图暂不支持导出', description: '', progress: 0 });
       await new Promise((r) => setTimeout(r, 2000));
@@ -141,10 +143,13 @@ export class PanoramaWorkbench {
     try {
       await this.exportSvc.exportView(exporter, fmt, (progress) => this.updateExportProgress(progress));
       this.exportWait.set({ title: '完成', description: '', progress: 100 });
-    } catch (e) { /* */ }
-    if (needsHiddenRoleMap) this.exportCaptureReady.set(false);
-    await new Promise((r) => setTimeout(r, 300));
-    this.exportWait.set(null);
+    } catch (e) {
+      this.exportWait.set({ title: '导出失败', description: e instanceof Error ? e.message : String(e), progress: 0 });
+    } finally {
+      if (needsHiddenRoleMap) this.exportCaptureReady.set(false);
+      await new Promise((r) => setTimeout(r, 300));
+      this.exportWait.set(null);
+    }
   }
 
   private updateExportProgress(progress: ExportProgress): void {

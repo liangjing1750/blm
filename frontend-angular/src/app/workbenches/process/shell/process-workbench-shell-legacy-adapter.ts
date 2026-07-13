@@ -2,7 +2,11 @@ import { LegacyProcess, LegacyProcessNode } from '../editor/process-editor-legac
 import { getAngularRuntimeState, emitRuntimeRefresh, recordAngularNavigationBoundary } from '../../../core/runtime/angular-runtime';
 
 interface LegacyState {
-  doc?: { processes?: LegacyProcess[] };
+  doc?: {
+    processes?: LegacyProcess[];
+    stages?: Array<{ id?: string; uid?: string; name?: string }>;
+    stageFlowRefs?: Array<{ stageUid?: string; stageId?: string; processUid?: string; processId?: string; order?: number }>;
+  };
   ui?: {
     tab?: string;
     procView?: string;
@@ -10,6 +14,7 @@ interface LegacyState {
     taskId?: string | null;
     stageViewMode?: string;
     stageEditorCollapsed?: boolean;
+    stageId?: string | null;
   };
 }
 
@@ -89,6 +94,33 @@ export function createProcessWorkbenchShellLegacyAdapter(
     if (current && !ui().procId) ui().procId = processId(current);
   }
 
+  function normalizeStageId(stageId: string): string {
+    const target = String(stageId || '').trim();
+    if (!target) return '';
+    const stage = (state().doc?.stages || []).find((item) => (
+      String(item.uid || '').trim() === target || String(item.id || '').trim() === target
+    ));
+    return stage ? String(stage.id || stage.uid || '').trim() : target;
+  }
+
+  function stageIdForCurrentProcess(): string {
+    const process = currentProcess();
+    const targetProcessId = processId(process);
+    if (!targetProcessId) return '';
+    const processKeys = new Set([targetProcessId, process?.id, process?.uid].filter(Boolean).map(String));
+    const currentStageId = normalizeStageId(String(ui().stageId || '').trim());
+    const refs = state().doc?.stageFlowRefs || [];
+    const currentRef = refs.find((ref) => (
+      normalizeStageId(String(ref.stageUid || ref.stageId || '').trim()) === currentStageId
+      && (processKeys.has(String(ref.processUid || '').trim()) || processKeys.has(String(ref.processId || '').trim()))
+    ));
+    if (currentRef) return currentStageId;
+    const firstRef = refs
+      .filter((ref) => processKeys.has(String(ref.processUid || '').trim()) || processKeys.has(String(ref.processId || '').trim()))
+      .sort((left, right) => Number(left.order || 0) - Number(right.order || 0))[0];
+    return normalizeStageId(String(firstRef?.stageUid || firstRef?.stageId || (process as any)?.stageUid || (process as any)?.stageId || '').trim());
+  }
+
   function currentView(): ProcessShellView {
     const raw = ui().procView || 'valueDomain';
     if (raw === 'list') return 'editor';
@@ -113,6 +145,8 @@ export function createProcessWorkbenchShellLegacyAdapter(
       ui().taskId = null;
     } else if (view === 'flow') {
       ensureProcessSelection();
+      const nextStageId = stageIdForCurrentProcess();
+      if (nextStageId) ui().stageId = nextStageId;
       ui().procView = 'flow';
       ui().taskId = null;
     } else if (view === 'node') {

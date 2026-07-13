@@ -86,6 +86,36 @@ describe('createCurrentNodeExporter', () => {
     ]));
   });
 
+  it('creates a ProcessExporter for the first process when no process id is selected', () => {
+    const document = {
+      meta: { domain: 'Order Center' },
+      roles: [],
+      stages: [],
+      stageFlowRefs: [],
+      processes: [{
+        uid: 'process-order',
+        name: 'Order Process',
+        nodes: [{ uid: 'node-review', name: 'Review Order' }],
+      }],
+      entities: [],
+      businessComponents: [],
+      businessConstructs: [],
+      taskDefinitions: [],
+      serviceGroups: [],
+      services: [],
+      terms: [],
+      dataDictionaries: [],
+      rules: [],
+    } satisfies BlmDocument;
+
+    const exporter = createCurrentProcessExporter(document, { procId: null });
+
+    expect(exporter?.label).toBe('process-Order-Process');
+    expect(exporter?.getContent().sections).toEqual(expect.arrayContaining([
+      { type: 'heading4', text: '流程：Order Process' },
+    ]));
+  });
+
   it('creates a StageExporter for the selected stage', () => {
     const document = {
       meta: { domain: '订单中心' },

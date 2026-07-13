@@ -10,6 +10,7 @@ import {
   EntityStateTransition,
   createEntityDesignLegacyAdapter,
 } from './entity-design-legacy-adapter';
+import { resolveRelationEndpoint } from './entity-design-relation-endpoint';
 
 type EntityDesignView = 'relation' | 'state';
 
@@ -1684,28 +1685,14 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
     };
   }
 
+  /** 从 relation 上提取来源实体 ID，并通过 entityId 归一化为当前 uid/id 体系 */
   private relationFrom(relation: EntityDesignRelation): string {
-    return String(
-      relation.from
-      || relation.source
-      || relation.sourceEntityUid
-      || relation.sourceEntityId
-      || relation.fromEntityUid
-      || relation.fromEntityId
-      || '',
-    ).trim();
+    return resolveRelationEndpoint(this.entities(), relation, 'from');
   }
 
+  /** 从 relation 上提取目标实体 ID，并通过 entityId 归一化为当前 uid/id 体系 */
   private relationTo(relation: EntityDesignRelation): string {
-    return String(
-      relation.to
-      || relation.target
-      || relation.targetEntityUid
-      || relation.targetEntityId
-      || relation.toEntityUid
-      || relation.toEntityId
-      || '',
-    ).trim();
+    return resolveRelationEndpoint(this.entities(), relation, 'to');
   }
 
   private constructForEntity(entity: EntityDesignEntity): EntityDesignConstruct | undefined {

@@ -1,8 +1,50 @@
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
-import { buildDocxFragment } from './docx-fragment';
+import * as CFB from 'cfb';
+import { buildDocxFragment, fitImageToDocxPage } from './docx-fragment';
 
 describe('buildDocxFragment', () => {
+  it('embeds attachment binaries into the docx package and links them from the document', async () => {
+    const blob = await buildDocxFragment({
+      title: '附录',
+      attachments: [{
+        id: 'att-1',
+        name: '说明.txt',
+        contentType: 'text/plain',
+        data: new TextEncoder().encode('hello attachment'),
+      }],
+      sections: [
+        { type: 'heading1', text: '附录' },
+        { type: 'heading4', text: '附件名称：说明.txt' },
+        { type: 'attachment', text: '附件：说明.txt', attachmentId: 'att-1' },
+      ],
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const embedded = await zip.file('word/embeddings/oleObject1.bin')?.async('uint8array');
+    const relsXml = await zip.file('word/_rels/document.xml.rels')?.async('string') || '';
+    const documentXml = await zip.file('word/document.xml')?.async('string') || '';
+    const contentTypesXml = await zip.file('[Content_Types].xml')?.async('string') || '';
+    expect(embedded).toBeDefined();
+    const ole = CFB.read(embedded || new Uint8Array(), { type: 'array' });
+    const oleNative = ole.FileIndex.find((entry) => entry.name.includes('Ole10Native'))?.content;
+
+    expect(relsXml).toContain('relationships/oleObject');
+    expect(relsXml).toContain('Target="embeddings/oleObject1.bin"');
+    expect(relsXml).toContain('relationships/image');
+    expect(contentTypesXml).toContain('application/vnd.openxmlformats-officedocument.oleObject');
+    expect(documentXml).toContain('<o:OLEObject');
+    expect(documentXml).toContain('ProgID="Package"');
+    expect(documentXml).toContain('r:id="rOleObject1"');
+    expect(new TextDecoder().decode(new Uint8Array(oleNative || []))).toContain('hello attachment');
+    expect(documentXml).toContain('附件：说明.txt');
+  });
+
+  it('keeps compact screenshots visually modest instead of stretching them to page width', () => {
+    expect(fitImageToDocxPage(320, 220, 640)).toEqual({ width: 320, height: 220 });
+    expect(fitImageToDocxPage(620, 260, 640)).toEqual({ width: 461, height: 193 });
+    expect(fitImageToDocxPage(1600, 900, 640)).toEqual({ width: 640, height: 360 });
+  });
+
   it('renders rich text table cells as native Word paragraphs and lists', async () => {
     const blob = await buildDocxFragment({
       title: '节点',

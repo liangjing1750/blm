@@ -388,10 +388,12 @@
                         <div class="prototype-file-actions">
                           <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-toggle" (click)="toggleNodePrototypeVersions(task, file)">展开版本</button>
                           @if (canPreviewPrototype(file)) {
-                            <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-open" (click)="openNodePrototype(task, file)">查看</button>
+                            <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-preview" (click)="previewNodePrototype(task, file)">预览</button>
                           }
                           <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-download" (click)="downloadNodePrototype(task, file)">下载</button>
-                          <button class="btn btn-ghost-sm prototype-file-remove" type="button" data-testid="proc-prototype-remove" (click)="removeNodePrototype(task, file)">删除</button>
+                          @if (editing) {
+                            <button class="btn btn-ghost-sm prototype-file-remove" type="button" data-testid="proc-prototype-remove" (click)="removeNodePrototype(task, file)">删除</button>
+                          }
                         </div>
                         @if (isNodePrototypeExpanded(task, file) && file.versions?.length) {
                           <div class="prototype-version-list" data-testid="proc-prototype-version-list">
@@ -403,7 +405,7 @@
                                 </div>
                                 <div class="prototype-version-actions">
                                   @if (canPreviewPrototype(file, version)) {
-                                    <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-open" (click)="openNodePrototype(task, file, version.uid || '')">查看</button>
+                                    <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-preview" (click)="previewNodePrototype(task, file, version.uid || '')">预览</button>
                                   }
                                   <button class="btn btn-ghost-sm" type="button" data-testid="proc-prototype-version-download" (click)="downloadNodePrototype(task, file, version.uid || '')">下载</button>
                                 </div>

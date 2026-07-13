@@ -1,5 +1,6 @@
 import { BlmDocument, Process, ProcessNode, Stage } from '../../../core/document/document.model';
 import { identityOf } from '../../../core/document/document-model';
+import { exportGraphId } from '../../../core/export/graph-export-registry';
 import { NodeExporter } from '../../../core/export/exporters/node-exporter';
 import { ProcessExporter } from '../../../core/export/exporters/process-exporter';
 import { StageExporter } from '../../../core/export/exporters/stage-exporter';
@@ -25,9 +26,9 @@ export function createCurrentProcessExporter(
   document: BlmDocument,
   ui: ProcessExportUiState,
 ): ProcessExporter | null {
-  const process = findProcess(document, ui.procId || '');
+  const process = findProcess(document, ui.procId || '', true);
   if (!process) return null;
-  return new ProcessExporter(document, process);
+  return new ProcessExporter(document, process, exportGraphId('process-flow', identityOf(process)));
 }
 
 export function createCurrentStageExporter(
@@ -50,9 +51,11 @@ function findStage(document: BlmDocument, stageId: string): Stage | null {
     null;
 }
 
-function findProcess(document: BlmDocument, processId: string): Process | null {
+function findProcess(document: BlmDocument, processId: string, fallbackToFirst = false): Process | null {
   const target = String(processId || '').trim();
-  return document.processes.find((process) => identityOf(process) === target || process.name === target) || null;
+  return document.processes.find((process) => identityOf(process) === target || process.name === target) ||
+    (fallbackToFirst ? document.processes[0] : null) ||
+    null;
 }
 
 function findNode(process: Process | null, nodeId: string): ProcessNode | null {

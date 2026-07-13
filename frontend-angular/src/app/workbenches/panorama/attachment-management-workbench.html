@@ -1,0 +1,141 @@
+<article class="knowledge-panel attachment-panel" data-testid="panorama-attachments-panel">
+  <header class="attachment-toolbar">
+    <input
+      type="search"
+      placeholder="搜索附件、流程或节点名称…"
+      [ngModel]="keyword()"
+      data-testid="panorama-attachment-search"
+      (ngModelChange)="setKeyword($event)"
+    />
+    <span class="attachment-total">{{ totalAttachmentCount() }} 个附件</span>
+  </header>
+
+  @if (stageTabs().length > 0) {
+    <nav class="knowledge-stage-tabs" data-testid="panorama-attachment-stage-tabs">
+      <button
+        class="knowledge-stage-tab"
+        type="button"
+        data-testid="panorama-attachment-stage-all"
+        [class.active]="!selectedStageId()"
+        (click)="selectStage('')"
+      >全部</button>
+      @for (tab of visibleStageTabs(); track tab.id) {
+        <button
+          class="knowledge-stage-tab"
+          type="button"
+          [attr.data-testid]="'panorama-attachment-stage-' + tab.id"
+          [class.active]="isStageSelected(tab.id)"
+          (click)="selectStage(tab.id)"
+        >
+          <span class="knowledge-stage-tab-name">{{ tab.name }}</span>
+          <span class="knowledge-stage-tab-count">{{ tab.attachmentCount }}</span>
+        </button>
+      }
+      @if (overflowStageTabs().length) {
+        <div class="knowledge-stage-more-wrap">
+          <button
+            class="knowledge-stage-tab knowledge-stage-more"
+            type="button"
+            data-testid="panorama-attachment-stage-more"
+            [class.active]="overflowStageTabs().some(t => isStageSelected(t.id))"
+            (click)="toggleStageDropdown()"
+          >更多 ▾</button>
+          @if (stageDropdownOpen()) {
+            <div class="knowledge-stage-dropdown" data-testid="panorama-attachment-stage-dropdown">
+              @for (tab of overflowStageTabs(); track tab.id) {
+                <button
+                  class="knowledge-stage-dropdown-item"
+                  type="button"
+                  [class.active]="isStageSelected(tab.id)"
+                  (click)="selectStage(tab.id)"
+                >
+                  <span>{{ tab.name }}</span>
+                  <span class="knowledge-stage-tab-count">{{ tab.attachmentCount }}</span>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </nav>
+  }
+
+  <div class="attachment-process-list workbench-scroll-body">
+    @for (group of attachmentGroups(); track group.processId) {
+      <article
+        class="attachment-process-card"
+        data-testid="panorama-attachment-card"
+        [class.is-expanded]="isExpanded(group.processId)"
+      >
+        <button
+          class="attachment-process-summary"
+          type="button"
+          data-testid="panorama-attachment-card-summary"
+          (click)="toggleExpand(group.processId)"
+        >
+          <span class="attachment-process-name">{{ group.processName }}</span>
+          <span class="attachment-process-meta">
+            <span>{{ processSummary(group) }}</span>
+          </span>
+          <span class="attachment-card-arrow" [class.expanded]="isExpanded(group.processId)">▾</span>
+        </button>
+
+        @if (isExpanded(group.processId)) {
+          <div class="attachment-card-list">
+            @for (attachment of group.attachments; track attachment.id; let index = $index) {
+              <div class="attachment-card" data-testid="panorama-attachment-row">
+                <span class="attachment-file-icon">📎</span>
+                <div class="attachment-card-body">
+                  <div class="attachment-card-head">
+                    <h4 class="attachment-file-name">{{ attachment.name }}</h4>
+                    <span class="attachment-file-scope">{{ attachment.scope }}</span>
+                  </div>
+                  <div class="attachment-file-tags">
+                  @if (attachment.nodeName !== '-') {
+                      <span>{{ attachment.nodeName }}</span>
+                  }
+                    <span>{{ prototypeKind(attachment) }}</span>
+                    <span>{{ prototypeMeta(attachment) }}</span>
+                  </div>
+                  <div class="attachment-actions">
+                    <button type="button" class="btn btn-ghost btn-sm" data-testid="panorama-attachment-toggle" (click)="togglePrototypeVersions(attachment)">
+                      {{ isPrototypeExpanded(attachment) ? '收起' : '展开' }}版本
+                    </button>
+                    @if (canPreviewPrototype(attachment)) {
+                      <button type="button" class="btn btn-ghost btn-sm" data-testid="panorama-attachment-preview" (click)="previewPrototype(attachment)">预览</button>
+                    }
+                    <button type="button" class="btn btn-ghost btn-sm" data-testid="panorama-attachment-download" (click)="downloadPrototype(attachment)">下载</button>
+                  </div>
+                  @if (isPrototypeExpanded(attachment) && prototypeVersions(attachment).length) {
+                    <div class="attachment-version-list" data-testid="panorama-attachment-version-list">
+                      @for (version of prototypeVersions(attachment); track version.uid || $index) {
+                        <div class="attachment-version-item" data-testid="panorama-attachment-version-item">
+                          <div class="attachment-card-body">
+                            <h4 class="attachment-file-name">v{{ version.number || $index + 1 }}{{ version.uid === attachment.versionUid ? ' · 当前引用' : '' }}</h4>
+                            <p class="attachment-version-meta">{{ version.uploadedAt || '未记录上传时间' }}</p>
+                            <div class="attachment-actions">
+                              @if (canPreviewPrototype(attachment, version)) {
+                                <button type="button" class="btn btn-ghost btn-sm" data-testid="panorama-attachment-version-preview" (click)="previewPrototype(attachment, version)">预览</button>
+                              }
+                              <button type="button" class="btn btn-ghost btn-sm" data-testid="panorama-attachment-version-download" (click)="downloadPrototype(attachment, version)">下载</button>
+                            </div>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </article>
+    } @empty {
+      <div class="knowledge-empty attachment-empty">
+        <span class="knowledge-empty-icon">📎</span>
+        <strong>暂无附件</strong>
+        <span>流程或节点上传附件后，会在这里按阶段和流程汇总展示。</span>
+      </div>
+    }
+  </div>
+</article>

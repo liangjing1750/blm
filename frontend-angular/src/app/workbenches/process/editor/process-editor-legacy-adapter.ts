@@ -158,7 +158,7 @@ export interface LegacyProcess {
   nodes?: LegacyProcessNode[];
   tasks?: LegacyProcessNode[];
   flow?: LegacyProcessFlow;
-  prototypeFiles?: unknown[];
+  prototypeFiles?: LegacyPrototypeFile[];
 }
 
 export interface LegacyPrototypeVersion {
@@ -167,6 +167,10 @@ export interface LegacyPrototypeVersion {
   number?: number;
   uploadedAt?: string;
   contentType?: string;
+  content?: string;
+  contentEncoding?: string;
+  localUrl?: string;
+  size?: number;
 }
 
 export interface LegacyPrototypeFile {
@@ -178,6 +182,7 @@ export interface LegacyPrototypeFile {
   contentType?: string;
   content?: string;
   contentEncoding?: string;
+  localUrl?: string;
   size?: number;
 }
 
@@ -190,7 +195,7 @@ interface LegacyState {
     stages?: LegacyStage[];
     stageFlowRefs?: LegacyStageRef[];
   };
-  ui?: { tab?: string; procId?: string; taskId?: string | null; procView?: string };
+  ui?: { tab?: string; procId?: string; stageId?: string; taskId?: string | null; procView?: string };
 }
 
 interface LegacyWindow {
@@ -285,6 +290,7 @@ export interface ProcessEditorLegacyAdapter {
   canPreviewPrototype(file: LegacyPrototypeFile, version?: LegacyPrototypeVersion | null): boolean;
   isPrototypeExpanded(processId: string, prototypeUid: string): boolean;
   togglePrototypeVersions(processId: string, prototypeUid: string): void;
+  previewPrototype(ownerId: string, prototypeUid: string, versionUid?: string): void;
   openPrototype(processId: string, prototypeUid: string, versionUid?: string): void;
   downloadPrototype(processId: string, prototypeUid: string, versionUid?: string): void;
   removePrototype(processId: string, prototypeUid: string): void;
@@ -324,11 +330,11 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
   };
 
   function processId(process: LegacyProcess | null | undefined): string {
-    return String(process?.id || process?.uid || '').trim();
+    return String(process?.uid || process?.id || '').trim();
   }
 
   function taskId(task: LegacyProcessNode | null | undefined): string {
-    return String(task?.id || task?.uid || '').trim();
+    return String(task?.uid || task?.id || '').trim();
   }
 
   function processes(): LegacyProcess[] {
@@ -382,7 +388,9 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
 
   function currentProcess(): LegacyProcess | null {
     const currentId = String(ui().procId || '').trim();
-    return processes().find((process) => processId(process) === currentId) || processes()[0] || null;
+    return processes().find((process) =>
+      processId(process) === currentId || process.uid === currentId || process.id === currentId
+    ) || processes()[0] || null;
   }
 
   function currentTask(): LegacyProcessNode | null {
@@ -390,6 +398,151 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     const currentTaskId = String(ui().taskId || '').trim();
     if (!process || !currentTaskId) return null;
     return tasks(process).find((task) => taskId(task) === currentTaskId) || null;
+  }
+
+  function normalizeStageId(stageId: string): string {
+    const target = String(stageId || '').trim();
+    if (!target) return '';
+    const stage = (document().stages || []).find((item) => String(item.uid || '').trim() === target || String(item.id || '').trim() === target);
+    return stage ? String(stage.id || stage.uid || '').trim() : target;
+  }
+
+  function stageIdForProcess(targetProcessId: string): string {
+    const process = processes().find((item) => processId(item) === targetProcessId || item.id === targetProcessId || item.uid === targetProcessId);
+    const processKeys = new Set([targetProcessId, process?.id, process?.uid].filter(Boolean).map(String));
+    const currentStageId = normalizeStageId(String(ui().stageId || '').trim());
+    const refs = document().stageFlowRefs || [];
+    const currentRef = refs.find((ref) => (
+      normalizeStageId(String(ref.stageUid || ref.stageId || '').trim()) === currentStageId
+      && (processKeys.has(String(ref.processUid || '').trim()) || processKeys.has(String(ref.processId || '').trim()))
+    ));
+    if (currentRef) return normalizeStageId(String(currentRef.stageUid || currentRef.stageId || currentStageId).trim());
+    const ref = refs
+      .filter((item) => processKeys.has(String(item.processUid || '').trim()) || processKeys.has(String(item.processId || '').trim()))
+      .sort((left, right) => Number((left as any).order || 0) - Number((right as any).order || 0))[0];
+    return normalizeStageId(String(ref?.stageUid || ref?.stageId || (process as any)?.stageUid || (process as any)?.stageId || '').trim());
+  }
+
+  // 模块意图：附件预览/下载既要兼容旧版全局函数，也要在 Angular 运行态独立工作。
+  // 关键流程：先按流程或节点定位附件归属，再选择指定版本或当前版本，最后打开持久化 URL 或内联 Blob。
+  // 边界细节：ownerId 可能是流程 id，也可能是节点 id；附件管理聚合视图依赖这个能力预览节点附件。
+  function findPrototypeOwner(ownerId: string): { process: LegacyProcess | null; task: LegacyProcessNode | null; files: LegacyPrototypeFile[] } | null {
+    const target = String(ownerId || '').trim();
+    if (!target) return null;
+    for (const process of processes()) {
+      if (processId(process) === target) {
+        return { process, task: null, files: Array.isArray(process.prototypeFiles) ? process.prototypeFiles : [] };
+      }
+      for (const task of tasks(process)) {
+        if (taskId(task) === target) {
+          return { process, task, files: Array.isArray(task.prototypeFiles) ? task.prototypeFiles : [] };
+        }
+      }
+    }
+    return null;
+  }
+
+  function findPrototypeFile(ownerId: string, prototypeUid: string): LegacyPrototypeFile | null {
+    const target = String(prototypeUid || '').trim();
+    const owner = findPrototypeOwner(ownerId);
+    if (!owner || !target) return null;
+    return owner.files.find((file) => String(file.uid || file.id || file.name || '').trim() === target) || null;
+  }
+
+  function getAttachmentExtension(name = ''): string {
+    const match = String(name || '').trim().toLowerCase().match(/\.([a-z0-9]+)$/);
+    return match ? match[1] : '';
+  }
+
+  function canPreviewAttachment(versionOrFile: LegacyPrototypeVersion | LegacyPrototypeFile | null | undefined): boolean {
+    const ext = getAttachmentExtension(versionOrFile?.name || '');
+    return ['html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'md', 'txt', 'json', 'csv'].includes(ext);
+  }
+
+  function decodeAttachmentContent(version: LegacyPrototypeVersion | LegacyPrototypeFile): BlobPart {
+    if (String(version.contentEncoding || '').toLowerCase() !== 'base64') return version.content || '';
+    const binary = atob(String(version.content || ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+
+  function attachmentObjectUrl(version: LegacyPrototypeVersion | LegacyPrototypeFile): string {
+    if ('localUrl' in version && version.localUrl) return version.localUrl;
+    const contentType = String(version.contentType || 'text/html').trim() || 'text/html';
+    const blob = new Blob([decodeAttachmentContent(version)], {
+      type: /charset=/i.test(contentType) ? contentType : `${contentType};charset=utf-8`,
+    });
+    return URL.createObjectURL(blob);
+  }
+
+  function hasInlineAttachmentContent(version: LegacyPrototypeVersion | LegacyPrototypeFile | null | undefined): boolean {
+    return Boolean(version && 'localUrl' in version && version.localUrl)
+      || (Object.prototype.hasOwnProperty.call(version || {}, 'content') && String(version?.content || '') !== '');
+  }
+
+  // 边界细节：旧文档持久化附件没有内联内容，只能复用旧 API 生成可访问地址。
+  function persistedAttachmentUrl(file: LegacyPrototypeFile, version: LegacyPrototypeVersion | null, options: Record<string, unknown> = {}): string {
+    const documentMeta = (document() as any).meta || {};
+    const documentName = String((state() as any).currentFile || documentMeta.domain || documentMeta.title || '').trim();
+    const attachmentUid = String(file.uid || '').trim();
+    const versionUid = String(version?.uid || file.versionUid || '').trim();
+    if (documentName && attachmentUid && versionUid) {
+      const base = `/api/attachment/${encodeURIComponent(documentName)}/${encodeURIComponent(attachmentUid)}/${encodeURIComponent(versionUid)}`;
+      return options['download'] ? `${base}?download=1` : base;
+    }
+    const api = (legacyWindow as any).api || (globalThis as any).api;
+    if (!documentName || !attachmentUid || !versionUid || typeof api?.attachmentUrl !== 'function') return '';
+    return api.attachmentUrl(documentName, attachmentUid, versionUid, options);
+  }
+
+  function openAttachmentInNewTab(file: LegacyPrototypeFile, version: LegacyPrototypeVersion | null): void {
+    const target = version || file;
+    if (!canPreviewAttachment(target)) return;
+    if (!hasInlineAttachmentContent(target)) {
+      const persisted = persistedAttachmentUrl(file, version);
+      if (persisted) {
+        const popup = window.open(persisted, '_blank', 'noopener');
+        if (!popup) window.alert?.('浏览器拦截了附件预览窗口，请允许弹窗后重试。');
+        return;
+      }
+    }
+    const objectUrl = attachmentObjectUrl(target);
+    const popup = window.open(objectUrl, '_blank', 'noopener');
+    if (!popup) {
+      URL.revokeObjectURL(objectUrl);
+      window.alert?.('浏览器拦截了附件预览窗口，请允许弹窗后重试。');
+      return;
+    }
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+  }
+
+  function downloadAttachment(file: LegacyPrototypeFile, version: LegacyPrototypeVersion | null): void {
+    const target = version || file;
+    if (!hasInlineAttachmentContent(target)) {
+      const persisted = persistedAttachmentUrl(file, version, { download: true });
+      if (persisted) {
+        const link = globalThis.document.createElement('a');
+        link.href = persisted;
+        link.download = String(target.name || file.name || 'attachment').trim();
+        link.rel = 'noopener';
+        link.style.display = 'none';
+        globalThis.document.body.appendChild(link);
+        link.click();
+        globalThis.document.body.removeChild(link);
+        return;
+      }
+    }
+    const objectUrl = attachmentObjectUrl(target);
+    const link = globalThis.document.createElement('a');
+    link.href = objectUrl;
+    link.download = String(target.name || file.name || 'attachment').trim();
+    link.rel = 'noopener';
+    link.style.display = 'none';
+    globalThis.document.body.appendChild(link);
+    link.click();
+    globalThis.document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
   }
 
   return {
@@ -400,6 +553,8 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     selectProcess(targetProcessId) {
       ui().procId = targetProcessId;
       ui().taskId = null;
+      const nextStageId = stageIdForProcess(targetProcessId);
+      if (nextStageId) ui().stageId = nextStageId;
       if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
       else emitRuntimeRefresh();
     },
@@ -408,6 +563,8 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       ui().procId = targetProcessId;
       ui().taskId = null;
       ui().procView = 'flow';
+      const nextStageId = stageIdForProcess(targetProcessId);
+      if (nextStageId) ui().stageId = nextStageId;
       if (legacyWindow.renderSidebar) legacyWindow.renderSidebar();
       else emitRuntimeRefresh();
     },
@@ -495,13 +652,16 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       if (!id) return [];
       const refs = typeof legacyWindow.getProcessStageRefs === 'function'
         ? legacyWindow.getProcessStageRefs(id, document())
-        : (document().stageFlowRefs || []).filter((ref) => String(ref.processUid || ref.processId || '').trim() === id);
+        : (document().stageFlowRefs || []).filter((ref) => {
+          const processKeys = new Set([id, process?.id, process?.uid].filter(Boolean).map(String));
+          return processKeys.has(String(ref.processUid || '').trim()) || processKeys.has(String(ref.processId || '').trim());
+        });
       return refs
-        .map((ref) => String(ref.stageUid || ref.stageId || '').trim())
+        .map((ref) => normalizeStageId(String(ref.stageUid || ref.stageId || '').trim()))
         .filter(Boolean)
         .map((stageId) => ({
           id: stageId,
-          name: legacyWindow.getStageDisplayName?.(stageId, document()) || (document().stages || []).find((stage) => String(stage.uid || stage.id || '').trim() === stageId)?.name || stageId,
+          name: legacyWindow.getStageDisplayName?.(stageId, document()) || (document().stages || []).find((stage) => String(stage.uid || stage.id || '').trim() === stageId || normalizeStageId(String(stage.uid || stage.id || '')) === stageId)?.name || stageId,
         }));
     },
     openStage(stageId) {
@@ -522,7 +682,8 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       return legacyWindow.getProcessAttachmentKind?.(version || file) || '附件';
     },
     canPreviewPrototype(file, version = null) {
-      return Boolean(legacyWindow.canPreviewProcessAttachment?.(version || this.currentPrototypeVersion(file) || file));
+      return Boolean(legacyWindow.canPreviewProcessAttachment?.(version || this.currentPrototypeVersion(file) || file))
+        || canPreviewAttachment(version || this.currentPrototypeVersion(file) || file);
     },
     isPrototypeExpanded(processId, prototypeUid) {
       return Boolean(legacyWindow.isProcessPrototypeExpanded?.(processId, prototypeUid));
@@ -530,10 +691,28 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     togglePrototypeVersions(processId, prototypeUid) {
       legacyWindow.toggleProcessPrototypeVersions?.(processId, prototypeUid);
     },
+    previewPrototype(ownerId, prototypeUid, versionUid = '') {
+      const file = findPrototypeFile(ownerId, prototypeUid);
+      if (file) {
+        openAttachmentInNewTab(file, this.currentPrototypeVersion({ ...file, versionUid: versionUid || file.versionUid }));
+        return;
+      }
+      legacyWindow.openProcessPrototypeFile?.(ownerId, prototypeUid, versionUid);
+    },
     openPrototype(processId, prototypeUid, versionUid = '') {
+      const file = findPrototypeFile(processId, prototypeUid);
+      if (file) {
+        openAttachmentInNewTab(file, this.currentPrototypeVersion({ ...file, versionUid: versionUid || file.versionUid }));
+        return;
+      }
       legacyWindow.openProcessPrototypeFile?.(processId, prototypeUid, versionUid);
     },
     downloadPrototype(processId, prototypeUid, versionUid = '') {
+      const file = findPrototypeFile(processId, prototypeUid);
+      if (file) {
+        downloadAttachment(file, this.currentPrototypeVersion({ ...file, versionUid: versionUid || file.versionUid }));
+        return;
+      }
       legacyWindow.downloadProcessPrototypeFile?.(processId, prototypeUid, versionUid);
     },
     removePrototype(processId, prototypeUid) {

@@ -324,17 +324,16 @@ function rebuildServiceNodeRefs(document: BlmDocument): void {
     if (service.uid) servicesById.set(service.uid, service);
   }
   if (!servicesById.size) return;
-  // 方向一：从 section.serviceUids → 回写 service.nodeRefs
-  // 方向二：从 service.nodeRefs / node.serviceUids → 回写 section.serviceUids
+  // 方向一：从 section.serviceUids → 回写 service.nodeRefs。
+  // 边界细节：nodeRefs/node.serviceUids 只能说明接口和节点相关，不能反向推断到每一个表单分组，
+  // 否则同节点下多个表单各自关联不同接口时，会在保存归一化后被扩散成全部表单都关联全部接口。
   for (const process of document.processes) {
     for (const node of process.nodes || []) {
       const nodeUid = (node.uid || node.id || '').trim();
       if (!nodeUid) continue;
       const sectionServiceUids = new Set<string>();
-      const sections: Array<Record<string, any>> = [];
       for (const form of node.forms || []) {
         for (const section of (Array.isArray((form as any).sections) ? (form as any).sections : [])) {
-          sections.push(section);
           for (const id of [
             ...(Array.isArray(section['serviceUids']) ? section['serviceUids'] : []),
             ...(Array.isArray(section['serviceIds']) ? section['serviceIds'] : []),
@@ -354,35 +353,6 @@ function rebuildServiceNodeRefs(document: BlmDocument): void {
         if (service) {
           service.nodeRefs = service.nodeRefs || [];
           if (!service.nodeRefs.includes(nodeUid)) service.nodeRefs.push(nodeUid);
-        }
-      }
-      // 方向二：node 级别或 service.nodeRefs 中的服务 → 补齐到 section.serviceUids
-      const nodeLevelIds = new Set([
-        ...sectionServiceUids,
-        ...((node as any).serviceUids || []).filter(Boolean),
-        ...((node as any).serviceIds || []).filter(Boolean),
-        ...([] as string[]),
-      ]);
-      // 从 service.nodeRefs 反向收集
-      for (const service of servicesById.values()) {
-        if ((service.nodeRefs || []).includes(nodeUid)) nodeLevelIds.add(service.uid);
-      }
-      // 对每个 form 的第一个 section 补齐缺失的 serviceUid
-      for (const form of node.forms || []) {
-        const formSections = Array.isArray((form as any).sections) ? (form as any).sections : [];
-        for (const section of formSections) {
-          const existing = new Set([
-            ...(Array.isArray(section['serviceUids']) ? section['serviceUids'] : []),
-            ...(Array.isArray(section['serviceIds']) ? section['serviceIds'] : []),
-            section['serviceUid'],
-            section['serviceId'],
-          ].map((id) => String(id || '').trim()).filter(Boolean));
-          const missing = [...nodeLevelIds].filter((id) => !existing.has(id));
-          if (!missing.length) continue;
-          section['serviceUids'] = [...existing, ...missing];
-          section['serviceIds'] = [...existing, ...missing];
-          if (!section['serviceUid']) section['serviceUid'] = missing[0];
-          if (!section['serviceId']) section['serviceId'] = missing[0];
         }
       }
     }

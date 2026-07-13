@@ -748,6 +748,10 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     this.adapter.openPrototype(this.processId(process), this.prototypeFileId(file), versionUid);
   }
 
+  protected previewPrototype(process: LegacyProcess, file: LegacyPrototypeFile, versionUid = ''): void {
+    this.adapter.previewPrototype(this.processId(process), this.prototypeFileId(file), versionUid);
+  }
+
   protected downloadPrototype(process: LegacyProcess, file: LegacyPrototypeFile, versionUid = ''): void {
     this.adapter.downloadPrototype(this.processId(process), this.prototypeFileId(file), versionUid);
   }
@@ -787,6 +791,10 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected openNodePrototype(task: LegacyProcessNode, file: LegacyPrototypeFile, versionUid = ''): void {
     this.adapter.openPrototype(this.taskId(task), this.prototypeFileId(file), versionUid);
+  }
+
+  protected previewNodePrototype(task: LegacyProcessNode, file: LegacyPrototypeFile, versionUid = ''): void {
+    this.adapter.previewPrototype(this.taskId(task), this.prototypeFileId(file), versionUid);
   }
 
   protected downloadNodePrototype(task: LegacyProcessNode, file: LegacyPrototypeFile, versionUid = ''): void {
@@ -993,6 +1001,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected currentStageId(process: LegacyProcess): string {
+    const runtimeStageId = this.normalizeStageId((getAngularRuntimeState() as any).ui?.stageId || '');
+    if (runtimeStageId && this.stageRefs(process).some((stage) => this.normalizeStageId(stage.id) === runtimeStageId)) return runtimeStageId;
     return this.stageRefs(process)[0]?.id || '';
   }
 
@@ -1005,11 +1015,11 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected processesForStage(stageId: string): LegacyProcess[] {
-    const normalizedStageId = String(stageId || '').trim();
+    const normalizedStageId = this.normalizeStageId(stageId);
     if (!normalizedStageId) return this.processes();
     const processIds = new Set(
       this.adapter.stageFlowRefs()
-        .filter((item) => String(item.stageUid || item.stageId || '').trim() === normalizedStageId)
+        .filter((item) => this.normalizeStageId(String(item.stageUid || item.stageId || '').trim()) === normalizedStageId)
         .map((item) => String(item.processUid || item.processId || '').trim())
         .filter(Boolean),
     );
@@ -1019,10 +1029,12 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected selectStage(stageId: string): void {
     if (!stageId) return;
+    const normalizedStageId = this.normalizeStageId(stageId);
     // 模块意图：节点视图里的阶段选择只用于限定“阶段-流程-节点”的维护上下文，不能跳转到阶段详情。
     // 关键流程：优先找到该阶段引用的第一个流程并切换；如果没有引用，则保持当前流程不变。
     // 边界细节：阶段详情跳转仍保留给全景/阶段视图入口，避免节点视图编辑中断。
-    const ref = this.adapter.stageFlowRefs().find((item) => String(item.stageUid || item.stageId || '').trim() === stageId);
+    (getAngularRuntimeState() as any).ui.stageId = normalizedStageId;
+    const ref = this.adapter.stageFlowRefs().find((item) => this.normalizeStageId(String(item.stageUid || item.stageId || '').trim()) === normalizedStageId);
     const processId = String(ref?.processUid || ref?.processId || '').trim();
     if (processId) this.selectProcess(processId);
   }
@@ -1030,6 +1042,13 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected stageRefs(process: LegacyProcess): ProcessStageDisplay[] {
     this.version();
     return this.adapter.stageRefs(process);
+  }
+
+  private normalizeStageId(stageId: string): string {
+    const target = String(stageId || '').trim();
+    if (!target) return '';
+    const stage = this.adapter.stages().find((item) => String(item.id || '').trim() === target || String(item.uid || '').trim() === target);
+    return stage ? String(stage.id || stage.uid || '').trim() : target;
   }
 
   protected openStage(stageId: string): void {

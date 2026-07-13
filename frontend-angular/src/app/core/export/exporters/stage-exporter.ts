@@ -41,7 +41,7 @@ export class StageExporter implements ViewExporter {
 
   async captureAll(onProgress?: (done: number, total: number, label?: string) => void): Promise<Uint8Array[]> {
     const screenshots: Uint8Array[] = [await this.capture()];
-    const processes = processesForStage(this.document, this.stage);
+    const processes = processesForStageContentOrder(this.document, this.stage);
     onProgress?.(1, Math.max(1, processes.length + 1), `阶段视图：${display(this.stage.name, identityOf(this.stage), '')}`);
     for (const process of processes) {
       screenshots.push(await captureProcessFlowGraph(exportGraphId('process-flow', identityOf(process))));
@@ -86,6 +86,10 @@ export function buildStageContent(
 
 export function processesForStage(document: BlmDocument, stage: Stage): Process[] {
   return groupedStageEntries(document, stage).map((entry) => entry.process);
+}
+
+export function processesForStageContentOrder(document: BlmDocument, stage: Stage): Process[] {
+  return groupedStageProcesses(document, stage).flatMap((group) => group.processes);
 }
 
 function groupedStageProcesses(document: BlmDocument, stage: Stage): Array<{ name: string; processes: Process[] }> {

@@ -76,7 +76,7 @@
       </div>
     }
   } @else if (view() === 'flow') {
-    <app-process-flow-workbench [editing]="flowEditing()" (taskEditorRequested)="openNode($event)" />
+    <app-process-flow-workbench [editing]="flowEditing()" [exportGraphId]="processGraphId(currentProcess())" (taskEditorRequested)="openNode($event)" />
   } @else if (view() === 'node') {
     <app-process-editor-workbench [editing]="editorEditing()" />
   } @else {

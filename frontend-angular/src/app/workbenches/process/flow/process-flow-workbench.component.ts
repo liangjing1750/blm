@@ -10,8 +10,10 @@ import {
   LegacyPrototypeVersion,
   LegacyRole,
   LegacyStage,
+  ProcessStageDisplay,
   createProcessEditorLegacyAdapter,
 } from '../editor/process-editor-legacy-adapter';
+import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import { ProcessFlowLayoutOffset, ProcessFlowModelService } from './process-flow-model.service';
 
 interface FlowCanvasNode {
@@ -131,8 +133,6 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly editingNodeNameId = signal<string>('');
   protected readonly editingEdgeLabelId = signal<string>('');
   protected readonly cardRolePickerNodeId = signal<string>('');
-  protected readonly selectedStageId = signal<string>('');
-  private lastProcessId = '';
   protected readonly attachmentDrawerOpen = signal(false);
   protected readonly zoomValue = signal(1);
   protected readonly dragState = signal<FlowDragState | null>(null);
@@ -217,7 +217,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected stageId(stage: LegacyStage | null | undefined): string {
-    return String(stage?.uid || stage?.id || '').trim();
+    return String(stage?.id || stage?.uid || '').trim();
   }
 
   protected stageName(stage: LegacyStage | null | undefined): string {
@@ -362,25 +362,31 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.cardRolePickerNodeId.set('');
   }
 
-  protected currentStageId(): string {
+  protected currentStageId(process: LegacyProcess): string {
     this.version();
-    const process = this.currentProcess();
-    const procId = process ? this.processId(process) : '';
-    // 流程发生变化时清除手动选中的阶段，让阶段下拉框跟随流程
-    if (procId && procId !== this.lastProcessId) {
-      this.lastProcessId = procId;
-      this.selectedStageId.set('');
-    }
-    const explicit = this.selectedStageId();
-    if (explicit) return explicit;
-    const refs = process ? this.stageIdsForProcess(process) : [];
-    return refs[0] || this.stageId(this.stages()[0]) || '';
+    // 模块意图：流程视图顶部上下文选择必须与节点视图保持同一套规则，避免两个视图显示不同阶段。
+    // 关键流程：优先使用 runtime 中仍然包含当前流程的阶段；否则回到当前流程关联的第一个阶段。
+    // 边界细节：这里不要用 currentProcess() 反推阶段，调用方已经传入当前渲染流程。
+    const runtimeStageId = this.normalizeStageId((getAngularRuntimeState() as any).ui?.stageId || '');
+    if (runtimeStageId && this.stageRefs(process).some((stage) => this.normalizeStageId(stage.id) === runtimeStageId)) return runtimeStageId;
+    return this.stageRefs(process)[0]?.id || '';
   }
 
-  protected processesForCurrentStage(): LegacyProcess[] {
-    const stageId = this.currentStageId();
-    if (!stageId) return this.processes();
-    return this.processes().filter((process) => this.stageIdsForProcess(process).includes(stageId));
+  private stageRefs(process: LegacyProcess): ProcessStageDisplay[] {
+    return this.adapter.stageRefs(process);
+  }
+
+  protected processesForStage(stageId: string): LegacyProcess[] {
+    const normalizedStageId = this.normalizeStageId(stageId);
+    if (!normalizedStageId) return this.processes();
+    const processIds = new Set(
+      this.adapter.stageFlowRefs()
+        .filter((item) => this.normalizeStageId(String(item.stageUid || item.stageId || '').trim()) === normalizedStageId)
+        .map((item) => String(item.processUid || item.processId || '').trim())
+        .filter(Boolean),
+    );
+    const scoped = this.processes().filter((process) => processIds.has(this.processId(process)));
+    return scoped.length ? scoped : this.processes();
   }
 
   protected lanes(process: LegacyProcess): FlowLane[] {
@@ -649,6 +655,12 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.adapter.openPrototype(this.processId(process), prototypeUid, String(version?.uid || ''));
   }
 
+  protected previewPrototype(process: LegacyProcess, file: LegacyPrototypeFile, version: LegacyPrototypeVersion | null = null): void {
+    const prototypeUid = this.prototypeUid(file);
+    if (!prototypeUid) return;
+    this.adapter.previewPrototype(this.processId(process), prototypeUid, String(version?.uid || ''));
+  }
+
   protected downloadPrototype(process: LegacyProcess, file: LegacyPrototypeFile, version: LegacyPrototypeVersion | null = null): void {
     const prototypeUid = this.prototypeUid(file);
     if (!prototypeUid) return;
@@ -663,8 +675,12 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected selectStage(stageId: string): void {
-    this.selectedStageId.set(stageId);
-    const process = this.processesForCurrentStage()[0] || null;
+    const normalizedStageId = this.normalizeStageId(stageId);
+    // 模块意图：复制节点视图的阶段选择语义，阶段只负责切换“阶段-流程”的维护上下文。
+    // 关键流程：先写入阶段，再取该阶段的第一个流程；不要通过当前流程反推阶段。
+    // 边界细节：没有流程引用时只刷新，不跳转阶段详情，避免打断流程图编辑。
+    (getAngularRuntimeState() as any).ui.stageId = normalizedStageId;
+    const process = this.processesForStage(normalizedStageId)[0] || null;
     if (process) this.selectProcess(this.processId(process));
     else this.refresh();
   }
@@ -674,7 +690,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     if (!target) return;
     this.selectedElementId.set('');
     this.connectingFromId.set('');
-    this.adapter.selectTask(null);
+    // 关键流程：流程切换交给 editor adapter，它和节点视图共用 stageIdForProcess，避免这里再次写 stageId。
     this.adapter.selectProcess(processId);
     this.refresh();
   }
@@ -1244,15 +1260,11 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     return task ? this.roleName(this.taskRoleId(task)) : '';
   }
 
-  private stageIdsForProcess(process: LegacyProcess): string[] {
-    const processId = this.processId(process);
-    const ids = this.adapter.stageFlowRefs()
-      .filter((ref) => String(ref.processUid || ref.processId || '').trim() === processId)
-      .map((ref) => String(ref.stageUid || ref.stageId || '').trim())
-      .filter(Boolean);
-    const direct = String((process as { stageUid?: string; stageId?: string }).stageUid || (process as { stageUid?: string; stageId?: string }).stageId || '').trim();
-    if (direct) ids.push(direct);
-    return [...new Set(ids)];
+  private normalizeStageId(stageId: string): string {
+    const target = String(stageId || '').trim();
+    if (!target) return '';
+    const stage = this.stages().find((item) => String(item.uid || '').trim() === target || String(item.id || '').trim() === target);
+    return stage ? this.stageId(stage) : target;
   }
 
   private refresh(): void {

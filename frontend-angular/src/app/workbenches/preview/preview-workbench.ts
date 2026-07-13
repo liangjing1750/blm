@@ -5,10 +5,12 @@ import { sanitizeRichTextHtml } from '../../shared/rich-text/rich-text-utils';
 import { ApiService } from '../../core/api/api.service';
 import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-registry';
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../core/runtime/angular-runtime';
-import { buildDocxFragment } from '../../core/export/fragments/docx-fragment';
+import { ExportProgress, ExportService } from '../../core/export/export.service';
 import { downloadBlob } from '../../core/export/export-builders';
-import { ViewContent, ViewSection } from '../../core/export/exporters/view-exporter';
+import { PanoramaExporter } from '../../core/export/exporters/panorama-exporter';
+import { ValueStreamExporter } from '../../core/export/exporters/value-stream-exporter';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
+import { PanoramaWorkbench } from '../panorama/panorama-workbench';
 import { PreviewGraphHostComponent } from './preview-graph-host.component';
 
 interface PreviewOutlineItem {
@@ -21,7 +23,7 @@ interface PreviewOutlineItem {
 @Component({
   selector: 'app-preview-workbench',
   standalone: true,
-  imports: [CommonModule, WaitDialogComponent, PreviewGraphHostComponent],
+  imports: [CommonModule, WaitDialogComponent, PreviewGraphHostComponent, PanoramaWorkbench],
   templateUrl: './preview-workbench.html',
   styleUrl: './preview-workbench.scss',
 })
@@ -31,8 +33,10 @@ export class PreviewWorkbench {
   // 边界细节：正文 HTML 由本组件统一转义字段后生成，再放行旧版懒加载所需的 data-* 标记。
   private readonly api = inject(ApiService);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly exportSvc = inject(ExportService);
   protected readonly runtime = getAngularRuntimeState();
   protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
+  protected readonly exportCaptureReady = signal(false);
   protected readonly showRaw = signal(false);
   protected readonly collapsedOutlineIds = signal<Set<string>>(new Set());
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
@@ -391,196 +395,83 @@ export class PreviewWorkbench {
     return true;
   }
 
-  /** 统一导出流程：截图 → 发送 → 轮询 → 下载 */
-  private async runExport(fmt: string, label: string): Promise<void> {
-    if (!await this.confirmExport()) return;
-    const name = this.runtime.currentFile;
-    if (!name) { this.exportWait.set(null); return; }
-    const version = this.currentVersion();
-    // 检查缓存
-    const cached = await fetch(`/api/export-bundle/${encodeURIComponent(name)}?version=${encodeURIComponent(version)}&format=${fmt}`);
-    if (cached.ok) {
-      const blob = await cached.blob();
-      this.exportWait.set(null);
-      this.downloadBlob(blob, this.responseFilename(cached) || `${this.baseFileName()}.${fmt === 'docx' ? 'docx' : 'zip'}`);
-      return;
-    }
-    this.exportWait.set({ title: '正在截图…', description: '正在用 html2canvas 截取图形。', progress: 5 });
-    let screenshots: Array<{id: string; dataUrl: string}> = [];
-    try {
-      screenshots = await this.captureAllGraphs();
-    } catch (e) { /* 截图失败继续 */ }
-
-    this.exportWait.set({ title: label, description: `截图完成（${screenshots.length} 张），正在提交导出任务。`, progress: 30 });
-    try {
-      const endpoint = fmt === 'docx' ? '/api/export-docx/start' : `/api/export/${fmt}/start`;
-      const resp = await fetch(endpoint, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, version, markdown: this.markdown(), screenshots }),
-      });
-      const job: any = await resp.json();
-      if (!job?.id) {
-        this.exportWait.set(null);
-        return;
-      }
-      const done = await this.waitForExportJob(job.id, job);
-      if (done?.status !== 'done') { this.exportWait.set(null); return; }
-      const dlResp = await this.api.downloadExportJob(job.id);
-      if (dlResp.ok) {
-        const ext = fmt === 'docx' ? 'docx' : 'zip';
-        this.downloadBlob(await dlResp.blob(), done.filename || `${this.baseFileName()}.${ext}`);
-      }
-    } catch (e) {
-      // 网络或其他错误，清理等待状态
-    } finally { this.exportWait.set(null); }
-  }
-
   protected async exportJson(): Promise<void> {
-    return this.runExport('json', '正在打包 JSON+附件...');
+    if (!this.runtime.currentFile) return;
+    const encoder = new TextEncoder();
+    const data = encoder.encode(JSON.stringify(this.runtime.doc || {}, null, 2));
+    downloadBlob(new Blob([data], { type: 'application/json' }), `${this.baseFileName()}.json`);
   }
 
   protected async exportMarkdown(): Promise<void> {
-    return this.runExport('markdown', '正在打包 MD+截图+附件...');
+    return this.exportPreviewDocument('md');
   }
 
-  /** 前端本地 DOCX 生成：截图 + Markdown → ViewContent → buildDocxFragment → 下载 */
   protected async exportDocx(): Promise<void> {
+    return this.exportPreviewDocument('docx');
+  }
+
+  private async exportPreviewDocument(format: 'docx' | 'md'): Promise<void> {
     if (!await this.confirmExport()) return;
-    const name = this.runtime.currentFile;
-    if (!name) { this.exportWait.set(null); return; }
+    const doc = this.runtime.doc;
+    if (!doc) return;
 
-    this.exportWait.set({ title: '正在截图…', description: '正在用 html2canvas 截取图形。', progress: 5 });
-    let screenshots: Array<{id: string; dataUrl: string}> = [];
-    try {
-      screenshots = await this.captureAllGraphs();
-    } catch (e) { /* 截图失败继续 */ }
+    this.exportWait.set({ title: '正在准备预览导出', description: '正在渲染全景与价值流截图区域', progress: 5 });
+    this.exportCaptureReady.set(true);
+    await this.waitForPreviewExportGraphs();
 
-    this.exportWait.set({ title: '正在生成 DOCX…', description: `截图完成（${screenshots.length} 张），正在构建文档。`, progress: 50 });
     try {
-      const viewContent = this.markdownToViewContent(this.markdown(), screenshots);
-      const pngBytes = screenshots.map((s) => this.dataUrlToUint8(s.dataUrl));
-      const blob = await buildDocxFragment(viewContent, pngBytes);
+      const exporters = [
+        new PanoramaExporter(doc),
+        new ValueStreamExporter(doc),
+      ];
+      await this.exportSvc.exportAll(exporters, format, (progress) => this.updateExportProgress(progress));
       this.exportWait.set({ title: '完成', description: '', progress: 100 });
-      downloadBlob(blob, `${this.baseFileName()}.docx`);
     } catch (e) {
       this.exportWait.set({ title: '导出失败', description: e instanceof Error ? e.message : String(e), progress: 0 });
+    } finally {
+      this.exportCaptureReady.set(false);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      this.exportWait.set(null);
     }
-    await new Promise((r) => setTimeout(r, 300));
-    this.exportWait.set(null);
   }
 
-  /** 将 Markdown 文本转为 ViewContent，图形引用与截图数组按 graphId 匹配 */
-  private markdownToViewContent(md: string, screenshots: Array<{id: string; dataUrl: string}>): ViewContent {
-    const sections: ViewSection[] = [];
-    const lines = md.split('\n');
-    const screenshotMap = new Map(screenshots.map((s) => [s.id, s]));
+  private updateExportProgress(progress: ExportProgress): void {
+    const ratio = progress.total > 0 ? progress.current / progress.total : 0;
+    this.exportWait.set({
+      title: `正在导出 ${progress.label}`,
+      description: this.exportPhaseText(progress),
+      progress: Math.min(99, Math.max(8, Math.round(8 + ratio * 86))),
+    });
+  }
 
-    let inTable = false;
-    let tableHeaders: string[] = [];
-    let tableRows: string[][] = [];
+  private exportPhaseText(progress: ExportProgress): string {
+    if (progress.phase === 'content') return '正在准备内容';
+    if (progress.phase === 'capture') return `正在截图 ${progress.current}/${progress.total}`;
+    if (progress.phase === 'assemble') return '正在生成文件';
+    if (progress.phase === 'download') return '正在下载';
+    return '正在导出';
+  }
 
-    const flushTable = (): void => {
-      if (!inTable || !tableHeaders.length) return;
-      sections.push({ type: 'table', headers: tableHeaders, rows: tableRows });
-      tableHeaders = [];
-      tableRows = [];
-      inTable = false;
-    };
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmed = line.trim();
-
-      // 图片引用
-      const imgMatch = trimmed.match(/^!\[(.+?)\]\((.+?)\)$/);
-      if (imgMatch) {
-        flushTable();
-        const imgId = imgMatch[2].replace(/\.png$/i, '');
-        const found = screenshotMap.get(imgId);
-        if (found) {
-          const idx = screenshots.findIndex((s) => s.id === imgId);
-          sections.push({ type: 'image', text: imgMatch[1], imageIndex: idx >= 0 ? idx : 0 });
-        }
-        continue;
-      }
-
-      // 表格行
-      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
-        const cells = trimmed.split('|').filter((c) => c.trim() || c === '').map((c) => c.trim());
-        const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
-        const isSeparator = nextLine.startsWith('|') && nextLine.split('|').every((c) => /^:?-{2,}:?$/.test(c.trim()));
-        if (isSeparator) {
-          flushTable();
-          tableHeaders = cells;
-          tableRows = [];
-          i += 1; // skip separator
-          inTable = true;
-          continue;
-        }
-        if (inTable) {
-          tableRows.push(cells);
-          continue;
-        }
-      }
-
-      flushTable();
-
-      // 空行
-      if (!trimmed) continue;
-
-      // 标题
-      if (trimmed.startsWith('##### ')) { sections.push({ type: 'heading3', text: trimmed.slice(6) }); continue; }
-      if (trimmed.startsWith('#### ')) { sections.push({ type: 'heading3', text: trimmed.slice(5) }); continue; }
-      if (trimmed.startsWith('### ')) { sections.push({ type: 'heading3', text: trimmed.slice(4) }); continue; }
-      if (trimmed.startsWith('## ')) { sections.push({ type: 'heading2', text: trimmed.slice(3) }); continue; }
-      if (trimmed.startsWith('# ')) { sections.push({ type: 'heading1', text: trimmed.slice(2) }); continue; }
-
-      // 列表项
-      if (trimmed.startsWith('- ')) {
-        sections.push({ type: 'list', items: [trimmed.slice(2)] });
-        continue;
-      }
-
-      // 普通段落
-      sections.push({ type: 'paragraph', text: trimmed });
+  private async waitForPreviewExportGraphs(): Promise<void> {
+    const graphIds = [
+      exportGraphId('stage-panorama'),
+      ...this.stages().map((stage, index) => this.stageGraphId('stage-flow', stage, index)),
+      ...this.processes().map((process, index) => this.processGraphId(process, index)),
+    ];
+    const selectors = [
+      '[data-testid="panorama-overview-rich"]',
+      ...graphIds.map((id) => `[data-export-graph-id="${String(id).replace(/"/g, '\\"')}"]`),
+    ];
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const ready = selectors.every((selector) => {
+        const el = document.querySelector<HTMLElement>(selector);
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+      if (ready) return;
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
-    flushTable();
-
-    return { title: this.title(), sections };
-  }
-
-  /** dataUrl → Uint8Array */
-  private dataUrlToUint8(dataUrl: string): Uint8Array {
-    const raw = atob(dataUrl.split(',')[1]);
-    const buf = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
-    return buf;
-  }
-
-  /** 遍历所有 [data-export-graph-id] 元素，用 html2canvas 截图（动态导入，避免 CJS 阻塞组件加载） */
-  private async captureAllGraphs(): Promise<Array<{id: string; dataUrl: string}>> {
-    const results: Array<{id: string; dataUrl: string}> = [];
-    try {
-      // 先触发所有 @defer 懒加载图形组件的渲染
-      const placeholders = document.querySelectorAll<HTMLElement>('.pv-graph-placeholder');
-      for (const ph of Array.from(placeholders)) {
-        ph.scrollIntoView({ behavior: 'instant', block: 'center' });
-      }
-      if (placeholders.length) {
-        // 等待 Angular 渲染 @defer 内容
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      const html2canvas = (await import('html2canvas')).default;
-      const elements = document.querySelectorAll<HTMLElement>('[data-export-graph-id]');
-      for (const el of Array.from(elements)) {
-        try {
-          const graphId = el.getAttribute('data-export-graph-id') || '';
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          results.push({ id: graphId, dataUrl: canvas.toDataURL('image/png') });
-        } catch (e) { /* 单个截图失败不阻塞 */ }
-      }
-    } catch (e) { /* html2canvas 不可用时降级 */ }
-    return results;
   }
 
   private buildOutlineItems(): PreviewOutlineItem[] {
@@ -1120,41 +1011,6 @@ export class PreviewWorkbench {
     link.click();
     link.remove();
     URL.revokeObjectURL(objectUrl);
-  }
-
-  private responseFilename(response: Response): string {
-    const disposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition') || '';
-    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-    if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1].replace(/"/g, ''));
-    const asciiMatch = disposition.match(/filename="?([^";]+)"?/i);
-    return asciiMatch?.[1] || '';
-  }
-
-  /** 轮询导出任务，实时更新进度和剩余时间估算 */
-  private async waitForExportJob(jobId: string, initialJob: any, startTime = Date.now()): Promise<any> {
-    let latestJob = initialJob;
-    const start = startTime;
-    for (let attempt = 0; attempt < 300; attempt += 1) {
-      if (latestJob?.status === 'done' || latestJob?.status === 'failed') return latestJob;
-      const progress = Math.min(99, Math.max(0, Number(latestJob?.progress ?? 0)));
-      const elapsed = (Date.now() - start) / 1000;
-      const estimatedTotal = progress > 5 ? (elapsed / progress) * 100 : 60;
-      const remaining = Math.max(1, Math.round(estimatedTotal - elapsed));
-      this.exportWait.set({
-        title: latestJob?.title || this.exportWait()?.title || '正在导出…',
-        description: latestJob?.message || '请耐心等待。',
-        progress,
-        remainingSeconds: remaining,
-      });
-      latestJob = await this.api.exportJob(jobId);
-      if (latestJob?.status === 'done' || latestJob?.status === 'failed') return latestJob;
-      await this.delay(500);
-    }
-    return latestJob;
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   protected anchorId(prefix: string, value: string): string {

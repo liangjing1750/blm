@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BlmDocument } from '../../document/document.model';
-import { buildStageContent, processesForStage, StageExporter } from './stage-exporter';
+import { buildStageContent, processesForStage, processesForStageContentOrder, StageExporter } from './stage-exporter';
 
 function createDocument(): BlmDocument {
   return {
@@ -63,6 +63,27 @@ describe('processesForStage', () => {
     const document = createDocument();
     expect(processesForStage(document, document.stages[0]).map((process) => process.name))
       .toEqual(['入库预约', '仓单审核']);
+  });
+});
+
+describe('processesForStageContentOrder', () => {
+  it('keeps process screenshot order aligned with grouped stage content order', () => {
+    const document = createDocument();
+    document.stageFlowRefs = [
+      { uid: 'ref-online-1', stageUid: 'stage-in', processUid: 'process-online-1', order: 1 },
+      { uid: 'ref-template', stageUid: 'stage-in', processUid: 'process-template', order: 2 },
+      { uid: 'ref-online-2', stageUid: 'stage-in', processUid: 'process-online-2', order: 3 },
+    ];
+    document.processes = [
+      { uid: 'process-online-1', name: '新增线上查库', flowGroup: '线上查库管理', nodes: [] } as any,
+      { uid: 'process-template', name: '修改查库模板', flowGroup: '查库模板管理', nodes: [] } as any,
+      { uid: 'process-online-2', name: '查看线上查库', flowGroup: '线上查库管理', nodes: [] } as any,
+    ];
+
+    expect(processesForStage(document, document.stages[0]).map((process) => process.name))
+      .toEqual(['新增线上查库', '修改查库模板', '查看线上查库']);
+    expect(processesForStageContentOrder(document, document.stages[0]).map((process) => process.name))
+      .toEqual(['新增线上查库', '查看线上查库', '修改查库模板']);
   });
 });
 

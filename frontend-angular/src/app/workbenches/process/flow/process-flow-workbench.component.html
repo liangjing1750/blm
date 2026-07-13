@@ -4,7 +4,7 @@
       <header class="process-flow-topbar" data-testid="process-flow-basic-fields">
         <label class="compact-field select-field">
           <span>阶段</span>
-          <select class="stage-select" data-testid="process-flow-stage-select" [value]="currentStageId()" (change)="selectStage($any($event.target).value)">
+          <select class="stage-select" data-testid="process-flow-stage-select" [ngModel]="currentStageId(process)" (ngModelChange)="selectStage($event)">
             @for (stage of stages(); track stageId(stage)) {
               <option [value]="stageId(stage)">{{ stageName(stage) }}</option>
             }
@@ -12,8 +12,8 @@
         </label>
         <label class="compact-field select-field">
           <span>流程</span>
-          <select class="process-select" data-testid="process-flow-select" [value]="processId(process)" (change)="selectProcess($any($event.target).value)">
-            @for (item of processesForCurrentStage(); track processId(item)) {
+          <select class="process-select" data-testid="process-flow-select" [ngModel]="processId(process)" (ngModelChange)="selectProcess($event)">
+            @for (item of processesForStage(currentStageId(process)); track processId(item)) {
               <option [value]="processId(item)">{{ item.name || '\u672a\u547d\u540d\u6d41\u7a0b' }}</option>
             }
           </select>
@@ -54,7 +54,7 @@
         }
 
         <section class="process-flow-canvas-shell" data-testid="process-flow-canvas-shell" (wheel)="onCanvasWheel($event)">
-          <div class="process-flow-canvas" data-testid="process-flow-canvas" [attr.data-export-graph-id]="exportGraphId || null" data-export-graph-ready="true" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
+          <div class="process-flow-canvas" data-testid="process-flow-canvas" [attr.data-export-graph-id]="exportGraphId || null" [attr.data-export-process-id]="processId(process)" data-export-graph-ready="true" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
             @for (lane of lanes(process); track lane.id) {
               <div class="flow-lane" [style.--lane-color]="laneColor(lane.name)" [style.top.px]="lane.top" [style.height.px]="lane.height" (dragover)="$event.preventDefault()" (drop)="onLaneDrop($event, lane)">
                 <div class="flow-lane-title">{{ lane.name }}</div>
@@ -165,7 +165,7 @@
                   <div class="attachment-card-meta"><strong>{{ prototypeFileName(file, index) }}</strong><span>{{ prototypeMeta(file) }}</span><small>{{ prototypeKind(file) }}</small></div>
                   <div class="attachment-card-actions">
                     <button type="button" data-testid="proc-prototype-toggle" (click)="togglePrototypeVersions(process, file)">{{ isPrototypeExpanded(process, file) ? '\u6536\u8d77' : '\u5c55\u5f00' }}&#x7248;&#x672c;</button>
-                    @if (canPreviewPrototype(file)) { <button type="button" data-testid="proc-prototype-open" (click)="openPrototype(process, file)">&#x67e5;&#x770b;</button> }
+                    @if (canPreviewPrototype(file)) { <button type="button" data-testid="proc-prototype-preview" (click)="previewPrototype(process, file)">预览</button> }
                     <button type="button" data-testid="proc-prototype-download" (click)="downloadPrototype(process, file)">&#x4e0b;&#x8f7d;</button>
                     <button type="button" data-testid="proc-prototype-remove" (click)="removePrototype(process, file)">&#x5220;&#x9664;</button>
                   </div>
@@ -174,7 +174,7 @@
                       @for (version of file.versions; track version.uid || $index) {
                         <div class="attachment-version-item" data-testid="proc-prototype-version-item">
                           <div><strong>v{{ version.number || $index + 1 }}{{ version.uid === file.versionUid ? ' \u00b7 \u5f53\u524d\u5f15\u7528' : '' }}</strong><span>{{ version.uploadedAt || '\u672a\u8bb0\u5f55\u4e0a\u4f20\u65f6\u95f4' }}</span></div>
-                          <div>@if (canPreviewPrototype(file, version)) { <button type="button" data-testid="proc-prototype-version-open" (click)="openPrototype(process, file, version)">&#x67e5;&#x770b;</button> }<button type="button" data-testid="proc-prototype-version-download" (click)="downloadPrototype(process, file, version)">&#x4e0b;&#x8f7d;</button></div>
+                          <div>@if (canPreviewPrototype(file, version)) { <button type="button" data-testid="proc-prototype-version-preview" (click)="previewPrototype(process, file, version)">预览</button> }<button type="button" data-testid="proc-prototype-version-download" (click)="downloadPrototype(process, file, version)">&#x4e0b;&#x8f7d;</button></div>
                         </div>
                       }
                     </div>

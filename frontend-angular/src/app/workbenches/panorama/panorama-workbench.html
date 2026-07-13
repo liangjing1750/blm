@@ -163,8 +163,10 @@
     <app-knowledge-workbench initialTab="termManagement" [editing]="editing()" />
   } @else if (activeTab() === 'dictionary') {
     <app-knowledge-workbench initialTab="dictionaryManagement" [editing]="editing()" />
-  } @else {
+  } @else if (activeTab() === 'rules') {
     <app-knowledge-workbench initialTab="rules" [editing]="editing()" />
+  } @else if (activeTab() === 'attachments') {
+    <app-attachment-management-workbench />
   }
   @if (exportCaptureReady()) {
     <div class="panorama-export-hidden-role" aria-hidden="true">

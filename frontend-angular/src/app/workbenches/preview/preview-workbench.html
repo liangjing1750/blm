@@ -515,7 +515,7 @@
                     <div [id]="'preview-appendix-file-' + (pf.uid || pf.name)" class="pv-appendix-file" style="margin:8px 0;padding:10px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
                       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
                         <span style="font-weight:700;font-size:13px">{{ outlineNumber('preview-appendix-file-' + (pf.uid || pf.name)) }} {{ attachmentLabel(pf) }}</span>
-                        <a [href]="attachmentUrl(pf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">↗ 浏览器打开</a>
+                        <a [href]="attachmentUrl(pf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">预览</a>
                       </div>
                       @if (isImageAttachment(pf)) {
                         <img [src]="attachmentUrl(pf)" alt="{{ pf.name || '附件图片' }}" style="max-width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px" />
@@ -533,7 +533,7 @@
                         <div [id]="'preview-appendix-file-' + (nf.uid || nf.name)" class="pv-appendix-file" style="margin:8px 0 8px 16px;padding:10px;border:1px solid #dbe5f0;border-radius:8px;background:#fbfdff">
                           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
                             <span style="font-weight:700;font-size:13px">{{ outlineNumber('preview-appendix-file-' + (nf.uid || nf.name)) }} {{ attachmentLabel(nf) }}</span>
-                            <a [href]="attachmentUrl(nf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">↗ 浏览器打开</a>
+                            <a [href]="attachmentUrl(nf)" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="white-space:nowrap">预览</a>
                           </div>
                           @if (isImageAttachment(nf)) {
                             <img [src]="attachmentUrl(nf)" alt="{{ nf.name || '附件图片' }}" style="max-width:100%;margin-top:8px;border:1px solid #e2e8f0;border-radius:6px" />
@@ -560,4 +560,17 @@
     [progress]="wait.progress ?? -1"
     [remainingSeconds]="wait.remainingSeconds ?? 0"
   ></app-wait-dialog>
+
+  @if (exportCaptureReady()) {
+    <div class="preview-export-hidden-host" aria-hidden="true">
+      <app-panorama-workbench />
+      <app-preview-graph-host kind="stage-panorama" [exportGraphId]="stageGraphId('stage-panorama')"></app-preview-graph-host>
+      @for (stage of stages(); track identityOf(stage, 'export-stage-' + $index); let i = $index) {
+        <app-preview-graph-host kind="stage-flow" [targetId]="identityOf(stage, 'stage-' + (i + 1))" [exportGraphId]="stageGraphId('stage-flow', stage, i)"></app-preview-graph-host>
+      }
+      @for (process of processes(); track identityOf(process, 'export-process-' + $index); let i = $index) {
+        <app-preview-graph-host kind="process-flow" [targetId]="identityOf(process, 'process-' + (i + 1))" [exportGraphId]="processGraphId(process, i)"></app-preview-graph-host>
+      }
+    </div>
+  }
 </section>

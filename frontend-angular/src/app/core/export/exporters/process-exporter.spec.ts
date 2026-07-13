@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BlmDocument, ProcessNode } from '../../document/document.model';
-import { buildProcessContent, ProcessExporter } from './process-exporter';
+import { buildProcessContent, captureProcessFlowGraph, ProcessExporter } from './process-exporter';
+
+vi.mock('dom-to-image-more', () => ({
+  default: {
+    toPng: vi.fn(async (el: HTMLElement) => {
+      const marker = el.getAttribute('data-marker') || 'unknown';
+      return `data:image/png;base64,${btoa(marker)}`;
+    }),
+  },
+}));
 
 describe('buildProcessContent', () => {
   it('exports a process heading, flow image, and all node sections by reusing node content', () => {
@@ -90,5 +99,51 @@ describe('buildProcessContent', () => {
       { type: 'heading4', text: '2.1.1.1 流程：Process A' },
       { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
     ]));
+  });
+});
+
+describe('captureProcessFlowGraph', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('does not fall back to the visible current-process canvas when a requested export graph is missing', async () => {
+    const currentCanvas = document.createElement('div');
+    currentCanvas.setAttribute('data-testid', 'process-flow-canvas');
+    currentCanvas.setAttribute('data-marker', 'current-process');
+    Object.defineProperties(currentCanvas, {
+      offsetWidth: { value: 320 },
+      offsetHeight: { value: 240 },
+      scrollWidth: { value: 320 },
+      scrollHeight: { value: 240 },
+    });
+    document.body.appendChild(currentCanvas);
+
+    const bytes = await captureProcessFlowGraph('process-flow:target-process');
+
+    expect(new TextDecoder().decode(bytes)).toBe('');
+  });
+
+  it('captures the exact requested export graph when it is present', async () => {
+    const currentCanvas = document.createElement('div');
+    currentCanvas.setAttribute('data-testid', 'process-flow-canvas');
+    currentCanvas.setAttribute('data-marker', 'current-process');
+    const targetCanvas = document.createElement('div');
+    targetCanvas.setAttribute('data-testid', 'process-flow-canvas');
+    targetCanvas.setAttribute('data-export-graph-id', 'process-flow:target-process');
+    targetCanvas.setAttribute('data-marker', 'target-process');
+    for (const el of [currentCanvas, targetCanvas]) {
+      Object.defineProperties(el, {
+        offsetWidth: { value: 320 },
+        offsetHeight: { value: 240 },
+        scrollWidth: { value: 320 },
+        scrollHeight: { value: 240 },
+      });
+      document.body.appendChild(el);
+    }
+
+    const bytes = await captureProcessFlowGraph('process-flow:target-process');
+
+    expect(new TextDecoder().decode(bytes)).toBe('target-process');
   });
 });

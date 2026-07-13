@@ -115,6 +115,76 @@ describe('ProcessStageLegacyAdapter — P2 safe matching', () => {
     expect(doc.stageFlowRefs.length).toBe(beforeCount);
   });
 
+  it('openProcess updates the stage context to the selected process stage', () => {
+    const doc = createTestDoc();
+    const windowMock = {
+      S: { doc, ui: { stageId: 's1' } },
+      markModified: () => {},
+      navigate: (_tab: string, options: Record<string, unknown>) => {
+        windowMock.S.ui = { ...windowMock.S.ui, ...options };
+      },
+    } as any;
+
+    const adapter = createProcessStageLegacyAdapter(windowMock);
+    adapter.openProcess('p2');
+
+    expect(windowMock.S.ui.procId).toBe('p2');
+    expect(windowMock.S.ui.stageId).toBe('s2');
+  });
+
+  it('openProcess normalizes stage uid refs to the stage select value', () => {
+    const doc = createTestDoc({
+      stages: [{ uid: 'stage-uid-1', id: 'stage-id-1', name: 'Stage 1' }, { uid: 'stage-uid-2', id: 'stage-id-2', name: 'Stage 2' }],
+      processes: [{ uid: 'process-uid-2', id: 'process-id-2', name: 'Process 2', nodes: [] }],
+      stageFlowRefs: [{ uid: 'ref-2', stageUid: 'stage-uid-2', processUid: 'process-uid-2', order: 1 }],
+    });
+    const windowMock = {
+      S: { doc, ui: { stageId: 'stage-id-1' } },
+      markModified: () => {},
+      navigate: (_tab: string, options: Record<string, unknown>) => {
+        windowMock.S.ui = { ...windowMock.S.ui, ...options };
+      },
+    } as any;
+
+    const adapter = createProcessStageLegacyAdapter(windowMock);
+    adapter.openProcess('process-id-2');
+
+    expect(windowMock.S.ui.procId).toBe('process-id-2');
+    expect(windowMock.S.ui.stageId).toBe('stage-id-2');
+  });
+
+  it('opens a process from the current stage detail directly in flow view with the matched stage selected', () => {
+    const doc = createTestDoc({
+      stages: [
+        { uid: 'stage-inbound', id: 'S1', name: '入库阶段' },
+        { uid: 'stage-in-stock', id: 'S2', name: '在库阶段' },
+      ],
+      processes: [
+        { uid: 'process-online-check', id: 'P1', name: '新增线上查库', nodes: [] },
+        { uid: 'process-template-change', id: 'P2', name: '修改查库模板', nodes: [] },
+      ],
+      stageFlowRefs: [
+        { uid: 'ref-online-check', stageUid: 'stage-in-stock', processUid: 'process-online-check', order: 1 },
+        { uid: 'ref-template-change', stageUid: 'stage-in-stock', processUid: 'process-template-change', order: 2 },
+      ],
+    });
+    const windowMock = {
+      S: { doc, ui: { procView: 'stage', stageViewMode: 'detail', stageId: 'S1' } },
+      markModified: () => {},
+      navigate: (_tab: string, options: Record<string, unknown>) => {
+        windowMock.S.ui = { ...windowMock.S.ui, ...options };
+      },
+    } as any;
+
+    const adapter = createProcessStageLegacyAdapter(windowMock);
+    adapter.openProcess('process-template-change');
+
+    expect(windowMock.S.ui.procView).toBe('flow');
+    expect(windowMock.S.ui.procId).toBe('process-template-change');
+    expect(windowMock.S.ui.stageId).toBe('S2');
+    expect(windowMock.S.ui.taskId).toBeNull();
+  });
+
   it('duplicateProcess with normal process (uid + id both present) works correctly', () => {
     // Simulate a process with both id and uid
     const doc = createTestDoc({

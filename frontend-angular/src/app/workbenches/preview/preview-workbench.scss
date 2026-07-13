@@ -288,3 +288,23 @@
 .pv-center {
   text-align: center;
 }
+
+.preview-export-hidden-host {
+  position: fixed;
+  left: -24000px;
+  top: 0;
+  width: 1440px;
+  min-height: 900px;
+  overflow: visible;
+  background: #fff;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.preview-export-hidden-host app-panorama-workbench,
+.preview-export-hidden-host app-preview-graph-host {
+  display: block;
+  width: 1440px;
+  min-height: 720px;
+  background: #fff;
+}

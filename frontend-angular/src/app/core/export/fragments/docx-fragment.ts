@@ -14,11 +14,14 @@ import {
   LevelFormat,
   VerticalMergeType,
 } from 'docx';
+import JSZip from 'jszip';
 import { ViewContent } from '../exporters/view-exporter';
 import { readPngSize } from '../export-builders';
 import { normalizeExportRichText, ExportRichTextBlock } from './rich-text-fragment';
 
 const RICH_TEXT_NUMBERING_REFERENCE = 'export-rich-text-numbering';
+const OLE_OBJECT_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.oleObject';
+const OLE_ICON_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 
 interface DocxBuildContext {
   nextOrderedListReference: number;
@@ -149,10 +152,8 @@ export async function buildDocxFragment(
         if (idx < screenshots.length) {
           let imgW = 1200, imgH = 800;
           try { const s = readPngSize(screenshots[idx]); imgW = s.w; imgH = s.h; } catch {}
-          // docx 库 ImageRun.transformation 使用像素，内部自动转 EMU
           const pageWidthPx = Math.round((11906 - 1200 - 1200) / 1440 * 96);
-          const cx = pageWidthPx;
-          const cy = imgH > 0 ? Math.round(cx * imgH / imgW) : Math.round(cx * 0.75);
+          const { width: cx, height: cy } = fitImageToDocxPage(imgW, imgH, pageWidthPx);
           children.push(
             new Paragraph({
               alignment: AlignmentType.CENTER,
@@ -169,6 +170,21 @@ export async function buildDocxFragment(
         }
         break;
       }
+
+      case 'attachment':
+        children.push(
+          new Paragraph({
+            spacing: { before: 80, after: 120, line: 320 },
+            children: [
+              new TextRun({
+                text: attachmentMarker(section.attachmentId || section.text || ''),
+                color: '1d4ed8',
+                underline: {},
+              }),
+            ],
+          }),
+        );
+        break;
     }
   }
 
@@ -208,7 +224,29 @@ export async function buildDocxFragment(
     ],
   });
 
-  return await Packer.toBlob(doc);
+  const blob = await Packer.toBlob(doc);
+  return content.attachments?.length ? embedAttachments(blob, content) : blob;
+}
+
+export function fitImageToDocxPage(
+  imageWidth: number,
+  imageHeight: number,
+  pageWidthPx: number,
+): { width: number; height: number } {
+  const safePageWidth = Math.max(1, pageWidthPx);
+  const safeImageWidth = imageWidth > 0 ? imageWidth : 1200;
+  const safeImageHeight = imageHeight > 0 ? imageHeight : 800;
+  const aspectHeight = (width: number) => Math.max(1, Math.round(width * safeImageHeight / safeImageWidth));
+
+  // 模块意图：导出截图在 Word 中按“可读”而不是“铺满”展示，避免少节点流程图被无意义放大。
+  // 关键流程：大图压到页宽；小图保持原始宽度；低矮流程图即便接近页宽，也保留更克制的展示宽度。
+  // 边界细节：不在这里判断具体视图类型，保证全景图、流程图、角色图共享同一套图片展示约束。
+  const smallDiagramMaxWidth = Math.round(safePageWidth * 0.72);
+  const looksLikeCompactDiagram = safeImageWidth <= safePageWidth && safeImageHeight <= safePageWidth * 0.75;
+  const targetWidth = looksLikeCompactDiagram
+    ? Math.min(safeImageWidth, smallDiagramMaxWidth)
+    : Math.min(safeImageWidth, safePageWidth);
+  return { width: targetWidth, height: aspectHeight(targetWidth) };
 }
 
 /** 构建 DOCX 表格 */
@@ -456,4 +494,195 @@ function parseInlineText(
   }
 
   return parts.length > 0 ? parts : [new TextRun({ text: text || '', size: options.size, color: options.color, break: options.breakBefore ? 1 : undefined })];
+}
+
+function attachmentMarker(id: string): string {
+  return `__BLM_ATTACHMENT_${id}__`;
+}
+
+async function embedAttachments(blob: Blob, content: ViewContent): Promise<Blob> {
+  const attachments = content.attachments || [];
+  if (!attachments.length) return blob;
+
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const relsPath = 'word/_rels/document.xml.rels';
+  const contentTypesPath = '[Content_Types].xml';
+  let documentXml = await zip.file('word/document.xml')?.async('string') || '';
+  let relsXml = await zip.file(relsPath)?.async('string') || '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+  let contentTypesXml = await zip.file(contentTypesPath)?.async('string') || '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>';
+
+  documentXml = ensureOleNamespaces(documentXml);
+  contentTypesXml = ensureDefaultContentType(contentTypesXml, 'bin', OLE_OBJECT_CONTENT_TYPE);
+  contentTypesXml = ensureDefaultContentType(contentTypesXml, 'png', 'image/png');
+
+  for (const [index, attachment] of attachments.entries()) {
+    const objectIndex = index + 1;
+    const objectRelId = `rOleObject${objectIndex}`;
+    const iconRelId = `rOleIcon${objectIndex}`;
+    const objectFileName = `oleObject${objectIndex}.bin`;
+    const iconFileName = `oleIcon${objectIndex}.png`;
+    const objectTarget = `embeddings/${objectFileName}`;
+    const iconTarget = `media/${iconFileName}`;
+    zip.file(`word/embeddings/${objectFileName}`, await createOlePackage(attachment.name, attachment.data));
+    zip.file(`word/media/${iconFileName}`, base64ToBytes(OLE_ICON_PNG));
+
+    if (!relsXml.includes(`Id="${objectRelId}"`)) {
+      relsXml = relsXml.replace(
+        '</Relationships>',
+        `<Relationship Id="${objectRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="${xmlEscape(objectTarget)}"/></Relationships>`,
+      );
+    }
+    if (!relsXml.includes(`Id="${iconRelId}"`)) {
+      relsXml = relsXml.replace(
+        '</Relationships>',
+        `<Relationship Id="${iconRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${xmlEscape(iconTarget)}"/></Relationships>`,
+      );
+    }
+
+    const marker = attachmentMarker(attachment.id);
+    const escapedMarker = xmlEscape(marker);
+    const objectXml = [
+      `<w:r><w:t>${xmlEscape(`附件：${attachment.name}`)}</w:t></w:r>`,
+      '<w:r><w:object w:dxaOrig="1520" w:dyaOrig="1058">',
+      '<v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" o:preferrelative="t" path="m@4@5l@4@11@9@11@9@5xe" filled="f" stroked="f">',
+      '<v:stroke joinstyle="miter"/>',
+      '<v:formulas><v:f eqn="if lineDrawn pixelLineWidth 0"/><v:f eqn="sum @0 1 0"/><v:f eqn="sum 0 0 @1"/><v:f eqn="prod @2 1 2"/><v:f eqn="prod @3 21600 pixelWidth"/><v:f eqn="prod @3 21600 pixelHeight"/><v:f eqn="sum @0 0 1"/><v:f eqn="prod @6 1 2"/><v:f eqn="prod @7 21600 pixelWidth"/><v:f eqn="sum @8 21600 0"/><v:f eqn="prod @7 21600 pixelHeight"/><v:f eqn="sum @10 21600 0"/></v:formulas>',
+      '<v:path o:extrusionok="f" gradientshapeok="t" o:connecttype="rect"/>',
+      '<o:lock v:ext="edit" aspectratio="t"/></v:shapetype>',
+      `<v:shape id="_x0000_i${1024 + objectIndex}" type="#_x0000_t75" style="width:76pt;height:53pt" o:ole="">`,
+      `<v:imagedata r:id="${iconRelId}" o:title=""/></v:shape>`,
+      `<o:OLEObject Type="Embed" ProgID="Package" ShapeID="_x0000_i${1024 + objectIndex}" DrawAspect="Icon" ObjectID="_blm_attachment_${objectIndex}" r:id="${objectRelId}"/>`,
+      '</w:object></w:r>',
+    ].join('');
+    documentXml = documentXml.replace(new RegExp(`<w:r[^>]*>(?:(?!</w:r>).)*<w:t[^>]*>${escapeRegExp(escapedMarker)}</w:t>(?:(?!</w:r>).)*</w:r>`, 'g'), objectXml);
+    documentXml = documentXml.replace(escapedMarker, xmlEscape(`附件：${attachment.name}`));
+  }
+
+  zip.file('word/document.xml', documentXml);
+  zip.file(relsPath, relsXml);
+  zip.file(contentTypesPath, contentTypesXml);
+  const bytes = await zip.generateAsync({ type: 'uint8array' });
+  return new Blob([uint8ToArrayBuffer(bytes)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+
+function ensureOleNamespaces(documentXml: string): string {
+  let xml = documentXml;
+  if (!xml.includes('xmlns:o=')) {
+    xml = xml.replace('<w:document ', '<w:document xmlns:o="urn:schemas-microsoft-com:office:office" ');
+  }
+  if (!xml.includes('xmlns:v=')) {
+    xml = xml.replace('<w:document ', '<w:document xmlns:v="urn:schemas-microsoft-com:vml" ');
+  }
+  return xml;
+}
+
+function ensureDefaultContentType(contentTypesXml: string, extension: string, contentType: string): string {
+  if (contentTypesXml.includes(`Extension="${extension}"`)) return contentTypesXml;
+  return contentTypesXml.replace(
+    '</Types>',
+    `<Default Extension="${extension}" ContentType="${xmlEscape(contentType)}"/></Types>`,
+  );
+}
+
+async function createOlePackage(name: string, data: Uint8Array): Promise<Uint8Array> {
+  const CFB = await import('cfb');
+  const cfb = CFB.utils.cfb_new();
+  CFB.utils.cfb_add(cfb, '\u0001CompObj', hexToBytes('0100feff030a0000ffffffff0c00030000000000c0000000000000460c0000004f4c45205061636b6167650000000000080000005061636b61676500f439b271'));
+  CFB.utils.cfb_add(cfb, '\u0003ObjInfo', new Uint8Array([0x40, 0x00, 0x03, 0x00, 0x01, 0x00]));
+  CFB.utils.cfb_add(cfb, '\u0001Ole10Native', createOle10NativeStream(name, data));
+  const bytes = CFB.write(cfb, { type: 'array', fileType: 'cfb' }) as number[] | Uint8Array;
+  return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+}
+
+function createOle10NativeStream(name: string, data: Uint8Array): Uint8Array {
+  const fileName = safeOleFileName(name);
+  const fileNameBytes = nullTerminatedUtf8(fileName);
+  const sourcePathBytes = nullTerminatedUtf8(fileName);
+  const tempPathBytes = nullTerminatedUtf8(fileName);
+  const payloadSize = 2 + fileNameBytes.length + sourcePathBytes.length + 4 + tempPathBytes.length + 4 + data.length;
+  return concatBytes(
+    le32(payloadSize),
+    le16(2),
+    fileNameBytes,
+    sourcePathBytes,
+    le32(0x00030000),
+    tempPathBytes,
+    le32(data.length),
+    data,
+  );
+}
+
+function safeOleFileName(name: string): string {
+  const safe = safeAttachmentFileName(0, name).replace(/^0-/, '');
+  return safe || 'attachment.bin';
+}
+
+function safeAttachmentFileName(index: number, name: string): string {
+  const base = String(name || `attachment-${index}`)
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim() || `attachment-${index}`;
+  return `${index}-${base}`;
+}
+
+function xmlEscape(value: string): string {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function uint8ToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function hexToBytes(value: string): Uint8Array {
+  const bytes = new Uint8Array(Math.floor(value.length / 2));
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = parseInt(value.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function nullTerminatedUtf8(value: string): Uint8Array {
+  const encoded = new TextEncoder().encode(value);
+  return concatBytes(encoded, new Uint8Array([0]));
+}
+
+function le16(value: number): Uint8Array {
+  const bytes = new Uint8Array(2);
+  new DataView(bytes.buffer).setUint16(0, value, true);
+  return bytes;
+}
+
+function le32(value: number): Uint8Array {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, value, true);
+  return bytes;
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }

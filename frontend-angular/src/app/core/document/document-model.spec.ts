@@ -8,6 +8,7 @@ import {
   normalizeDocument,
 } from './document-model';
 import { BlmDocument } from './document.model';
+import { describe, expect, it } from 'vitest';
 
 describe('document model algorithms', () => {
   it('normalizes uid-only stage flow refs and removes dangling references', () => {
@@ -449,5 +450,42 @@ describe('document model algorithms', () => {
       }],
       outputs: [{ name: 'reservationId', type: 'String', required: false, note: '预约标识' }],
     });
+  });
+
+  it('does not spread node-level service refs into every form section', () => {
+    const document = normalizeDocument({
+      meta: { domain: '测试模型' },
+      services: [
+        { uid: 'service-form-1', name: '接口1', nodeRefs: ['node-submit'] },
+        { uid: 'service-form-2', name: '接口2', nodeRefs: ['node-submit'] },
+      ],
+      processes: [{
+        uid: 'process-a',
+        name: '流程',
+        nodes: [{
+          uid: 'node-submit',
+          name: '提交节点',
+          serviceUids: ['service-form-1', 'service-form-2'],
+          forms: [
+            {
+              uid: 'form-1',
+              name: '表单1',
+              sections: [{ uid: 'section-1', name: '分组1', serviceUids: ['service-form-1'], fields: [] }],
+            },
+            {
+              uid: 'form-2',
+              name: '表单2',
+              sections: [{ uid: 'section-2', name: '分组2', serviceUids: ['service-form-2'], fields: [] }],
+            },
+          ],
+        } as any],
+      }],
+    });
+
+    const node = document.processes[0].nodes[0] as any;
+    expect(node.forms[0].sections[0].serviceUids).toEqual(['service-form-1']);
+    expect(node.forms[1].sections[0].serviceUids).toEqual(['service-form-2']);
+    expect(document.services[0].nodeRefs).toEqual(['node-submit']);
+    expect(document.services[1].nodeRefs).toEqual(['node-submit']);
   });
 });

@@ -171,8 +171,9 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     return identityOf(stage);
   }
 
-  protected processGraphId(process: LegacyProcess): string {
-    return exportGraphId('process-flow', identityOf(process as any));
+  protected processGraphId(process: LegacyProcess | null | undefined): string {
+    const processId = identityOf(process as any);
+    return processId ? exportGraphId('process-flow', processId) : '';
   }
 
   protected stageProcessesForExport(): LegacyProcess[] {
@@ -366,6 +367,8 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
 
   protected openFlowForProcess(processId: string): void {
     if (processId) getAngularRuntimeState().ui['procId'] = processId;
+    const stageId = this.stageIdForProcess(processId);
+    if (stageId) getAngularRuntimeState().ui['stageId'] = stageId;
     this.adapter.openFlow();
     this.viewState.set('flow');
     this.refresh();
@@ -562,6 +565,35 @@ export class ProcessWorkbenchShellComponent implements OnDestroy, OnInit {
     return (runtime.doc?.stages || []).find((stage: any) => (
       identityOf(stage) === target || stage.name === target
     )) || runtime.doc?.stages?.[0] || null;
+  }
+
+  private stageIdForProcess(processId: string): string {
+    const runtime = getAngularRuntimeState() as any;
+    const target = String(processId || '').trim();
+    if (!target) return '';
+    const process = (runtime.doc?.processes || []).find((item: any) => (
+      String(item.uid || '').trim() === target || String(item.id || '').trim() === target
+    ));
+    const processKeys = new Set([target, process?.uid, process?.id].filter(Boolean).map(String));
+    const normalizeStageId = (stageId: string): string => {
+      const raw = String(stageId || '').trim();
+      if (!raw) return '';
+      const stage = (runtime.doc?.stages || []).find((item: any) => (
+        String(item.id || '').trim() === raw || String(item.uid || '').trim() === raw
+      ));
+      return stage ? String(stage.id || stage.uid || '').trim() : raw;
+    };
+    const currentStageId = normalizeStageId(String(runtime.ui?.stageId || '').trim());
+    const refs = runtime.doc?.stageFlowRefs || [];
+    const currentRef = refs.find((ref: any) => (
+      normalizeStageId(String(ref.stageUid || ref.stageId || '').trim()) === currentStageId
+      && (processKeys.has(String(ref.processUid || '').trim()) || processKeys.has(String(ref.processId || '').trim()))
+    ));
+    if (currentRef) return normalizeStageId(String(currentRef.stageUid || currentRef.stageId || '').trim());
+    const ref = refs
+      .filter((item: any) => processKeys.has(String(item.processUid || '').trim()) || processKeys.has(String(item.processId || '').trim()))
+      .sort((left: any, right: any) => Number(left.order || 0) - Number(right.order || 0))[0];
+    return normalizeStageId(String(ref?.stageUid || ref?.stageId || process?.stageUid || process?.stageId || '').trim());
   }
 
   protected refresh(): void {
