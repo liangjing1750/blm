@@ -9,7 +9,10 @@ import { ExportProgress, ExportService } from '../../core/export/export.service'
 import { downloadBlob } from '../../core/export/export-builders';
 import { PanoramaExporter } from '../../core/export/exporters/panorama-exporter';
 import { ValueStreamExporter } from '../../core/export/exporters/value-stream-exporter';
+import { ComponentGraphIds, ComponentModelExporter } from '../../core/export/exporters/component-exporter';
+import { ApplicationExporter } from '../../core/export/exporters/application-exporter';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
+import { ComponentWorkbenchComponent } from '../component/component-workbench';
 import { PanoramaWorkbench } from '../panorama/panorama-workbench';
 import { PreviewGraphHostComponent } from './preview-graph-host.component';
 
@@ -23,7 +26,7 @@ interface PreviewOutlineItem {
 @Component({
   selector: 'app-preview-workbench',
   standalone: true,
-  imports: [CommonModule, WaitDialogComponent, PreviewGraphHostComponent, PanoramaWorkbench],
+  imports: [CommonModule, WaitDialogComponent, PreviewGraphHostComponent, PanoramaWorkbench, ComponentWorkbenchComponent],
   templateUrl: './preview-workbench.html',
   styleUrl: './preview-workbench.scss',
 })
@@ -423,6 +426,8 @@ export class PreviewWorkbench {
       const exporters = [
         new PanoramaExporter(doc),
         new ValueStreamExporter(doc),
+        new ComponentModelExporter(doc, this.componentGraphIds()),
+        new ApplicationExporter(doc),
       ];
       await this.exportSvc.exportAll(exporters, format, (progress) => this.updateExportProgress(progress));
       this.exportWait.set({ title: '完成', description: '', progress: 100 });
@@ -457,6 +462,7 @@ export class PreviewWorkbench {
       exportGraphId('stage-panorama'),
       ...this.stages().map((stage, index) => this.stageGraphId('stage-flow', stage, index)),
       ...this.processes().map((process, index) => this.processGraphId(process, index)),
+      ...this.componentExportGraphIds(),
     ];
     const selectors = [
       '[data-testid="panorama-overview-rich"]',
@@ -472,6 +478,39 @@ export class PreviewWorkbench {
       if (ready) return;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
+  }
+
+  private componentGraphIds(): ComponentGraphIds {
+    return {
+      overview: 'component-export-overview',
+      components: Object.fromEntries(this.components().map((component) => {
+        const id = this.identityOf(component, '');
+        return [id, `component-export-component-${id}`];
+      })),
+      constructs: Object.fromEntries(this.constructs().map((construct) => {
+        const id = this.identityOf(construct, '');
+        return [id, `component-export-construct-${id}`];
+      })),
+      relations: Object.fromEntries(this.constructs().map((construct) => {
+        const id = this.identityOf(construct, '');
+        return [id, `component-export-relation-${id}`];
+      })),
+      states: Object.fromEntries(this.entities().map((entity) => {
+        const id = this.identityOf(entity, '');
+        return [id, `component-export-state-${id}`];
+      })),
+    };
+  }
+
+  private componentExportGraphIds(): string[] {
+    const ids = this.componentGraphIds();
+    return [
+      ids.overview,
+      ...Object.values(ids.components || {}),
+      ...Object.values(ids.constructs || {}),
+      ...Object.values(ids.relations || {}),
+      ...Object.values(ids.states || {}),
+    ].filter((id): id is string => Boolean(id));
   }
 
   private buildOutlineItems(): PreviewOutlineItem[] {

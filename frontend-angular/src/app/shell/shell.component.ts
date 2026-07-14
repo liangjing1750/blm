@@ -43,6 +43,7 @@ import { ManualWorkbenchComponent } from '../workbenches/support/manual/manual-w
 type ToolbarModal = '' | 'create' | 'copy' | 'archive' | 'open' | 'properties' | 'history' | 'compare' | 'merge' | 'collab-conflict' | 'placeholder' | 'user-settings';
 type OpenDocumentTab = 'workspace' | 'trash';
 type CompareSource = 'current' | 'version' | 'history' | 'submit';
+const HISTORY_PAGE_SIZE = 100;
 
 interface WaitDialogState {
   title: string;
@@ -181,6 +182,13 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly versionRows = signal<any[]>([]);
   protected readonly submitRows = signal<any[]>([]);
   protected readonly historyTab = signal<HistoryDialogTab>('remote');
+  protected readonly historyHasMore = signal(false);
+  protected readonly versionHasMore = signal(false);
+  protected readonly submitHasMore = signal(false);
+  protected readonly historyNextOffset = signal(0);
+  protected readonly versionNextOffset = signal(0);
+  protected readonly submitNextOffset = signal(0);
+  protected readonly historyLoadingMore = signal(false);
   protected readonly compareResult = signal<CompareResult | null>(null);
   protected readonly compareReportMode = signal<'diff' | 'all'>('diff');
   protected readonly compareLeftVersions = signal<any[]>([]);
@@ -659,6 +667,10 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.showToast('\u8bf7\u5148\u6253\u5f00\u6587\u6863');
       return;
     }
+    if (this.runtime.readOnly || this.runtime.doc?.meta?.readonly) {
+      this.showToast('\u53ea\u8bfb\u7248\u672c\u4e0d\u80fd\u7acb\u5373\u540c\u6b65\uff0c\u8bf7\u56de\u5230\u6b63\u5f0f\u6587\u6863\u540e\u518d\u63d0\u4ea4\u3002', 'error');
+      return;
+    }
     this.waitDialog.set({
       title: '\u6b63\u5728\u540c\u6b65\u6587\u6863...',
       description: '\u6b63\u5728\u63d0\u4ea4\u672c\u5730\u4fee\u6539\u5e76\u62c9\u53d6\u8fdc\u7aef\u6700\u65b0\u7248\u672c\u3002',
@@ -858,13 +870,19 @@ export class ShellComponent implements OnInit, OnDestroy {
     try {
       await this.runBusy(async () => {
         const [history, versions, submits] = await Promise.all([
-          this.api.history(this.runtime.currentFile).catch(() => []),
-          this.api.versions(this.runtime.currentFile).catch(() => []),
-          this.api.collabSubmits(this.runtime.currentFile).catch(() => ({ submits: [] })),
+          this.api.history(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: 0 }).catch(() => this.emptyHistoryPage()),
+          this.api.versions(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: 0 }).catch(() => this.emptyHistoryPage()),
+          this.api.collabSubmits(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: 0 }).catch(() => this.emptyHistoryPage()),
         ]);
-        this.historyRows.set(history || []);
-        this.versionRows.set(versions || []);
-        this.submitRows.set(Array.isArray(submits?.submits) ? submits.submits : []);
+        this.historyRows.set(history.items || []);
+        this.versionRows.set(versions.items || []);
+        this.submitRows.set(submits.items || []);
+        this.historyHasMore.set(history.hasMore);
+        this.versionHasMore.set(versions.hasMore);
+        this.submitHasMore.set(submits.hasMore);
+        this.historyNextOffset.set(history.nextOffset);
+        this.versionNextOffset.set(versions.nextOffset);
+        this.submitNextOffset.set(submits.nextOffset);
         this.historyTab.set('remote');
         this.modal.set('history');
         this.activeDropdown.set('');
@@ -894,6 +912,55 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected selectHistoryTab(tab: HistoryDialogTab): void {
     this.historyTab.set(tab);
+  }
+
+  protected historyCanLoadMore(): boolean {
+    return this.historyTab() === 'local'
+      ? this.submitHasMore()
+      : this.versionHasMore() || this.historyHasMore();
+  }
+
+  protected async loadMoreHistoryRows(): Promise<void> {
+    if (!this.runtime.currentFile || this.historyLoadingMore()) return;
+    if (!this.historyCanLoadMore()) return;
+    this.historyLoadingMore.set(true);
+    try {
+      if (this.historyTab() === 'local') {
+        const submits = await this.api.collabSubmits(this.runtime.currentFile, {
+          limit: HISTORY_PAGE_SIZE,
+          offset: this.submitNextOffset(),
+        }).catch(() => this.emptyHistoryPage());
+        this.submitRows.update((rows) => [...rows, ...(submits.items || [])]);
+        this.submitHasMore.set(submits.hasMore);
+        this.submitNextOffset.set(submits.nextOffset);
+        return;
+      }
+
+      const [versions, history] = await Promise.all([
+        this.versionHasMore()
+          ? this.api.versions(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: this.versionNextOffset() }).catch(() => this.emptyHistoryPage())
+          : Promise.resolve(this.emptyHistoryPage()),
+        this.historyHasMore()
+          ? this.api.history(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: this.historyNextOffset() }).catch(() => this.emptyHistoryPage())
+          : Promise.resolve(this.emptyHistoryPage()),
+      ]);
+      if (versions.items.length) this.versionRows.update((rows) => [...rows, ...versions.items]);
+      if (history.items.length) this.historyRows.update((rows) => [...rows, ...history.items]);
+      if (this.versionHasMore()) {
+        this.versionHasMore.set(versions.hasMore);
+        this.versionNextOffset.set(versions.nextOffset);
+      }
+      if (this.historyHasMore()) {
+        this.historyHasMore.set(history.hasMore);
+        this.historyNextOffset.set(history.nextOffset);
+      }
+    } finally {
+      this.historyLoadingMore.set(false);
+    }
+  }
+
+  private emptyHistoryPage(): { items: any[]; hasMore: boolean; nextOffset: number } {
+    return { items: [], hasMore: false, nextOffset: 0 };
   }
 
   protected locatorActions(target?: HTMLElement | null): LocatorAction[] {
@@ -1076,8 +1143,10 @@ export class ShellComponent implements OnInit, OnDestroy {
     await this.runBusy(async () => {
       const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
       await this.api.createVersion(this.runtime.currentFile, loaded?.document || loaded, `历史记录 ${id}`);
-      const versions = await this.api.versions(this.runtime.currentFile).catch(() => []);
-      this.versionRows.set(versions || []);
+      const versions = await this.api.versions(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: 0 }).catch(() => this.emptyHistoryPage());
+      this.versionRows.set(versions.items || []);
+      this.versionHasMore.set(versions.hasMore);
+      this.versionNextOffset.set(versions.nextOffset);
       this.archiveVersionMessage = '';
       this.showToast('历史记录已归档为版本。');
       this.modal.set('history');
@@ -1338,12 +1407,12 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   private async loadCompareOptions(name: string, source: CompareSource): Promise<any[]> {
     if (!name) return [];
-    const entries = source === 'history'
-      ? await this.api.history(name).catch(() => [])
+    const page = source === 'history'
+      ? await this.api.history(name).catch(() => this.emptyHistoryPage())
       : source === 'submit'
-        ? ((await this.api.collabSubmits(name).catch(() => ({ submits: [] })))?.submits || [])
-        : await this.api.versions(name).catch(() => []);
-    return Array.isArray(entries) ? entries : [];
+        ? await this.api.collabSubmits(name).catch(() => this.emptyHistoryPage())
+        : await this.api.versions(name).catch(() => this.emptyHistoryPage());
+    return page.items || [];
   }
 
   protected compareEntryId(entry: any): string {

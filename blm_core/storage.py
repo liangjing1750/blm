@@ -182,11 +182,16 @@ class WorkspaceStorage(DocumentFileStore):
         except (json.JSONDecodeError, OSError):
             return None
 
-    def list_history(self, name: str) -> list[dict]:
+    def list_history(self, name: str, *, limit: int | None = None, offset: int = 0) -> list[dict]:
         safe_name = self._validate_name(name)
         target_dir = self._history_dir(name)
         if not target_dir.exists():
             return []
+        offset = max(0, int(offset or 0))
+        limit_value = int(limit) if limit is not None else None
+        if limit_value is not None:
+            limit_value = max(0, limit_value)
+        end_index = offset + limit_value if limit_value is not None else None
         entries: list[dict] = []
         seen_ids: set[str] = set()
         valid_snapshots: list[Path] = []
@@ -202,7 +207,8 @@ class WorkspaceStorage(DocumentFileStore):
             except (TypeError, ValueError):
                 seq = 0
             inferred_seq_by_id[snapshot_id] = seq if seq > 0 else index
-        for snapshot in sorted(valid_snapshots, key=lambda item: item.name, reverse=True):
+        ordered_snapshots = sorted(valid_snapshots, key=lambda item: item.name, reverse=True)
+        for snapshot in ordered_snapshots[offset:end_index]:
             if snapshot.is_dir() and self._is_package_dir(snapshot):
                 snapshot_id = snapshot.name
             elif snapshot.is_file() and snapshot.suffix == ".json":
@@ -237,8 +243,18 @@ class WorkspaceStorage(DocumentFileStore):
                 }
             )
         # 追加 ZIP 归档中的快照
+        if limit_value is not None and len(entries) >= limit_value:
+            return entries
+        archive_offset = max(0, offset - len(ordered_snapshots))
+        remaining_limit = None if limit_value is None else max(0, limit_value - len(entries))
         archive = self._history_archive_path(name)
-        for zip_name in self._zlist(archive):
+        archive_names = sorted([
+            zip_name
+            for zip_name in self._zlist(archive)
+            if len(zip_name.split("/")) >= 2 and zip_name.split("/")[-1] == "manifest.json"
+        ], reverse=True)
+        archive_page = archive_names[archive_offset:archive_offset + remaining_limit if remaining_limit is not None else None]
+        for zip_name in archive_page:
             parts = zip_name.split("/")
             if len(parts) < 2 or parts[-1] != "manifest.json":
                 continue
@@ -329,13 +345,18 @@ class WorkspaceStorage(DocumentFileStore):
         finally:
             zf.close()
 
-    def list_versions(self, name: str) -> list[dict]:
+    def list_versions(self, name: str, *, limit: int | None = None, offset: int = 0) -> list[dict]:
         safe_name = self._validate_name(name)
         target_dir = self._versions_dir(name)
         if not target_dir.exists():
             return []
+        offset = max(0, int(offset or 0))
+        limit_value = int(limit) if limit is not None else None
+        if limit_value is not None:
+            limit_value = max(0, limit_value)
+        end_index = offset + limit_value if limit_value is not None else None
         entries: list[dict] = []
-        for version_dir in sorted(target_dir.iterdir(), key=lambda item: item.name, reverse=True):
+        for version_dir in sorted(target_dir.iterdir(), key=lambda item: item.name, reverse=True)[offset:end_index]:
             if not version_dir.is_dir() or not self._is_package_dir(version_dir):
                 continue
             meta = self._read_named_version_meta(version_dir)

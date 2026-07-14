@@ -65,6 +65,12 @@ export interface AgentHandoffPayload {
   documentSummary?: Record<string, unknown>;
 }
 
+export interface PagedRows<T = any> {
+  items: T[];
+  hasMore: boolean;
+  nextOffset: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   // 模块意图：集中承接浏览器到后端的 HTTP 调用，替代旧 api.js 的散落全局函数。
@@ -143,12 +149,16 @@ export class ApiService {
     });
   }
 
-  async history(name: string): Promise<any[]> {
-    return this.getJson(`/api/history/${encodeURIComponent(name)}`, []);
+  async history(name: string, options: { limit?: number; offset?: number } = {}): Promise<PagedRows> {
+    const query = this.paginationQuery(options);
+    const result = await this.getJson<any>(`/api/history/${encodeURIComponent(name)}${query}`, []);
+    return this.normalizePagedRows(result);
   }
 
-  async versions(name: string): Promise<any[]> {
-    return this.getJson(`/api/versions/${encodeURIComponent(name)}`, []);
+  async versions(name: string, options: { limit?: number; offset?: number } = {}): Promise<PagedRows> {
+    const query = this.paginationQuery(options);
+    const result = await this.getJson<any>(`/api/versions/${encodeURIComponent(name)}${query}`, []);
+    return this.normalizePagedRows(result);
   }
 
   async loadVersion(name: string, versionId: string): Promise<any> {
@@ -163,8 +173,9 @@ export class ApiService {
     return this.postJson('/api/history/restore', { name, snapshot_id: snapshotId });
   }
 
-  async collabSubmits(name: string): Promise<any> {
-    return this.postJson('/api/collab/submits/list', { name });
+  async collabSubmits(name: string, options: { limit?: number; offset?: number } = {}): Promise<PagedRows> {
+    const result = await this.postJson('/api/collab/submits/list', { name, ...options });
+    return this.normalizePagedRows(result, 'submits');
   }
 
   async loadCollabSubmit(name: string, submitId: string): Promise<any> {
@@ -251,5 +262,28 @@ export class ApiService {
       throw new Error(result?.error || `POST ${url} failed: ${response.status}`);
     }
     return result;
+  }
+
+  private paginationQuery(options: { limit?: number; offset?: number }): string {
+    const params = new URLSearchParams();
+    if (options.limit !== undefined) params.set('limit', String(options.limit));
+    if (options.offset !== undefined) params.set('offset', String(options.offset));
+    const query = params.toString();
+    return query ? `?${query}` : '';
+  }
+
+  private normalizePagedRows(result: any, key = 'items'): PagedRows {
+    const rows = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.[key])
+        ? result[key]
+        : Array.isArray(result?.items)
+          ? result.items
+          : [];
+    return {
+      items: rows,
+      hasMore: Boolean(result?.hasMore),
+      nextOffset: Number(result?.nextOffset ?? rows.length) || rows.length,
+    };
   }
 }

@@ -66,5 +66,11 @@
 
       <p *ngIf="!submitRows.length" class="placeholder-copy">暂无提交记录。</p>
     </ng-template>
+
+    <div *ngIf="canLoadMore" class="history-load-more">
+      <button class="btn btn-outline btn-sm" type="button" [disabled]="loadingMore" (click)="loadMore.emit()">
+        {{ loadingMore ? '加载中...' : '加载更多记录' }}
+      </button>
+    </div>
   </div>
 </section>

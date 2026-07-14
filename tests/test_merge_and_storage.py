@@ -917,6 +917,82 @@ class MergeEngineTests(unittest.TestCase):
         )
         self.assertEqual(service["orchestration"]["returnMapping"][0]["target"], "available")
 
+    def test_three_way_merge_preserves_terms_dictionaries_and_application_detail_fields(self):
+        base = create_empty_document("KnowledgeAndApplicationMerge")
+        base["terms"] = []
+        base["dataDictionaries"] = []
+        base["serviceGroups"] = [{"uid": "service-group-inbound", "name": "入库应用服务"}]
+        base["services"] = [
+            {
+                "uid": "service-submit",
+                "name": "提交入库预约接口",
+                "serviceGroupUid": "service-group-inbound",
+                "method": "POST",
+                "path": "/inbound/submit",
+                "requestParams": [
+                    {
+                        "uid": "param-status",
+                        "name": "status",
+                        "type": "String",
+                        "required": True,
+                        "dictionaryUid": "dict-status",
+                        "example": "pending",
+                        "desc": "状态编码",
+                    }
+                ],
+                "responseParams": [],
+                "taskDefinitionUids": [],
+                "nodeRefs": [],
+                "orchestration": {
+                    "variables": [{"uid": "var-request", "name": "requestStatus", "source": "request.status"}],
+                    "steps": [
+                        {
+                            "uid": "step-check",
+                            "name": "校验状态",
+                            "stepAlias": "step1",
+                            "taskDefinitionUid": "task-check",
+                            "parentUid": "root",
+                            "slot": "then",
+                            "order": 1,
+                            "inputMapping": [],
+                            "outputMapping": [],
+                        }
+                    ],
+                    "returnMapping": [],
+                },
+            }
+        ]
+        left = deepcopy(base)
+        right = deepcopy(base)
+        left["terms"].append({"uid": "term-left", "name": "仓单", "desc": "仓库单据"})
+        right["dataDictionaries"].append(
+            {
+                "uid": "dict-status",
+                "code": "status",
+                "name": "状态",
+                "desc": "状态枚举",
+                "entries": [{"uid": "dict-status-pending", "code": "pending", "name": "待处理", "desc": "等待处理"}],
+            }
+        )
+        right["services"][0]["requestParams"][0]["example"] = "approved"
+        right["services"][0]["orchestration"]["variables"][0]["source"] = "request.statusCode"
+        right["services"][0]["orchestration"]["steps"][0]["order"] = 2
+
+        analysis = analyze_merge("3way", left, right, base)
+        merged = analysis["merged_document"]
+        service = merged["services"][0]
+
+        self.assertEqual(analysis["conflicts"], [])
+        self.assertEqual(merged["terms"][0]["name"], "仓单")
+        self.assertEqual(merged["dataDictionaries"][0]["entries"][0]["code"], "pending")
+        self.assertEqual(service["requestParams"][0]["dictionaryUid"], "dict-status")
+        self.assertEqual(service["requestParams"][0]["example"], "approved")
+        self.assertEqual(service["requestParams"][0]["desc"], "状态编码")
+        self.assertEqual(service["orchestration"]["variables"][0]["source"], "request.statusCode")
+        self.assertEqual(service["orchestration"]["steps"][0]["parentUid"], "root")
+        self.assertEqual(service["orchestration"]["steps"][0]["slot"], "then")
+        self.assertEqual(service["orchestration"]["steps"][0]["order"], 2)
+
     def test_two_way_combine_reports_same_name_conflict_for_legacy_documents(self):
         left = {
             "meta": {"title": "A"},

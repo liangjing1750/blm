@@ -23,6 +23,7 @@ Rules expressed here:
 DOCUMENT_LISTS: dict[str, str] = {
     "roles": "role",
     "language": "language",
+    "terms": "term",
     "stages": "stage",
     "stageLinks": "stage_link",
     "stageFlowRefs": "stage_flow_ref",
@@ -36,6 +37,7 @@ DOCUMENT_LISTS: dict[str, str] = {
     "taskDefinitions": "task_definition",
     "serviceGroups": "service_group",
     "services": "service",
+    "dataDictionaries": "data_dictionary",
 }
 
 
@@ -44,6 +46,7 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "meta": {"scalars": ["title", "domain", "author", "date"], "lists": {}},
     "role": {"scalars": ["name", "desc", "group"], "set_lists": ["subDomains"], "lists": {}},
     "language": {"scalars": ["term", "definition"], "lists": {}},
+    "term": {"scalars": ["name", "desc"], "lists": {}},
     "stage": {
         "scalars": ["name", "subDomain", "panoramaColumnUid", "panoramaLaneUid", "panoramaSlot", "panoramaPos", "pos"],
         "lists": {"processLinks": "process_link"},
@@ -150,19 +153,21 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
         "lists": {"requestParams": "service_param", "responseParams": "service_param"},
     },
     "service_param": {
-        "scalars": ["name", "type", "required", "note", "code", "description"],
+        "scalars": ["name", "type", "required", "note", "code", "description", "desc", "example", "dictionaryUid"],
         "lists": {"children": "service_param"},
     },
     "service_orchestration": {
         "scalars": [],
         "lists": {"variables": "service_variable", "steps": "service_step", "returnMapping": "param_mapping"},
     },
-    "service_variable": {"scalars": ["name", "type", "value", "note"], "lists": {}},
+    "service_variable": {"scalars": ["name", "source", "type", "value", "note"], "lists": {}},
     "service_step": {
-        "scalars": ["name", "stepAlias", "taskDefinitionUid", "kind", "expression", "condition", "loopSource"],
+        "scalars": ["name", "stepAlias", "taskDefinitionUid", "kind", "expression", "condition", "loopSource", "parentUid", "slot", "order"],
         "lists": {"inputMapping": "param_mapping", "outputMapping": "param_mapping"},
     },
     "param_mapping": {"scalars": ["source", "target", "note"], "lists": {}},
+    "data_dictionary": {"scalars": ["code", "name", "desc"], "lists": {"entries": "data_dictionary_entry"}},
+    "data_dictionary_entry": {"scalars": ["code", "name", "desc"], "lists": {}},
 }
 
 
@@ -174,6 +179,7 @@ COLLECTION_LABELS: dict[str, str] = {
     "process_link": "阶段内流程连线",
     "role": "角色",
     "language": "术语",
+    "term": "术语",
     "process": "流程",
     "node": "节点",
     "user_step": "用户操作步骤",
@@ -195,6 +201,8 @@ COLLECTION_LABELS: dict[str, str] = {
     "task_definition": "任务定义",
     "service_group": "应用服务组",
     "service": "应用服务",
+    "data_dictionary": "数据字典",
+    "data_dictionary_entry": "字典项",
 }
 
 
@@ -238,6 +246,7 @@ SEMANTIC_KEY_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "stage_flow_link": [("stageUid", "fromRefUid", "toRefUid")],
     "role": [("name",), ("uid",)],
     "language": [("term",)],
+    "term": [("name",), ("uid",)],
     "process": [("name",), ("uid",)],
     "process_flow_node": [("uid",), ("nodeUid",), ("title",)],
     "process_flow_edge": [("uid",), ("from", "to", "label"), ("source", "target", "label")],
@@ -259,6 +268,8 @@ SEMANTIC_KEY_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "service_variable": [("name",), ("uid",)],
     "service_step": [("stepAlias",), ("taskDefinitionUid",), ("name",), ("uid",)],
     "param_mapping": [("source", "target"), ("target",), ("uid",)],
+    "data_dictionary": [("code",), ("name",), ("uid",)],
+    "data_dictionary_entry": [("code",), ("name",), ("uid",)],
     "entity": [("name",), ("uid",)],
     "field": [("name",)],
     "state_node": [("name",)],

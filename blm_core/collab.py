@@ -584,12 +584,16 @@ class CollaborationManager:
         )
         return submit_id
 
-    def list_submits(self, doc_name: str) -> list[dict]:
+    def list_submits(self, doc_name: str, *, limit: int | None = None, offset: int = 0) -> list[dict]:
         """列出文档的所有提交记录摘要（不包含完整文档）"""
         safe_name = self.storage._validate_name(doc_name)
         submits_dir = self._collab_dir(safe_name) / "submits"
         records = []
         seen_ids = set()
+        offset = max(0, int(offset or 0))
+        limit_value = int(limit) if limit is not None else None
+        if limit_value is not None:
+            limit_value = max(0, limit_value)
 
         # 目录中的 JSON 文件
         if submits_dir.is_dir():
@@ -612,6 +616,9 @@ class CollaborationManager:
                     })
                 except (json.JSONDecodeError, OSError):
                     continue
+
+        if limit_value is not None and len(records) >= offset + limit_value:
+            return records[offset:offset + limit_value]
 
         # ZIP 归档
         archive = submits_dir / "archive.zip" if submits_dir.is_dir() else None
@@ -641,7 +648,9 @@ class CollaborationManager:
             except (zipfile.BadZipFile, OSError):
                 pass
 
-        return records
+        if limit_value is None:
+            return records[offset:] if offset else records
+        return records[offset:offset + limit_value]
 
     def load_submit(self, doc_name: str, submit_id: str) -> dict | None:
         """加载指定的提交记录完整内容"""

@@ -1,4 +1,4 @@
-<section class="component-workbench">
+<section class="component-workbench" [class.is-export-only]="exportOnly">
   <div class="proc-view-toolbar">
     <div class="proc-view-toolbar-main">
       <div class="view-toggle-group">
@@ -522,7 +522,7 @@
     <app-entity-design-workbench [editing]="canEdit()" [showEditorToggle]="false" [initialEntityId]="currentEntityId()" (editRequested)="enableEditor()" />
   }
 
-  @if (exportCaptureReady()) {
+  @if (exportCaptureReady() || exportOnly) {
     <div class="component-export-hidden-graphs" aria-hidden="true">
       <div class="component-export-mindmap" [attr.data-export-graph-id]="componentOverviewGraphId()" data-export-graph-ready="true">
         <div class="mind-groups">

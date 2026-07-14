@@ -302,7 +302,8 @@
 }
 
 .preview-export-hidden-host app-panorama-workbench,
-.preview-export-hidden-host app-preview-graph-host {
+.preview-export-hidden-host app-preview-graph-host,
+.preview-export-hidden-host app-component-workbench {
   display: block;
   width: 1440px;
   min-height: 720px;

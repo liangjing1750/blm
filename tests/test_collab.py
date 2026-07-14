@@ -112,6 +112,34 @@ class CollaborationWebSocketTests(unittest.TestCase):
         thread.start()
         return server, thread
 
+    def test_list_submits_supports_pagination(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = WorkspaceStorage(Path(temp_dir) / "workspace")
+            storage.save("CollabSmoke", create_empty_document("CollabSmoke"))
+            submits_dir = storage._package_dir("CollabSmoke") / "collab" / "submits"
+            submits_dir.mkdir(parents=True, exist_ok=True)
+            for index in range(121):
+                payload = {
+                    "submitId": f"submit-{index:03d}",
+                    "doc": "CollabSmoke",
+                    "seq": index + 1,
+                    "baseSeq": index,
+                    "user": "Tester",
+                    "createdAt": f"2026-07-14T10:{index % 60:02d}:00",
+                    "document": {"meta": {"title": f"v{index}"}},
+                }
+                path = submits_dir / f"submit-{index:03d}.json"
+                path.write_text(json.dumps(payload, ensure_ascii=False), "utf-8")
+                os.utime(path, (index + 1, index + 1))
+
+            collab = CollaborationManager(storage)
+            first_page = collab.list_submits("CollabSmoke", limit=100, offset=0)
+            second_page = collab.list_submits("CollabSmoke", limit=100, offset=100)
+
+        self.assertEqual(len(first_page), 100)
+        self.assertEqual(first_page[0]["submitId"], "submit-120")
+        self.assertEqual(len(second_page), 21)
+
     @unittest.skip("v2: changelog removed, replaced by sync-log")
     def test_join_change_ack_and_changelog(self):
         with tempfile.TemporaryDirectory() as temp_dir:

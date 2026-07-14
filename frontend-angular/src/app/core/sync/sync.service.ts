@@ -30,6 +30,9 @@ export class SyncService {
     if (!runtime.currentFile) {
       throw new Error('请先打开或保存文档');
     }
+    if (runtime.readOnly || runtime.doc?.meta?.readonly) {
+      throw new Error('readonly documents cannot be synchronized');
+    }
     this.collaboration.beginSync();
     try {
       if (runtime.collab.hasRemoteUpdate && !runtime.modified && !runtime.collab.pendingSnapshot) {

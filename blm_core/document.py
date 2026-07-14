@@ -16,6 +16,7 @@ SCHEMA_VERSION = 4
 TOP_LEVEL_LIST_FIELDS = (
     "roles",
     "language",
+    "terms",
     "stages",
     "stageLinks",
     "stageFlowRefs",
@@ -925,6 +926,7 @@ def create_empty_document(name: str) -> dict:
             "meta": {"title": name, "domain": "", "author": "", "date": ""},
             "roles": [],
             "language": [],
+            "terms": [],
             "stages": [],
             "stageLinks": [],
             "stageFlowRefs": [],
@@ -1297,6 +1299,37 @@ def _normalize_language(language: list[dict]) -> None:
         _ensure_uid(item, prefix="item")
         item.setdefault("term", "")
         item.setdefault("definition", "")
+
+
+def _normalize_terms(terms: list[dict]) -> None:
+    for index, item in enumerate(terms, start=1):
+        if not isinstance(item, dict):
+            continue
+        _ensure_uid(item, prefix="term")
+        item["name"] = str(item.get("name") or item.get("term") or f"术语{index}").strip()
+        item["desc"] = str(item.get("desc") or item.get("definition") or "").strip()
+
+
+def _normalize_data_dictionaries(dictionaries: list[dict]) -> None:
+    for dictionary_index, dictionary in enumerate(dictionaries, start=1):
+        if not isinstance(dictionary, dict):
+            continue
+        _ensure_uid(dictionary, prefix="dictionary")
+        dictionary["code"] = str(dictionary.get("code", "")).strip()
+        dictionary["name"] = str(dictionary.get("name") or f"数据字典{dictionary_index}").strip()
+        dictionary["desc"] = str(dictionary.get("desc", "")).strip()
+        entries = dictionary.get("entries") if isinstance(dictionary.get("entries"), list) else []
+        normalized_entries = []
+        for entry_index, entry in enumerate(entries, start=1):
+            if not isinstance(entry, dict):
+                continue
+            normalized = dict(entry)
+            _ensure_uid(normalized, prefix="dictionary-entry")
+            normalized["code"] = str(normalized.get("code", "")).strip()
+            normalized["name"] = str(normalized.get("name") or f"字典项{entry_index}").strip()
+            normalized["desc"] = str(normalized.get("desc", "")).strip()
+            normalized_entries.append(normalized)
+        dictionary["entries"] = normalized_entries
 
 
 def _normalize_relations(relations: list[dict]) -> None:
@@ -1812,6 +1845,8 @@ def migrate_document(document: dict | None) -> dict:
     _normalize_relations(doc["relations"])
     _normalize_rules(doc["rules"])
     _normalize_language(doc["language"])
+    _normalize_terms(doc["terms"])
+    _normalize_data_dictionaries(doc["dataDictionaries"])
 
     for component_index, component in enumerate(doc.get("businessComponents", []), start=1):
         if not isinstance(component, dict):

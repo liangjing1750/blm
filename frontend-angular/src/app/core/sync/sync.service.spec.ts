@@ -71,4 +71,18 @@ describe('SyncService', () => {
     expect(collaboration.failSync).not.toHaveBeenCalled();
     expect(documentStore.load).not.toHaveBeenCalled();
   });
+
+  it('rejects read-only version synchronization before posting a snapshot', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.readOnly = true;
+    runtime.doc = { meta: { readonly: true }, roles: [{ uid: 'readonly-role', name: 'readonly role' }] };
+    const service = TestBed.inject(SyncService);
+
+    await expect(service.syncNow()).rejects.toThrow('readonly documents cannot be synchronized');
+
+    expect(api.collabSnapshot).not.toHaveBeenCalled();
+    expect(collaboration.beginSync).not.toHaveBeenCalled();
+    expect(collaboration.failSync).not.toHaveBeenCalled();
+    expect(documentStore.load).not.toHaveBeenCalled();
+  });
 });

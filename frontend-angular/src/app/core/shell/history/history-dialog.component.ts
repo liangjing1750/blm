@@ -18,6 +18,8 @@ export class HistoryDialogComponent {
   @Input() versionRows: any[] = [];
   @Input() historyRows: any[] = [];
   @Input() submitRows: any[] = [];
+  @Input() canLoadMore = false;
+  @Input() loadingMore = false;
 
   @Output() activeTabChange = new EventEmitter<HistoryDialogTab>();
   @Output() openVersion = new EventEmitter<any>();
@@ -27,6 +29,7 @@ export class HistoryDialogComponent {
   @Output() restoreHistory = new EventEmitter<any>();
   @Output() openSubmit = new EventEmitter<any>();
   @Output() restoreSubmit = new EventEmitter<any>();
+  @Output() loadMore = new EventEmitter<void>();
 
   selectTab(tab: HistoryDialogTab): void {
     this.activeTabChange.emit(tab);

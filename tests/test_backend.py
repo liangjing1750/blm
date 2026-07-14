@@ -2574,6 +2574,77 @@ class RecoveryApiTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["doc_name"], "Loans")
 
+    def test_history_api_lists_snapshots_by_page(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_dir = Path(temp_dir) / "workspace"
+            workspace_dir.mkdir()
+            storage = WorkspaceStorage(workspace_dir)
+            storage.history_limit = 200
+            storage.manual_history_keep_count = 200
+            storage.manual_history_keep_days = 0
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+            for version in range(1, 121):
+                document["meta"]["title"] = f"Loans v{version}"
+                storage.save("Loans", document)
+
+            app_dir = Path(__file__).resolve().parent.parent / "app"
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/api/history/Loans?limit=100&offset=0"
+                ) as response:
+                    first_page = json.loads(response.read().decode("utf-8"))
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/api/history/Loans?limit=100&offset=100"
+                ) as response:
+                    second_page = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(len(first_page["items"]), 100)
+        self.assertTrue(first_page["hasMore"])
+        self.assertEqual(first_page["nextOffset"], 100)
+        self.assertEqual(len(second_page["items"]), 20)
+        self.assertFalse(second_page["hasMore"])
+
+    def test_versions_api_lists_versions_by_page(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_dir = Path(temp_dir) / "workspace"
+            workspace_dir.mkdir()
+            storage = WorkspaceStorage(workspace_dir)
+            document = create_empty_document("Loans")
+            storage.save("Loans", document)
+            for version in range(121):
+                document["meta"]["title"] = f"Loans version {version}"
+                storage.create_named_version("Loans", document, message=f"version {version}")
+
+            app_dir = Path(__file__).resolve().parent.parent / "app"
+            handler = create_handler(app_dir, storage)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/api/versions/Loans?limit=100&offset=0"
+                ) as response:
+                    first_page = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(len(first_page["items"]), 100)
+        self.assertTrue(first_page["hasMore"])
+        self.assertEqual(first_page["nextOffset"], 100)
+
     def test_trash_restore_api_restores_document(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace_dir = Path(temp_dir) / "workspace"

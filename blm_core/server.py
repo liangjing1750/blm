@@ -496,9 +496,17 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
             name = str(payload.get("name", "")).strip()
             if not name:
                 return self._json({"error": "name is required"}, 400)
+            limit, offset = self._pagination_from_payload(payload)
             try:
-                submits = collab.list_submits(name)
-                return self._json({"submits": submits})
+                submits = collab.list_submits(name, limit=limit + 1 if limit is not None else None, offset=offset)
+                has_more = limit is not None and len(submits) > limit
+                if limit is not None:
+                    submits = submits[:limit]
+                return self._json({
+                    "submits": submits,
+                    "hasMore": has_more,
+                    "nextOffset": offset + len(submits),
+                })
             except InvalidDocumentNameError as exc:
                 return self._json({"error": str(exc)}, 400)
 
@@ -936,15 +944,39 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
 
         def _handle_history(self, path: str):
             name = unquote(path[len("/api/history/"):])
+            query = parse_qs(urlparse(self.path).query)
+            limit, offset = self._pagination_from_query(query)
             try:
-                return self._json(storage.list_history(name))
+                if limit is None and offset <= 0:
+                    return self._json(storage.list_history(name))
+                entries = storage.list_history(name, limit=limit + 1 if limit is not None else None, offset=offset)
+                has_more = limit is not None and len(entries) > limit
+                if limit is not None:
+                    entries = entries[:limit]
+                return self._json({
+                    "items": entries,
+                    "hasMore": has_more,
+                    "nextOffset": offset + len(entries),
+                })
             except InvalidDocumentNameError as exc:
                 return self._json({"error": str(exc)}, 400)
 
         def _handle_versions(self, path: str):
             name = unquote(path[len("/api/versions/"):])
+            query = parse_qs(urlparse(self.path).query)
+            limit, offset = self._pagination_from_query(query)
             try:
-                return self._json(storage.list_versions(name))
+                if limit is None and offset <= 0:
+                    return self._json(storage.list_versions(name))
+                entries = storage.list_versions(name, limit=limit + 1 if limit is not None else None, offset=offset)
+                has_more = limit is not None and len(entries) > limit
+                if limit is not None:
+                    entries = entries[:limit]
+                return self._json({
+                    "items": entries,
+                    "hasMore": has_more,
+                    "nextOffset": offset + len(entries),
+                })
             except InvalidDocumentNameError as exc:
                 return self._json({"error": str(exc)}, 400)
 
@@ -1281,6 +1313,30 @@ def create_handler(app_dir: Path, storage: WorkspaceStorage, collab: Collaborati
                 return json.loads(body or b"{}")
             except json.JSONDecodeError:
                 return {"error": "invalid json"}, 400
+
+        def _pagination_from_payload(self, payload: dict) -> tuple[int | None, int]:
+            return self._normalize_pagination(payload.get("limit"), payload.get("offset"))
+
+        def _pagination_from_query(self, query: dict) -> tuple[int | None, int]:
+            limit_values = query.get("limit") or []
+            offset_values = query.get("offset") or []
+            return self._normalize_pagination(
+                limit_values[0] if limit_values else None,
+                offset_values[0] if offset_values else 0,
+            )
+
+        def _normalize_pagination(self, raw_limit, raw_offset) -> tuple[int | None, int]:
+            try:
+                offset = max(0, int(raw_offset or 0))
+            except (TypeError, ValueError):
+                offset = 0
+            if raw_limit in (None, ""):
+                return None, offset
+            try:
+                limit = int(raw_limit)
+            except (TypeError, ValueError):
+                limit = 100
+            return max(1, min(limit, 500)), offset
 
         def _is_safe_docs_path(self, target_path: Path) -> bool:
             try:

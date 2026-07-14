@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewChecked, Component, signal, OnInit, OnDestroy, inject } from '@angular/core';
+import { AfterViewChecked, Component, Input, signal, OnInit, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified, recordAngularNavigationBoundary } from '../../core/runtime/angular-runtime';
@@ -25,6 +25,7 @@ interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: strin
 })
 export class ComponentWorkbenchComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly exportSvc = inject(ExportService);
+  @Input() exportOnly = false;
   protected readonly taskParamTypeOptions = [
     { value: '', label: '类型' },
     { value: 'String', label: '字符' },

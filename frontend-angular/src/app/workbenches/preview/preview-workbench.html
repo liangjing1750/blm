@@ -571,6 +571,7 @@
       @for (process of processes(); track identityOf(process, 'export-process-' + $index); let i = $index) {
         <app-preview-graph-host kind="process-flow" [targetId]="identityOf(process, 'process-' + (i + 1))" [exportGraphId]="processGraphId(process, i)"></app-preview-graph-host>
       }
+      <app-component-workbench [exportOnly]="true"></app-component-workbench>
     </div>
   }
 </section>

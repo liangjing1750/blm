@@ -42,6 +42,9 @@
   text-align: left;
 }
 .component-export-dropdown button:hover { background: #f1f5f9; }
+.component-workbench.is-export-only > :not(.component-export-hidden-graphs) {
+  display: none !important;
+}
 .component-export-hidden-graphs {
   position: fixed;
   left: -10000px;
