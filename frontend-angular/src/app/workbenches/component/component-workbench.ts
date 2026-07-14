@@ -1,9 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal, OnInit, OnDestroy } from '@angular/core';
+import { AfterViewChecked, Component, signal, OnInit, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntityDesignWorkbenchComponent } from './entity-design/entity-design-workbench.component';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified, recordAngularNavigationBoundary } from '../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
+import { ExportProgress, ExportService } from '../../core/export/export.service';
+import { ComponentModelExporter } from '../../core/export/exporters/component-exporter';
+import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 
 type ComponentTab = 'businessComponent' | 'businessConstruct' | 'taskDef' | 'entity';
 const UNASSIGNED_COMPONENT_ID = '__unassigned_component__';
@@ -16,11 +19,12 @@ interface TaskParam { uid?: string; name: string; type: string; required: boolea
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; businessComponentUid?: string; }
 
 @Component({
-  selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent, RichTextEditorComponent],
+  selector: 'app-component-workbench', standalone: true, imports: [CommonModule, FormsModule, EntityDesignWorkbenchComponent, RichTextEditorComponent, WaitDialogComponent],
   templateUrl: './component-workbench.html',
   styleUrls: ['./component-workbench.scss', './component-workbench-tree.scss'],
 })
-export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
+export class ComponentWorkbenchComponent implements OnInit, OnDestroy, AfterViewChecked {
+  private readonly exportSvc = inject(ExportService);
   protected readonly taskParamTypeOptions = [
     { value: '', label: '类型' },
     { value: 'String', label: '字符' },
@@ -40,14 +44,22 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
     window.addEventListener('blm-business-mindmap-command', this.onMindMapCommand);
+    this.restoreDirectoryFocus();
   }
   ngOnDestroy(): void {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
     window.removeEventListener('blm-business-mindmap-command', this.onMindMapCommand);
   }
 
+  ngAfterViewChecked(): void {
+    this.consumeDirectoryFocus();
+  }
+
   protected readonly version = signal(0);
   protected readonly activeTab = signal<ComponentTab>(this.restoreActiveTab());
+  protected readonly exportMenuOpen = signal(false);
+  protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
+  protected readonly exportCaptureReady = signal(false);
   protected readonly editorOpen = signal(false);
   protected readonly selectedConstructId = signal(String(this.runtime.ui['componentWorkbenchConstructId'] || '').trim());
   protected readonly expandedComp = signal('');
@@ -90,8 +102,102 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
   protected constructs(): LegacyConstruct[] { return this.doc().businessConstructs || []; }
   protected entities(): LegacyEntity[] { return this.doc().entities || []; }
   protected taskDefs(): LegacyTaskDef[] { return this.doc().taskDefinitions || []; }
+  protected currentEntityId(): string { return String(this.runtime.ui['entityId'] || '').trim(); }
 
   protected canEdit(): boolean { return this.editorOpen() && !this.runtime.readOnly; }
+  protected toggleExportMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    this.exportMenuOpen.update((value) => !value);
+  }
+  protected closeExportMenu(): void {
+    this.exportMenuOpen.set(false);
+  }
+  protected async exportComponentModel(format: 'docx' | 'zip'): Promise<void> {
+    this.closeExportMenu();
+    this.exportWait.set({ title: '正在导出 component-model', description: '正在准备截图区域', progress: 5 });
+    this.exportCaptureReady.set(true);
+    await this.waitForComponentExportGraphs((done, total) => {
+      this.exportWait.set({
+        title: '正在导出 component-model',
+        description: `正在准备截图区域 ${done}/${total}`,
+        progress: Math.min(18, Math.round(5 + 13 * (total > 0 ? done / total : 0))),
+      });
+    });
+    const exporter = new ComponentModelExporter(this.doc(), {
+      overview: this.componentOverviewGraphId(),
+      components: Object.fromEntries(this.components().map((component) => [this.uid(component), this.componentGraphId(component)])),
+      constructs: Object.fromEntries(this.constructs().map((construct) => [this.uid(construct), this.constructGraphId(construct)])),
+      relations: Object.fromEntries(this.constructs().map((construct) => [this.uid(construct), this.constructRelationGraphId(construct)])),
+      states: Object.fromEntries(this.entities().map((entity) => [this.uid(entity), this.entityStateGraphId(entity)])),
+    });
+    this.exportWait.set({ title: `正在导出 ${exporter.label}`, description: '正在准备内容', progress: 18 });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    try {
+      await this.exportSvc.exportView(exporter, format, (progress) => this.updateExportProgress(progress));
+      this.exportWait.set({ title: '完成', description: '', progress: 100 });
+    } catch (error) {
+      this.exportWait.set({ title: '导出失败', description: error instanceof Error ? error.message : String(error), progress: 0 });
+    } finally {
+      this.exportCaptureReady.set(false);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      this.exportWait.set(null);
+    }
+  }
+  protected componentOverviewGraphId(): string {
+    return 'component-export-overview';
+  }
+  protected componentGraphId(component: LegacyComp): string {
+    return `component-export-component-${this.uid(component)}`;
+  }
+  protected constructGraphId(construct: LegacyConstruct): string {
+    return `component-export-construct-${this.uid(construct)}`;
+  }
+  protected constructRelationGraphId(construct: LegacyConstruct): string {
+    return `component-export-relation-${this.uid(construct)}`;
+  }
+  protected entityStateGraphId(entity: LegacyEntity): string {
+    return `component-export-state-${this.uid(entity)}`;
+  }
+  private async waitForComponentExportGraphs(onProgress?: (done: number, total: number) => void): Promise<void> {
+    const expected = [
+      this.componentOverviewGraphId(),
+      ...this.components().map((component) => this.componentGraphId(component)),
+      ...this.constructs().map((construct) => this.constructGraphId(construct)),
+      ...this.constructs().map((construct) => this.constructRelationGraphId(construct)),
+      ...this.entities().map((entity) => this.entityStateGraphId(entity)),
+    ];
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      let done = 0;
+      const ready = expected.every((id) => {
+        const el = document.querySelector<HTMLElement>(`[data-export-graph-id="${this.cssEscape(id)}"]`);
+        const ok = Boolean(el && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+        if (ok) done += 1;
+        return ok;
+      });
+      onProgress?.(done, expected.length);
+      if (ready) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  private cssEscape(value: string): string {
+    return typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(value) : value.replace(/["\\]/g, '\\$&');
+  }
+  private updateExportProgress(progress: ExportProgress): void {
+    const phaseBase = progress.phase === 'content' ? 10 : progress.phase === 'capture' ? 20 : progress.phase === 'assemble' ? 84 : 94;
+    const phaseSpan = progress.phase === 'capture' ? 60 : progress.phase === 'assemble' ? 10 : 6;
+    const ratio = progress.total > 0 ? progress.current / progress.total : 0;
+    this.exportWait.set({
+      title: `正在导出 ${progress.label}`,
+      description: this.exportPhaseText(progress),
+      progress: Math.min(99, Math.round(phaseBase + phaseSpan * ratio)),
+    });
+  }
+  private exportPhaseText(progress: ExportProgress): string {
+    if (progress.phase === 'capture') return `正在截图 ${progress.current}/${progress.total}`;
+    if (progress.phase === 'assemble') return '正在生成文件';
+    if (progress.phase === 'download') return '正在下载';
+    return '正在准备内容';
+  }
   protected enableEditor(): void {
     if (this.runtime.readOnly) return;
     this.editorOpen.set(true);
@@ -172,6 +278,53 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy {
     if (type === 'component') this.expandedTreeComponentId.set(id);
     if (type === 'construct') this.expandedTreeConstructId.set(id);
   }
+
+  private restoreDirectoryFocus(): void {
+    const focus = this.runtime.ui['componentWorkbenchFocus'] as { componentId?: string; constructId?: string; target?: 'component' | 'construct' | 'entity' | 'task'; assetId?: string } | undefined;
+    if (!focus) return;
+    if (focus.target === 'component' || focus.target === 'construct') this.activeTab.set('businessComponent');
+    if (focus.target === 'entity') this.activeTab.set('entity');
+    if (focus.target === 'task') this.activeTab.set('taskDef');
+    if (focus.componentId) {
+      this.expandedTreeComponentId.set(focus.componentId);
+      if (focus.target === 'component') this.selectedMindNode.set({ type: 'component', id: focus.componentId });
+    }
+    if (focus.constructId) {
+      this.expandedTreeConstructId.set(focus.constructId);
+      this.selectedConstructId.set(focus.constructId);
+      if (focus.target === 'construct') this.selectedMindNode.set({ type: 'construct', id: focus.constructId });
+    }
+    if (focus.target === 'task' && focus.assetId) {
+      this.runtime.ui['taskDefinitionId'] = focus.assetId;
+      this.taskDefConstructId.set(focus.constructId || '');
+      this.taskDefCompId.set(focus.componentId || '');
+      const task = this.taskDefs().find((item) => this.uid(item) === focus.assetId);
+      this.taskDefKeyword.set(task?.name || focus.assetId);
+    }
+    if (focus.target === 'entity' && focus.assetId) {
+      this.runtime.ui['entityId'] = focus.assetId;
+    }
+  }
+
+  private consumeDirectoryFocus(): void {
+    const focus = this.runtime.ui['componentWorkbenchFocus'] as { componentId?: string; constructId?: string; target?: 'component' | 'construct' | 'entity' | 'task'; assetId?: string } | undefined;
+    if (!focus) return;
+    this.restoreDirectoryFocus();
+    const targetId = focus.target === 'construct' ? focus.constructId : focus.componentId;
+    const selector = focus.target === 'construct'
+      ? `[data-testid="mind-node-construct-${targetId}"]`
+      : focus.target === 'component'
+        ? `[data-testid="mind-node-component-${targetId}"]`
+        : '';
+    const target = selector ? document.querySelector<HTMLElement>(selector) : null;
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      this.runtime.ui['componentWorkbenchFocus'] = null;
+      return;
+    }
+    if (focus.target === 'entity' || focus.target === 'task') this.runtime.ui['componentWorkbenchFocus'] = null;
+  }
+
   protected isMindNodeSelected(type: 'component' | 'construct' | 'entity' | 'task', id: string): boolean {
     const selected = this.selectedMindNode();
     return selected?.type === type && selected.id === id;

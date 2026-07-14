@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output, signal, OnInit, OnDestroy } from '@angular/core';
+import { AfterViewChecked, Component, EventEmitter, Input, Output, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction } from '../../../core/runtime/angular-runtime';
 import {
@@ -63,7 +63,7 @@ interface FlowDragState {
   templateUrl: './process-stage-workbench.component.html',
   styleUrl: './process-stage-workbench.component.scss',
 })
-export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
+export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {
@@ -78,6 +78,10 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
     document.removeEventListener('click', this.onDocumentClick);
+  }
+
+  ngAfterViewChecked(): void {
+    this.consumeFlowGroupFocus();
   }
 
   private readonly onDocumentClick = (): void => {
@@ -510,6 +514,28 @@ export class ProcessStageWorkbenchComponent implements OnInit, OnDestroy {
 
   private refresh(): void {
     this.version.update((value) => value + 1);
+  }
+
+  private consumeFlowGroupFocus(): void {
+    const ui = this.adapter.ui() as Record<string, any>;
+    const focus = ui['stageFlowGroupFocus'] as { stageId?: string; groupName?: string } | undefined;
+    if (!focus?.groupName || this.mode() !== 'detail') return;
+    const stage = this.currentStage();
+    if (!stage || String(focus.stageId || '').trim() !== this.stageId(stage)) return;
+    const target = Array.from(document.querySelectorAll<HTMLElement>('.stage-flow-group-box'))
+      .find((item) => String(item.dataset['flowGroup'] || '').trim() === String(focus.groupName || '').trim());
+    if (!target) return;
+    const scroller = target.closest<HTMLElement>('.stage-flow-zoom-shell');
+    if (scroller) {
+      scroller.scrollTo({
+        left: Math.max(0, target.offsetLeft - 24),
+        top: Math.max(0, target.offsetTop - 24),
+        behavior: 'smooth',
+      });
+    } else {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }
+    ui['stageFlowGroupFocus'] = null;
   }
 
   private isInteractiveDragChild(target: EventTarget | null): boolean {

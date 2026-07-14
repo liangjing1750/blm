@@ -9,21 +9,39 @@
   gap: 4px;
 }
 
+.panorama-export-menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.panorama-export-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 100;
+  min-width: 120px;
+  border: 1px solid #d7e1ee;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+  padding: 4px;
+}
+
 .panorama-export-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border: 0;
-  background: transparent;
-  color: #1e293b;
-  font-size: 13px;
-  cursor: pointer;
   border-radius: 6px;
+  color: #1e293b;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
 }
 .panorama-export-item:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #f1f5f9;
 }
 
 .panorama-export-hidden-role {

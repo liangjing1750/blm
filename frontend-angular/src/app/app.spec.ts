@@ -4823,8 +4823,12 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     compiled.querySelector<HTMLButtonElement>('.sb-value-stream-head .sb-caret')?.click();
+    const sidebar = compiled.querySelector<HTMLElement>('#sidebar')!;
+    sidebar.scrollTop = 120;
     fixture.detectChanges();
     expect(runtime.ui['sbCollapse']['vs-column-1']).toBe(false);
+    await Promise.resolve();
+    expect(sidebar.scrollTop).toBe(120);
     expect(compiled.querySelector('[data-testid="sidebar-stage-name"]')?.textContent).toContain('准备');
     expect(compiled.querySelector('[data-testid="sidebar-process-row"]')).toBeFalsy();
 
@@ -4841,7 +4845,25 @@ describe('App', () => {
     compiled.querySelector<HTMLButtonElement>('[data-testid="sidebar-component-name"]')?.click();
     fixture.detectChanges();
     expect(runtime.ui['mainTab']).toBe('constructWorkbench');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessComponent');
+    expect(runtime.ui['componentWorkbenchComponentId']).toBe('bc-1');
+    expect(runtime.ui['componentWorkbenchFocus']).toMatchObject({ componentId: 'bc-1', target: 'component' });
     expect(runtime.ui['sbCollapse']['cap-bc-1']).toBe(false);
+
+    compiled.querySelector<HTMLButtonElement>('[data-testid="sidebar-construct-name"]')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('constructWorkbench');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessComponent');
+    expect(runtime.ui['componentWorkbenchConstructId']).toBe('construct-1');
+    expect(runtime.ui['componentWorkbenchFocus']).toMatchObject({ componentId: 'bc-1', constructId: 'construct-1', target: 'construct' });
+
+    compiled.querySelector<HTMLButtonElement>('.sb-asset-link.is-task')?.click();
+    fixture.detectChanges();
+    expect(runtime.ui['mainTab']).toBe('constructWorkbench');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('taskDef');
+    expect(runtime.ui['componentWorkbenchConstructId']).toBe('construct-1');
+    expect(runtime.ui['taskDefinitionId']).toBe('task-1');
+    expect(runtime.ui['componentWorkbenchFocus']).toMatchObject({ componentId: 'bc-1', constructId: 'construct-1', target: 'task', assetId: 'task-1' });
   });
 
   it('should navigate sidebar flow groups to stage view and processes to process view', async () => {
@@ -4885,7 +4907,9 @@ describe('App', () => {
     fixture.detectChanges();
     expect(runtime.ui['mainTab']).toBe('processWorkbench');
     expect(runtime.ui['procView']).toBe('stage');
+    expect(runtime.ui['stageViewMode']).toBe('detail');
     expect(runtime.ui['stageId']).toBe('stage-1');
+    expect(runtime.ui['stageFlowGroupFocus']).toEqual({ stageId: 'stage-1', groupName: '入库组' });
 
     compiled.querySelector<HTMLButtonElement>('.sb-proc-main-button')?.click();
     fixture.detectChanges();

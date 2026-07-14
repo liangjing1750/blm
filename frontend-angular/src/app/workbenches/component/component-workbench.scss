@@ -15,6 +15,73 @@
 .comp-toolbar input { border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: 12px; max-width: 240px; }
 .comp-toolbar select { border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 8px; font-size: 12px; }
 
+.component-export-menu-wrap { position: relative; display: inline-block; }
+.component-export-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 100;
+  min-width: 120px;
+  border: 1px solid #d7e1ee;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+  padding: 4px;
+}
+.component-export-dropdown button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1e293b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  text-align: left;
+}
+.component-export-dropdown button:hover { background: #f1f5f9; }
+.component-export-hidden-graphs {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1600px;
+  height: 1200px;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  z-index: -1;
+}
+.component-export-hidden-graphs app-entity-design-workbench {
+  display: block;
+  width: 1600px;
+  height: 1200px;
+  margin-bottom: 48px;
+}
+.component-export-mindmap,
+.component-export-construct-card {
+  display: block;
+  width: max-content;
+  min-width: 920px;
+  max-width: 1440px;
+  margin-bottom: 48px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #fff;
+  padding: 18px;
+}
+.component-export-mindmap .mind-groups { min-width: 860px; }
+.component-export-mindmap .mind-node { cursor: default; }
+.component-export-construct-card .business-construct-assets {
+  min-height: 260px;
+  margin-top: 12px;
+}
+.component-export-construct-card .construct-asset-scroll {
+  min-height: 180px;
+  max-height: none;
+}
+
 .business-construct-view { display: flex; flex-direction: column; gap: 10px; background: #f8fafc; overflow: hidden; }
 .business-construct-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; flex-shrink: 0; border: 1px solid #bae6fd; border-left: 4px solid #0891b2; border-radius: 9px; background: #fff; padding: 10px 12px; box-shadow: 0 3px 10px rgba(8,145,178,.05); }
 .business-construct-edit-card { align-items: flex-start; position: relative; overflow: hidden; }
@@ -32,7 +99,7 @@
 .business-construct-summary h3 { margin: 4px 0 6px; color: #0f172a; font-size: 18px; }
 .business-construct-summary p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.6; }
 .summary-metrics { display: flex; flex-wrap: nowrap; align-items: flex-end; justify-content: flex-end; gap: 6px; min-width: max-content; }
-.summary-metrics span, .metric-pill { background: #fff; border: 1px solid #bae6fd; border-radius: 999px; color: #0f172a; font-size: 12px; font-weight: 800; padding: 4px 9px; }
+.summary-metrics span, .metric-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; background: #fff; border: 1px solid #bae6fd; border-radius: 999px; color: #0f172a; font-size: 12px; font-weight: 800; padding: 4px 9px; white-space: nowrap; word-break: keep-all; }
 .metric-pill.entity { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; }
 .metric-pill.task { color: #15803d; border-color: #bbf7d0; background: #f0fdf4; }
 .business-construct-assets { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
@@ -60,7 +127,7 @@
 .asset-type-tag { border-radius: 999px; font-size: 10px; font-weight: 900; padding: 2px 7px; }
 .asset-type-tag.entity { background: #dbeafe; color: #1d4ed8; }
 .asset-type-tag.task { background: #dcfce7; color: #15803d; }
-.asset-mini-pill { border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; padding: 2px 7px; }
+.asset-mini-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; padding: 2px 7px; white-space: nowrap; word-break: keep-all; }
 .business-empty-inline { color: #94a3b8; font-size: 12px; padding: 9px 10px; }
 .business-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 180px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; background: #fff; }
 .business-empty-state strong { color: #1e293b; font-size: 14px; }

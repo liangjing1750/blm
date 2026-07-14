@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, EventEmitter, HostListener, Input, Output, computed, inject, signal, OnInit, OnDestroy } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, HostListener, Input, Output, SimpleChanges, computed, inject, signal, OnInit, OnDestroy, OnChanges } from '@angular/core';
 import { getAngularRuntimeState } from '../../../core/runtime/angular-runtime';
 import {
   EntityDesignAdapter,
@@ -187,9 +187,10 @@ interface SelectionBox {
   templateUrl: './entity-design-workbench.component.html',
   styleUrl: './entity-design-workbench.component.scss',
 })
-export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
+export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy, OnChanges {
   @Input() showEditorToggle = true;
   @Input() exportGraphId = '';
+  @Input() focusConstructId = '';
   @Input() initialView: EntityDesignView = 'relation';
   @Input() initialEntityId = '';
   @Output() editRequested = new EventEmitter<void>();
@@ -225,6 +226,15 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
       this.stateEditorOpen.set(this.externalEditing());
     }
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!changes['initialEntityId'] || changes['initialEntityId'].firstChange) return;
+    const nextId = String(this.initialEntityId || '').trim();
+    if (!nextId || nextId === this.selectedEntityId()) return;
+    this.selectedEntityId.set(nextId);
+    this.selectedEntityIds.set(new Set([nextId]));
+    this.syncRuntimeEntityId(nextId);
   }
 
   ngOnDestroy(): void {
@@ -290,7 +300,10 @@ export class EntityDesignWorkbenchComponent implements OnInit, OnDestroy {
 
   protected readonly entities = computed(() => {
     this.version();
-    return this.adapter.entities();
+    const focusConstructId = String(this.focusConstructId || '').trim();
+    const entities = this.adapter.entities();
+    if (!focusConstructId || this.view() !== 'relation') return entities;
+    return entities.filter((entity) => this.entityConstructValue(entity) === focusConstructId);
   });
 
   protected readonly selectedEntity = computed(() => {

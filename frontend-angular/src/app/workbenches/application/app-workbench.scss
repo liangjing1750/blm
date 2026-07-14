@@ -8,6 +8,34 @@
 .comp-toolbar input { border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-size: 13px; max-width: 280px; }
 .comp-toolbar select { border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
 
+.application-export-menu-wrap { position: relative; display: inline-block; }
+.application-export-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 100;
+  min-width: 120px;
+  border: 1px solid #d7e1ee;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+  padding: 4px;
+}
+.application-export-dropdown button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1e293b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  text-align: left;
+}
+.application-export-dropdown button:hover { background: #f1f5f9; }
+
 /* ─── Tab1: 应用服务卡片 ──────────────────── */
 .app-service-board { background: #f8fafc; }
 .app-service-toolbar { justify-content: flex-end; }

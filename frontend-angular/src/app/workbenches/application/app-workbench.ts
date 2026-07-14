@@ -1,7 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, signal, OnInit, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { confirmRuntimeAction, getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench, recordAngularNavigationBoundary } from '../../core/runtime/angular-runtime';
+import { ExportProgress, ExportService } from '../../core/export/export.service';
+import { ApplicationExporter } from '../../core/export/exporters/application-exporter';
+import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 
 type AppTab = 'service' | 'orchestration';
 type OrchestrationStepKind = 'task' | 'branch' | 'loop' | 'assertion' | 'transform' | 'return';
@@ -45,10 +48,11 @@ interface ContractParamLine {
 }
 
 @Component({
-  selector: 'app-application-workbench', standalone: true, imports: [CommonModule, FormsModule],
+  selector: 'app-application-workbench', standalone: true, imports: [CommonModule, FormsModule, WaitDialogComponent],
   templateUrl: './app-workbench.html', styleUrl: './app-workbench.scss',
 })
 export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
+  private readonly exportSvc = inject(ExportService);
   private readonly onRefresh = () => {
     this.syncSelectionAfterDocumentRefresh();
     this.version.update((v) => v + 1);
@@ -62,6 +66,8 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
 
   protected readonly version = signal(0);
   protected readonly activeTab = signal<AppTab>(this.restoreActiveTab());
+  protected readonly exportMenuOpen = signal(false);
+  protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
   protected readonly svcKeyword = signal('');
   protected readonly orchServiceGroupUid = signal(String(this.runtime.ui['applicationOrchestrationServiceGroupUid'] || '__all__'));
   protected readonly orchSvcId = signal(String(this.runtime.ui['applicationOrchestrationServiceUid'] || ''));
@@ -92,6 +98,44 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
     if (t === 'orchestration') this.ensureOrchestrationInterfaceSelection();
   }
   protected canEdit(): boolean { return this.editorOpen() && !this.runtime.readOnly; }
+  protected toggleExportMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    this.exportMenuOpen.update((value) => !value);
+  }
+  protected closeExportMenu(): void {
+    this.exportMenuOpen.set(false);
+  }
+  protected async exportApplication(format: 'docx' | 'zip'): Promise<void> {
+    this.closeExportMenu();
+    const exporter = new ApplicationExporter(this.doc());
+    this.exportWait.set({ title: `正在导出 ${exporter.label}`, description: '正在准备内容', progress: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    try {
+      await this.exportSvc.exportView(exporter, format, (progress) => this.updateExportProgress(progress));
+      this.exportWait.set({ title: '完成', description: '', progress: 100 });
+    } catch (error) {
+      this.exportWait.set({ title: '导出失败', description: error instanceof Error ? error.message : String(error), progress: 0 });
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      this.exportWait.set(null);
+    }
+  }
+  private updateExportProgress(progress: ExportProgress): void {
+    const phaseBase = progress.phase === 'content' ? 10 : progress.phase === 'capture' ? 20 : progress.phase === 'assemble' ? 84 : 94;
+    const phaseSpan = progress.phase === 'capture' ? 60 : progress.phase === 'assemble' ? 10 : 6;
+    const ratio = progress.total > 0 ? progress.current / progress.total : 0;
+    this.exportWait.set({
+      title: `正在导出 ${progress.label}`,
+      description: this.exportPhaseText(progress),
+      progress: Math.min(99, Math.round(phaseBase + phaseSpan * ratio)),
+    });
+  }
+  private exportPhaseText(progress: ExportProgress): string {
+    if (progress.phase === 'capture') return `正在截图 ${progress.current}/${progress.total}`;
+    if (progress.phase === 'assemble') return '正在生成文件';
+    if (progress.phase === 'download') return '正在下载';
+    return '正在准备内容';
+  }
   protected toggleEditor(): void {
     if (this.runtime.readOnly) {
       this.editorOpen.set(false);

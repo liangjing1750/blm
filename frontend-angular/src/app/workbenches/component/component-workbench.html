@@ -8,6 +8,15 @@
         <button class="vtb" data-testid="component-entity-tab" [class.active]="activeTab()==='entity'" (click)="switchTab('entity')">实体定义</button>
       </div>
       <div class="proc-view-actions">
+        <div class="component-export-menu-wrap" data-testid="component-export-menu-wrap">
+          <button class="btn btn-outline btn-sm" type="button" data-testid="component-export-btn" (click)="toggleExportMenu($event)">&#23548;&#20986;</button>
+          @if (exportMenuOpen()) {
+            <div class="component-export-dropdown" data-testid="component-export-dropdown" (click)="$event.stopPropagation()">
+              <button type="button" data-testid="component-export-zip" (click)="exportComponentModel('zip')">&#23548;&#20986;MD</button>
+              <button type="button" data-testid="component-export-docx" (click)="exportComponentModel('docx')">&#23548;&#20986;Docx</button>
+            </div>
+          }
+        </div>
         <button class="btn btn-outline btn-sm editor-toggle" type="button" data-testid="component-editor-toggle" [class.active]="editorOpen()" (click)="toggleEditor()">
           {{ editorOpen() ? '关闭编辑' : '打开编辑' }}
         </button>
@@ -510,7 +519,122 @@
 
   <!-- Tab 3: 实体定义 -->
   @if (activeTab() === 'entity') {
-    <app-entity-design-workbench [editing]="canEdit()" [showEditorToggle]="false" (editRequested)="enableEditor()" />
+    <app-entity-design-workbench [editing]="canEdit()" [showEditorToggle]="false" [initialEntityId]="currentEntityId()" (editRequested)="enableEditor()" />
+  }
+
+  @if (exportCaptureReady()) {
+    <div class="component-export-hidden-graphs" aria-hidden="true">
+      <div class="component-export-mindmap" [attr.data-export-graph-id]="componentOverviewGraphId()" data-export-graph-ready="true">
+        <div class="mind-groups">
+          @for (group of groupedTreeComponents(); track group.kind) {
+            <section class="mind-group" [class.is-generic]="group.kind === 'generic'">
+              <header><strong>{{ group.title }}</strong><span>{{ group.components.length }} 个组件</span></header>
+              @for (comp of group.components; track uid(comp)) {
+                <article class="mind-row">
+                  <div class="mind-node mind-node--component" [class.is-generic]="group.kind === 'generic'">
+                    <span class="business-tree-tag" [class.is-generic]="group.kind === 'generic'">{{ group.title }}</span>
+                    <strong>{{ comp.name || uid(comp) }}</strong>
+                    <small>{{ treeComponentSummary(comp) }}</small>
+                  </div>
+                </article>
+              }
+            </section>
+          }
+        </div>
+      </div>
+      @for (comp of components(); track uid(comp)) {
+        <div class="component-export-mindmap" [attr.data-export-graph-id]="componentGraphId(comp)" data-export-graph-ready="true">
+          <div class="mind-groups">
+            <section class="mind-group" [class.is-generic]="componentKind(comp) === 'generic'">
+              <header><strong>{{ componentKind(comp) === 'generic' ? '通用组件' : '核心组件' }}</strong><span>{{ constructsFor(comp).length }} 个构件</span></header>
+              <article class="mind-row">
+                <div class="mind-node mind-node--component" [class.is-generic]="componentKind(comp) === 'generic'">
+                  <span class="business-tree-tag" [class.is-generic]="componentKind(comp) === 'generic'">{{ componentKind(comp) === 'generic' ? '通用组件' : '核心组件' }}</span>
+                  <strong>{{ comp.name || uid(comp) }}</strong>
+                  <small>{{ treeComponentSummary(comp) }}</small>
+                </div>
+                <div class="mind-branch">
+                  @for (construct of constructsFor(comp); track uid(construct)) {
+                    <section class="mind-construct">
+                      <div class="mind-node mind-node--construct">
+                        <strong>{{ construct.name || uid(construct) }}</strong>
+                        <small>{{ entitiesFor(construct).length }} 个实体 · {{ taskDefsFor(construct).length }} 个任务</small>
+                      </div>
+                      <div class="mind-leaves">
+                        <div>
+                          @for (entity of entitiesFor(construct); track uid(entity)) {
+                            <div class="mind-node mind-node--entity"><span class="business-tree-tag entity">实体</span><strong>{{ entity.name || uid(entity) }}</strong></div>
+                          }
+                        </div>
+                        <div>
+                          @for (task of taskDefsFor(construct); track uid(task)) {
+                            <div class="mind-node mind-node--task"><span class="business-tree-tag task">{{ task.type || 'Query' }}</span><strong>{{ task.name || uid(task) }}</strong></div>
+                          }
+                        </div>
+                      </div>
+                    </section>
+                  }
+                </div>
+              </article>
+            </section>
+          </div>
+        </div>
+      }
+      @for (construct of constructs(); track uid(construct)) {
+        <div class="component-export-construct-card" [attr.data-export-graph-id]="constructGraphId(construct)" data-export-graph-ready="true">
+          <section class="business-construct-summary business-construct-edit-card">
+            <div class="business-construct-fields">
+              <label><span>所属组件</span><strong>{{ componentName(constructComponentId(construct)) }}</strong></label>
+              <label><span>业务构件</span><strong>{{ construct.name || uid(construct) }}</strong></label>
+              <label class="business-construct-note-field"><span>说明</span><p>{{ construct.note || '暂无说明' }}</p></label>
+            </div>
+            <div class="summary-metrics">
+              <span class="metric-pill entity">实体 {{ entitiesFor(construct).length }}</span>
+              <span class="metric-pill task">任务 {{ taskDefsFor(construct).length }}</span>
+            </div>
+          </section>
+          <div class="business-construct-assets">
+            <section class="construct-asset-panel">
+              <header><strong><span class="asset-dot entity"></span>实体</strong></header>
+              <div class="construct-asset-scroll">
+                @for (entity of entitiesFor(construct); track uid(entity)) {
+                  <div class="construct-asset-row entity-row"><strong><span class="asset-type-tag entity">实体</span><span>{{ entity.name || uid(entity) }}</span></strong><span><span class="asset-mini-pill">{{ fieldCount(entity) }} 个字段</span></span></div>
+                } @empty {
+                  <div class="business-empty-inline">暂无实体</div>
+                }
+              </div>
+            </section>
+            <section class="construct-asset-panel">
+              <header><strong><span class="asset-dot task"></span>任务</strong></header>
+              <div class="construct-asset-scroll">
+                @for (task of taskDefsFor(construct); track uid(task)) {
+                  <div class="construct-asset-row task-row"><strong><span class="asset-type-tag task">{{ task.type || 'Query' }}</span><span>{{ task.name || uid(task) }}</span></strong><span><span class="asset-mini-pill">{{ task.target || task.address || '未设置实现' }}</span><span class="asset-mini-pill">{{ taskNodeCount(task) }} 个节点引用</span></span></div>
+                } @empty {
+                  <div class="business-empty-inline">暂无任务</div>
+                }
+              </div>
+            </section>
+          </div>
+        </div>
+      }
+      <app-entity-design-workbench
+        *ngFor="let construct of constructs()"
+        [editing]="false"
+        [showEditorToggle]="false"
+        initialView="relation"
+        [focusConstructId]="uid(construct)"
+        [exportGraphId]="constructRelationGraphId(construct)"
+      />
+      @for (entity of entities(); track uid(entity)) {
+        <app-entity-design-workbench
+          [editing]="false"
+          [showEditorToggle]="false"
+          initialView="state"
+          [initialEntityId]="uid(entity)"
+          [exportGraphId]="entityStateGraphId(entity)"
+        />
+      }
+    </div>
   }
 
 
@@ -543,4 +667,11 @@
       </aside>
     </div>
   }
+  <app-wait-dialog
+    *ngIf="exportWait() as wait"
+    [title]="wait.title"
+    [description]="wait.description"
+    [progress]="wait.progress ?? -1"
+    [remainingSeconds]="wait.remainingSeconds ?? 0"
+  ></app-wait-dialog>
 </section>

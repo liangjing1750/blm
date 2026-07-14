@@ -6,6 +6,15 @@
         <button class="vtb" data-testid="application-orchestration-tab" [class.active]="activeTab()==='orchestration'" (click)="switchTab('orchestration')">应用编排</button>
       </div>
       <div class="proc-view-actions">
+        <div class="application-export-menu-wrap" data-testid="application-export-menu-wrap">
+          <button class="btn btn-outline btn-sm" type="button" data-testid="application-export-btn" (click)="toggleExportMenu($event)">&#23548;&#20986;</button>
+          @if (exportMenuOpen()) {
+            <div class="application-export-dropdown" data-testid="application-export-dropdown" (click)="$event.stopPropagation()">
+              <button type="button" data-testid="application-export-zip" (click)="exportApplication('zip')">&#23548;&#20986;MD</button>
+              <button type="button" data-testid="application-export-docx" (click)="exportApplication('docx')">&#23548;&#20986;Docx</button>
+            </div>
+          }
+        </div>
         <button class="btn btn-outline btn-sm editor-toggle" type="button" data-testid="application-editor-toggle" [class.active]="editorOpen()" (click)="toggleEditor()">
           {{ editorOpen() ? '关闭编辑' : '打开编辑' }}
         </button>
@@ -662,4 +671,11 @@
       </aside>
     </div>
   }
+  <app-wait-dialog
+    *ngIf="exportWait() as wait"
+    [title]="wait.title"
+    [description]="wait.description"
+    [progress]="wait.progress ?? -1"
+    [remainingSeconds]="wait.remainingSeconds ?? 0"
+  ></app-wait-dialog>
 </section>

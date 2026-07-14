@@ -67,8 +67,16 @@ export class SidebarDirectoryComponent implements OnInit {
   }
 
   protected toggleNode(key: string): void {
+    const scroller = this.documentRef.getElementById('sidebar');
+    const previousTop = scroller?.scrollTop ?? 0;
     this.adapter.toggleNode(key);
     this.version.update((value) => value + 1);
+    queueMicrotask(() => {
+      if (scroller) scroller.scrollTop = previousTop;
+      requestAnimationFrame(() => {
+        if (scroller) scroller.scrollTop = previousTop;
+      });
+    });
   }
 
   protected openValueDomain(): void {
@@ -79,8 +87,20 @@ export class SidebarDirectoryComponent implements OnInit {
     this.adapter.openStage(stage.id);
   }
 
+  protected openFlowGroup(stage: SidebarStageGroup, group: SidebarProcessGroup): void {
+    this.adapter.openFlowGroup(stage.id, group.name);
+  }
+
   protected openProcess(process: SidebarProcessSummary): void {
+    const scroller = this.documentRef.getElementById('sidebar');
+    const previousTop = scroller?.scrollTop ?? 0;
     this.adapter.openProcess(process.id);
+    queueMicrotask(() => {
+      if (scroller) scroller.scrollTop = previousTop;
+      requestAnimationFrame(() => {
+        if (scroller) scroller.scrollTop = previousTop;
+      });
+    });
   }
 
   protected moveProcessInStage(stage: SidebarStageGroup, process: SidebarProcessSummary, dir: -1 | 1, event: MouseEvent): void {
@@ -97,8 +117,13 @@ export class SidebarDirectoryComponent implements OnInit {
     this.refreshFromRuntime();
   }
 
-  protected openComponentWorkbench(): void {
-    this.adapter.openComponentWorkbench();
+  protected openComponentWorkbench(
+    component?: SidebarComponentGroup,
+    construct?: SidebarConstructSummary,
+    target: 'component' | 'construct' | 'entity' | 'task' = 'component',
+    assetId = '',
+  ): void {
+    this.adapter.openComponentWorkbench(component?.id || '', construct?.id || '', target, assetId);
   }
 
   protected startResize(event: MouseEvent): void {

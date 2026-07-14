@@ -180,10 +180,11 @@ export interface SidebarAdapter {
   setBusinessDomain(domainId: string): void;
   openValueDomain(): void;
   openStage(stageId: string): void;
+  openFlowGroup(stageId: string, groupName: string): void;
   openProcess(processId: string): void;
   moveProcessInStage(stageId: string, processId: string, dir: -1 | 1): void;
   moveFlowGroupInStage(stageId: string, groupName: string, dir: -1 | 1): void;
-  openComponentWorkbench(): void;
+  openComponentWorkbench(componentId?: string, constructId?: string, target?: 'component' | 'construct' | 'entity' | 'task', assetId?: string): void;
   openEntity(entityId: string): void;
 }
 
@@ -577,9 +578,14 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       else switchAngularMainTab('processWorkbench');
       ui()['mainTab'] = 'processWorkbench';
       ui()['procView'] = 'stage';
+      ui()['stageViewMode'] = 'detail';
       ui()['stageId'] = stageId;
       ui()['taskId'] = null;
       runtime.render?.();
+    },
+    openFlowGroup(stageId: string, groupName: string): void {
+      this.openStage(stageId);
+      ui()['stageFlowGroupFocus'] = { stageId, groupName };
     },
     openProcess(processId: string): void {
       if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
@@ -595,9 +601,17 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     },
     moveProcessInStage,
     moveFlowGroupInStage,
-    openComponentWorkbench(): void {
+    openComponentWorkbench(componentId = '', constructId = '', target: 'component' | 'construct' | 'entity' | 'task' = 'component', assetId = ''): void {
       if (runtime.switchMainTab) runtime.switchMainTab('constructWorkbench');
       else switchAngularMainTab('constructWorkbench');
+      ui()['mainTab'] = 'constructWorkbench';
+      ui()['componentWorkbenchTab'] = target === 'component' || target === 'construct' ? 'businessComponent' : target === 'entity' ? 'entity' : 'taskDef';
+      if (componentId) ui()['componentWorkbenchComponentId'] = componentId;
+      if (constructId) ui()['componentWorkbenchConstructId'] = constructId;
+      if (target === 'task' && assetId) ui()['taskDefinitionId'] = assetId;
+      if (target === 'entity' && assetId) ui()['entityId'] = assetId;
+      if (componentId || constructId || assetId) ui()['componentWorkbenchFocus'] = { componentId, constructId, target, assetId };
+      runtime.render?.();
     },
     openEntity(entityId: string): void {
       if (runtime.navigate) runtime.navigate('data', { entityId });
