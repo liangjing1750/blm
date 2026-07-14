@@ -77,6 +77,10 @@ export function createShellTabBarLegacyAdapter(runtime: ShellTabBarRuntime = get
       return runtime.getBackNavigationTitle?.() || getAngularBackNavigationTitle();
     },
     switchTab(tabId: string): void {
+      if (normalize(tabId) === 'preview') {
+        ui()['sidebarCollapsed'] = true;
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('blm-sidebar-directory-refresh'));
+      }
       if (runtime.switchMainTab) runtime.switchMainTab(tabId);
       else switchAngularMainTab(tabId);
     },

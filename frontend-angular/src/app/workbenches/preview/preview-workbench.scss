@@ -127,15 +127,33 @@
 }
 
 .preview-outline-link.depth-1 {
-  padding-left: 18px;
+  padding-left: 20px;
 }
 
 .preview-outline-link.depth-2 {
-  padding-left: 32px;
+  padding-left: 36px;
 }
 
 .preview-outline-link.depth-3 {
-  padding-left: 46px;
+  padding-left: 52px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.preview-outline-link.depth-4 {
+  padding-left: 68px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.preview-outline-link.depth-5 {
+  padding-left: 84px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.preview-outline-link.depth-6 {
+  padding-left: 100px;
   font-size: 11px;
   color: #64748b;
 }
@@ -309,14 +327,68 @@
 .pv-graph-card app-process-flow-workbench,
 .pv-graph-card app-entity-design-workbench,
 .pv-graph-card app-preview-graph-host,
+.pv-export-image app-preview-graph-host,
 .pv-graph-placeholder {
   display: block;
-  height: 420px;
-  min-height: 420px;
-  overflow: hidden;
+  height: auto;
+  min-height: 560px;
+  overflow: visible;
   border: 1px solid #dbe5f0;
   border-radius: 8px;
   background: #fff;
+}
+
+.pv-export-image app-preview-graph-host:has(app-process-stage-workbench),
+.pv-export-image app-preview-graph-host:has(app-process-flow-workbench) {
+  min-height: 720px;
+}
+
+.pv-export-image app-preview-graph-host app-process-stage-workbench,
+.pv-export-image app-preview-graph-host app-process-flow-workbench {
+  min-height: 720px;
+}
+
+.pv-generated-figure {
+  display: grid;
+  gap: 12px;
+  min-height: 260px;
+  border: 1px solid #dbe5f0;
+  border-radius: 8px;
+  padding: 18px;
+  background:
+    linear-gradient(90deg, rgba(219, 229, 240, .55) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(219, 229, 240, .55) 1px, transparent 1px),
+    #ffffff;
+  background-size: 28px 28px;
+}
+
+.pv-generated-figure-title {
+  align-self: start;
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pv-generated-figure-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 18px;
+}
+
+.pv-generated-figure-body span {
+  display: block;
+  height: 76px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f8fafc, #eef6ff);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .08);
 }
 
 .pv-value-stream-section {
@@ -345,6 +417,59 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.pv-export-attachment-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0 14px;
+  border: 1px solid #d7e4f3;
+  border-left: 4px solid #10b981;
+  border-radius: 8px;
+  padding: 12px;
+  background: linear-gradient(90deg, rgba(236, 253, 245, .75), #fff 46%);
+}
+
+.pv-export-attachment-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  background: #ecfdf5;
+}
+
+.pv-export-attachment-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pv-export-attachment-body strong,
+.pv-export-attachment-body span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pv-export-attachment-body strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pv-export-attachment-body span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.pv-export-attachment-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .pv-component-head {

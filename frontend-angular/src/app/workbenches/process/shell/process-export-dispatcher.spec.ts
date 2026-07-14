@@ -171,8 +171,8 @@ describe('createCurrentNodeExporter', () => {
     expect(exporter.label).toBe('value-stream');
     expect(exporter.getContent().sections).toEqual(expect.arrayContaining([
       { type: 'image', text: '价值流视图', imageIndex: 0 },
-      { type: 'heading1', text: '2.价值流环节：入库' },
-      { type: 'heading2', text: '2.1 阶段：入库阶段' },
+      { type: 'heading1', text: '价值流环节：入库' },
+      { type: 'heading2', text: '阶段：入库阶段' },
     ]));
   });
 });

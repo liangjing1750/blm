@@ -48,12 +48,12 @@ export function buildProcessContent(
   process: Process,
   options: ProcessExportBuildOptions = {},
 ): ViewContent {
+  void options;
   const processTitle = display(process.name, identityOf(process), '未命名流程');
-  const prefix = display(options.headingPrefix, '', '');
   const trigger = display((process as any).trigger, '', '');
   const outcome = display((process as any).outcome, '', '');
   const sections: ViewSection[] = [
-    { type: 'heading4', text: headingText(prefix, `流程：${processTitle}`) },
+    { type: 'heading4', text: `流程：${processTitle}` },
     {
       type: 'table',
       headers: ['字段', '内容'],
@@ -70,7 +70,7 @@ export function buildProcessContent(
   (process.nodes || []).forEach((node, index) => {
     sections.push(...buildNodeContent(document, node, {
       process,
-      headingPrefix: childPrefix(prefix, index + 1),
+      headingPrefix: '',
     }).sections);
   });
 
@@ -256,14 +256,6 @@ export function processContentBounds(el: HTMLElement): { x: number; y: number; w
 
 function display(primary: unknown, fallback: unknown, empty: string): string {
   return String(primary || fallback || empty).trim();
-}
-
-function childPrefix(prefix: string, index: number): string {
-  return prefix ? `${prefix}.${index}` : '';
-}
-
-function headingText(prefix: string, text: string): string {
-  return prefix ? `${prefix} ${text}` : text;
 }
 
 function safeFileSegment(value: string): string {

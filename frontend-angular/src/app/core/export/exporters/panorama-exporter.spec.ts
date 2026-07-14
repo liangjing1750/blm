@@ -46,8 +46,8 @@ describe('PanoramaExporter', () => {
 
     // 标题
     expect(content.sections).toEqual(expect.arrayContaining([
-      { type: 'heading1', text: '1.引言' },
-      { type: 'heading2', text: '1.1 全景视图' },
+      { type: 'heading1', text: '引言' },
+      { type: 'heading2', text: '全景视图' },
     ]));
 
     const image = content.sections.find((s) => s.type === 'image');
@@ -90,14 +90,14 @@ describe('PanoramaExporter', () => {
 
     expect(content.title).toBe('引言');
     expect(content.sections).toEqual(expect.arrayContaining([
-      { type: 'heading1', text: '1.引言' },
-      { type: 'heading2', text: '1.1 全景视图' },
+      { type: 'heading1', text: '引言' },
+      { type: 'heading2', text: '全景视图' },
       { type: 'image', text: '全景视图', imageIndex: 0 },
-      { type: 'heading2', text: '1.2 角色管理' },
+      { type: 'heading2', text: '角色管理' },
       { type: 'heading3', text: '角色用例图：Role A' },
       { type: 'image', text: '角色用例图：Role A', imageIndex: 1 },
-      { type: 'heading2', text: '1.3 术语管理' },
-      { type: 'heading2', text: '1.4 字典管理' },
+      { type: 'heading2', text: '术语管理' },
+      { type: 'heading2', text: '字典管理' },
       { type: 'heading3', text: '字典：Dict A' },
     ]));
   });

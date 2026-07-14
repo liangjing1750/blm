@@ -44,21 +44,21 @@ function createDocument(): BlmDocument {
 }
 
 describe('buildValueStreamContent', () => {
-  it('starts from chapter 2 and nests stages, groups, processes and nodes with numbering', () => {
+  it('nests stages, groups, processes and nodes without hard-coded numbering', () => {
     const content = buildValueStreamContent(createDocument());
 
     expect(content.title).toBe('价值流环节');
     expect(content.sections).toEqual(expect.arrayContaining([
       { type: 'image', text: '价值流视图', imageIndex: 0 },
-      { type: 'heading1', text: '2.价值流环节：Inbound' },
-      { type: 'heading2', text: '2.1 阶段：Receive Stage' },
+      { type: 'heading1', text: '价值流环节：Inbound' },
+      { type: 'heading2', text: '阶段：Receive Stage' },
       { type: 'image', text: '阶段视图：Receive Stage', imageIndex: 1 },
-      { type: 'heading3', text: '2.1.1 流程组：Receive Group' },
-      { type: 'heading4', text: '2.1.1.1 流程：Receive Process' },
+      { type: 'heading3', text: '流程组：Receive Group' },
+      { type: 'heading4', text: '流程：Receive Process' },
       { type: 'image', text: '流程图：Receive Process', imageIndex: 2 },
-      { type: 'heading5', text: '2.1.1.1.1 节点：Receive Node' },
-      { type: 'heading1', text: '3.价值流环节：Outbound' },
-      { type: 'heading2', text: '3.1 阶段：Ship Stage' },
+      { type: 'heading5', text: '节点：Receive Node' },
+      { type: 'heading1', text: '价值流环节：Outbound' },
+      { type: 'heading2', text: '阶段：Ship Stage' },
       { type: 'image', text: '阶段视图：Ship Stage', imageIndex: 3 },
       { type: 'image', text: '流程图：Ship Process', imageIndex: 4 },
     ]));

@@ -7,19 +7,21 @@ import { ExportGraphKind, exportGraphId } from '../../core/export/graph-export-r
 import { confirmRuntimeAction, getAngularRuntimeState } from '../../core/runtime/angular-runtime';
 import { ExportProgress, ExportService } from '../../core/export/export.service';
 import { downloadBlob } from '../../core/export/export-builders';
+import { FragmentAssembler } from '../../core/export/fragments/fragment-assembler';
 import { PanoramaExporter } from '../../core/export/exporters/panorama-exporter';
 import { ValueStreamExporter } from '../../core/export/exporters/value-stream-exporter';
 import { ComponentGraphIds, ComponentModelExporter } from '../../core/export/exporters/component-exporter';
 import { ApplicationExporter } from '../../core/export/exporters/application-exporter';
+import { ViewAttachment, ViewContent, ViewSection } from '../../core/export/exporters/view-exporter';
 import { WaitDialogComponent } from '../../core/shell/wait-dialog/wait-dialog.component';
 import { ComponentWorkbenchComponent } from '../component/component-workbench';
 import { PanoramaWorkbench } from '../panorama/panorama-workbench';
-import { PreviewGraphHostComponent } from './preview-graph-host.component';
+import { PreviewGraphHostComponent, PreviewGraphKind } from './preview-graph-host.component';
 
 interface PreviewOutlineItem {
   id: string;
   label: string;
-  depth: 0 | 1 | 2 | 3;
+  depth: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   number: string;
 }
 
@@ -27,6 +29,25 @@ interface PreviewSummaryCard {
   label: string;
   value: number;
   tone: 'blue' | 'green' | 'amber' | 'cyan';
+}
+
+interface PreviewSectionGroup {
+  id: string;
+  title: string;
+  sections: Array<{ id: string; section: ViewSection }>;
+}
+
+interface PreviewImageGraph {
+  kind: PreviewGraphKind;
+  targetId: string;
+  graphId: string;
+}
+
+interface PreviewAttachmentEmbed {
+  processName: string;
+  nodeName: string;
+  scope: string;
+  section: ViewSection;
 }
 
 @Component({
@@ -43,16 +64,23 @@ export class PreviewWorkbench {
   private readonly api = inject(ApiService);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly exportSvc = inject(ExportService);
+  private readonly assembler = new FragmentAssembler();
   protected readonly runtime = getAngularRuntimeState();
   protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
   protected readonly exportCaptureReady = signal(false);
   protected readonly showRaw = signal(false);
   protected readonly collapsedOutlineIds = signal<Set<string>>(new Set());
-  protected readonly visibleSectionIds = signal<Set<string>>(new Set(['preview-intro']));
+  protected readonly visibleSectionIds = signal<Set<string>>(new Set());
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
-  protected readonly markdown = computed(() => this.buildMarkdown());
+  protected readonly previewContent = computed<ViewContent>(() => this.buildPreviewContent());
+  protected readonly previewGroups = computed<PreviewSectionGroup[]>(() => this.groupPreviewSections(this.previewContent().sections));
+  protected readonly markdown = computed(() => this.assembler.exportOneMarkdown(this.previewContent()));
   protected readonly metaHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMeta(this.runtime.doc?.meta || {})));
   protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
+  protected readonly outlineNumberMap = computed<Map<string, string>>(() =>
+    new Map(this.outlineItems().map((item) => [item.id, item.number])),
+  );
+  protected readonly visibleOutlineItems = computed<PreviewOutlineItem[]>(() => this.buildVisibleOutlineItems());
   protected readonly summaryCards = computed<PreviewSummaryCard[]>(() => [
     { label: '价值流环节', value: this.valueStreamLanes().length, tone: 'blue' },
     { label: '阶段', value: this.stages().length, tone: 'green' },
@@ -62,9 +90,7 @@ export class PreviewWorkbench {
 
   /** 根据大纲条目 ID 获取序号，正文标题使用 */
   protected outlineNumber(id: string): string {
-    const items = this.outlineItems();
-    const found = items.find((item) => item.id === id);
-    return found?.number || '';
+    return this.outlineNumberMap().get(id) || '';
   }
 
   /** 流程组在 outline 中的 anchor ID，与 buildOutlineItems 保持一致 */
@@ -89,7 +115,7 @@ export class PreviewWorkbench {
   }
 
   protected expandAllSections(): void {
-    this.visibleSectionIds.set(new Set(this.outlineItems().filter((item) => item.depth === 0).map((item) => item.id)));
+    this.visibleSectionIds.set(new Set(this.previewGroups().map((group) => group.id)));
   }
 
   /** 切换大纲条目折叠/展开，depth 0/1 可折叠（对应 2 级折叠） */
@@ -116,7 +142,9 @@ export class PreviewWorkbench {
   }
 
   protected isPreviewSectionVisible(sectionId: string): boolean {
-    return this.visibleSectionIds().has(sectionId);
+    const visible = this.visibleSectionIds();
+    if (visible.size === 0) return this.previewGroups()[0]?.id === sectionId;
+    return visible.has(sectionId);
   }
 
   protected showPreviewSection(sectionId: string): void {
@@ -128,21 +156,97 @@ export class PreviewWorkbench {
   }
 
   protected previewSectionLabel(sectionId: string): string {
+    const group = this.previewGroups().find((candidate) => candidate.id === sectionId);
+    if (group) return group.title;
     const item = this.outlineItems().find((candidate) => candidate.id === sectionId);
     return item ? `${item.number} ${item.label}` : '章节内容';
   }
 
-  /** 判断大纲条目是否应隐藏（自身被折叠或任一祖先被折叠） */
-  protected isOutlineHidden(item: PreviewOutlineItem, index: number): boolean {
-    if (item.depth === 0) return false;
-    const collapsed = this.collapsedOutlineIds();
-    if (collapsed.size === 0) return false;
-    const items = this.outlineItems();
-    for (let i = index - 1; i >= 0; i--) {
-      const prev = items[i];
-      if (prev.depth < item.depth && collapsed.has(prev.id)) return true;
+  protected sectionCssClass(section: ViewSection): string {
+    return `pv-export-section pv-export-${section.type}`;
+  }
+
+  protected sectionHeadingTag(section: ViewSection): string {
+    const level = Number(section.type.replace('heading', ''));
+    return `h${Math.max(2, Math.min(6, level + 1))}`;
+  }
+
+  protected isHeadingSection(section: ViewSection): boolean {
+    return /^heading[1-7]$/.test(section.type);
+  }
+
+  protected isRichTextColumn(section: ViewSection, columnIndex: number): boolean {
+    return new Set(section.richTextColumns || []).has(columnIndex);
+  }
+
+  protected tableColumnStyle(section: ViewSection, columnIndex: number): Record<string, string> {
+    const widths = section.columnWidths || [];
+    return widths[columnIndex] ? { width: `${widths[columnIndex]}%` } : {};
+  }
+
+  protected attachmentName(section: ViewSection): string {
+    const attachment = this.previewContent().attachments?.find((item) => item.id === section.attachmentId);
+    return attachment?.path || attachment?.name || section.text || '附件';
+  }
+
+  protected previewImageGraph(section: ViewSection): PreviewImageGraph | null {
+    const kind = this.previewImageKind(section);
+    if (!kind) return null;
+    return {
+      kind,
+      targetId: this.previewImageTargetId(section),
+      graphId: this.previewImageGraphId(section),
+    };
+  }
+
+  protected previewImageKind(section: ViewSection): '' | PreviewGraphKind {
+    const text = String(section.text || '');
+    if (text.includes('全景视图') || text.includes('价值流视图')) return 'stage-panorama';
+    if (text.includes('阶段视图')) return 'stage-flow';
+    if (text.includes('流程图')) return 'process-flow';
+    if (text.includes('实体关系图')) return 'entity-relation';
+    if (text.includes('实体状态图')) return 'entity-state';
+    return '';
+  }
+
+  protected previewImageTargetId(section: ViewSection): string {
+    const text = String(section.text || '');
+    if (text.includes('阶段视图')) {
+      const name = text.split('：').pop()?.trim() || '';
+      const stage = this.stages().find((item) => this.displayName(item, '') === name);
+      return stage ? this.identityOf(stage, '') : '';
     }
-    return false;
+    if (text.includes('流程图')) {
+      const name = text.split('：').pop()?.trim() || '';
+      const process = this.processes().find((item) => this.displayName(item, '') === name);
+      return process ? this.identityOf(process, '') : '';
+    }
+    if (text.includes('实体状态图')) {
+      const name = text.split('：').pop()?.trim() || '';
+      const entity = this.entities().find((item) => this.displayName(item, '') === name);
+      return entity ? this.identityOf(entity, '') : '';
+    }
+    return '';
+  }
+
+  protected previewImageGraphId(section: ViewSection): string {
+    const kind = this.previewImageKind(section);
+    const targetId = this.previewImageTargetId(section);
+    if (kind === 'stage-panorama') return exportGraphId('stage-panorama');
+    if (kind === 'stage-flow') return exportGraphId('stage-flow', targetId);
+    if (kind === 'process-flow') return exportGraphId('process-flow', targetId);
+    if (kind === 'entity-relation') return exportGraphId('entity-relation');
+    if (kind === 'entity-state') return exportGraphId('entity-state', targetId);
+    return '';
+  }
+
+  protected headingNumber(text: string): string {
+    const match = String(text || '').trim().match(/^(\d+(?:\.\d+)*)[.\s]/);
+    return match?.[1] || '';
+  }
+
+  protected headingLabel(text: string): string {
+    return String(text || '').trim().replace(/^\d+(?:\.\d+)*[.\s]+/, '');
   }
 
   protected jumpTo(anchorId: string): void {
@@ -151,12 +255,190 @@ export class PreviewWorkbench {
   }
 
   private ensurePreviewSectionVisible(item: PreviewOutlineItem): void {
-    const items = this.outlineItems();
-    const index = items.findIndex((candidate) => candidate.id === item.id);
-    const top = item.depth === 0
-      ? item
-      : [...items.slice(0, index + 1)].reverse().find((candidate) => candidate.depth === 0);
-    if (top) this.showPreviewSection(top.id);
+    const group = this.previewGroups().find((candidate) =>
+      candidate.id === item.id || candidate.sections.some((entry) => entry.id === item.id),
+    );
+    if (group) this.showPreviewSection(group.id);
+  }
+
+  private buildPreviewContent(): ViewContent {
+    const doc = this.runtime.doc;
+    const contents = [
+      new PanoramaExporter(doc, this.runtime.currentFile || '').getContent(),
+      new ValueStreamExporter(doc).getContent(),
+      new ComponentModelExporter(doc, this.componentGraphIds()).getContent(),
+      new ApplicationExporter(doc).getContent(),
+    ];
+    return this.embedAttachmentCardsNearOwners(this.assembler.mergeContents(contents, []).content);
+  }
+
+  private groupPreviewSections(sections: ViewSection[]): PreviewSectionGroup[] {
+    const groups: PreviewSectionGroup[] = [];
+    let current: PreviewSectionGroup | null = null;
+    sections.forEach((section, index) => {
+      const sectionId = this.sectionAnchorId(section, index);
+      if (section.type === 'heading1' || !current) {
+        current = {
+          id: sectionId,
+          title: section.text || `章节${groups.length + 1}`,
+          sections: [],
+        };
+        groups.push(current);
+      }
+      current.sections.push({ id: sectionId, section });
+    });
+    return groups;
+  }
+
+  protected sectionAnchorId(section: ViewSection, index: number): string {
+    return this.anchorId('section', `${index}-${section.type}-${section.text || ''}`);
+  }
+
+  protected headingDisplayText(section: ViewSection, id: string): string {
+    const number = this.outlineNumber(id);
+    const label = this.headingLabel(section.text || '');
+    return number ? `${number} ${label}` : label;
+  }
+
+  protected attachmentFor(section: ViewSection): ViewAttachment | null {
+    return this.previewContent().attachments?.find((item) => item.id === section.attachmentId) || null;
+  }
+
+  protected previewAttachment(section: ViewSection): void {
+    const attachment = this.attachmentFor(section);
+    if (!attachment) return;
+    const url = URL.createObjectURL(this.attachmentBlob(attachment));
+    window.open(url, '_blank', 'noopener');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  protected downloadAttachment(section: ViewSection): void {
+    const attachment = this.attachmentFor(section);
+    if (!attachment) return;
+    downloadBlob(this.attachmentBlob(attachment), attachment.name || 'attachment');
+  }
+
+  private attachmentBlob(attachment: ViewAttachment): Blob {
+    const buffer = new ArrayBuffer(attachment.data.byteLength);
+    new Uint8Array(buffer).set(attachment.data);
+    return new Blob([buffer], { type: attachment.contentType || 'application/octet-stream' });
+  }
+
+  private moveAttachmentChapterToEnd(content: ViewContent): ViewContent {
+    const firstAttachmentHeading = content.sections.findIndex((section) =>
+      section.type === 'heading1' && this.headingLabel(section.text || '') === '附件',
+    );
+    if (firstAttachmentHeading < 0) return content;
+    const nextHeading = content.sections.findIndex((section, index) => index > firstAttachmentHeading && section.type === 'heading1');
+    const end = nextHeading < 0 ? content.sections.length : nextHeading;
+    const attachmentSections = content.sections.slice(firstAttachmentHeading, end);
+    const otherSections = [
+      ...content.sections.slice(0, firstAttachmentHeading),
+      ...content.sections.slice(end),
+    ];
+    return {
+      ...content,
+      sections: [
+        ...otherSections.filter((section, index, list) =>
+          !(section.type === 'paragraph' && !section.text && (index === 0 || index === list.length - 1)),
+        ),
+        { type: 'paragraph', text: '' },
+        ...attachmentSections,
+      ],
+    };
+  }
+
+  // 模块意图：预览页更适合在流程/节点上下文里看到附件，集中“附件”章节只保留给导出包组织文件。
+  // 关键流程：解析附件章节里的阶段/流程/附件元数据，删除集中章节，再把附件卡片插入对应流程或节点标题之后。
+  // 边界细节：附件卡片不是 heading，不进入大纲；如果找不到匹配标题，则回退到文末，避免附件入口丢失。
+  private embedAttachmentCardsNearOwners(content: ViewContent): ViewContent {
+    const attachmentChapter = this.extractAttachmentChapter(content.sections);
+    if (!attachmentChapter) return content;
+    const { sections: remainingSections, embeds } = attachmentChapter;
+    if (!embeds.length) return { ...content, sections: remainingSections };
+
+    const inserted = new Set<ViewSection>();
+    const nextSections: ViewSection[] = [];
+    let currentProcessName = '';
+
+    for (const section of remainingSections) {
+      nextSections.push(section);
+      if (section.type === 'heading4' && this.headingLabel(section.text || '').startsWith('流程：')) {
+        currentProcessName = this.headingLabel(section.text || '').replace(/^流程：/, '').trim();
+        this.pushMatchingAttachmentEmbeds(nextSections, embeds, inserted, currentProcessName, '');
+      } else if (section.type === 'heading5' && this.headingLabel(section.text || '').startsWith('节点：')) {
+        const nodeName = this.headingLabel(section.text || '').replace(/^节点：/, '').trim();
+        this.pushMatchingAttachmentEmbeds(nextSections, embeds, inserted, currentProcessName, nodeName);
+      } else if (section.type === 'heading1' || section.type === 'heading2' || section.type === 'heading3') {
+        if (section.type !== 'heading3') currentProcessName = '';
+      }
+    }
+
+    const leftovers = embeds.filter((embed) => !inserted.has(embed.section)).map((embed) => embed.section);
+    return {
+      ...content,
+      sections: leftovers.length ? [...nextSections, { type: 'paragraph', text: '' }, ...leftovers] : nextSections,
+    };
+  }
+
+  private extractAttachmentChapter(sections: ViewSection[]): { sections: ViewSection[]; embeds: PreviewAttachmentEmbed[] } | null {
+    const start = sections.findIndex((section) =>
+      section.type === 'heading1' && this.headingLabel(section.text || '') === '附件',
+    );
+    if (start < 0) return null;
+    const next = sections.findIndex((section, index) => index > start && section.type === 'heading1');
+    const end = next < 0 ? sections.length : next;
+    const chapter = sections.slice(start, end);
+    const remaining = [
+      ...sections.slice(0, start),
+      ...sections.slice(end),
+    ].filter((section, index, list) =>
+      !(section.type === 'paragraph' && !section.text && (index === 0 || index === list.length - 1)),
+    );
+
+    const embeds: PreviewAttachmentEmbed[] = [];
+    let processName = '';
+    let meta: Record<string, string> = {};
+    for (const section of chapter) {
+      const label = this.headingLabel(section.text || '');
+      if (section.type === 'heading3' && label.startsWith('流程：')) {
+        processName = label.replace(/^流程：/, '').trim();
+        meta = {};
+      } else if (section.type === 'heading4') {
+        meta = {};
+      } else if (section.type === 'table') {
+        meta = Object.fromEntries((section.rows || []).map((row) => [String(row[0] || ''), String(row[1] || '')]));
+      } else if (section.type === 'attachment') {
+        embeds.push({
+          processName,
+          nodeName: meta['所属节点'] === '-' ? '' : (meta['所属节点'] || ''),
+          scope: meta['所属层级'] || '',
+          section,
+        });
+      }
+    }
+    return { sections: remaining, embeds };
+  }
+
+  private pushMatchingAttachmentEmbeds(
+    target: ViewSection[],
+    embeds: PreviewAttachmentEmbed[],
+    inserted: Set<ViewSection>,
+    processName: string,
+    nodeName: string,
+  ): void {
+    const isNode = Boolean(nodeName);
+    for (const embed of embeds) {
+      if (inserted.has(embed.section)) continue;
+      if (embed.processName !== processName) continue;
+      if (isNode) {
+        if (embed.scope !== '节点附件' || embed.nodeName !== nodeName) continue;
+      } else if (embed.scope !== '流程附件') {
+        continue;
+      }
+      target.push(embed.section);
+      inserted.add(embed.section);
+    }
   }
 
   // ── 附件辅助方法 ──
@@ -558,182 +840,39 @@ export class PreviewWorkbench {
   }
 
   private buildOutlineItems(): PreviewOutlineItem[] {
-    const doc = this.runtime.doc || {};
-    const raw: Array<{id: string; label: string; depth: number}> = [];
-    const outlinedAnchors = new Set<string>();
-
-    // ── 引言 ──
-    const hasIntro = this.asArray(doc.roles).length || this.asArray(doc.terms || doc.language).length || this.stages().length;
-    if (hasIntro) {
-      raw.push({ id: 'preview-intro', label: '引言', depth: 0 });
-      raw.push({ id: 'preview-stage-panorama', label: '全景视图', depth: 1 });
-      if (this.asArray(doc.roles).length) raw.push({ id: 'preview-roles', label: '角色', depth: 1 });
-      if (this.asArray(doc.terms || doc.language).length) raw.push({ id: 'preview-language', label: '统一语言/术语表', depth: 1 });
-      // Note: 数据字典目前没有单独 section，暂不加入
-    }
-
-    // ── 价值流（每个价值流线作为顶级章节）──
-    const stages = this.stages();
-    if (stages.length) {
-      const lanes = this.valueStreamLanes();
-      if (lanes.length) {
-        lanes.forEach((lane) => {
-          const laneStages = this.stagesInLane(lane.id);
-          if (!laneStages.length) return;
-          raw.push({ id: `preview-lane-${lane.id}`, label: lane.name, depth: 0 });
-          laneStages.forEach((stage) => {
-            const stageId = this.identityOf(stage, `stage-${this.stages().indexOf(stage)}`);
-            raw.push({ id: this.anchorId('stage', stageId), label: `阶段 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 1 });
-            const groups = this.groupRefsByFlowGroup(stage);
-            groups.forEach((processes, groupName) => {
-              if (groupName) {
-                raw.push({ id: `preview-group-${stageId}-${groupName}`, label: `流程组 · ${groupName}`, depth: 2 });
-              }
-              processes.forEach((p) => {
-                const anchor = this.anchorId('proc', this.identityOf(p, `${stageId}-${p.flowGroup || 'proc'}`));
-                if (!outlinedAnchors.has(anchor)) {
-                  outlinedAnchors.add(anchor);
-                  raw.push({ id: anchor, label: this.displayName(p, '未命名流程'), depth: groupName ? 3 : 2 });
-                }
-              });
-            });
-          });
-        });
-      } else {
-        // 无价值流时阶段降级为深度 0
-        stages.forEach((stage, index) => {
-          raw.push({ id: this.stageAnchor(stage, index), label: `阶段 · ${this.displayName(stage, '未命名业务阶段')}`, depth: 0 });
-        });
-      }
-    }
-
-    // 孤立流程（不属于任何阶段的）
-    const orphanProcesses = this.orphanProcesses();
-    if (orphanProcesses.length) {
-      raw.push({ id: 'preview-processes', label: '流程视图', depth: 0 });
-      orphanProcesses.forEach((process, index) => {
-        raw.push({ id: this.processAnchor(process, index), label: this.displayName(process, '未命名流程'), depth: 1 });
+    const counters = [0, 0, 0, 0, 0, 0, 0];
+    return this.previewGroups().flatMap((group) => group.sections)
+      .filter(({ section }) => this.isHeadingSection(section))
+      .map(({ section, id }) => {
+        const level = Number(section.type.replace('heading', ''));
+        const depth = Math.max(0, Math.min(6, level - 1)) as PreviewOutlineItem['depth'];
+        counters[depth] += 1;
+        for (let index = depth + 1; index < counters.length; index += 1) counters[index] = 0;
+        const number = counters.slice(0, depth + 1).filter((value) => value > 0).join('.');
+        return {
+          id,
+          label: this.headingLabel(section.text || ''),
+          depth,
+          number,
+        };
       });
+  }
+
+  private buildVisibleOutlineItems(): PreviewOutlineItem[] {
+    const collapsed = this.collapsedOutlineIds();
+    const items = this.outlineItems();
+    if (!collapsed.size) return items;
+    const hiddenDepthStack: number[] = [];
+    const visible: PreviewOutlineItem[] = [];
+    for (const item of items) {
+      while (hiddenDepthStack.length && item.depth <= hiddenDepthStack[hiddenDepthStack.length - 1]) {
+        hiddenDepthStack.pop();
+      }
+      if (hiddenDepthStack.length) continue;
+      visible.push(item);
+      if (item.depth <= 1 && collapsed.has(item.id)) hiddenDepthStack.push(item.depth);
     }
-
-    // ── 组件建模（组件→构件→实体、任务） ──
-    const constructs = this.asArray(doc.businessConstructs);
-    const hasComponents = this.asArray(doc.entities).length || this.asArray(doc.businessComponents).length || constructs.length || this.asArray(doc.taskDefinitions).length;
-    if (hasComponents) {
-      raw.push({ id: 'preview-components', label: '组件建模', depth: 0 });
-      if (this.asArray(doc.businessComponents).length) raw.push({ id: 'preview-business-components', label: '业务组件', depth: 1 });
-
-      // 构件→实体、任务（大纲）; 标记已归属的实体和任务
-      const outlinedEntities = new Set<string>();
-      const outlinedTasks = new Set<string>();
-      if (constructs.length) {
-        constructs.forEach((c) => {
-          const cId = this.identityOf(c, '');
-          raw.push({ id: `preview-construct-${cId}`, label: `构件：${this.displayName(c, '未命名构件')}`, depth: 1 });
-          this.constructEntities(c).forEach((e) => {
-            const eAnchor = this.anchorId('entity', this.identityOf(e, ''));
-            outlinedEntities.add(eAnchor);
-            raw.push({ id: eAnchor, label: `实体：${this.displayName(e, '未命名实体')}`, depth: 2 });
-          });
-          this.constructTasks(c).forEach((t) => {
-            const tAnchor = this.anchorId('task', this.identityOf(t, ''));
-            outlinedTasks.add(tAnchor);
-            raw.push({ id: tAnchor, label: `任务：${this.displayName(t, '未命名任务')}`, depth: 2 });
-          });
-        });
-      }
-
-      // 未归属实体的实体
-      const orphanEntities = this.asArray(doc.entities).filter((e) => !outlinedEntities.has(this.anchorId('entity', this.identityOf(e, ''))));
-      if (orphanEntities.length) {
-        raw.push({ id: 'preview-entity-overview', label: '实体关系图', depth: 1 });
-        orphanEntities.forEach((entity, index) => {
-          raw.push({ id: this.anchorId('entity', this.identityOf(entity, `entity-${index + 1}`)), label: `实体：${this.displayName(entity, '未命名实体')}`, depth: 2 });
-        });
-      }
-
-      // 未归属的任务
-      const orphanTasks = this.asArray(doc.taskDefinitions).filter((t) => !outlinedTasks.has(this.anchorId('task', this.identityOf(t, ''))));
-      if (orphanTasks.length) raw.push({ id: 'preview-task-definitions', label: '任务定义', depth: 1 });
-    }
-
-    // ── 应用服务（按服务组→应用接口，无三级标题） ──
-    const allSvcs = this.services();
-    const svcGroups = this.serviceGroups();
-    if (allSvcs.length || this.interfaces().length) {
-      raw.push({ id: 'preview-applications', label: '应用服务', depth: 0 });
-      if (svcGroups.length) {
-        svcGroups.forEach((g) => {
-          const groupSvcs = allSvcs.filter((s) => s.serviceGroupUid === g.uid);
-          if (groupSvcs.length) {
-            raw.push({ id: `preview-app-svc-${g.uid}`, label: g.name || this.identityOf(g, '未命名服务组'), depth: 1 });
-          }
-        });
-        // 未归属服务组的接口
-        const ungrouped = allSvcs.filter((s) => !s.serviceGroupUid);
-        if (ungrouped.length) {
-          raw.push({ id: 'preview-app-svc-ungrouped', label: '其他', depth: 1 });
-        }
-      } else {
-        // 无服务组时 flat 列出
-        allSvcs.forEach((s, idx) => {
-          raw.push({ id: `preview-app-svc-${s.uid || s.id || `svc-${idx}`}`, label: this.displayName(s, '未命名服务'), depth: 1 });
-        });
-      }
-    }
-
-    // ── 附录（按流程→节点→附件组织） ──
-    const appendixProcesses = this.processesWithAttachments();
-    if (appendixProcesses.length) {
-      raw.push({ id: 'preview-appendix', label: '附录', depth: 0 });
-      appendixProcesses.forEach((process) => {
-        const processId = this.identityOf(process, '');
-        raw.push({ id: `preview-appendix-proc-${processId}`, label: this.displayName(process, '未命名流程'), depth: 1 });
-        const processFiles = this.asArray(process?.prototypeFiles);
-        processFiles.forEach((pf: any) => {
-          const name = pf?.name || '未命名附件';
-          raw.push({ id: `preview-appendix-file-${pf.uid || name}`, label: name, depth: 2 });
-        });
-        this.asArray(process?.nodes || process?.tasks).forEach((node: any) => {
-          const nodeFiles = this.asArray(node?.prototypeFiles);
-          if (!nodeFiles.length) return;
-          const nodeId = this.identityOf(node, '');
-          raw.push({ id: `preview-appendix-node-${nodeId}`, label: `节点: ${this.displayName(node, '未命名节点')}`, depth: 2 });
-          nodeFiles.forEach((nf: any) => {
-            const name = nf?.name || '未命名附件';
-            raw.push({ id: `preview-appendix-file-${nf.uid || name}`, label: name, depth: 3 });
-          });
-        });
-      });
-    }
-
-    // ── 赋序号 ──
-    const counters = [0, 0, 0, 0];
-    return raw.map((item, index) => {
-      const d = item.depth;
-      if (d === 0) {  // 深度 0 每项自增序号
-        counters[0] += 1;
-        counters[1] = 0; counters[2] = 0; counters[3] = 0;
-      } else {
-        for (let p = index - 1; p >= 0; p--) {
-          if (raw[p].depth < d) {
-            counters[d] = (counters[d] || 0) + 1;
-            for (let r = d + 1; r <= 3; r++) counters[r] = 0;
-            break;
-          }
-        }
-      }
-      const parts: string[] = [];
-      for (let i = 0; i <= d; i++) {
-        if (counters[i] > 0) parts.push(String(counters[i]));
-      }
-      return {
-        id: item.id,
-        label: item.label,
-        depth: d as 0 | 1 | 2 | 3,
-        number: parts.join('.'),
-      };
-    });
+    return visible;
   }
 
   /** 按流程组整理阶段下的流程引用，返回 Map<groupName, processes[]> */

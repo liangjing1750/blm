@@ -20,6 +20,7 @@ import { readPngSize } from '../export-builders';
 import { normalizeExportRichText, ExportRichTextBlock } from './rich-text-fragment';
 
 const RICH_TEXT_NUMBERING_REFERENCE = 'export-rich-text-numbering';
+const HEADING_NUMBERING_REFERENCE = 'export-heading-numbering';
 const OLE_OBJECT_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.oleObject';
 const OLE_ICON_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 
@@ -48,70 +49,35 @@ export async function buildDocxFragment(
   for (const section of content.sections) {
     switch (section.type) {
       case 'heading1':
-        children.push(
-          new Paragraph({
-            text: section.text || '',
-            heading: HeadingLevel.HEADING_1,
-            spacing: { before: 360, after: 160, line: 480 },
-          }),
-        );
+        children.push(headingParagraph(section.text || '', HeadingLevel.HEADING_1, 0, { before: 360, after: 160, line: 480 }));
         break;
 
       case 'heading2':
-        children.push(
-          new Paragraph({
-            text: section.text || '',
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 280, after: 120, line: 480 },
-          }),
-        );
+        children.push(headingParagraph(section.text || '', HeadingLevel.HEADING_2, 1, { before: 280, after: 120, line: 480 }));
         break;
 
       case 'heading3':
-        children.push(
-          new Paragraph({
-            text: section.text || '',
-            heading: HeadingLevel.HEADING_3,
-            spacing: { before: 200, after: 80, line: 480 },
-          }),
-        );
+        children.push(headingParagraph(section.text || '', HeadingLevel.HEADING_3, 2, { before: 200, after: 80, line: 480 }));
         break;
 
       case 'heading4':
-        children.push(
-          new Paragraph({
-            text: section.text || '',
-            heading: HeadingLevel.HEADING_4,
-            spacing: { before: 160, after: 60, line: 420 },
-          }),
-        );
+        children.push(headingParagraph(section.text || '', HeadingLevel.HEADING_4, 3, { before: 160, after: 60, line: 420 }));
         break;
 
       case 'heading5':
-        children.push(
-          new Paragraph({
-            text: section.text || '',
-            heading: HeadingLevel.HEADING_5,
-            spacing: { before: 140, after: 60, line: 400 },
-          }),
-        );
+        children.push(headingParagraph(section.text || '', HeadingLevel.HEADING_5, 4, { before: 140, after: 60, line: 400 }));
         break;
 
       case 'heading6':
-        children.push(
-          new Paragraph({
-            text: section.text || '',
-            heading: HeadingLevel.HEADING_6,
-            spacing: { before: 120, after: 50, line: 360 },
-          }),
-        );
+        children.push(headingParagraph(section.text || '', HeadingLevel.HEADING_6, 5, { before: 120, after: 50, line: 360 }));
         break;
 
       case 'heading7':
         children.push(
           new Paragraph({
-            text: section.text || '',
+            text: stripHeadingNumber(section.text || ''),
             style: 'Heading7',
+            numbering: { reference: HEADING_NUMBERING_REFERENCE, level: 6 },
             spacing: { before: 100, after: 40, line: 340 },
           }),
         );
@@ -190,7 +156,10 @@ export async function buildDocxFragment(
 
   const doc = new Document({
     numbering: {
-      config: Array.from(context.orderedListReferences).map((reference) => orderedListNumberingConfig(reference)),
+      config: [
+        headingNumberingConfig(),
+        ...Array.from(context.orderedListReferences).map((reference) => orderedListNumberingConfig(reference)),
+      ],
     },
     styles: {
       default: {
@@ -228,6 +197,20 @@ export async function buildDocxFragment(
   return content.attachments?.length && content.sections.some((section) => section.type === 'attachment')
     ? embedAttachments(blob, content)
     : blob;
+}
+
+function headingParagraph(
+  text: string,
+  heading: (typeof HeadingLevel)[keyof typeof HeadingLevel],
+  level: number,
+  spacing: { before: number; after: number; line: number },
+): Paragraph {
+  return new Paragraph({
+    text: stripHeadingNumber(text),
+    heading,
+    numbering: { reference: HEADING_NUMBERING_REFERENCE, level },
+    spacing,
+  });
 }
 
 async function patchHeading4Style(blob: Blob): Promise<Blob> {
@@ -378,6 +361,25 @@ function mergeState(
   return undefined;
 }
 
+function headingNumberingConfig() {
+  return {
+    reference: HEADING_NUMBERING_REFERENCE,
+    levels: Array.from({ length: 7 }, (_, level) => ({
+      level,
+      format: LevelFormat.DECIMAL,
+      text: level === 0
+        ? '%1.'
+        : Array.from({ length: level + 1 }, (_unused, index) => `%${index + 1}`).join('.'),
+      alignment: AlignmentType.LEFT,
+      style: {
+        paragraph: {
+          indent: { left: level * 240, hanging: 0 },
+        },
+      },
+    })),
+  };
+}
+
 function orderedListNumberingConfig(reference: string) {
   return {
     reference,
@@ -393,6 +395,10 @@ function orderedListNumberingConfig(reference: string) {
       },
     })),
   };
+}
+
+function stripHeadingNumber(text: string): string {
+  return String(text || '').trim().replace(/^\d+(?:\.\d+)*[.\s]+/, '');
 }
 
 function tableColumnWidths(totalCols: number): number[] {

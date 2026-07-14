@@ -53,7 +53,7 @@ describe('buildProcessContent', () => {
 
   it('exposes a ProcessExporter label based on the process name', async () => {
     const document = {
-      meta: {},
+      meta: { domain: '' },
       roles: [],
       stages: [],
       stageFlowRefs: [],
@@ -76,9 +76,9 @@ describe('buildProcessContent', () => {
     expect(await exporter.captureAll()).toHaveLength(1);
   });
 
-  it('prefixes composed process and node headings when a hierarchy prefix is provided', () => {
+  it('does not write hierarchy prefixes into composed process and node headings', () => {
     const document = {
-      meta: {},
+      meta: { domain: '' },
       roles: [],
       stages: [],
       stageFlowRefs: [],
@@ -97,13 +97,13 @@ describe('buildProcessContent', () => {
     const content = buildProcessContent(document, document.processes[0], { headingPrefix: '2.1.1.1' });
 
     expect(content.sections).toEqual(expect.arrayContaining([
-      { type: 'heading4', text: '2.1.1.1 流程：Process A' },
-      { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
+      { type: 'heading4', text: '流程：Process A' },
+      { type: 'heading5', text: '节点：Node A' },
     ]));
   });
   it('omits the trigger and outcome table when both fields are blank', () => {
     const document = {
-      meta: {},
+      meta: { domain: '' },
       roles: [],
       stages: [],
       stageFlowRefs: [],

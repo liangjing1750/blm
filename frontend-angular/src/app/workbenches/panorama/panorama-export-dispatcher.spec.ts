@@ -47,7 +47,7 @@ describe('createCurrentPanoramaExporter', () => {
 
     expect(content.sections.some((section) => section.type === 'attachment')).toBe(false);
     expect(content.attachments?.map((attachment) => attachment.name)).toEqual(['流程附件.txt']);
-    expect(content.attachments?.[0].path).toBe('价值流环节/阶段：入库/流程：入库流程/流程附件.txt');
+    expect(content.attachments?.[0].path).toBe('附件/阶段：入库/流程：入库流程/流程附件.txt');
     expect(new TextDecoder().decode(content.attachments?.[0].data)).toBe('panorama attachment');
   });
 
@@ -90,7 +90,7 @@ describe('createCurrentPanoramaExporter', () => {
 
     expect(exporter).toBeTruthy();
     expect(exporter!.label).toBe('attachments');
-    expect(exporter!.getContent().sections[0]).toEqual({ type: 'heading1', text: '价值流环节' });
+    expect(exporter!.getContent().sections[0]).toEqual({ type: 'heading1', text: '附件' });
   });
 
   it('returns null for unsupported tabs', () => {

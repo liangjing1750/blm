@@ -30,6 +30,8 @@ export class CollaborationService {
   private socket: WebSocket | null = null;
   private docName = '';
   private pingTimer: number | null = null;
+  private reconnectTimer: number | null = null;
+  private reconnectAttempt = 0;
   private profile: CollaborationUserProfile | null = null;
   private readonly localSaveChannel: BroadcastChannel | null = this.createLocalSaveChannel();
 
@@ -39,6 +41,7 @@ export class CollaborationService {
   start(docName: string): void {
     const runtime = getAngularRuntimeState();
     if (!docName || runtime.readOnly || !runtime.runtime.supportsCollab) return;
+    this.clearReconnectTimer();
     if (this.docName === docName && this.socket && this.socket.readyState <= WebSocket.OPEN) {
       if (this.socket.readyState === WebSocket.OPEN && !runtime.collab.connected) {
         runtime.collab.connected = true;
@@ -66,15 +69,18 @@ export class CollaborationService {
       runtime.collab.connected = false;
       runtime.collab.lastError = error instanceof Error ? error.message : String(error);
       emitRuntimeRefresh();
+      this.scheduleReconnect(docName);
     }
   }
 
   stop(): void {
+    this.clearReconnectTimer();
     if (this.pingTimer) window.clearInterval(this.pingTimer);
     this.pingTimer = null;
-    if (this.socket && this.socket.readyState <= WebSocket.OPEN) this.socket.close();
+    const socket = this.socket;
     this.socket = null;
     this.docName = '';
+    if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
     const runtime = getAngularRuntimeState();
     runtime.collab.connected = false;
     runtime.collab.users = [];
@@ -200,6 +206,7 @@ export class CollaborationService {
     }
     const runtime = getAngularRuntimeState();
     if (payload.type === 'joined') {
+      this.reconnectAttempt = 0;
       runtime.collab.connected = true;
       runtime.collab.seq = Number(payload.seq || runtime.collab.seq || 0);
       runtime.collab.acceptedSeq = runtime.collab.seq;
@@ -222,10 +229,36 @@ export class CollaborationService {
 
   private markDisconnected(socket: WebSocket): void {
     if (this.socket !== socket) return;
+    if (this.pingTimer) window.clearInterval(this.pingTimer);
+    this.pingTimer = null;
     const runtime = getAngularRuntimeState();
     runtime.collab.connected = false;
     runtime.collab.syncing = false;
     emitRuntimeRefresh();
+    this.socket = null;
+    this.scheduleReconnect(this.docName);
+  }
+
+  // 模块意图：后端重启或网络闪断后自动恢复协作通道，避免顶部状态永久停留在“协作连接中”。
+  // 关键流程：WebSocket close/error 只标记离线，然后按退避延迟重新创建连接；收到 joined 后重置退避。
+  // 边界细节：stop()/只读/无文档/不支持协作时不重连，避免关闭文档或切换版本后又意外连回旧文档。
+  private scheduleReconnect(docName: string): void {
+    const runtime = getAngularRuntimeState();
+    if (!docName || runtime.readOnly || !runtime.runtime.supportsCollab) return;
+    if (this.reconnectTimer !== null) return;
+    const delay = Math.min(15000, 1000 * 2 ** Math.min(this.reconnectAttempt, 4));
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.docName !== docName) return;
+      this.start(docName);
+    }, delay);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer === null) return;
+    window.clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
   }
 
   private handleLocalDocumentSaved(payload: LocalDocumentSavedMessage): void {

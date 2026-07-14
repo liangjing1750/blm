@@ -33,7 +33,7 @@ interface ParamMappingV3 { source: string; target: string; note?: string; }
 interface ParamMapping { fromTaskDefUid: string; fromParamName: string; toTaskDefUid: string; toParamName: string; note: string; }
 interface ServiceParam { name: string; type: string; required: boolean; note: string; children?: ServiceParam[]; }
 interface LegacyServiceGroup { uid?: string; id?: string; name?: string; desc?: string; }
-interface LegacyService { uid?: string; name?: string; serviceGroupUid?: string; method?: string; path?: string; desc?: string; actor?: string; kind?: string; responseKind?: string; rawRequest?: string; rawResponse?: string; requestParams?: ServiceParam[]; responseParams?: ServiceParam[]; inputs?: ServiceParam[]; outputs?: ServiceParam[]; orchestration?: ServiceOrchestration; steps?: OrchStep[]; parameterMappings: ParamMapping[]; nodeRefs: string[]; }
+interface LegacyService { uid?: string; id?: string; name?: string; serviceGroupUid?: string; method?: string; path?: string; desc?: string; actor?: string; kind?: string; responseKind?: string; rawRequest?: string; rawResponse?: string; requestParams?: ServiceParam[]; responseParams?: ServiceParam[]; inputs?: ServiceParam[]; outputs?: ServiceParam[]; orchestration?: ServiceOrchestration; steps?: OrchStep[]; parameterMappings: ParamMapping[]; nodeRefs: string[]; }
 interface ParamRow { param: ServiceParam; path: number[]; level: number; testPath: string; }
 interface VariableOption { value: string; label: string; }
 interface ContractParamLine {
@@ -375,12 +375,15 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
   protected async deleteService(svc: LegacyService): Promise<void> {
     if (!this.canEdit()) return;
+    const targetIds = this.serviceIdentitySet(svc);
+    if (!targetIds.size) return;
     const confirmed = await confirmRuntimeAction(`确认删除接口“${svc.name || this.uid(svc)}”吗？`, {
       title: '删除接口',
       confirmLabel: '删除',
     });
     if (!confirmed) return;
-    this.doc().services = this.services().filter((s) => s.uid !== svc.uid);
+    this.doc().services = this.services().filter((s) => !this.serviceMatches(s, targetIds));
+    this.removeServiceReferences(targetIds);
     if (this.serviceDrawerId() === this.uid(svc)) this.serviceDrawerId.set('');
     this.touch();
   }
@@ -459,6 +462,47 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       if (service.serviceGroupUid === groupUid) service.serviceGroupUid = '';
     }
     this.touch();
+  }
+
+  // 模块意图：应用接口删除只应影响被删除接口，不能因为旧数据 uid/id 不一致而误删其他接口或关联。
+  // 关键流程：以 uid、id、uid(item) 三类稳定标识组成匹配集合，删除接口后仅清理命中集合的节点/表单引用。
+  // 边界细节：空标识不参与匹配，避免多个旧接口缺失 uid 时被 undefined 等值误判为同一接口。
+  private serviceIdentitySet(service: LegacyService): Set<string> {
+    return new Set([
+      service.uid,
+      service.id,
+      this.uid(service),
+    ].map((value) => String(value || '').trim()).filter(Boolean));
+  }
+
+  private serviceMatches(service: LegacyService, targetIds: Set<string>): boolean {
+    return [...this.serviceIdentitySet(service)].some((id) => targetIds.has(id));
+  }
+
+  private removeServiceReferences(targetIds: Set<string>): void {
+    for (const process of this.doc().processes || []) {
+      for (const node of process.nodes || []) {
+        this.removeServiceReferenceFields(node, targetIds);
+        for (const form of node.forms || []) {
+          this.removeServiceReferenceFields(form, targetIds);
+          for (const section of form.sections || []) this.removeServiceReferenceFields(section, targetIds);
+        }
+      }
+    }
+  }
+
+  private removeServiceReferenceFields(target: Record<string, unknown>, targetIds: Set<string>): void {
+    const singleKeys = ['serviceUid', 'serviceId', 'applicationServiceUid', 'applicationServiceId', 'interfaceUid', 'interfaceId'];
+    for (const key of singleKeys) {
+      const value = String(target[key] || '').trim();
+      if (value && targetIds.has(value)) target[key] = '';
+    }
+    const listKeys = ['serviceUids', 'serviceIds', 'applicationServiceUids', 'applicationServiceIds', 'interfaceUids', 'interfaceIds'];
+    for (const key of listKeys) {
+      const value = target[key];
+      if (!Array.isArray(value)) continue;
+      target[key] = value.map((item) => String(item || '').trim()).filter((item) => item && !targetIds.has(item));
+    }
   }
   protected addSvcParam(arr: ServiceParam[]): void { if (!this.canEdit()) return; arr.push({ name: '', type: 'String', required: false, note: '' }); this.touch(); }
   protected removeSvcParam(arr: ServiceParam[], idx: number): void { if (!this.canEdit()) return; arr.splice(idx, 1); this.touch(); }

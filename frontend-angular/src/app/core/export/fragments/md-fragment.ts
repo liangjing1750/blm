@@ -5,29 +5,30 @@ import { exportRichTextToMarkdown } from './rich-text-fragment';
 export function buildMarkdown(content: ViewContent): string {
   const lines: string[] = [];
   const { sections } = content;
+  const headingCounters = [0, 0, 0, 0, 0, 0, 0];
 
   for (const section of sections) {
     switch (section.type) {
       case 'heading1':
-        lines.push(`# ${section.text || ''}`, '');
+        lines.push(`# ${numberedHeadingText(section.text || '', 1, headingCounters)}`, '');
         break;
       case 'heading2':
-        lines.push(`## ${section.text || ''}`, '');
+        lines.push(`## ${numberedHeadingText(section.text || '', 2, headingCounters)}`, '');
         break;
       case 'heading3':
-        lines.push(`### ${section.text || ''}`, '');
+        lines.push(`### ${numberedHeadingText(section.text || '', 3, headingCounters)}`, '');
         break;
       case 'heading4':
-        lines.push(`#### ${section.text || ''}`, '');
+        lines.push(`#### ${numberedHeadingText(section.text || '', 4, headingCounters)}`, '');
         break;
       case 'heading5':
-        lines.push(`##### ${section.text || ''}`, '');
+        lines.push(`##### ${numberedHeadingText(section.text || '', 5, headingCounters)}`, '');
         break;
       case 'heading6':
-        lines.push(`###### ${section.text || ''}`, '');
+        lines.push(`###### ${numberedHeadingText(section.text || '', 6, headingCounters)}`, '');
         break;
       case 'heading7':
-        lines.push(`####### ${section.text || ''}`, '');
+        lines.push(`####### ${numberedHeadingText(section.text || '', 7, headingCounters)}`, '');
         break;
       case 'paragraph':
         lines.push(section.text || '', '');
@@ -53,6 +54,21 @@ export function buildMarkdown(content: ViewContent): string {
   }
 
   return lines.join('\n');
+}
+
+function numberedHeadingText(text: string, level: number, counters: number[]): string {
+  const index = Math.max(0, Math.min(counters.length - 1, level - 1));
+  counters[index] += 1;
+  for (let cursor = index + 1; cursor < counters.length; cursor += 1) counters[cursor] = 0;
+  for (let cursor = 0; cursor < index; cursor += 1) {
+    if (counters[cursor] === 0) counters[cursor] = 1;
+  }
+  const number = counters.slice(0, index + 1).join('.');
+  return `${number} ${stripHeadingNumber(text)}`.trim();
+}
+
+function stripHeadingNumber(text: string): string {
+  return String(text || '').trim().replace(/^\d+(?:\.\d+)*[.\s]+/, '');
 }
 
 function renderTable(lines: string[], headers: string[], rows: string[][], richTextColumns: number[] = []): void {

@@ -131,14 +131,14 @@ describe('buildNodeContent', () => {
     expect(await exporter.captureAll()).toEqual([]);
   });
 
-  it('narrows the step number column and prefixes composed node headings', () => {
+  it('narrows the step number column without writing hierarchy prefixes into headings', () => {
     const node: ProcessNode = {
       uid: 'node-a',
       name: 'Node A',
       userSteps: [{ uid: 'step-a', name: 'Input', type: 'Click', note: 'Long description' }],
     } as any;
     const document = {
-      meta: {},
+      meta: { domain: '' },
       roles: [],
       stages: [],
       stageFlowRefs: [],
@@ -163,8 +163,8 @@ describe('buildNodeContent', () => {
     );
 
     expect(content.sections).toEqual(expect.arrayContaining([
-      { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
-      { type: 'heading6', text: '2.1.1.1.1.1 办理步骤' },
+      { type: 'heading5', text: '节点：Node A' },
+      { type: 'heading6', text: '办理步骤' },
     ]));
     expect(stepTable?.columnWidths).toEqual([6, 24, 14, 56]);
   });

@@ -61,20 +61,19 @@ export function buildStageContent(
   stage: Stage,
   options: StageExportBuildOptions = {},
 ): ViewContent {
+  void options;
   const stageTitle = display(stage.name, identityOf(stage), '未命名阶段');
-  const prefix = display(options.headingPrefix, '', '');
   const sections: ViewSection[] = [
-    { type: 'heading2', text: headingText(prefix, `阶段：${stageTitle}`) },
+    { type: 'heading2', text: `阶段：${stageTitle}` },
     { type: 'image', text: `阶段视图：${stageTitle}`, imageIndex: 0 },
   ];
 
   let imageOffset = 1;
   groupedStageProcesses(document, stage).forEach((group, groupIndex) => {
-    const groupPrefix = childPrefix(prefix, groupIndex + 1);
-    sections.push({ type: 'heading3', text: headingText(groupPrefix, `流程组：${group.name}`) });
+    sections.push({ type: 'heading3', text: `流程组：${group.name}` });
     group.processes.forEach((process, processIndex) => {
       const processContent = buildProcessContent(document, process, {
-        headingPrefix: childPrefix(groupPrefix, processIndex + 1),
+        headingPrefix: '',
       });
       sections.push(...offsetImageSections(processContent.sections, imageOffset));
       imageOffset += countImages(processContent.sections);
@@ -166,14 +165,6 @@ function objectKeys(value: { uid?: string; id?: string; name?: string }): Set<st
 
 function display(primary: unknown, fallback: unknown, empty: string): string {
   return String(primary || fallback || empty).trim();
-}
-
-function childPrefix(prefix: string, index: number): string {
-  return prefix ? `${prefix}.${index}` : '';
-}
-
-function headingText(prefix: string, text: string): string {
-  return prefix ? `${prefix} ${text}` : text;
 }
 
 function safeFileSegment(value: string): string {

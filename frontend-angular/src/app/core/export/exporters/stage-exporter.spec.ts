@@ -98,9 +98,9 @@ describe('StageExporter', () => {
 });
 
 describe('buildStageContent numbering', () => {
-  it('prefixes stage, flow group, process and node headings', () => {
+  it('does not write hierarchy prefixes into composed headings', () => {
     const document = {
-      meta: {},
+      meta: { domain: '' },
       roles: [],
       stages: [{ uid: 'stage-a', name: 'Stage A' }],
       stageFlowRefs: [{ uid: 'ref-a', stageUid: 'stage-a', processUid: 'process-a', order: 1 }],
@@ -124,10 +124,10 @@ describe('buildStageContent numbering', () => {
     const content = buildStageContent(document, document.stages[0], { headingPrefix: '2.1' });
 
     expect(content.sections).toEqual(expect.arrayContaining([
-      { type: 'heading2', text: '2.1 阶段：Stage A' },
-      { type: 'heading3', text: '2.1.1 流程组：Group A' },
-      { type: 'heading4', text: '2.1.1.1 流程：Process A' },
-      { type: 'heading5', text: '2.1.1.1.1 节点：Node A' },
+      { type: 'heading2', text: '阶段：Stage A' },
+      { type: 'heading3', text: '流程组：Group A' },
+      { type: 'heading4', text: '流程：Process A' },
+      { type: 'heading5', text: '节点：Node A' },
     ]));
   });
 });

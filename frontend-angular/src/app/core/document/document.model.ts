@@ -51,6 +51,7 @@ export interface Role {
   name: string;
   group?: string;
   desc?: string;
+  subDomains?: string[];
 }
 
 export interface Stage {
@@ -78,6 +79,8 @@ export interface Process {
   subDomain?: string;
   stageUid?: string;
   stageId?: string;
+  trigger?: string;
+  outcome?: string;
   nodes: ProcessNode[];
 }
 
@@ -88,10 +91,29 @@ export interface ProcessNode {
   role_uids?: string[];
   role_ids?: string[];
   role?: string;
+  userSteps?: ProcessUserStep[];
   entity_ops?: EntityOperation[];
   forms?: ProcessForm[];
   serviceUids?: string[];
   taskDefinitionUids?: string[];
+  businessRules?: ProcessBusinessRule[];
+}
+
+export interface ProcessUserStep {
+  uid?: string;
+  id?: string;
+  name?: string;
+  type?: string;
+  note?: string;
+  desc?: string;
+}
+
+export interface ProcessBusinessRule {
+  uid?: string;
+  id?: string;
+  name?: string;
+  content?: string;
+  desc?: string;
 }
 
 export interface EntityOperation {
@@ -108,6 +130,28 @@ export interface ProcessForm {
   serviceName?: string;
   entity_uid?: string;
   entity_id?: string;
+  sections?: ProcessFormSection[];
+}
+
+export interface ProcessFormSection {
+  uid?: string;
+  id?: string;
+  name?: string;
+  serviceUid?: string;
+  serviceId?: string;
+  serviceUids?: string[];
+  serviceIds?: string[];
+  fields?: ProcessFormField[];
+}
+
+export interface ProcessFormField {
+  uid?: string;
+  id?: string;
+  name: string;
+  type?: string;
+  required?: boolean;
+  note?: string;
+  desc?: string;
 }
 
 export interface Entity {
@@ -140,8 +184,9 @@ export interface BusinessComponent {
   id?: string;
   name: string;
   kind: 'core' | 'common' | 'generic';
-  entityUids: string[];
-  taskDefinitionUids: string[];
+  entityUids?: string[];
+  taskDefinitionUids?: string[];
+  businessConstructIds?: string[];
   stageUids?: string[];
 }
 
@@ -252,8 +297,10 @@ export interface OrchestrationMapping {
 }
 
 export interface KnowledgeTerm {
-  uid: string;
-  name: string;
+  uid?: string;
+  name?: string;
+  term?: string;
+  definition?: string;
   desc?: string;
 }
 

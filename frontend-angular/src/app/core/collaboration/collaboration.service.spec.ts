@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { CollaborationService } from './collaboration.service';
 import { getAngularRuntimeState } from '../runtime/angular-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,6 +58,7 @@ describe('CollaborationService', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -129,6 +131,49 @@ describe('CollaborationService', () => {
     expect(FakeWebSocket.instances).toHaveLength(1);
     expect(runtime.collab.connected).toBe(true);
     expect(service.statusText()).toBe('\u534f\u4f5c agent\u5728\u7ebf');
+  });
+
+  it('reconnects automatically after the collaboration websocket closes', () => {
+    vi.useFakeTimers();
+    const service = new CollaborationService();
+    const runtime = getAngularRuntimeState();
+
+    service.start('Agent');
+    const first = FakeWebSocket.instances[0];
+    first.readyState = FakeWebSocket.OPEN;
+    first.emit('open', {});
+    first.emit('message', { data: JSON.stringify({ type: 'joined', seq: 1, users: [{ name: 'agent' }] }) });
+
+    first.close();
+    expect(runtime.collab.connected).toBe(false);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    vi.advanceTimersByTime(1000);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    const second = FakeWebSocket.instances[1];
+    second.readyState = FakeWebSocket.OPEN;
+    second.emit('open', {});
+    second.emit('message', { data: JSON.stringify({ type: 'joined', seq: 2, users: [{ name: 'agent' }] }) });
+
+    expect(runtime.collab.connected).toBe(true);
+    expect(runtime.collab.acceptedSeq).toBe(2);
+  });
+
+  it('does not reconnect after collaboration is stopped intentionally', () => {
+    vi.useFakeTimers();
+    const service = new CollaborationService();
+
+    service.start('Agent');
+    const first = FakeWebSocket.instances[0];
+    first.readyState = FakeWebSocket.OPEN;
+    first.emit('open', {});
+    first.emit('message', { data: JSON.stringify({ type: 'joined', seq: 1, users: [{ name: 'agent' }] }) });
+
+    service.stop();
+    vi.advanceTimersByTime(5000);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
   });
 
 });

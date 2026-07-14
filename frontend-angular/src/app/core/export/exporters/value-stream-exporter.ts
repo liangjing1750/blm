@@ -57,11 +57,10 @@ export function buildValueStreamContent(document: BlmDocument): ViewContent {
 
   let imageOffset = 1;
   valueStreamChapters(document).forEach((chapter, chapterIndex) => {
-    const chapterNo = chapterIndex + 2;
-    sections.push({ type: 'heading1', text: `${chapterNo}.价值流环节：${chapter.title}` });
+    sections.push({ type: 'heading1', text: `价值流环节：${chapter.title}` });
     chapter.stages.forEach((stage, stageIndex) => {
       const stageContent = buildStageContent(document, stage, {
-        headingPrefix: `${chapterNo}.${stageIndex + 1}`,
+        headingPrefix: '',
       });
       sections.push(...offsetImageSections(stageContent.sections, imageOffset));
       imageOffset += countImages(stageContent.sections);

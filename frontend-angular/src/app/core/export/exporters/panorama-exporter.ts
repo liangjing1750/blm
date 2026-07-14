@@ -24,15 +24,15 @@ export class PanoramaExporter implements ViewExporter {
     const roleImageCount = (this.document.roles || []).length;
     const attachmentContent = buildAttachmentContent(this.document);
     const sections: ViewSection[] = [
-      { type: 'heading1', text: '1.引言' },
-      { type: 'heading2', text: '1.1 全景视图' },
+      { type: 'heading1', text: '引言' },
+      { type: 'heading2', text: '全景视图' },
       { type: 'image', text: '全景视图', imageIndex: 0 },
       ...renameFirstHeading(buildRoleContent(this.document, {
         headingType: 'heading2',
         imageOffset: 1,
-      }).sections, '1.2 角色管理'),
-      ...renameFirstHeading(buildTermsContent(this.document, { headingType: 'heading2' }).sections, '1.3 术语管理'),
-      ...renameFirstHeading(buildDictionaryContent(this.document, { headingType: 'heading2' }).sections, '1.4 字典管理'),
+      }).sections, '角色管理'),
+      ...renameFirstHeading(buildTermsContent(this.document, { headingType: 'heading2' }).sections, '术语管理'),
+      ...renameFirstHeading(buildDictionaryContent(this.document, { headingType: 'heading2' }).sections, '字典管理'),
       ...attachmentContent.sections,
     ];
 

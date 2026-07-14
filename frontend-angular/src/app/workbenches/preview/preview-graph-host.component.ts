@@ -4,7 +4,7 @@ import { EntityDesignWorkbenchComponent } from '../component/entity-design/entit
 import { ProcessFlowWorkbenchComponent } from '../process/flow/process-flow-workbench.component';
 import { ProcessStageWorkbenchComponent } from '../process/stage/process-stage-workbench.component';
 
-type PreviewGraphKind = 'stage-panorama' | 'stage-flow' | 'process-flow' | 'entity-relation' | 'entity-state';
+export type PreviewGraphKind = 'stage-panorama' | 'stage-flow' | 'process-flow' | 'entity-relation' | 'entity-state';
 
 @Component({
   selector: 'app-preview-graph-host',
@@ -28,6 +28,22 @@ type PreviewGraphKind = 'stage-panorama' | 'stage-flow' | 'process-flow' | 'enti
       <app-entity-design-workbench [editing]="false" [showEditorToggle]="false" initialView="state" [initialEntityId]="targetId" [exportGraphId]="exportGraphId"></app-entity-design-workbench>
     }
   `,
+  styles: [`
+    :host {
+      display: block;
+      min-height: inherit;
+      overflow: visible;
+      background: #fff;
+    }
+
+    :host app-process-stage-workbench,
+    :host app-process-flow-workbench,
+    :host app-entity-design-workbench {
+      display: block;
+      min-height: inherit;
+      overflow: visible;
+    }
+  `],
 })
 export class PreviewGraphHostComponent {
   // 模块意图：把预览页的真实图形组件隔离到可延迟加载的宿主中，避免主预览组件直接拖入重型工作台依赖。

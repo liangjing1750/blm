@@ -368,6 +368,90 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(host.querySelector('[data-testid="service-group-drawer"]')).toBeTruthy();
   });
 
+  it('deletes only the selected id-only interface and preserves other node/form bindings', async () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services = [{
+      id: 'svc-delete',
+      name: '待删除接口',
+      serviceGroupUid: 'service-group-1',
+      method: 'POST',
+      path: '/delete',
+      desc: '',
+      requestParams: [],
+      responseParams: [],
+      parameterMappings: [],
+      nodeRefs: [],
+    }, {
+      id: 'svc-keep',
+      name: '保留接口',
+      serviceGroupUid: 'service-group-1',
+      method: 'POST',
+      path: '/keep',
+      desc: '',
+      requestParams: [],
+      responseParams: [],
+      parameterMappings: [],
+      nodeRefs: [],
+    }];
+    runtime.doc.processes = [{
+      uid: 'process-1',
+      name: '流程1',
+      nodes: [{
+        uid: 'node-1',
+        name: '节点1',
+        serviceUids: ['svc-delete', 'svc-keep'],
+        forms: [{
+          uid: 'form-1',
+          name: '表单1',
+          serviceUid: 'svc-delete',
+          serviceId: 'svc-delete',
+          sections: [{
+            uid: 'section-1',
+            name: '分组1',
+            serviceUids: ['svc-delete'],
+            serviceUid: 'svc-delete',
+            fields: [],
+          }],
+        }, {
+          uid: 'form-2',
+          name: '表单2',
+          serviceUid: 'svc-keep',
+          serviceId: 'svc-keep',
+          sections: [{
+            uid: 'section-2',
+            name: '分组2',
+            serviceUids: ['svc-keep'],
+            serviceUid: 'svc-keep',
+            fields: [],
+          }],
+        }],
+      }],
+    }];
+    const confirmHandler = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      detail.markHandled();
+      detail.resolve(true);
+    };
+    window.addEventListener('blm-runtime-confirm', confirmHandler);
+    try {
+      host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
+      fixture.detectChanges();
+
+      await (fixture.componentInstance as any).deleteService(runtime.doc.services[0]);
+      fixture.detectChanges();
+    } finally {
+      window.removeEventListener('blm-runtime-confirm', confirmHandler);
+    }
+
+    expect(runtime.doc.services.map((service: any) => service.id || service.uid)).toEqual(['svc-keep']);
+    const node = runtime.doc.processes[0].nodes[0];
+    expect(node.serviceUids).toEqual(['svc-keep']);
+    expect(node.forms[0].serviceUid).toBe('');
+    expect(node.forms[0].sections[0].serviceUids).toEqual([]);
+    expect(node.forms[1].serviceUid).toBe('svc-keep');
+    expect(node.forms[1].sections[0].serviceUids).toEqual(['svc-keep']);
+  });
+
   it('rejects reserved ungrouped service name when creating a service group', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="application-editor-toggle"]')?.click();
     fixture.detectChanges();
