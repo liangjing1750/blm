@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { ApiService, ManualDocSummary } from '../../../core/api/api.service';
+import { requestUtilityReturn } from '../utility-return';
 
 interface ManualDocContent extends ManualDocSummary {
   content: string;
@@ -46,7 +48,10 @@ export class ManualWorkbenchComponent implements OnInit {
   });
   protected readonly outlineGroups = computed(() => this.buildOutlineGroups(this.rendered().outline));
 
-  constructor(private readonly api: ApiService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly router: Router,
+  ) {}
 
   async ngOnInit(): Promise<void> {
     await this.loadDocs();
@@ -77,7 +82,7 @@ export class ManualWorkbenchComponent implements OnInit {
   }
 
   protected returnToWork(): void {
-    window.dispatchEvent(new CustomEvent('blm-return-to-workbench'));
+    requestUtilityReturn(this.router);
   }
 
   protected isGroupCollapsed(groupId: string): boolean {

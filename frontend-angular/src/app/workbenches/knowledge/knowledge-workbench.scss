@@ -279,6 +279,21 @@
 
 /* ─── 卡片网格 ─────────────────────────────────────────── */
 
+[data-testid="knowledge-rules-panel"] .knowledge-stage-tabs {
+  overflow: visible;
+  position: relative;
+  z-index: 20;
+}
+
+[data-testid="knowledge-rules-panel"] .knowledge-stage-more-wrap {
+  position: relative;
+  z-index: 30;
+}
+
+[data-testid="knowledge-rules-panel"] .knowledge-stage-dropdown {
+  z-index: 40;
+}
+
 .knowledge-rule-cards {
   display: grid;
   gap: 12px;
@@ -670,7 +685,17 @@
 .knowledge-dictionary-entry-row {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) 1fr 32px;
+  grid-template-columns: minmax(120px, 160px) minmax(120px, 160px) minmax(180px, 1fr) 178px;
+}
+
+.knowledge-dictionary-entry-actions {
+  grid-template-columns: 32px 32px 32px minmax(58px, 1fr);
+}
+
+.knowledge-dictionary-entry-actions button {
+  min-width: 0;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
 .knowledge-dictionary-entry-row .is-danger {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import secrets
 import zipfile
 import socket
@@ -23,6 +24,7 @@ from blm_core.storage import WorkspaceStorage
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 CLIENT_STALE_SECONDS = 25
+SUBMIT_SUMMARY_HEAD_BYTES = 64 * 1024
 
 
 def _doc_hash(document: dict) -> str:
@@ -597,9 +599,14 @@ class CollaborationManager:
 
         # 目录中的 JSON 文件
         if submits_dir.is_dir():
-            for path in sorted(submits_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            page_end = offset + limit_value if limit_value is not None else None
+            for path_index, path in enumerate(sorted(submits_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)):
+                if page_end is not None and path_index >= page_end:
+                    break
+                if path_index < offset:
+                    continue
                 try:
-                    data = json.loads(path.read_text("utf-8"))
+                    data = self._read_submit_summary(path, safe_name)
                     sid = data.get("submitId", path.stem)
                     if sid in seen_ids:
                         continue
@@ -612,27 +619,32 @@ class CollaborationManager:
                         "user": data.get("user", ""),
                         "userId": data.get("userId", ""),
                         "createdAt": data.get("createdAt", ""),
-                        "documentBytes": len(json.dumps(data.get("document", {}), ensure_ascii=False)),
+                        "documentBytes": data.get("documentBytes", int(path.stat().st_size)),
                     })
                 except (json.JSONDecodeError, OSError):
                     continue
 
-        if limit_value is not None and len(records) >= offset + limit_value:
-            return records[offset:offset + limit_value]
+        if limit_value is not None and len(records) >= limit_value:
+            return records[:limit_value]
 
         # ZIP 归档
         archive = submits_dir / "archive.zip" if submits_dir.is_dir() else None
         if archive and archive.is_file():
             try:
                 with zipfile.ZipFile(str(archive), "r") as zf:
-                    for name in zf.namelist():
+                    directory_count = len(list(submits_dir.glob("*.json"))) if submits_dir.is_dir() else 0
+                    archive_offset = max(0, offset - directory_count)
+                    remaining = None if limit_value is None else max(0, limit_value - len(records))
+                    names = zf.namelist()
+                    archive_page = names[archive_offset:archive_offset + remaining if remaining is not None else None]
+                    for name in archive_page:
                         sid = name.rsplit(".", 1)[0] if name.endswith(".json") else name
                         if sid in seen_ids:
                             continue
                         seen_ids.add(sid)
                         try:
                             raw = zf.read(name)
-                            data = json.loads(raw.decode("utf-8"))
+                            data = self._parse_submit_summary(raw.decode("utf-8", errors="ignore"), safe_name, sid, len(raw))
                         except Exception:
                             data = {}
                         records.append({
@@ -649,8 +661,54 @@ class CollaborationManager:
                 pass
 
         if limit_value is None:
-            return records[offset:] if offset else records
-        return records[offset:offset + limit_value]
+            return records
+        return records[:limit_value]
+
+    def _read_submit_summary(self, path: Path, safe_name: str) -> dict:
+        try:
+            with path.open("rb") as handle:
+                head = handle.read(SUBMIT_SUMMARY_HEAD_BYTES)
+            text = head.decode("utf-8", errors="ignore")
+            summary = self._parse_submit_summary(text, safe_name, path.stem, int(path.stat().st_size))
+            if summary:
+                return summary
+        except OSError:
+            pass
+        data = json.loads(path.read_text("utf-8"))
+        data["documentBytes"] = int(path.stat().st_size)
+        return data
+
+    def _parse_submit_summary(self, text: str, safe_name: str, fallback_id: str, size: int) -> dict:
+        head = text.split('"document"', 1)[0]
+
+        def string_field(key: str, fallback: str = "") -> str:
+            match = re.search(rf'"{re.escape(key)}"\s*:\s*("(?:\\.|[^"\\])*")', head)
+            if not match:
+                return fallback
+            try:
+                return str(json.loads(match.group(1)))
+            except json.JSONDecodeError:
+                return fallback
+
+        def int_field(key: str) -> int:
+            match = re.search(rf'"{re.escape(key)}"\s*:\s*(-?\d+)', head)
+            if not match:
+                return 0
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return 0
+
+        return {
+            "submitId": string_field("submitId", fallback_id),
+            "doc": string_field("doc", safe_name),
+            "seq": int_field("seq"),
+            "baseSeq": int_field("baseSeq"),
+            "user": string_field("user"),
+            "userId": string_field("userId"),
+            "createdAt": string_field("createdAt"),
+            "documentBytes": size,
+        }
 
     def load_submit(self, doc_name: str, submit_id: str) -> dict | None:
         """加载指定的提交记录完整内容"""

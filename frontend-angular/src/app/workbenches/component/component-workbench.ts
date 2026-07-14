@@ -39,7 +39,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy, AfterView
     { value: 'ID', label: '标识ID' },
     { value: 'list', label: '列表' },
   ];
-  private readonly onRefresh = () => this.version.update((v) => v + 1);
+  private readonly onRefresh = () => {
+    this.syncNavigationFromRuntime();
+    this.version.update((v) => v + 1);
+  };
   private readonly onMindMapCommand = (event: Event) => this.handleMindMapCommand(event as CustomEvent<{ command?: string }>);
   private readonly runtime = getAngularRuntimeState();
   ngOnInit(): void {
@@ -1421,5 +1424,10 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy, AfterView
     return ['businessComponent', 'businessConstruct', 'taskDef', 'entity'].includes(saved)
       ? saved as ComponentTab
       : 'businessComponent';
+  }
+
+  private syncNavigationFromRuntime(): void {
+    this.activeTab.set(this.restoreActiveTab());
+    this.selectedConstructId.set(String(this.runtime.ui['componentWorkbenchConstructId'] || '').trim());
   }
 }

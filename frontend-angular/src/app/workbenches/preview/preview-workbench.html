@@ -3,6 +3,7 @@
     <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-json" [disabled]="!runtime.currentFile" (click)="exportJson()">导出 JSON</button>
     <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-markdown" [disabled]="!runtime.currentFile" (click)="exportMarkdown()">导出 MD</button>
     <button class="btn btn-outline btn-sm" type="button" data-testid="preview-export-docx" [disabled]="!runtime.currentFile || !!exportWait()" (click)="exportDocx()">导出 DOCX</button>
+    <button class="btn btn-ghost-sm" type="button" data-testid="preview-expand-all-sections" (click)="expandAllSections()">展开全部章节</button>
     <button id="preview-raw-toggle" class="btn btn-ghost-sm" type="button" style="margin-left:auto" (click)="toggleRaw()">
       {{ showRaw() ? '显示渲染预览' : '显示原文 MD' }}
     </button>
@@ -42,9 +43,17 @@
       <div id="preview-rendered" class="preview-rendered pv-content" data-testid="preview-rendered">
         <h1 id="preview-top">{{ title() }}</h1>
         <div [innerHTML]="metaHtml()"></div>
+        <div class="preview-summary-grid" data-testid="preview-summary-grid">
+          @for (card of summaryCards(); track card.label) {
+            <div class="preview-summary-card tone-{{ card.tone }}">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+            </div>
+          }
+        </div>
 
         <!-- ════ 引言 ════ -->
-        @if (stages().length || roles().length || terms().length) {
+        @if ((stages().length || roles().length || terms().length) && isPreviewSectionVisible('preview-intro')) {
           <section id="preview-intro" class="pv-section">
             <h2>{{ outlineNumber('preview-intro') }} 引言</h2>
 
@@ -92,11 +101,16 @@
               </section>
             }
           </section>
+        } @else if (stages().length || roles().length || terms().length) {
+          <button class="preview-section-placeholder" type="button" (click)="showPreviewSection('preview-intro')">
+            <span>{{ previewSectionLabel('preview-intro') }}</span>
+            <strong>加载本章</strong>
+          </button>
         }
 
         <!-- ════ 价值流（每个价值流线一个顶级章节） ════ -->
         @for (lane of valueStreamLanes(); track lane.id) {
-          @if (stagesInLane(lane.id).length) {
+          @if (stagesInLane(lane.id).length && isPreviewSectionVisible('preview-lane-' + lane.id)) {
           <section class="pv-section pv-graph-section" [id]="'preview-lane-' + lane.id">
             <h2>{{ outlineNumber('preview-lane-' + lane.id) }} {{ lane.name }}</h2>
             @for (stage of stagesInLane(lane.id); track identityOf(stage, 'stage-' + $index); let i = $index) {
@@ -230,11 +244,16 @@
               </section>
             }
           </section>
+          } @else if (stagesInLane(lane.id).length) {
+            <button class="preview-section-placeholder" type="button" (click)="showPreviewSection('preview-lane-' + lane.id)">
+              <span>{{ previewSectionLabel('preview-lane-' + lane.id) }}</span>
+              <strong>加载本章</strong>
+            </button>
           }
         }
 
         <!-- ════ 孤立流程 ════ -->
-        @if (orphanProcesses().length) {
+        @if (orphanProcesses().length && isPreviewSectionVisible('preview-processes')) {
           <section id="preview-processes" class="pv-section pv-graph-section">
             <h2>{{ outlineNumber('preview-processes') }} 流程视图</h2>
             @for (process of orphanProcesses(); track identityOf(process, 'process-' + $index); let i = $index) {
@@ -324,10 +343,15 @@
               </section>
             }
           </section>
+        } @else if (orphanProcesses().length) {
+          <button class="preview-section-placeholder" type="button" (click)="showPreviewSection('preview-processes')">
+            <span>{{ previewSectionLabel('preview-processes') }}</span>
+            <strong>加载本章</strong>
+          </button>
         }
 
         <!-- ════ 组件建模（组件→构件→实体、任务） ════ -->
-        @if (entities().length || components().length || constructs().length || taskDefinitions().length) {
+        @if ((entities().length || components().length || constructs().length || taskDefinitions().length) && isPreviewSectionVisible('preview-components')) {
           <section id="preview-components" class="pv-section">
             <h2>{{ outlineNumber('preview-components') }} 组件建模</h2>
 
@@ -435,10 +459,15 @@
               </section>
             }
           </section>
+        } @else if (entities().length || components().length || constructs().length || taskDefinitions().length) {
+          <button class="preview-section-placeholder" type="button" (click)="showPreviewSection('preview-components')">
+            <span>{{ previewSectionLabel('preview-components') }}</span>
+            <strong>加载本章</strong>
+          </button>
         }
 
         <!-- ════ 应用服务（服务组→接口JSON视图） ════ -->
-        @if (services().length || applicationInterfaceRows().length) {
+        @if ((services().length || applicationInterfaceRows().length) && isPreviewSectionVisible('preview-applications')) {
           <section id="preview-applications" class="pv-section">
             <h2>{{ outlineNumber('preview-applications') }} 应用服务</h2>
 
@@ -499,10 +528,15 @@
               </section>
             }
           </section>
+        } @else if (services().length || applicationInterfaceRows().length) {
+          <button class="preview-section-placeholder" type="button" (click)="showPreviewSection('preview-applications')">
+            <span>{{ previewSectionLabel('preview-applications') }}</span>
+            <strong>加载本章</strong>
+          </button>
         }
 
         <!-- ════ 附录 ════ -->
-        @if (processesWithAttachments().length) {
+        @if (processesWithAttachments().length && isPreviewSectionVisible('preview-appendix')) {
           <section id="preview-appendix" class="pv-section">
             <h2>{{ outlineNumber('preview-appendix') }} 附录</h2>
             @for (process of processesWithAttachments(); track identityOf(process, 'proc-' + $index)) {
@@ -546,6 +580,11 @@
               }
             }
           </section>
+        } @else if (processesWithAttachments().length) {
+          <button class="preview-section-placeholder" type="button" (click)="showPreviewSection('preview-appendix')">
+            <span>{{ previewSectionLabel('preview-appendix') }}</span>
+            <strong>加载本章</strong>
+          </button>
         }
       </div>
     </div>

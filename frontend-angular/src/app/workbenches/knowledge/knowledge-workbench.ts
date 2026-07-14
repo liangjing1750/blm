@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { getAngularRuntimeState, markAngularRuntimeModified } from '../../core/runtime/angular-runtime';
 import { RichTextEditorComponent } from '../../shared/rich-text/rich-text-editor.component';
 
+const MAX_VISIBLE_STAGE_TABS = 10;
+
 interface LegacyTerm {
   uid?: string;
   id?: string;
@@ -418,11 +420,11 @@ export class KnowledgeWorkbenchComponent implements OnChanges, OnInit, OnDestroy
   }
 
   protected visibleStageTabs(): Array<{ id: string; name: string; processCount: number }> {
-    return this.stageTabs().slice(0, 5);
+    return this.stageTabs().slice(0, MAX_VISIBLE_STAGE_TABS);
   }
 
   protected overflowStageTabs(): Array<{ id: string; name: string; processCount: number }> {
-    return this.stageTabs().slice(5);
+    return this.stageTabs().slice(MAX_VISIBLE_STAGE_TABS);
   }
 
   protected isStageSelected(stageId: string): boolean {

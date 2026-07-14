@@ -62,8 +62,9 @@ export function createShellTabBarLegacyAdapter(runtime: ShellTabBarRuntime = get
       return MAIN_TABS;
     },
     activeTabId(): string {
-      const current = normalize(ui()['mainTab'] || 'panoramaWorkbench');
-      ui()['mainTab'] = current;
+      const raw = String(ui()['mainTab'] || 'panoramaWorkbench');
+      const current = normalize(raw);
+      if (!isAngularUtilityWorkbench(raw)) ui()['mainTab'] = current;
       return current;
     },
     isPreviewRendering(): boolean {
@@ -80,6 +81,9 @@ export function createShellTabBarLegacyAdapter(runtime: ShellTabBarRuntime = get
       else switchAngularMainTab(tabId);
     },
     goBack(): string | null {
+      if (isAngularUtilityWorkbench(String(ui()['mainTab'] || ''))) {
+        return goBackAngularUtilityWorkbench();
+      }
       if (runtime.goBackNavigation) {
         runtime.goBackNavigation();
         return normalize(ui()['mainTab']);
@@ -94,6 +98,8 @@ import {
   getAngularBackNavigationTitle,
   getAngularRuntimeState,
   goBackAngularNavigation,
+  goBackAngularUtilityWorkbench,
+  isAngularUtilityWorkbench,
   normalizeMainWorkbenchId,
   switchAngularMainTab,
 } from '../../runtime/angular-runtime';

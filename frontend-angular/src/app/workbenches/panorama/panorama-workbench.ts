@@ -1,9 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { BlmDocument, BusinessComponent, Stage } from '../../core/document/document.model';
 import { DocumentStore } from '../../core/document/document-store';
 import { getComponentSupportedStages, getStageProcesses } from '../../core/document/document-model';
-import { getAngularRuntimeState, switchAngularMainTab } from '../../core/runtime/angular-runtime';
+import { getAngularRuntimeState, recordAngularNavigationBoundary, switchAngularMainTab } from '../../core/runtime/angular-runtime';
 import { ValueDomainCell, ValueDomainColumn, ValueDomainLane, getValueDomainColumnUid, getValueDomainLaneUid } from '../../core/document/value-domain-model';
 import { KnowledgeWorkbenchComponent } from '../knowledge/knowledge-workbench';
 import { RoleWorkbenchComponent } from '../role/role-workbench';
@@ -31,7 +31,7 @@ interface PanoramaDocument extends BlmDocument {
   templateUrl: './panorama-workbench.html',
   styleUrls: ['../../shared/layout/workbench-section.scss', './panorama-workbench.scss'],
 })
-export class PanoramaWorkbench {
+export class PanoramaWorkbench implements OnInit, OnDestroy {
   // 模块意图：全景工作台是跨模型入口，只编排“视图投影”和已迁移子工作台，不在这里承接具体编辑命令。
   protected readonly tabs: PanoramaSubtabItem[] = [
     { id: 'overview', label: '全景视图' },
@@ -41,7 +41,9 @@ export class PanoramaWorkbench {
     { id: 'rules', label: '规则管理' },
     { id: 'attachments', label: '附件管理' },
   ];
-  protected readonly activeTab = signal<PanoramaSubtab>('overview');
+  private readonly runtime = getAngularRuntimeState();
+  private readonly onRefresh = () => this.activeTab.set(this.restoreActiveTab());
+  protected readonly activeTab = signal<PanoramaSubtab>(this.restoreActiveTab());
   protected readonly editing = signal(false);
   protected readonly editMenuOpen = signal(false);
   protected readonly manualZoom = signal<number | null>(null);
@@ -107,6 +109,14 @@ export class PanoramaWorkbench {
   protected readonly exportMenuOpen = signal(false);
   protected readonly exportWait = signal<{ title: string; description: string; progress?: number; remainingSeconds?: number } | null>(null);
   protected readonly exportCaptureReady = signal(false);
+
+  ngOnInit(): void {
+    window.addEventListener('blm-workbench-refresh', this.onRefresh);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('blm-workbench-refresh', this.onRefresh);
+  }
 
   // ── 局部导出（调试功能，不涉及服务器存储） ──
   protected toggleExportMenu(event: MouseEvent): void {
@@ -191,10 +201,20 @@ export class PanoramaWorkbench {
   }
 
   protected switchTab(tabId: PanoramaSubtab): void {
+    if (this.activeTab() === tabId) return;
+    recordAngularNavigationBoundary();
+    this.runtime.ui['panoramaWorkbenchTab'] = tabId;
     this.activeTab.set(tabId);
     // 关键流程：编辑态是一次工作台级编辑会话，不跟随三级 tab 自动关闭。
     // 切换 tab 只收起全景视图的跳转菜单，避免菜单悬浮到不相关子视图。
     this.editMenuOpen.set(false);
+  }
+
+  private restoreActiveTab(): PanoramaSubtab {
+    const saved = String(this.runtime.ui['panoramaWorkbenchTab'] || '').trim();
+    return ['overview', 'roles', 'terms', 'dictionary', 'rules', 'attachments'].includes(saved)
+      ? saved as PanoramaSubtab
+      : 'overview';
   }
 
   protected toggleEditing(): void {

@@ -23,6 +23,12 @@ interface PreviewOutlineItem {
   number: string;
 }
 
+interface PreviewSummaryCard {
+  label: string;
+  value: number;
+  tone: 'blue' | 'green' | 'amber' | 'cyan';
+}
+
 @Component({
   selector: 'app-preview-workbench',
   standalone: true,
@@ -42,10 +48,17 @@ export class PreviewWorkbench {
   protected readonly exportCaptureReady = signal(false);
   protected readonly showRaw = signal(false);
   protected readonly collapsedOutlineIds = signal<Set<string>>(new Set());
+  protected readonly visibleSectionIds = signal<Set<string>>(new Set(['preview-intro']));
   protected readonly title = computed(() => this.runtime.doc?.meta?.title || this.runtime.doc?.meta?.domain || this.runtime.currentFile || '未命名文档');
   protected readonly markdown = computed(() => this.buildMarkdown());
   protected readonly metaHtml = computed<SafeHtml>(() => this.trustedHtml(this.renderMeta(this.runtime.doc?.meta || {})));
   protected readonly outlineItems = computed<PreviewOutlineItem[]>(() => this.buildOutlineItems());
+  protected readonly summaryCards = computed<PreviewSummaryCard[]>(() => [
+    { label: '价值流环节', value: this.valueStreamLanes().length, tone: 'blue' },
+    { label: '阶段', value: this.stages().length, tone: 'green' },
+    { label: '流程', value: this.processes().length, tone: 'cyan' },
+    { label: '构件/接口', value: this.constructs().length + this.services().length, tone: 'amber' },
+  ]);
 
   /** 根据大纲条目 ID 获取序号，正文标题使用 */
   protected outlineNumber(id: string): string {
@@ -75,6 +88,10 @@ export class PreviewWorkbench {
     this.collapsedOutlineIds.set(new Set());
   }
 
+  protected expandAllSections(): void {
+    this.visibleSectionIds.set(new Set(this.outlineItems().filter((item) => item.depth === 0).map((item) => item.id)));
+  }
+
   /** 切换大纲条目折叠/展开，depth 0/1 可折叠（对应 2 级折叠） */
   protected toggleOutline(item: PreviewOutlineItem): void {
     if (item.depth > 1) return;
@@ -93,8 +110,26 @@ export class PreviewWorkbench {
 
   /** 点击大纲：跳转正文 + depth 0/1 折叠切换 */
   protected handleOutlineClick(item: PreviewOutlineItem): void {
-    this.jumpTo(item.id);
+    this.ensurePreviewSectionVisible(item);
+    window.setTimeout(() => this.jumpTo(item.id), 0);
     if (item.depth <= 1) this.toggleOutline(item);
+  }
+
+  protected isPreviewSectionVisible(sectionId: string): boolean {
+    return this.visibleSectionIds().has(sectionId);
+  }
+
+  protected showPreviewSection(sectionId: string): void {
+    this.visibleSectionIds.update((ids) => {
+      const next = new Set(ids);
+      next.add(sectionId);
+      return next;
+    });
+  }
+
+  protected previewSectionLabel(sectionId: string): string {
+    const item = this.outlineItems().find((candidate) => candidate.id === sectionId);
+    return item ? `${item.number} ${item.label}` : '章节内容';
   }
 
   /** 判断大纲条目是否应隐藏（自身被折叠或任一祖先被折叠） */
@@ -113,6 +148,15 @@ export class PreviewWorkbench {
   protected jumpTo(anchorId: string): void {
     const el = document.getElementById(anchorId);
     if (el) el.scrollIntoView({ behavior: 'instant', block: 'start' });
+  }
+
+  private ensurePreviewSectionVisible(item: PreviewOutlineItem): void {
+    const items = this.outlineItems();
+    const index = items.findIndex((candidate) => candidate.id === item.id);
+    const top = item.depth === 0
+      ? item
+      : [...items.slice(0, index + 1)].reverse().find((candidate) => candidate.depth === 0);
+    if (top) this.showPreviewSection(top.id);
   }
 
   // ── 附件辅助方法 ──

@@ -104,11 +104,11 @@
                           <input [ngModel]="entry.name || ''" [readonly]="!editing" placeholder="中文值" data-testid="knowledge-dictionary-entry-name" (ngModelChange)="updateDictionaryEntry(entry, 'name', $event)" />
                           <input [ngModel]="entry.desc || ''" [readonly]="!editing" placeholder="说明" data-testid="knowledge-dictionary-entry-desc" (ngModelChange)="updateDictionaryEntry(entry, 'desc', $event)" />
                           @if (editing) {
-                            <div class="knowledge-row-actions">
+                            <div class="knowledge-row-actions knowledge-dictionary-entry-actions">
                               <button type="button" title="在下方新增" data-testid="knowledge-dictionary-entry-add-after" (click)="addDictionaryEntryAfter(dictionary, entryIndex)">+</button>
                               <button type="button" title="上移" data-testid="knowledge-dictionary-entry-move-up" [disabled]="entryIndex === 0" (click)="moveDictionaryEntry(dictionary, entryIndex, -1)">↑</button>
                               <button type="button" title="下移" data-testid="knowledge-dictionary-entry-move-down" [disabled]="entryIndex === dictionaryEntries(dictionary).length - 1" (click)="moveDictionaryEntry(dictionary, entryIndex, 1)">↓</button>
-                              <button class="is-danger" type="button" data-testid="knowledge-dictionary-entry-remove" (click)="removeDictionaryEntry(dictionary, entryIndex)">×</button>
+                              <button class="is-danger" type="button" title="删除" data-testid="knowledge-dictionary-entry-remove" (click)="removeDictionaryEntry(dictionary, entryIndex)">×</button>
                             </div>
                           }
                         </div>

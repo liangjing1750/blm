@@ -454,6 +454,22 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     return owner.files.find((file) => String(file.uid || file.id || file.name || '').trim() === target) || null;
   }
 
+  function findPrototypeFileAnywhere(prototypeUid: string): LegacyPrototypeFile | null {
+    const target = String(prototypeUid || '').trim();
+    if (!target) return null;
+    for (const process of processes()) {
+      const processFile = (Array.isArray(process.prototypeFiles) ? process.prototypeFiles : [])
+        .find((file) => String(file.uid || file.id || file.name || '').trim() === target);
+      if (processFile) return processFile;
+      for (const task of tasks(process)) {
+        const taskFile = (Array.isArray(task.prototypeFiles) ? task.prototypeFiles : [])
+          .find((file) => String(file.uid || file.id || file.name || '').trim() === target);
+        if (taskFile) return taskFile;
+      }
+    }
+    return null;
+  }
+
   function getAttachmentExtension(name = ''): string {
     const match = String(name || '').trim().toLowerCase().match(/\.([a-z0-9]+)$/);
     return match ? match[1] : '';
@@ -475,10 +491,12 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
   function attachmentObjectUrl(version: LegacyPrototypeVersion | LegacyPrototypeFile): string {
     if ('localUrl' in version && version.localUrl) return version.localUrl;
     const contentType = String(version.contentType || 'text/html').trim() || 'text/html';
-    const blob = new Blob([decodeAttachmentContent(version)], {
+    const BlobCtor = (legacyWindow as any).Blob || Blob;
+    const URLApi = (legacyWindow as any).URL || URL;
+    const blob = new BlobCtor([decodeAttachmentContent(version)], {
       type: /charset=/i.test(contentType) ? contentType : `${contentType};charset=utf-8`,
     });
-    return URL.createObjectURL(blob);
+    return URLApi.createObjectURL(blob);
   }
 
   function hasInlineAttachmentContent(version: LegacyPrototypeVersion | LegacyPrototypeFile | null | undefined): boolean {
@@ -507,19 +525,20 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     if (!hasInlineAttachmentContent(target)) {
       const persisted = persistedAttachmentUrl(file, version);
       if (persisted) {
-        const popup = window.open(persisted, '_blank', 'noopener');
+        const popup = ((legacyWindow as any).open || window.open).call(window, persisted, '_blank', 'noopener');
         if (!popup) window.alert?.('浏览器拦截了附件预览窗口，请允许弹窗后重试。');
         return;
       }
     }
+    const URLApi = (legacyWindow as any).URL || URL;
     const objectUrl = attachmentObjectUrl(target);
-    const popup = window.open(objectUrl, '_blank', 'noopener');
+    const popup = ((legacyWindow as any).open || window.open).call(window, objectUrl, '_blank', 'noopener');
     if (!popup) {
-      URL.revokeObjectURL(objectUrl);
+      URLApi.revokeObjectURL(objectUrl);
       window.alert?.('浏览器拦截了附件预览窗口，请允许弹窗后重试。');
       return;
     }
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    setTimeout(() => URLApi.revokeObjectURL(objectUrl), 60000);
   }
 
   function downloadAttachment(file: LegacyPrototypeFile, version: LegacyPrototypeVersion | null): void {
@@ -697,7 +716,7 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       legacyWindow.toggleProcessPrototypeVersions?.(processId, prototypeUid);
     },
     previewPrototype(ownerId, prototypeUid, versionUid = '') {
-      const file = findPrototypeFile(ownerId, prototypeUid);
+      const file = findPrototypeFile(ownerId, prototypeUid) || findPrototypeFileAnywhere(prototypeUid);
       if (file) {
         openAttachmentInNewTab(file, this.currentPrototypeVersion({ ...file, versionUid: versionUid || file.versionUid }));
         return;
@@ -705,7 +724,7 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       legacyWindow.openProcessPrototypeFile?.(ownerId, prototypeUid, versionUid);
     },
     openPrototype(processId, prototypeUid, versionUid = '') {
-      const file = findPrototypeFile(processId, prototypeUid);
+      const file = findPrototypeFile(processId, prototypeUid) || findPrototypeFileAnywhere(prototypeUid);
       if (file) {
         openAttachmentInNewTab(file, this.currentPrototypeVersion({ ...file, versionUid: versionUid || file.versionUid }));
         return;
@@ -713,7 +732,7 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       legacyWindow.openProcessPrototypeFile?.(processId, prototypeUid, versionUid);
     },
     downloadPrototype(processId, prototypeUid, versionUid = '') {
-      const file = findPrototypeFile(processId, prototypeUid);
+      const file = findPrototypeFile(processId, prototypeUid) || findPrototypeFileAnywhere(prototypeUid);
       if (file) {
         downloadAttachment(file, this.currentPrototypeVersion({ ...file, versionUid: versionUid || file.versionUid }));
         return;

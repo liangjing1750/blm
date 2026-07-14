@@ -10,6 +10,8 @@ import {
   ProcessEditorLegacyAdapter,
 } from '../process/editor/process-editor-legacy-adapter';
 
+const MAX_VISIBLE_STAGE_TABS = 10;
+
 export interface AttachmentGroup {
   processId: string;
   processName: string;
@@ -61,11 +63,11 @@ export class AttachmentManagementWorkbench implements OnInit, OnDestroy {
   }
 
   protected visibleStageTabs(): AttachmentStageTab[] {
-    return this.stageTabs().slice(0, 5);
+    return this.stageTabs().slice(0, MAX_VISIBLE_STAGE_TABS);
   }
 
   protected overflowStageTabs(): AttachmentStageTab[] {
-    return this.stageTabs().slice(5);
+    return this.stageTabs().slice(MAX_VISIBLE_STAGE_TABS);
   }
 
   protected totalAttachmentCount(): number {
@@ -73,10 +75,7 @@ export class AttachmentManagementWorkbench implements OnInit, OnDestroy {
   }
 
   protected processSummary(group: AttachmentGroup): string {
-    const parts = [`${group.attachments.length} 个附件`];
-    if (group.processAttachmentCount) parts.push(`流程附件 ${group.processAttachmentCount}`);
-    if (group.nodeAttachmentCount) parts.push(`节点附件 ${group.nodeAttachmentCount}`);
-    return parts.join(' · ');
+    return `${group.attachments.length} 个附件`;
   }
 
   protected setKeyword(value: string): void {

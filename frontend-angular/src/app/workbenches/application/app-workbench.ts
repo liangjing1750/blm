@@ -54,6 +54,7 @@ interface ContractParamLine {
 export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   private readonly exportSvc = inject(ExportService);
   private readonly onRefresh = () => {
+    this.syncNavigationFromRuntime();
     this.syncSelectionAfterDocumentRefresh();
     this.version.update((v) => v + 1);
   };
@@ -273,6 +274,15 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
       this.selectedStepUid.set('');
       this.runtime.ui['applicationOrchestrationStepUid'] = '';
     }
+  }
+
+  private syncNavigationFromRuntime(): void {
+    this.activeTab.set(this.restoreActiveTab());
+    this.selectedServiceGroupUid.set(String(this.runtime.ui['applicationServiceGroupUid'] || '__all__'));
+    this.selectedServiceId.set(String(this.runtime.ui['applicationServiceUid'] || this.runtime.ui['applicationServiceId'] || ''));
+    this.orchServiceGroupUid.set(String(this.runtime.ui['applicationOrchestrationServiceGroupUid'] || '__all__'));
+    this.orchSvcId.set(String(this.runtime.ui['applicationOrchestrationServiceUid'] || ''));
+    this.selectedStepUid.set(String(this.runtime.ui['applicationOrchestrationStepUid'] || ''));
   }
 
   protected orderedSteps(svc: LegacyService): OrchestrationStep[] { return this.orchestrationSteps(svc); }

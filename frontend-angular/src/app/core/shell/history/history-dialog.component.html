@@ -38,7 +38,8 @@
       <h3 *ngIf="historyRows.length" class="history-section-title">协作快照</h3>
       <article *ngFor="let row of historyRows" class="recovery-item">
         <div class="recovery-item-main">
-          <strong>{{ row.message || row.user || '协作同步' }}</strong>
+          <strong>{{ historyTitle(row) }}</strong>
+          <span *ngIf="historySubmitter(row)" class="history-submitter">{{ historySubmitter(row) }}</span>
           <span>{{ historyTime(row) }}</span>
         </div>
         <div class="recovery-item-actions">
@@ -53,6 +54,10 @@
 
     <ng-template #localHistory>
       <p class="recovery-subtitle">每次 Ctrl+S 的提交原文。打开为只读预览。</p>
+      <div *ngIf="loadingSubmits && !submitRows.length" class="history-inline-loading">
+        <span class="history-spinner" aria-hidden="true"></span>
+        <span>正在加载本地提交记录...</span>
+      </div>
       <article *ngFor="let row of submitRows" class="recovery-item">
         <div class="recovery-item-main">
           <strong>{{ row.user || '未知用户' }} 提交 · 基于 v{{ row.baseSeq || 0 }} -> v{{ row.seq || 0 }}</strong>
@@ -64,7 +69,7 @@
         </div>
       </article>
 
-      <p *ngIf="!submitRows.length" class="placeholder-copy">暂无提交记录。</p>
+      <p *ngIf="!loadingSubmits && !submitRows.length" class="placeholder-copy">暂无提交记录。</p>
     </ng-template>
 
     <div *ngIf="canLoadMore" class="history-load-more">

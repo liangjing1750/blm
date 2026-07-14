@@ -198,17 +198,18 @@ class WorkspaceStorage(DocumentFileStore):
         for snapshot in sorted(target_dir.iterdir(), key=lambda item: item.name):
             if (snapshot.is_dir() and self._is_package_dir(snapshot)) or (snapshot.is_file() and snapshot.suffix == ".json"):
                 valid_snapshots.append(snapshot)
-        inferred_seq_by_id: dict[str, int] = {}
-        for index, snapshot in enumerate(valid_snapshots, start=1):
-            snapshot_id = snapshot.name if snapshot.is_dir() else snapshot.stem
-            snapshot_meta = self._read_snapshot_meta(snapshot)
-            try:
-                seq = int(snapshot_meta.get("seq", 0) or 0)
-            except (TypeError, ValueError):
-                seq = 0
-            inferred_seq_by_id[snapshot_id] = seq if seq > 0 else index
         ordered_snapshots = sorted(valid_snapshots, key=lambda item: item.name, reverse=True)
-        for snapshot in ordered_snapshots[offset:end_index]:
+        inferred_seq_by_id: dict[str, int] = {}
+        if limit_value is None:
+            for index, snapshot in enumerate(valid_snapshots, start=1):
+                snapshot_id = snapshot.name if snapshot.is_dir() else snapshot.stem
+                snapshot_meta = self._read_snapshot_meta(snapshot)
+                try:
+                    seq = int(snapshot_meta.get("seq", 0) or 0)
+                except (TypeError, ValueError):
+                    seq = 0
+                inferred_seq_by_id[snapshot_id] = seq if seq > 0 else index
+        for page_index, snapshot in enumerate(ordered_snapshots[offset:end_index], start=offset + 1):
             if snapshot.is_dir() and self._is_package_dir(snapshot):
                 snapshot_id = snapshot.name
             elif snapshot.is_file() and snapshot.suffix == ".json":
@@ -219,6 +220,10 @@ class WorkspaceStorage(DocumentFileStore):
                 continue
             seen_ids.add(snapshot_id)
             snapshot_meta = self._read_snapshot_meta(snapshot)
+            try:
+                meta_seq = int(snapshot_meta.get("seq", 0) or 0)
+            except (TypeError, ValueError):
+                meta_seq = 0
             message = str(snapshot_meta.get("message", "")).strip()
             timestamp_label = str(snapshot_meta.get("timestampLabel", "")).strip() or self._format_timestamp_label(snapshot_id)
             kind = str(snapshot_meta.get("kind", "")).strip() or "manual"
@@ -235,7 +240,7 @@ class WorkspaceStorage(DocumentFileStore):
                     "content_hash": str(snapshot_meta.get("contentHash", "")).strip(),
                     "user": str(snapshot_meta.get("user", "")).strip(),
                     "created_at": str(snapshot_meta.get("createdAt", "")).strip(),
-                    "seq": inferred_seq_by_id.get(snapshot_id, 0),
+                    "seq": inferred_seq_by_id.get(snapshot_id, meta_seq if meta_seq > 0 else page_index),
                     "size": size,
                     "documentBytes": size,
                     "timestamp": snapshot_id,

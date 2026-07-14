@@ -20,6 +20,7 @@ export class HistoryDialogComponent {
   @Input() submitRows: any[] = [];
   @Input() canLoadMore = false;
   @Input() loadingMore = false;
+  @Input() loadingSubmits = false;
 
   @Output() activeTabChange = new EventEmitter<HistoryDialogTab>();
   @Output() openVersion = new EventEmitter<any>();
@@ -54,6 +55,15 @@ export class HistoryDialogComponent {
 
   historyTime(row: any): string {
     return this.formatDateTime(row?.timestamp_label || row?.timestamp || row?.createdAt || row?.created_at || row?.time || row?.date || row?.id || '');
+  }
+
+  historyTitle(row: any): string {
+    return String(row?.message || '协作同步').trim();
+  }
+
+  historySubmitter(row: any): string {
+    const user = String(row?.user || row?.userName || row?.author || '').trim();
+    return user ? `提交者：${user}` : '';
   }
 
   submitTime(row: any): string {

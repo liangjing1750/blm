@@ -86,4 +86,24 @@ describe('KnowledgeWorkbenchComponent', () => {
     expect(runtime.doc.dataDictionaries[0].entries).toHaveLength(2);
     expect(runtime.modified).toBe(true);
   });
+
+  it('offers a readable delete action for dictionary entries', () => {
+    fixture.componentRef.setInput('initialTab', 'dictionaryManagement');
+    fixture.componentRef.setInput('editing', true);
+    fixture.detectChanges();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="knowledge-dictionary-summary"]')?.click();
+    fixture.detectChanges();
+
+    const removeButton = host.querySelector<HTMLButtonElement>('[data-testid="knowledge-dictionary-entry-remove"]');
+    expect(removeButton?.textContent?.trim()).toBe('×');
+    expect(removeButton?.getAttribute('title')).toBe('删除');
+
+    removeButton?.click();
+    fixture.detectChanges();
+
+    const runtime = getAngularRuntimeState();
+    expect(runtime.doc.dataDictionaries[0].entries).toHaveLength(0);
+    expect(runtime.modified).toBe(true);
+  });
 });

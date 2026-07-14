@@ -51,6 +51,7 @@ interface AngularNavigationSnapshot {
 
 const ANGULAR_NAV_HISTORY_LIMIT = 30;
 const ANGULAR_UNDO_HISTORY_LIMIT = 50;
+const ANGULAR_UTILITY_WORKBENCH_IDS = new Set(['manual', 'feedback']);
 const ANGULAR_NAVIGATION_UI_KEY_PATTERN = /^(process|component|application|orchestration|entity|taskDefinition)[A-Za-z0-9]*(Tab|View|Id|Uid)$/;
 const ANGULAR_NAVIGATION_UI_KEYS = new Set([
   'procId',
@@ -60,6 +61,7 @@ const ANGULAR_NAVIGATION_UI_KEYS = new Set([
   'stageId',
   'processWorkbenchView',
   'processWorkbenchTab',
+  'panoramaWorkbenchTab',
   'componentTab',
   'componentWorkbenchTab',
   'componentWorkbenchReturnTab',
@@ -271,6 +273,10 @@ export function normalizeMainWorkbenchId(tabId?: string): string {
     : 'panoramaWorkbench';
 }
 
+export function isAngularUtilityWorkbench(tabId?: string): boolean {
+  return ANGULAR_UTILITY_WORKBENCH_IDS.has(normalizeMainWorkbenchId(tabId));
+}
+
 export function navigateAngularWorkbench(tab: string, options: Record<string, unknown> = {}): void {
   const before = captureAngularNavigationSnapshot();
   if (tab === 'process') {
@@ -371,6 +377,22 @@ export function goBackAngularNavigation(): string | null {
   return runtimeState.ui['mainTab'];
 }
 
+export function goBackAngularUtilityWorkbench(fallbackTab = 'panoramaWorkbench'): string {
+  const fallback = isAngularUtilityWorkbench(fallbackTab) ? 'panoramaWorkbench' : normalizeMainWorkbenchId(fallbackTab);
+  let target = goBackAngularNavigation();
+  while (target && isAngularUtilityWorkbench(target) && angularNavigationHistory().length > 0) {
+    target = goBackAngularNavigation();
+  }
+  if (target && !isAngularUtilityWorkbench(target)) {
+    runtimeState.ui['utilityReturnMainTab'] = '';
+    return target;
+  }
+  runtimeState.ui['mainTab'] = fallback;
+  runtimeState.ui['utilityReturnMainTab'] = '';
+  emitRuntimeRefresh();
+  return runtimeState.ui['mainTab'];
+}
+
 function hasAngularInternalBackNavigation(): boolean {
   return runtimeState.ui['mainTab'] === 'constructWorkbench'
     && runtimeState.ui['componentWorkbenchTab'] === 'entity'
@@ -446,4 +468,3 @@ function areAngularNavigationSnapshotsEqual(left: AngularNavigationSnapshot, rig
   return String(left.mainTab || '') === String(right.mainTab || '')
     && JSON.stringify(left.ui || {}) === JSON.stringify(right.ui || {});
 }
-

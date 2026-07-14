@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService, FeedbackDocument, FeedbackItem } from '../../../core/api/api.service';
+import { requestUtilityReturn } from '../utility-return';
 
 const CATEGORIES = ['需求功能', '体验改进', '轻微缺陷', '严重问题'];
 const STATUSES = ['待处理', '处理中', '已解决', '已关闭'];
@@ -66,10 +68,13 @@ export class FeedbackWorkbenchComponent implements OnInit {
   });
   protected readonly selectedItem = computed(() => this.items().find((item) => item.uid === this.selectedUid()) || null);
 
-  constructor(private readonly api: ApiService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly router: Router,
+  ) {}
 
   protected returnToWork(): void {
-    window.dispatchEvent(new CustomEvent('blm-return-to-workbench'));
+    requestUtilityReturn(this.router);
   }
 
   async ngOnInit(): Promise<void> {

@@ -6,6 +6,7 @@ import {
   canGoBackAngularNavigation,
   getAngularRuntimeState,
   goBackAngularNavigation,
+  goBackAngularUtilityWorkbench,
   markAngularRuntimeModified,
   recordAngularNavigationBoundary,
   redoAngularRuntimeDocument,
@@ -168,6 +169,19 @@ describe('angular runtime undo history', () => {
     expect(runtime.ui['taskId']).toBe('task-1');
   });
 
+  it('restores panorama workbench subtab when returning inside the same workbench', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'panoramaWorkbench';
+    runtime.ui['panoramaWorkbenchTab'] = 'roles';
+
+    recordAngularNavigationBoundary();
+    runtime.ui['panoramaWorkbenchTab'] = 'attachments';
+
+    expect(canGoBackAngularNavigation()).toBe(true);
+    expect(goBackAngularNavigation()).toBe('panoramaWorkbench');
+    expect(runtime.ui['panoramaWorkbenchTab']).toBe('roles');
+  });
+
   it('restores application workbench tab and interface selection when returning from another workbench', () => {
     const runtime = getAngularRuntimeState();
     runtime.ui['mainTab'] = 'applicationWorkbench';
@@ -190,5 +204,47 @@ describe('angular runtime undo history', () => {
     expect(runtime.ui['applicationServiceUid']).toBe('service-1');
     expect(runtime.ui['applicationOrchestrationServiceUid']).toBe('service-2');
     expect(runtime.ui['applicationOrchestrationStepUid']).toBe('step-1');
+  });
+
+  it('returns from utility workbench to the previous business workbench with selection restored', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'processWorkbench';
+    runtime.ui['procView'] = 'node';
+    runtime.ui['processWorkbenchView'] = 'node';
+    runtime.ui['procId'] = 'process-1';
+    runtime.ui['taskId'] = 'task-1';
+
+    switchAngularMainTab('manual');
+
+    expect(goBackAngularUtilityWorkbench()).toBe('processWorkbench');
+    expect(runtime.ui['mainTab']).toBe('processWorkbench');
+    expect(runtime.ui['procView']).toBe('node');
+    expect(runtime.ui['processWorkbenchView']).toBe('node');
+    expect(runtime.ui['procId']).toBe('process-1');
+    expect(runtime.ui['taskId']).toBe('task-1');
+  });
+
+  it('skips utility-to-utility history entries when returning to work', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'constructWorkbench';
+    runtime.ui['componentWorkbenchTab'] = 'businessConstruct';
+    runtime.ui['componentWorkbenchConstructId'] = 'construct-1';
+
+    switchAngularMainTab('manual');
+    switchAngularMainTab('feedback');
+
+    expect(goBackAngularUtilityWorkbench()).toBe('constructWorkbench');
+    expect(runtime.ui['mainTab']).toBe('constructWorkbench');
+    expect(runtime.ui['componentWorkbenchTab']).toBe('businessConstruct');
+    expect(runtime.ui['componentWorkbenchConstructId']).toBe('construct-1');
+  });
+
+  it('falls back to panorama when a utility workbench has no business history', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.ui['mainTab'] = 'manual';
+    runtime.ui['navHistory'] = [];
+
+    expect(goBackAngularUtilityWorkbench()).toBe('panoramaWorkbench');
+    expect(runtime.ui['mainTab']).toBe('panoramaWorkbench');
   });
 });

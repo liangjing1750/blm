@@ -14,6 +14,7 @@ import {
   canUndoAngularRuntimeDocument,
   confirmRuntimeAction,
   getAngularRuntimeState,
+  goBackAngularUtilityWorkbench,
   redoAngularRuntimeDocument,
   replaceRuntimeDocument,
   switchAngularMainTab,
@@ -189,6 +190,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly versionNextOffset = signal(0);
   protected readonly submitNextOffset = signal(0);
   protected readonly historyLoadingMore = signal(false);
+  protected readonly submitHistoryLoading = signal(false);
   protected readonly compareResult = signal<CompareResult | null>(null);
   protected readonly compareReportMode = signal<'diff' | 'all'>('diff');
   protected readonly compareLeftVersions = signal<any[]>([]);
@@ -367,9 +369,7 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   @HostListener('window:blm-return-to-workbench')
   protected returnToWorkFromUtility(): void {
-    const target = this.utilityReturnWorkbench();
-    this.runtime.ui['mainTab'] = target;
-    this.runtime.ui['utilityReturnMainTab'] = '';
+    const target = goBackAngularUtilityWorkbench('panoramaWorkbench');
     this.activeDropdown.set('');
     this.refreshShellView();
     void this.router.navigateByUrl(routePathFromWorkbenchId(target));
@@ -869,20 +869,19 @@ export class ShellComponent implements OnInit, OnDestroy {
     });
     try {
       await this.runBusy(async () => {
-        const [history, versions, submits] = await Promise.all([
+        const [history, versions] = await Promise.all([
           this.api.history(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: 0 }).catch(() => this.emptyHistoryPage()),
           this.api.versions(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: 0 }).catch(() => this.emptyHistoryPage()),
-          this.api.collabSubmits(this.runtime.currentFile, { limit: HISTORY_PAGE_SIZE, offset: 0 }).catch(() => this.emptyHistoryPage()),
         ]);
         this.historyRows.set(history.items || []);
         this.versionRows.set(versions.items || []);
-        this.submitRows.set(submits.items || []);
+        this.submitRows.set([]);
         this.historyHasMore.set(history.hasMore);
         this.versionHasMore.set(versions.hasMore);
-        this.submitHasMore.set(submits.hasMore);
+        this.submitHasMore.set(false);
         this.historyNextOffset.set(history.nextOffset);
         this.versionNextOffset.set(versions.nextOffset);
-        this.submitNextOffset.set(submits.nextOffset);
+        this.submitNextOffset.set(0);
         this.historyTab.set('remote');
         this.modal.set('history');
         this.activeDropdown.set('');
@@ -893,28 +892,22 @@ export class ShellComponent implements OnInit, OnDestroy {
   }
 
   protected openManual(): void {
-    this.rememberUtilityReturnWorkbench();
-    this.runtime.ui['mainTab'] = 'manual';
-    this.activeDropdown.set('');
-    this.refreshShellView();
-    void this.router.navigateByUrl('/manual');
-    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    this.openUtilityWorkbench('manual');
   }
 
   protected openFeedback(): void {
-    this.rememberUtilityReturnWorkbench();
-    this.runtime.ui['mainTab'] = 'feedback';
-    this.activeDropdown.set('');
-    this.refreshShellView();
-    void this.router.navigateByUrl('/feedback');
-    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
+    this.openUtilityWorkbench('feedback');
   }
 
   protected selectHistoryTab(tab: HistoryDialogTab): void {
     this.historyTab.set(tab);
+    if (tab === 'local' && this.submitNextOffset() === 0 && !this.submitRows().length) {
+      void this.loadInitialSubmitHistoryRows();
+    }
   }
 
   protected historyCanLoadMore(): boolean {
+    if (this.historyTab() === 'local' && this.submitHistoryLoading()) return false;
     return this.historyTab() === 'local'
       ? this.submitHasMore()
       : this.versionHasMore() || this.historyHasMore();
@@ -956,6 +949,22 @@ export class ShellComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.historyLoadingMore.set(false);
+    }
+  }
+
+  private async loadInitialSubmitHistoryRows(): Promise<void> {
+    if (!this.runtime.currentFile || this.submitHistoryLoading()) return;
+    this.submitHistoryLoading.set(true);
+    try {
+      const submits = await this.api.collabSubmits(this.runtime.currentFile, {
+        limit: HISTORY_PAGE_SIZE,
+        offset: 0,
+      }).catch(() => this.emptyHistoryPage());
+      this.submitRows.set(submits.items || []);
+      this.submitHasMore.set(submits.hasMore);
+      this.submitNextOffset.set(submits.nextOffset);
+    } finally {
+      this.submitHistoryLoading.set(false);
     }
   }
 
@@ -2194,16 +2203,13 @@ export class ShellComponent implements OnInit, OnDestroy {
     this.shellVersion.update((value) => value + 1);
   }
 
-  private rememberUtilityReturnWorkbench(): void {
-    const current = String(this.runtime.ui['mainTab'] || 'panoramaWorkbench');
-    this.runtime.ui['utilityReturnMainTab'] = ['manual', 'feedback'].includes(current)
-      ? String(this.runtime.ui['utilityReturnMainTab'] || 'panoramaWorkbench')
-      : current;
-  }
-
-  private utilityReturnWorkbench(): string {
-    const target = String(this.runtime.ui['utilityReturnMainTab'] || '').trim();
-    return target && !['manual', 'feedback'].includes(target) ? target : 'panoramaWorkbench';
+  private openUtilityWorkbench(tabId: 'manual' | 'feedback'): void {
+    switchAngularMainTab(tabId);
+    this.runtime.ui['utilityReturnMainTab'] = '';
+    this.activeDropdown.set('');
+    this.refreshShellView();
+    void this.router.navigateByUrl(routePathFromWorkbenchId(tabId));
+    window.dispatchEvent(new CustomEvent('blm-shell-tabbar-refresh'));
   }
 
   private async runBusy(action: () => Promise<void>): Promise<void> {
