@@ -72,4 +72,16 @@ describe('AttachmentManagementWorkbench helpers', () => {
     });
     expect(groups[0].attachments.map((attachment) => attachment.name)).toEqual(['流程说明.pdf', '节点图.png', '节点模板.xlsx']);
   });
+  it('does not count a process twice when stale stage references point to another stage', () => {
+    const document = createDocument();
+    document.processes[0].stageUid = 'stage-a';
+    document.stageFlowRefs.push({ stageUid: 'stage-b', processUid: 'process-a', order: 2 });
+
+    const tabs = buildAttachmentStageTabs(document);
+
+    expect(tabs.map(({ id, processCount, attachmentCount }) => ({ id, processCount, attachmentCount }))).toEqual([
+      { id: 'stage-a', processCount: 1, attachmentCount: 3 },
+      { id: 'stage-b', processCount: 1, attachmentCount: 1 },
+    ]);
+  });
 });

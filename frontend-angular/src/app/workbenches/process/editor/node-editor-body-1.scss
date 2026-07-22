@@ -152,7 +152,7 @@
   .task-form-card-head .step-del { display: none; }
   .btn-outline, .btn-primary { display: none; }
   .node-section-actions { display: none; }
-  .node-material-tabs button { pointer-events: none; }
+  .node-material-tabs button { pointer-events: auto; }
   .node-material-upload { display: none; }
   .prototype-file-actions .prototype-file-remove { display: none; }
   .node-progress-step { opacity: .92; }

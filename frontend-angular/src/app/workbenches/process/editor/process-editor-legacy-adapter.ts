@@ -787,6 +787,9 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
               name: file.name,
               contentType: file.type || 'application/octet-stream',
               uploadedAt: now,
+              contentEncoding: 'base64',
+              content: base64Content,
+              size: file.size,
             }],
             ...(base64Content ? {
               contentType: file.type || 'application/octet-stream',

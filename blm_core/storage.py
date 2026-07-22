@@ -578,7 +578,12 @@ class WorkspaceStorage(DocumentFileStore):
     def _copy_package_metadata(self, source_dir: Path, target_dir: Path, safe_name: str) -> None:
         target_dir.mkdir(parents=True, exist_ok=True)
         self._manifest_path(target_dir).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(self._manifest_path(source_dir), self._manifest_path(target_dir))
+        source_manifest = self._manifest_path(source_dir)
+        if not source_manifest.is_file():
+            legacy_manifest = source_dir / PACKAGE_MANIFEST_NAME
+            if legacy_manifest.is_file():
+                source_manifest = legacy_manifest
+        shutil.copy2(source_manifest, self._manifest_path(target_dir))
         markdown_path = self._package_markdown_path(source_dir, safe_name)
         if markdown_path.is_file():
             shutil.copy2(markdown_path, self._package_markdown_path(target_dir, safe_name))
@@ -1706,7 +1711,8 @@ class WorkspaceStorage(DocumentFileStore):
 
     def _has_structural_change(self, document: dict, snapshot_path: Path) -> bool:
         try:
-            previous = self._load_history_snapshot(snapshot_path.parent.name, snapshot_path.name if snapshot_path.is_dir() else snapshot_path.stem)
+            document_name = snapshot_path.parent.parent.name if snapshot_path.parent.name == "history" else snapshot_path.parent.name
+            previous = self._load_history_snapshot(document_name, snapshot_path.name if snapshot_path.is_dir() else snapshot_path.stem)
         except (FileNotFoundError, InvalidWorkspaceEntryError, OSError, ValueError):
             return True
         return self._structural_signature(previous) != self._structural_signature(document)

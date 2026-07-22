@@ -56,7 +56,7 @@
                 <strong>{{ svc.name || uid(svc) }}</strong>
                 <code>{{ svc.path || '/' }}</code>
               </div>
-              <span class="app-interface-counts">请求 {{ requestParamCount(svc) }} · 响应 {{ responseParamCount(svc) }} · 编排 {{ stepCount(svc) }} · 节点 {{ (svc.nodeRefs || []).length }}</span>
+              <span class="app-interface-counts">请求 {{ requestParamCount(svc) }} · 响应 {{ responseParamCount(svc) }} · 编排 {{ stepCount(svc) }} · 节点 {{ linkedNodeCount(svc) }}</span>
               @if (canEdit()) {
                 <button class="btn-ghost-sm" type="button" [attr.data-testid]="'interface-edit-' + uid(svc)" (click)="startEdit(svc); $event.stopPropagation()">编辑</button>
               }

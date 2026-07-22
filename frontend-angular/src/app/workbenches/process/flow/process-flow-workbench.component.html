@@ -33,13 +33,14 @@
       </header>
       @if (editing) {
         <div class="process-flow-edit-shortcut" data-testid="process-flow-edit-shortcut">
-          <strong>双击</strong>可以修改节点、网关和连线的描述
+          <span> <strong>双击</strong>可以修改节点、网关和连线的描述</span>
+          <span class="process-flow-tool-counts" aria-label="流程数量统计">节点 {{ taskCount(process) }} · 网关 {{ gatewayCount(process) }} · 附件 {{ prototypeCount(process) }}</span>
         </div>
       }
 
       <section class="process-flow-body">
-        @if (editing) {
-          <div class="process-flow-side-tools">
+        <div class="process-flow-side-tools">
+          @if (editing) {
             <button type="button" data-testid="process-flow-add-node" title="&#x65b0;&#x589e;&#x8282;&#x70b9;" (click)="addTask()"><b>+</b><span>&#x8282;&#x70b9;</span></button>
             <button type="button" data-testid="process-flow-add-gateway" title="&#x65b0;&#x589e;&#x7f51;&#x5173;" (click)="addGateway()"><b>&#x25c7;</b><span>&#x7f51;&#x5173;</span></button>
             <button type="button" data-testid="process-flow-open-attachments" title="&#x6d41;&#x7a0b;&#x9644;&#x4ef6;" (click)="attachmentDrawerOpen.set(true)"><b class="tool-file-icon">□</b><span>&#x9644;&#x4ef6;</span></button>
@@ -50,9 +51,14 @@
               <button type="button" data-testid="process-flow-copy-selected" title="&#x590d;&#x5236;&#x9009;&#x4e2d;" (click)="duplicateSelected(process)"><b>⧉</b><span>&#x590d;&#x5236;</span></button>
               <button class="danger" type="button" data-testid="process-flow-delete-selected" title="&#x5220;&#x9664;&#x9009;&#x4e2d;" (click)="removeSelected(process)"><b>x</b><span>&#x5220;&#x9664;</span></button>
             }
-          </div>
-        }
+          }
+        </div>
 
+        @if (!editing) {
+          <button class="process-flow-readonly-attachment" type="button" data-testid="process-flow-open-attachments-readonly" title="流程附件" (click)="attachmentDrawerOpen.set(true)">
+            <span>附件</span><b>{{ prototypeCount(process) }}</b>
+          </button>
+        }
         <section class="process-flow-canvas-shell" data-testid="process-flow-canvas-shell" (wheel)="onCanvasWheel($event)">
           <div class="process-flow-canvas" data-testid="process-flow-canvas" [attr.data-export-graph-id]="exportGraphId || null" [attr.data-export-process-id]="processId(process)" data-export-graph-ready="true" [style.width.px]="canvasWidth(process)" [style.height.px]="canvasHeight(process)" [style.zoom]="zoomValue()" (mousemove)="onCanvasPointer($event)" (pointermove)="moveNodeDrag($event)" (pointerup)="finishNodeDrag($event)" (click)="clearCanvasSelection()">
             @for (lane of lanes(process); track lane.id) {

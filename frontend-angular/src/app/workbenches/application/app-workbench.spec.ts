@@ -305,7 +305,7 @@ describe('ApplicationWorkbenchComponent', () => {
   it('shows linked node names in interface details and jumps to the node view', () => {
     const runtime = getAngularRuntimeState();
     runtime.doc.services[0].nodeRefs = ['node-submit'];
-    runtime.doc.processes = [{ uid: 'process-1', name: '订单流程', nodes: [{ uid: 'node-submit', name: '提交订单节点' }] }];
+    runtime.doc.processes = [{ uid: 'process-1', name: '订单流程', nodes: [{ uid: 'node-submit', name: '提交订单节点', forms: [{ sections: [{ serviceUid: 'svc-1' }] }] }] }];
     fixture.detectChanges();
     host.querySelector<HTMLElement>('[data-testid="interface-card-svc-1"]')?.click();
     fixture.detectChanges();
@@ -320,6 +320,18 @@ describe('ApplicationWorkbenchComponent', () => {
     expect(runtime.ui['processWorkbenchView']).toBe('node');
     expect(runtime.ui['procId']).toBe('process-1');
     expect(runtime.ui['taskId']).toBe('node-submit');
+  });
+
+  it('does not show stale nodeRefs as linked nodes when no form references the interface', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.services[0].nodeRefs = ['node-stale'];
+    runtime.doc.processes = [{ uid: 'process-1', name: '订单流程', nodes: [{ uid: 'node-stale', name: '旧节点', forms: [] }] }];
+    fixture.detectChanges();
+    host.querySelector<HTMLElement>('[data-testid="interface-card-svc-1"]')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="application-linked-node-node-stale"]')).toBeFalsy();
+    expect(host.querySelector('[data-testid="application-interface-detail"]')?.textContent).toContain('暂无关联节点');
   });
 
   it('keeps application service columns as independent scroll regions', () => {

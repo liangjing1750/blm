@@ -848,6 +848,71 @@ class MergeEngineTests(unittest.TestCase):
         self.assertEqual(merged["taskDefinitions"][0]["uid"], "td-1")
         self.assertEqual(merged["processes"][0]["nodes"][0]["orchestrationTasks"][0]["taskDefinitionUid"], "td-1")
 
+    def test_three_way_merge_preserves_node_attachment_identity_and_binary_metadata(self):
+        base = create_empty_document("NodeAttachmentMerge")
+        base["processes"][0]["nodes"] = [{
+            "uid": "node-1",
+            "id": "N1",
+            "name": "提交申请",
+            "prototypeFiles": [{
+                "uid": "node-file-1",
+                "name": "申请说明.pdf",
+                "versionUid": "node-file-1-v1",
+                "contentType": "application/pdf",
+                "contentEncoding": "base64",
+                "size": 4,
+                "versions": [{
+                    "uid": "node-file-1-v1",
+                    "number": 1,
+                    "name": "申请说明.pdf",
+                    "content": "AQIDBA==",
+                    "contentType": "application/pdf",
+                    "contentEncoding": "base64",
+                    "size": 4,
+                }],
+            }],
+        }]
+        left = deepcopy(base)
+        right = deepcopy(base)
+        left["processes"][0]["nodes"][0]["name"] = "提交申请（已更新）"
+        right["processes"][0]["nodes"][0]["prototypeFiles"][0]["versions"][0]["content"] = "BQYHCA=="
+
+        merged = analyze_merge("3way", left, right, base)["merged_document"]
+        attachment = merged["processes"][0]["nodes"][0]["prototypeFiles"][0]
+        version = attachment["versions"][0]
+
+        self.assertEqual(attachment["uid"], "node-file-1")
+        self.assertEqual(attachment["versionUid"], "node-file-1-v1")
+        self.assertEqual(version["content"], "BQYHCA==")
+        self.assertEqual(version["contentEncoding"], "base64")
+        self.assertEqual(version["size"], 4)
+
+    def test_two_way_combine_keeps_node_attachments_from_both_documents(self):
+        left = create_empty_document("NodeAttachmentLeft")
+        right = create_empty_document("NodeAttachmentRight")
+        for document, uid, name in ((left, "node-file-left", "左侧附件.txt"), (right, "node-file-right", "右侧附件.txt")):
+            document["processes"][0]["nodes"] = [{
+                "uid": f"node-{uid}",
+                "id": f"N-{uid}",
+                "name": f"节点-{uid}",
+                "prototypeFiles": [{
+                    "uid": uid,
+                    "name": name,
+                    "versionUid": f"{uid}-v1",
+                    "versions": [{"uid": f"{uid}-v1", "number": 1, "name": name, "content": uid}],
+                }],
+            }]
+
+        merged = analyze_merge("combine", left, right)["merged_document"]
+        merged_attachments = {
+            file["uid"]
+            for process in merged["processes"]
+            for node in process.get("nodes", [])
+            for file in node.get("prototypeFiles", [])
+        }
+
+        self.assertEqual(merged_attachments, {"node-file-left", "node-file-right"})
+
     def test_three_way_merge_preserves_application_service_nested_contract_and_orchestration(self):
         base = create_empty_document("ApplicationServiceMerge")
         base["taskDefinitions"] = [

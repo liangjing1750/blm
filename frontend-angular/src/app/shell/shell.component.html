@@ -11,10 +11,10 @@
       data-testid="version-badge-group"
     >
       <span *ngIf="latestVersionLabel()" class="modified-badge-row latest-version" data-testid="latest-version-badge">
-        <span class="modified-badge-dot"></span>{{ latestVersionLabel() }}
+        <span class="modified-badge-dot"></span>{{ remoteVersionLabel() }}
       </span>
       <span *ngIf="currentVersionLabel()" class="modified-badge-row current-version" data-testid="current-version-badge">
-        <span class="modified-badge-dot"></span>{{ currentVersionLabel() }}
+        <span class="modified-badge-dot"></span>{{ displayCurrentVersionLabel() }}
       </span>
     </span>
     <span

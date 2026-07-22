@@ -29,6 +29,44 @@
   font-weight: 800;
 }
 
+.process-flow-tool-counts {
+  align-self: center;
+  margin-right: 2px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.process-flow-readonly-attachment {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.process-flow-readonly-attachment b {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  text-align: center;
+}
+
 .process-flow-side-tools button b {
   justify-self: center;
 }
@@ -39,6 +77,7 @@
   color: #1d4ed8;
   font-size: 12px;
   font-weight: 700;
+  line-height: normal;
 }
 
 .tool-file-icon {

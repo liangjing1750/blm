@@ -2,8 +2,9 @@
   display: grid;
   align-content: start;
   gap: 10px;
-  height: min(520px, calc(100vh - 218px));
-  min-height: 320px;
+  height: auto;
+  max-height: min(520px, calc(100vh - 218px));
+  min-height: 0;
   padding: 12px;
   border: 1px solid #d7e4f3;
   border-radius: 12px;
@@ -16,7 +17,7 @@
   top: 0;
   right: 12px;
   z-index: 35;
-  width: 420px;
+  width: min(360px, calc(100vw - 32px));
   box-shadow: 0 18px 46px rgba(15, 23, 42, .18);
 }
 
@@ -52,6 +53,7 @@
 .attachment-list {
   display: grid;
   gap: 8px;
+  max-height: min(420px, calc(100vh - 310px));
   overflow: auto;
 }
 

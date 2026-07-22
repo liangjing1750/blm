@@ -111,11 +111,23 @@ export function buildAttachmentContent(document: BlmDocument): ViewContent {
 export function stageAttachmentGroups(document: BlmDocument): Array<{ stageId: string; stageName: string; processes: Process[] }> {
   const processes = document.processes || [];
   const usedProcessIds = new Set<string>();
+  const explicitStageByProcessId = new Map<string, string>();
   const groups: Array<{ stageId: string; stageName: string; processes: Process[] }> = [];
+
+  for (const process of processes) {
+    const processId = identityOf(process);
+    const explicitStageId = String((process as any).stageUid || (process as any).stageId || '').trim();
+    if (processId && explicitStageId) explicitStageByProcessId.set(processId, explicitStageId);
+  }
 
   for (const stage of document.stages || []) {
     const stageId = identityOf(stage);
-    const stageProcesses = processesForStage(document, stage);
+    const stageProcesses = processesForStage(document, stage)
+      .filter((process) => {
+        const explicitStageId = explicitStageByProcessId.get(identityOf(process));
+        return !explicitStageId || explicitStageId === stageId;
+      })
+      .filter((process) => !usedProcessIds.has(identityOf(process)));
     stageProcesses.forEach((process) => usedProcessIds.add(identityOf(process)));
     const processesWithAttachments = stageProcesses.filter((process) => processAttachmentRows(process).length);
     if (processesWithAttachments.length) {

@@ -66,9 +66,10 @@
 
 .process-flow-edit-shortcut {
   display: inline-flex;
-  width: fit-content;
+  width: calc(100% - 16px);
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 2px 8px;
   border: 1px solid #dbeafe;
   border-radius: 999px;
@@ -76,6 +77,16 @@
   color: #64748b;
   font-size: 12px;
   font-weight: 600;
+}
+
+.process-flow-edit-shortcut .process-flow-tool-counts {
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .process-flow-edit-shortcut strong {
@@ -130,7 +141,7 @@
 
 /* 只读模式 */
 .flow-readonly {
-  .process-flow-side-tools { display: none; }
+  .process-flow-side-tools { display: grid; }
   .process-flow-topbar input { pointer-events: none; opacity: .6; background: #f8fafc; }
   .flow-node, .flow-terminal, .flow-gateway { pointer-events: auto; cursor: pointer; } /* 允许点击跳转 */
 }

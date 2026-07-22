@@ -116,10 +116,13 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   // 远端同步后通过 blm-workbench-refresh 事件刷新视图
   private readonly onRefresh = () => {
     this.version.update((v) => v + 1);
+    this.syncAttachmentDrawer(this.currentProcess());
   };
+  private attachmentStateProcessId = '';
 
   ngOnInit(): void {
     window.addEventListener('blm-workbench-refresh', this.onRefresh);
+    this.syncAttachmentDrawer(this.currentProcess(), true);
   }
 
   ngOnDestroy(): void {
@@ -133,6 +136,9 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected readonly editingNodeNameId = signal<string>('');
   protected readonly editingEdgeLabelId = signal<string>('');
   protected readonly cardRolePickerNodeId = signal<string>('');
+  // 模块意图：流程视图进入后直接展示流程附件，避免附件存在但被折叠造成不可见。
+  // 关键流程：用户仍可通过关闭按钮收起，上传完成后保持打开状态。
+  // 边界细节：这里只改变流程视图的初始展示状态，不改变附件数据或编辑权限。
   protected readonly attachmentDrawerOpen = signal(false);
   protected readonly zoomValue = signal(1);
   protected readonly dragState = signal<FlowDragState | null>(null);
@@ -685,6 +691,14 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     else this.refresh();
   }
 
+  protected taskCount(process: LegacyProcess): number {
+    return this.tasks(process).length;
+  }
+
+  protected gatewayCount(process: LegacyProcess): number {
+    return this.gateways(process).length;
+  }
+
   protected selectProcess(processId: string): void {
     const target = this.processes().find((process) => this.processId(process) === processId);
     if (!target) return;
@@ -692,7 +706,18 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
     this.connectingFromId.set('');
     // 关键流程：流程切换交给 editor adapter，它和节点视图共用 stageIdForProcess，避免这里再次写 stageId。
     this.adapter.selectProcess(processId);
+    this.syncAttachmentDrawer(target, true);
     this.refresh();
+  }
+
+  // 模块意图：附件面板的默认状态跟随当前流程，而不是跟随组件生命周期固定开启。
+  // 关键流程：流程初次加载和下拉切换都经过这里，统一检查当前流程的附件数量。
+  // 边界细节：用户手动关闭后不在刷新中强行打开，只有流程真正切换时才重新计算默认状态。
+  private syncAttachmentDrawer(process: LegacyProcess | null, force = false): void {
+    const processId = process ? this.processId(process) : '';
+    if (!force && processId === this.attachmentStateProcessId) return;
+    this.attachmentStateProcessId = processId;
+    this.attachmentDrawerOpen.set(Boolean(process && this.prototypeFiles(process).length));
   }
 
   protected selectElement(id: string): void {

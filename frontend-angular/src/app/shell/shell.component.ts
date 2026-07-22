@@ -450,12 +450,24 @@ export class ShellComponent implements OnInit, OnDestroy {
     return base > 0 ? `当前版本 v${base}` : '';
   }
 
+  protected displayCurrentVersionLabel(): string {
+    const label = this.currentVersionLabel();
+    return label && label.includes('当前版本') ? label : (label ? `当前版本：${label}` : '');
+  }
+
   protected latestVersionLabel(): string {
     if (!this.runtime.currentFile || this.runtime.readOnly) return '';
     if (!this.runtime.runtime.supportsCollab) return '';
     const latest = Number(this.runtime.collab.seq || 0);
     const base = Number(this.runtime.collab.acceptedSeq || 0);
     return latest > base ? `最新版本 v${latest}` : '';
+  }
+
+  protected remoteVersionLabel(): string {
+    if (!this.runtime.currentFile || !this.runtime.runtime.supportsCollab) return '';
+    const latest = Number(this.runtime.collab.seq || 0);
+    const base = Number(this.runtime.collab.acceptedSeq || 0);
+    return latest > base || this.runtime.readOnly ? `远端版本 v${latest}` : '';
   }
 
   protected hasVersionBadge(): boolean {
@@ -1101,7 +1113,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected async openVersionReadOnly(row: any): Promise<void> {
     const id = String(row?.id || row?.version_id || '').trim();
     if (!this.runtime.currentFile || !id) return;
-    await this.runBusy(async () => {
+    await this.runHistoryAction('正在打开只读版本...', '正在读取版本内容，打开后文档将保持只读。', async () => {
       const loaded = await this.api.loadVersion(this.runtime.currentFile, id);
       this.openLoadedDocument(this.runtime.currentFile, loaded, true);
       this.modal.set('');
@@ -1118,7 +1130,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected async openHistoryReadOnly(row: any): Promise<void> {
     const id = String(row?.id || row?.snapshot_id || '').trim();
     if (!this.runtime.currentFile || !id) return;
-    await this.runBusy(async () => {
+    await this.runHistoryAction('正在打开历史记录...', '正在读取历史快照，打开后文档将保持只读。', async () => {
       const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
       const document = loaded?.document || loaded;
       document.meta = document.meta && typeof document.meta === 'object' ? document.meta : {};
@@ -1133,7 +1145,7 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected async openSubmitReadOnly(row: any): Promise<void> {
     const submitId = String(row?.submitId || '').trim();
     if (!this.runtime.currentFile || !submitId) return;
-    await this.runBusy(async () => {
+    await this.runHistoryAction('正在打开本地提交...', '正在读取本地提交记录，打开后文档将保持只读。', async () => {
       const loaded = await this.api.loadCollabSubmit(this.runtime.currentFile, submitId);
       const document = loaded?.document || loaded;
       document.meta = document.meta && typeof document.meta === 'object' ? document.meta : {};
@@ -1166,7 +1178,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     const id = String(row?.id || row?.snapshot_id || '').trim();
     if (!this.runtime.currentFile || !id) return;
     if (!await confirmRuntimeAction('本地恢复会把这个历史版本设为当前文档，点击“立即同步”后才会影响其他人。继续吗？', { title: '本地恢复', confirmLabel: '恢复' })) return;
-    await this.runBusy(async () => {
+    await this.runHistoryAction('正在恢复历史版本...', '正在读取历史快照并恢复为当前文档草稿。', async () => {
       const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
       const document = loaded?.document || loaded;
       this.restoreLoadedDocument(this.runtime.currentFile, document, Number(row?.seq || 0));
@@ -1179,13 +1191,25 @@ export class ShellComponent implements OnInit, OnDestroy {
     const submitId = String(row?.submitId || '').trim();
     if (!this.runtime.currentFile || !submitId) return;
     if (!await confirmRuntimeAction('本地恢复会把这次提交设为当前文档，点击“立即同步”后才会影响其他人。继续吗？', { title: '本地恢复', confirmLabel: '恢复' })) return;
-    await this.runBusy(async () => {
+    await this.runHistoryAction('正在恢复本地提交...', '正在读取本地提交并恢复为当前文档草稿。', async () => {
       const loaded = await this.api.loadCollabSubmit(this.runtime.currentFile, submitId);
       const document = loaded?.document || loaded;
       this.restoreLoadedDocument(this.runtime.currentFile, document, Number(row?.baseSeq || loaded?.baseSeq || 0));
       this.modal.set('');
       this.showToast('已本地恢复提交记录，点击“立即同步”后才会影响其他人。');
     });
+  }
+
+  // 模块意图：为历史记录的读取和恢复提供统一的可见等待状态。
+  // 关键流程：先显示等待框，再复用既有 busy 锁执行异步动作，最后无论成功失败都清理状态。
+  // 边界细节：确认弹窗不纳入等待阶段，避免用户尚未确认时阻塞界面。
+  private async runHistoryAction(title: string, description: string, action: () => Promise<void>): Promise<void> {
+    this.waitDialog.set({ title, description });
+    try {
+      await this.runBusy(action);
+    } finally {
+      this.waitDialog.set(null);
+    }
   }
 
   protected openDocumentProperties(): void {

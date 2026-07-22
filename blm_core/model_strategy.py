@@ -67,15 +67,16 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
     "process_flow_node": {"scalars": ["kind", "gatewayType", "title", "role_uid", "nodeUid", "x", "y"], "lists": {}},
     "process_flow_edge": {"scalars": ["from", "to", "label", "condition", "source", "target"], "lists": {}},
     "prototype_file": {
-        "scalars": ["name", "versionUid", "content", "contentType", "uploadedAt"],
+        "scalars": ["name", "versionUid", "content", "contentType", "contentEncoding", "size", "uploadedAt", "uploadToken", "localUrl"],
         "lists": {"versions": "prototype_version"},
     },
-    "prototype_version": {"scalars": ["number", "name", "content", "contentType", "uploadedAt"], "lists": {}},
+    "prototype_version": {"scalars": ["number", "name", "content", "contentType", "contentEncoding", "size", "uploadedAt", "uploadToken", "localUrl"], "lists": {}},
     "process_link": {"scalars": ["fromProcessUid", "toProcessUid"], "lists": {}},
     "node": {
         "scalars": ["name", "role_uid", "role", "repeatable", "rules_note", "taskDefinitionUid", "businessComponentUid", "constructUid", "businessConstructUid"],
         "set_lists": ["role_uids", "roles"],
         "lists": {
+            "prototypeFiles": "prototype_file",
             "userSteps": "user_step",
             "entity_ops": "entity_op",
             "orchestrationTasks": "orchestration_task",

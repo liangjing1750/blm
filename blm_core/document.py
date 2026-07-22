@@ -576,6 +576,67 @@ def canonicalize_model_references(document: dict | None) -> dict:
         if isinstance(rule, dict):
             rule["applies_to"] = mapped(rule.get("appliesToUid") or rule.get("applies_to"), valid_rule_targets)
 
+    # 模块意图：表单分组接口引用是接口关系的主数据，节点和接口侧字段只作为派生索引。
+    # 关键流程：统一 UID/ID 别名后扫描所有节点表单分组，再从主数据重建两侧反向索引。
+    # 边界细节：只有文档中存在明确的表单接口引用时才重建，保留纯旧版 nodeRefs 文档等待后续迁移确认。
+    service_items = [item for item in doc.get("services", []) if isinstance(item, dict)]
+    service_by_ref: dict[str, str] = {}
+    for service in service_items:
+        service_uid = str(service.get("uid") or service.get("id") or "").strip()
+        if not service_uid:
+            continue
+        service["uid"] = service_uid
+        for field in ("uid", "id"):
+            ref = str(service.get(field) or "").strip()
+            if ref:
+                service_by_ref[ref] = service_uid
+
+    has_explicit_form_refs = False
+    node_service_refs: dict[str, set[str]] = {}
+    for process in doc.get("processes", []) if isinstance(doc.get("processes"), list) else []:
+        if not isinstance(process, dict):
+            continue
+        for node in process.get("nodes", []) if isinstance(process.get("nodes"), list) else []:
+            if not isinstance(node, dict):
+                continue
+            node_uid = str(node.get("uid") or node.get("id") or "").strip()
+            if not node_uid:
+                continue
+            resolved: set[str] = set()
+            for form in node.get("forms", []) if isinstance(node.get("forms"), list) else []:
+                if not isinstance(form, dict):
+                    continue
+                sections = form.get("sections", []) if isinstance(form.get("sections"), list) else []
+                for section in sections:
+                    if not isinstance(section, dict):
+                        continue
+                    raw_refs = [
+                        *(section.get("serviceUids") if isinstance(section.get("serviceUids"), list) else []),
+                        *(section.get("serviceIds") if isinstance(section.get("serviceIds"), list) else []),
+                        section.get("serviceUid"), section.get("serviceId"),
+                        *(section.get("interfaceUids") if isinstance(section.get("interfaceUids"), list) else []),
+                        *(section.get("interfaceIds") if isinstance(section.get("interfaceIds"), list) else []),
+                        section.get("interfaceUid"), section.get("interfaceId"),
+                    ]
+                    canonical_refs = list(dict.fromkeys(service_by_ref.get(str(ref or "").strip(), "") for ref in raw_refs if service_by_ref.get(str(ref or "").strip(), "")))
+                    if canonical_refs:
+                        has_explicit_form_refs = True
+                        section["serviceUids"] = canonical_refs
+                        section["serviceIds"] = list(canonical_refs)
+                        section["serviceUid"] = canonical_refs[0]
+                        section["serviceId"] = canonical_refs[0]
+                        resolved.update(canonical_refs)
+            node_service_refs[node_uid] = resolved
+
+    if has_explicit_form_refs:
+        for node in (node for process in doc.get("processes", []) if isinstance(process, dict) for node in process.get("nodes", []) if isinstance(process.get("nodes"), list) and isinstance(node, dict)):
+            node_uid = str(node.get("uid") or node.get("id") or "").strip()
+            node["serviceUids"] = sorted(node_service_refs.get(node_uid, set()))
+            node["serviceIds"] = list(node["serviceUids"])
+        for service in service_items:
+            service_uid = str(service.get("uid") or "").strip()
+            service["nodeRefs"] = sorted(node_uid for node_uid, refs in node_service_refs.items() if service_uid in refs)
+
     return doc
 
 

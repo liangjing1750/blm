@@ -331,15 +331,35 @@ export class ApplicationWorkbenchComponent implements OnInit, OnDestroy {
   }
 
   protected linkedNodes(svc: LegacyService): Array<{ processUid: string; nodeUid: string; name: string }> {
-    const refs = new Set((svc.nodeRefs || []).map((ref) => String(ref || '').trim()).filter(Boolean));
+    // 模块意图：关联节点必须与节点视图的表单接口展示保持同一数据口径。
+    // 关键流程：扫描节点表单及分组中的接口引用，再反向生成接口详情中的节点列表。
+    // 边界细节：不再单独信任 service.nodeRefs，它是可失真的反向缓存，避免显示无法在节点视图复现的“幽灵关联”。
+    const serviceIds = new Set([svc.uid, svc.id, this.uid(svc)].map((value) => String(value || '').trim()).filter(Boolean));
     const result: Array<{ processUid: string; nodeUid: string; name: string }> = [];
     for (const process of this.doc().processes || []) {
       for (const node of process.nodes || []) {
         const nodeUid = this.uid(node);
-        if (refs.has(nodeUid)) result.push({ processUid: this.uid(process), nodeUid, name: node.name || nodeUid });
+        const linked = (node.forms || []).some((form: any) => (form.sections || []).some((section: any) => {
+          const refs = [
+            section.serviceUid,
+            section.serviceId,
+            section.interfaceUid,
+            section.interfaceId,
+            ...(Array.isArray(section.serviceUids) ? section.serviceUids : []),
+            ...(Array.isArray(section.serviceIds) ? section.serviceIds : []),
+            ...(Array.isArray(section.interfaceUids) ? section.interfaceUids : []),
+            ...(Array.isArray(section.interfaceIds) ? section.interfaceIds : []),
+          ].map((value) => String(value || '').trim()).filter(Boolean);
+          return refs.some((ref) => serviceIds.has(ref));
+        }));
+        if (linked) result.push({ processUid: this.uid(process), nodeUid, name: node.name || nodeUid });
       }
     }
     return result;
+  }
+
+  protected linkedNodeCount(svc: LegacyService): number {
+    return this.linkedNodes(svc).length;
   }
 
   protected jumpToProcessNode(node: { processUid: string; nodeUid: string }): void {

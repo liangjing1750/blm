@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { createProcessEditorLegacyAdapter } from './process-editor-legacy-adapter';
 
@@ -79,5 +80,34 @@ describe('ProcessEditorLegacyAdapter', () => {
 
     expect(open).toHaveBeenCalledWith('blob:node-file-1', '_blank', 'noopener');
     expect(fallback).not.toHaveBeenCalled();
+  });
+
+  it('stores uploaded node attachment bytes on the version consumed by persistence', async () => {
+    const file = new File(['node bytes'], 'node.txt', { type: 'text/plain' });
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.id = 'node-upload';
+    document.body.appendChild(input);
+    class ImmediateFileReader {
+      result = 'data:text/plain;base64,bm9kZSBieXRlcw==';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL(): void { this.onload?.(); }
+    }
+    vi.stubGlobal('FileReader', ImmediateFileReader);
+    const win = {
+      S: { doc: {}, ui: {} },
+      markModified: vi.fn(),
+    } as any;
+    const task = { uid: 'node-1', prototypeFiles: [] } as any;
+
+    createProcessEditorLegacyAdapter(win).uploadNodePrototypeFiles(task, 'node-upload');
+    await Promise.resolve();
+
+    expect(task.prototypeFiles[0].versions[0]).toMatchObject({
+      content: 'bm9kZSBieXRlcw==',
+      contentEncoding: 'base64',
+      size: file.size,
+    });
   });
 });

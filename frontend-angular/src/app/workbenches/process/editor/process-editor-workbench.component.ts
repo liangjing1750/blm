@@ -242,15 +242,21 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     // 模块意图：流程节点只展示“这个节点会触发哪些应用服务”的产品视图，不接管应用编排编辑职责。
     // 关键流程：优先用服务侧 nodeRefs 反查节点，同时兼容节点侧 serviceUids/serviceIds 引用，便于后续流程平台对接。
     // 边界细节：这里不展开参数映射、步骤编排和技术承接，避免流程工作台重新暴露构件运行时细节。
-    const taskRefs = this.referenceKeys([this.taskId(task), task.uid, task.id]);
     const nodeServiceRefs = this.referenceKeys([
       ...((task as LegacyProcessNode & { serviceUids?: string[] }).serviceUids || []),
       ...((task as LegacyProcessNode & { serviceIds?: string[] }).serviceIds || []),
     ]);
+    for (const form of this.forms(task)) {
+      for (const ref of [form.serviceUid, form.serviceId]) {
+        if (ref) nodeServiceRefs.push(String(ref).trim());
+      }
+      for (const section of this.sections(form)) {
+        this.formSectionServiceIds(section).forEach((ref) => nodeServiceRefs.push(ref));
+      }
+    }
     return this.applicationServices().filter((service) => {
-      const serviceRefs = this.referenceKeys(service.nodeRefs || []);
       const serviceId = this.serviceId(service);
-      return taskRefs.some((ref) => serviceRefs.includes(ref)) || (serviceId ? nodeServiceRefs.includes(serviceId) : false);
+      return serviceId ? nodeServiceRefs.includes(serviceId) : false;
     });
   }
 
