@@ -16,6 +16,7 @@ interface LegacyComp { uid?: string; id?: string; name?: string; kind?: string; 
 interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: string; businessComponentUid?: string; businessComponentId?: string; businessComponent?: string; }
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructId?: string; businessConstructUids?: string[]; constructUid?: string; constructId?: string; }
 interface TaskParam { uid?: string; name: string; type: string; required: boolean; code?: string; description?: string; example?: string; note: string; children?: TaskParam[]; }
+interface TaskParamDisplayRow { param: TaskParam; level: number; }
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; businessComponentUid?: string; }
 
 @Component({
@@ -1284,6 +1285,19 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy, AfterView
 
   protected taskParamNote(param: TaskParam): string {
     return String(param.note ?? param.example ?? '').trim();
+  }
+
+  /** 将参数树展开为展示行，保持原始参数对象和编辑模型不变。 */
+  protected taskParamDisplayRows(params: TaskParam[] | undefined): TaskParamDisplayRow[] {
+    const rows: TaskParamDisplayRow[] = [];
+    const visit = (items: TaskParam[] | undefined, level: number): void => {
+      for (const param of items || []) {
+        rows.push({ param, level });
+        visit(param.children, level + 1);
+      }
+    };
+    visit(params, 0);
+    return rows;
   }
 
   protected setTaskParamNote(param: TaskParam, value: string): void {

@@ -438,6 +438,11 @@ export class ShellComponent implements OnInit, OnDestroy {
   // 消除原来笼统显示 seq 的歧义。
   protected currentVersionLabel(): string {
     if (!this.runtime.currentFile) return '';
+    const historyContext = this.runtime.collab.historyVersionContext;
+    if (historyContext) {
+      const prefix = historyContext.kind === 'history' ? '历史快照' : '本地提交';
+      return historyContext.currentSeq > 0 ? `${prefix}：v${historyContext.currentSeq}` : prefix;
+    }
     if (this.runtime.readOnly) {
       const versionId = String(this.runtime.doc?.meta?.version_id || '').trim();
       const versionLabel = String(this.runtime.doc?.meta?.version_label || '').trim();
@@ -452,12 +457,18 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected displayCurrentVersionLabel(): string {
     const label = this.currentVersionLabel();
+    if (this.runtime.collab.historyVersionContext) return label;
     return label && label.includes('当前版本') ? label : (label ? `当前版本：${label}` : '');
   }
 
   protected latestVersionLabel(): string {
-    if (!this.runtime.currentFile || this.runtime.readOnly) return '';
+    if (!this.runtime.currentFile) return '';
     if (!this.runtime.runtime.supportsCollab) return '';
+    const historyContext = this.runtime.collab.historyVersionContext;
+    if (historyContext?.remoteSeq) {
+      return `远端版本 v${historyContext.remoteSeq}`;
+    }
+    if (this.runtime.readOnly) return '';
     const latest = Number(this.runtime.collab.seq || 0);
     const base = Number(this.runtime.collab.acceptedSeq || 0);
     return latest > base ? `最新版本 v${latest}` : '';
@@ -465,6 +476,8 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected remoteVersionLabel(): string {
     if (!this.runtime.currentFile || !this.runtime.runtime.supportsCollab) return '';
+    const historyContext = this.runtime.collab.historyVersionContext;
+    if (historyContext?.remoteSeq) return `远端版本 v${historyContext.remoteSeq}`;
     const latest = Number(this.runtime.collab.seq || 0);
     const base = Number(this.runtime.collab.acceptedSeq || 0);
     return latest > base || this.runtime.readOnly ? `远端版本 v${latest}` : '';
@@ -1138,6 +1151,12 @@ export class ShellComponent implements OnInit, OnDestroy {
       document.meta.version_id = `history:${id}`;
       document.meta.version_label = document.meta.version_label || '历史快照';
       this.openLoadedDocument(this.runtime.currentFile, loaded, true);
+      this.runtime.collab.historyVersionContext = {
+        kind: 'history',
+        currentSeq: Number(loaded?.seq || row?.seq || 0),
+        remoteSeq: Number(this.runtime.collab.seq || 0),
+      };
+      this.refreshShellView();
       this.modal.set('');
     });
   }
@@ -1153,6 +1172,13 @@ export class ShellComponent implements OnInit, OnDestroy {
       document.meta.version_id = `submit:${submitId}`;
       document.meta.version_label = document.meta.version_label || '本地提交';
       this.openLoadedDocument(this.runtime.currentFile, loaded, true);
+      this.runtime.collab.historyVersionContext = {
+        kind: 'submit',
+        currentSeq: Number(loaded?.seq || row?.seq || 0),
+        remoteSeq: Number(this.runtime.collab.seq || 0),
+        baseSeq: Number(loaded?.baseSeq || row?.baseSeq || 0),
+      };
+      this.refreshShellView();
       this.modal.set('');
     });
   }
@@ -1181,7 +1207,11 @@ export class ShellComponent implements OnInit, OnDestroy {
     await this.runHistoryAction('正在恢复历史版本...', '正在读取历史快照并恢复为当前文档草稿。', async () => {
       const loaded = await this.api.loadHistory(this.runtime.currentFile, id);
       const document = loaded?.document || loaded;
-      this.restoreLoadedDocument(this.runtime.currentFile, document, Number(row?.seq || 0));
+      const snapshotSeq = Number(loaded?.seq || row?.seq || 0);
+      const remoteSeq = Number(this.runtime.collab.seq || 0);
+      this.restoreLoadedDocument(this.runtime.currentFile, document, snapshotSeq);
+      this.runtime.collab.historyVersionContext = { kind: 'history', currentSeq: snapshotSeq, remoteSeq, restored: true };
+      this.refreshShellView();
       this.modal.set('');
       this.showToast('已本地恢复历史版本，点击“立即同步”后才会影响其他人。');
     });
@@ -1194,7 +1224,12 @@ export class ShellComponent implements OnInit, OnDestroy {
     await this.runHistoryAction('正在恢复本地提交...', '正在读取本地提交并恢复为当前文档草稿。', async () => {
       const loaded = await this.api.loadCollabSubmit(this.runtime.currentFile, submitId);
       const document = loaded?.document || loaded;
-      this.restoreLoadedDocument(this.runtime.currentFile, document, Number(row?.baseSeq || loaded?.baseSeq || 0));
+      const currentSeq = Number(loaded?.seq || row?.seq || 0);
+      const baseSeq = Number(loaded?.baseSeq || row?.baseSeq || 0);
+      const remoteSeq = Number(this.runtime.collab.seq || 0);
+      this.restoreLoadedDocument(this.runtime.currentFile, document, baseSeq);
+      this.runtime.collab.historyVersionContext = { kind: 'submit', currentSeq: currentSeq || baseSeq, remoteSeq, baseSeq, restored: true };
+      this.refreshShellView();
       this.modal.set('');
       this.showToast('已本地恢复提交记录，点击“立即同步”后才会影响其他人。');
     });
@@ -2068,6 +2103,7 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   private openLoadedDocument(name: string, payload: any, readOnly = false): void {
     const document = payload?.document || payload;
+    this.runtime.collab.historyVersionContext = undefined;
     this.documentStore.load(document, name);
     this.runtime.readOnly = readOnly || !!document?.meta?.readonly;
     this.runtime.collab.hasRemoteUpdate = false;

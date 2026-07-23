@@ -913,6 +913,49 @@ class MergeEngineTests(unittest.TestCase):
 
         self.assertEqual(merged_attachments, {"node-file-left", "node-file-right"})
 
+    def test_three_way_merge_preserves_task_parameter_contract_changes_from_both_sides(self):
+        base = create_empty_document("TaskContractMerge")
+        base["taskDefinitions"] = [{
+            "uid": "task-contract",
+            "name": "任务契约",
+            "parameters": {"inputs": [{"uid": "param-base", "name": "基础参数", "type": "String", "required": True}], "outputs": []},
+        }]
+        left = deepcopy(base)
+        left["taskDefinitions"][0]["parameters"]["inputs"][0]["description"] = "左侧说明"
+        right = deepcopy(base)
+        right["taskDefinitions"][0]["parameters"]["inputs"].append({
+            "uid": "param-right", "name": "新增参数", "type": "Number", "required": False,
+        })
+
+        merged = analyze_merge("3way", left, right, base)["merged_document"]
+        params = merged["taskDefinitions"][0]["parameters"]["inputs"]
+
+        assert [item["uid"] for item in params] == ["param-base", "param-right"]
+        assert params[0]["description"] == "左侧说明"
+
+    def test_three_way_merge_preserves_task_parameter_list_children(self):
+        base = create_empty_document("TaskListContractMerge")
+        base["taskDefinitions"] = [{
+            "uid": "task-list",
+            "name": "列表任务",
+            "parameters": {"inputs": [{
+                "uid": "param-list", "name": "仓库列表", "type": "List", "required": True,
+                "children": [{"uid": "child-base", "name": "仓库ID", "type": "String", "required": True}],
+            }], "outputs": []},
+        }]
+        left = deepcopy(base)
+        left["taskDefinitions"][0]["parameters"]["inputs"][0]["children"][0]["description"] = "左侧子字段说明"
+        right = deepcopy(base)
+        right["taskDefinitions"][0]["parameters"]["inputs"][0]["children"].append({
+            "uid": "child-right", "name": "仓库名称", "type": "String", "required": False,
+        })
+
+        merged = analyze_merge("3way", left, right, base)["merged_document"]
+        children = merged["taskDefinitions"][0]["parameters"]["inputs"][0]["children"]
+
+        assert [item["uid"] for item in children] == ["child-base", "child-right"]
+        assert children[0]["description"] == "左侧子字段说明"
+
     def test_three_way_merge_preserves_application_service_nested_contract_and_orchestration(self):
         base = create_empty_document("ApplicationServiceMerge")
         base["taskDefinitions"] = [

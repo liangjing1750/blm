@@ -40,6 +40,13 @@ export interface AngularRuntimeState {
     draftBaseSeqOverride?: number;
     recoveryMode?: boolean;
     forceSnapshotSync?: boolean;
+    historyVersionContext?: {
+      kind: 'history' | 'submit';
+      currentSeq: number;
+      remoteSeq: number;
+      baseSeq?: number;
+      restored?: boolean;
+    };
   };
   recovery: Record<string, any>;
 }
@@ -128,6 +135,7 @@ const runtimeState: AngularRuntimeState = {
     serverDocumentHash: '',
     lastSyncedAt: '',
     lastActivity: null,
+    historyVersionContext: undefined,
   },
   recovery: {},
 };

@@ -136,7 +136,6 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
             "querySourceKind",
             "target",
             "address",
-            "parameters",
             "note",
             "businessComponentUid",
             "businessComponent",
@@ -145,6 +144,17 @@ DESCRIPTORS: dict[str, dict[str, Any]] = {
         ],
         "set_lists": ["entityUids"],
         "lists": {},
+        "objects": {"parameters": "task_parameter_bag"},
+    },
+    "task_parameter_bag": {
+        "scalars": [],
+        "set_lists": [],
+        "lists": {"inputs": "task_parameter", "outputs": "task_parameter"},
+    },
+    "task_parameter": {
+        "scalars": ["name", "type", "required", "code", "description", "note", "example", "dictionaryUid"],
+        "set_lists": [],
+        "lists": {"children": "task_parameter"},
     },
     "service_group": {"scalars": ["name", "note"], "lists": {}},
     "service": {

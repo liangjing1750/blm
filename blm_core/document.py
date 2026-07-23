@@ -1049,6 +1049,11 @@ def normalize_task_parameters(value) -> dict:
             param["required"] = bool(param.get("required", False))
             param["description"] = str(param.get("description", param.get("note", ""))).strip()
             param["example"] = str(param.get("example", "")).strip()
+            children = normalize_list(param.get("children"))
+            if children:
+                param["children"] = children
+            else:
+                param.pop("children", None)
             if not param["name"] and not param["type"] and not param["description"] and not param["example"]:
                 param["name"] = f"参数{index}"
             normalized.append(param)

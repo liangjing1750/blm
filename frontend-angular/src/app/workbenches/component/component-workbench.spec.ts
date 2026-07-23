@@ -77,6 +77,24 @@ describe('ComponentWorkbenchComponent', () => {
     expect(head?.getAttribute('title')).toBe('甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳');
   });
 
+  it('shows nested task parameter child fields in the expanded contract details', () => {
+    const runtime = getAngularRuntimeState();
+    runtime.doc.taskDefinitions[0].parameters.inputs = [{
+      uid: 'input-order', name: '订单', type: 'list', required: true, note: '订单列表', children: [
+        { uid: 'input-order-id', name: '订单编号', type: 'String', required: true, note: '唯一编号', children: [] },
+      ],
+    }];
+    host.querySelector<HTMLButtonElement>('[data-testid="component-taskdef-tab"]')?.click();
+    fixture.detectChanges();
+    host.querySelector<HTMLElement>('[data-testid="taskdef-card-task-1"]')?.click();
+    fixture.detectChanges();
+
+    const inputTable = host.querySelector<HTMLElement>('[data-testid="taskdef-card-task-1"] .taskdef-params');
+    expect(inputTable?.textContent).toContain('订单编号');
+    expect(inputTable?.querySelectorAll('.taskdef-param-name')).toHaveLength(2);
+    expect(inputTable?.querySelectorAll('.taskdef-param-name')[1].getAttribute('style')).toContain('padding-left: 16px');
+  });
+
   it('opens construct detail from component overview and keeps context without a return button', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
     fixture.detectChanges();
