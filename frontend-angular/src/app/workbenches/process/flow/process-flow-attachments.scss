@@ -59,7 +59,7 @@
 
 .attachment-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   padding: 12px;
@@ -75,12 +75,14 @@
 }
 
 .attachment-card-meta strong {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   color: #0f172a;
   font-size: 14px;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .attachment-card-meta span {
@@ -100,7 +102,7 @@
 .attachment-card-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 5px;
 }
 
@@ -117,4 +119,52 @@
 }
 
 .attachment-version-list{grid-column:1/-1;display:grid;gap:6px;padding-top:10px;border-top:1px dashed #d7e4f3}
-.attachment-version-item{display:flex;justify-content:space-between;gap:6px;padding:6px}
+.attachment-version-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:7px 0}
+.attachment-version-meta{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.attachment-version-meta strong{min-width:42px;color:#1d4ed8;font-size:13px}
+.attachment-version-meta span{color:#64748b;font-size:12px;white-space:nowrap}
+.attachment-version-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+
+/* 版本行使用稳定的左侧信息块，避免版本号、日期和按钮互相挤压。 */
+.attachment-version-item > div:first-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.attachment-version-item > div:first-child strong {
+  display: inline-flex;
+  align-items: center;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: #e0edff;
+  color: #1557b0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.attachment-version-item > div:first-child span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.attachment-version-item > div:first-child strong + span {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #15803d;
+  font-weight: 700;
+}
+
+.attachment-version-item > div:first-child strong + span + span {
+  padding-left: 2px;
+  color: #64748b;
+}

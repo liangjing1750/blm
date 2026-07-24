@@ -171,6 +171,7 @@ export interface LegacyPrototypeVersion {
   contentEncoding?: string;
   localUrl?: string;
   size?: number;
+  uploadToken?: string;
 }
 
 export interface LegacyPrototypeFile {
@@ -311,6 +312,11 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     state().ui ||= {};
     return state().ui as NonNullable<LegacyState['ui']>;
   };
+  // 模块意图：保存流程、节点和附件管理共用的附件版本展开状态。
+  // 关键流程：以归属对象 UID 和附件 UID 组成稳定键，避免不同节点的同名附件互相影响。
+  // 边界细节：状态只属于当前适配器实例，不写入文档，切换文档时不会产生脏数据。
+  const expandedPrototypeKeys = new Map<string, boolean>();
+  const prototypeExpandKey = (ownerId: string, prototypeUid: string): string => `${String(ownerId || '').trim()}::${String(prototypeUid || '').trim()}`;
 
   const nextId = (prefix: string, items: Array<{ id?: string; uid?: string }> = []) => {
     const used = new Set(items.map((item) => String(item.id || item.uid || '')));
@@ -396,6 +402,22 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
     return processes().find((process) =>
       processId(process) === currentId || process.uid === currentId || process.id === currentId
     ) || processes()[0] || null;
+  }
+
+  function uploadProcessAttachment(file: File): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/attachment-upload');
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      xhr.setRequestHeader('X-Attachment-Name', encodeURIComponent(file.name || 'attachment'));
+      xhr.responseType = 'json';
+      xhr.onload = () => {
+        const result = xhr.response || JSON.parse(xhr.responseText || '{}');
+        resolve({ ...(result && typeof result === 'object' ? result : {}), status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300 && !result?.error });
+      };
+      xhr.onerror = () => reject(new Error('attachment upload failed'));
+      xhr.send(file);
+    });
   }
 
   function currentTask(): LegacyProcessNode | null {
@@ -710,9 +732,14 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
         || canPreviewAttachment(version || this.currentPrototypeVersion(file) || file);
     },
     isPrototypeExpanded(processId, prototypeUid) {
+      const key = prototypeExpandKey(processId, prototypeUid);
+      if (expandedPrototypeKeys.has(key)) return Boolean(expandedPrototypeKeys.get(key));
       return Boolean(legacyWindow.isProcessPrototypeExpanded?.(processId, prototypeUid));
     },
     togglePrototypeVersions(processId, prototypeUid) {
+      const key = prototypeExpandKey(processId, prototypeUid);
+      const expanded = this.isPrototypeExpanded(processId, prototypeUid);
+      expandedPrototypeKeys.set(key, !expanded);
       legacyWindow.toggleProcessPrototypeVersions?.(processId, prototypeUid);
     },
     previewPrototype(ownerId, prototypeUid, versionUid = '') {
@@ -739,12 +766,40 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       }
       legacyWindow.downloadProcessPrototypeFile?.(processId, prototypeUid, versionUid);
     },
-    removePrototype(processId, prototypeUid) {
-      legacyWindow.removeProcessPrototypeFile?.(processId, prototypeUid);
+  removePrototype(ownerProcessId, prototypeUid) {
+      const targetProcess = processes().find((process) => processId(process) === ownerProcessId);
+      if (targetProcess) {
+        const targetUid = String(prototypeUid || '').trim();
+        targetProcess.prototypeFiles = (Array.isArray(targetProcess.prototypeFiles) ? targetProcess.prototypeFiles : [])
+          .filter((file) => String(file.uid || file.id || '') !== targetUid);
+        dirty();
+        return;
+      }
+      legacyWindow.removeProcessPrototypeFile?.(ownerProcessId, prototypeUid);
     },
-    uploadPrototypeFiles(processId, inputId) {
-      legacyWindow.addProcessPrototypeFiles?.(processId, inputId);
-      dirty();
+    uploadPrototypeFiles(ownerProcessId, inputId) {
+      const targetProcess = processes().find((process) => processId(process) === ownerProcessId);
+      const input = globalThis.document.getElementById(inputId) as HTMLInputElement | null;
+      const files = Array.from(input?.files || []);
+      if (!targetProcess || !files.length) return;
+      targetProcess.prototypeFiles ||= [];
+      void (async () => {
+        for (const file of files) {
+          const staged = await uploadProcessAttachment(file);
+          if (!staged.ok) throw new Error(staged.error || '附件上传失败');
+          const versionUid = `protover-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const version = { uid: versionUid, number: 1, name: file.name, uploadToken: String(staged.token || ''), contentType: staged.contentType || file.type || 'application/octet-stream', size: Number(staged.size || file.size || 0), uploadedAt: new Date().toLocaleString() } as LegacyPrototypeVersion;
+          const existing = targetProcess.prototypeFiles!.find((item) => String(item.name || '').trim() === String(file.name || '').trim());
+          if (existing) {
+            existing.versions = [...(existing.versions || []), { ...version, number: (existing.versions || []).length + 1 }];
+            existing.versionUid = versionUid;
+          } else {
+            targetProcess.prototypeFiles!.push({ uid: `proto-${Date.now()}-${Math.random().toString(16).slice(2)}`, id: `proto-${Date.now()}`, name: file.name, versionUid, versions: [version] });
+          }
+        }
+        if (input) input.value = '';
+        dirty();
+      })().catch((error) => { if (input) input.value = ''; console.error(error); });
     },
     nodePrototypeFiles(task) {
       return (Array.isArray(task?.prototypeFiles) ? task.prototypeFiles : []) as LegacyPrototypeFile[];
@@ -759,50 +814,31 @@ export function createProcessEditorLegacyAdapter(legacyWindow: LegacyWindow = ge
       const files = Array.from(input?.files || []);
       if (!files.length) return;
       task.prototypeFiles ||= [];
-      let remaining = files.length;
-      const finishOne = () => {
-        remaining -= 1;
-        if (remaining <= 0) {
-          if (input) input.value = '';
-          dirty();
-        }
-      };
-      for (const file of files) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const raw = String(reader.result || '');
-          const [, base64Content = ''] = raw.split(',', 2);
-          const now = new Date().toLocaleString();
-          const uid = `node-proto-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-          const versionUid = `${uid}-v1`;
-          task.prototypeFiles?.push({
-            uid,
-            id: uid,
+      void (async () => {
+        for (const file of files) {
+          const staged = await uploadProcessAttachment(file);
+          if (!staged.ok) throw new Error(staged.error || '附件上传失败');
+          const versionUid = `node-proto-ver-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const version = {
+            uid: versionUid,
+            number: 1,
             name: file.name,
-            versionUid,
-            contentType: file.type || 'application/octet-stream',
-            versions: [{
-              uid: versionUid,
-              number: 1,
-              name: file.name,
-              contentType: file.type || 'application/octet-stream',
-              uploadedAt: now,
-              contentEncoding: 'base64',
-              content: base64Content,
-              size: file.size,
-            }],
-            ...(base64Content ? {
-              contentType: file.type || 'application/octet-stream',
-              contentEncoding: 'base64',
-              content: base64Content,
-              size: file.size,
-            } as Partial<LegacyPrototypeFile> : {}),
-          } as LegacyPrototypeFile);
-          finishOne();
-        };
-        reader.onerror = finishOne;
-        reader.readAsDataURL(file);
-      }
+            uploadToken: String(staged.token || ''),
+            contentType: staged.contentType || file.type || 'application/octet-stream',
+            size: Number(staged.size || file.size || 0),
+            uploadedAt: new Date().toLocaleString(),
+          } as LegacyPrototypeVersion;
+          const existing = task.prototypeFiles!.find((item) => String(item.name || '').trim() === String(file.name || '').trim());
+          if (existing) {
+            existing.versions = [...(existing.versions || []), { ...version, number: (existing.versions || []).length + 1 }];
+            existing.versionUid = versionUid;
+          } else {
+            task.prototypeFiles!.push({ uid: `node-proto-${Date.now()}-${Math.random().toString(16).slice(2)}`, id: `node-proto-${Date.now()}`, name: file.name, versionUid, versions: [version] });
+          }
+        }
+        if (input) input.value = '';
+        dirty();
+      })().catch((error) => { if (input) input.value = ''; console.error(error); });
     },
     flowNodeOptions(process, side) {
       const options = tasks(process).map((task, index) => ({ id: taskId(task), label: task.name || `节点${index + 1}` }));

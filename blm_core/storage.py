@@ -1197,9 +1197,11 @@ class WorkspaceStorage(DocumentFileStore):
         safe_owner_uid = self._safe_path_component(resolved_owner_uid, normalized_owner_type)
         owner_label = str(resolved_owner_name or "").strip()
         safe_owner_name = self._safe_path_component(owner_label, "") if owner_label else ""
-        safe_owner_dir = safe_owner_uid if not safe_owner_name else f"{safe_owner_uid}__{safe_owner_name}"
+        # 新上传附件采用名称优先的目录，便于人工按流程/节点浏览；已有索引中的 path 仍原样保留。
+        safe_owner_dir = safe_owner_uid if not safe_owner_name else f"{safe_owner_name}__{safe_owner_uid}"
         safe_name = self._build_attachment_filename(version_name, content_type)
-        return Path(owner_dir) / safe_owner_dir / safe_attachment_uid / f"v{max(int(version_number or 1), 1)}__{safe_name}"
+        safe_attachment_name = self._safe_path_component(Path(version_name).stem, "attachment")
+        return Path(owner_dir) / safe_owner_dir / f"{safe_attachment_name}__{safe_attachment_uid}" / f"v{max(int(version_number or 1), 1)}__{safe_name}"
 
     def _attachment_version_path(self, document_uid: str, relative_path: str | Path, package_dir: Path | None = None) -> Path:
         root = self._attachment_root_for_doc(document_uid, package_dir)

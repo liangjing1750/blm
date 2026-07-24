@@ -291,11 +291,11 @@
   @if (activeTab() === 'taskDef') {
     <div class="comp-tab-body taskdef-map-view">
       <div class="comp-toolbar">
-        <select [ngModel]="taskDefCompId()" (ngModelChange)="selectTaskDefComp($event)">
+        <select class="taskdef-filter-select" [ngModel]="taskDefCompId()" (ngModelChange)="selectTaskDefComp($event)">
           <option value="">全部组件</option>
           @for(c of components(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
         </select>
-        <select data-testid="taskdef-construct-filter" [attr.data-selected-construct]="taskDefConstructId()" [ngModel]="taskDefConstructId()" (ngModelChange)="taskDefConstructId.set($event)">
+        <select class="taskdef-filter-select" data-testid="taskdef-construct-filter" [attr.data-selected-construct]="taskDefConstructId()" [ngModel]="taskDefConstructId()" (ngModelChange)="taskDefConstructId.set($event)">
           <option value="">全部构件</option>
           @for(c of filteredConstructsForTaskDef(); track uid(c)) { <option [value]="uid(c)">{{ c.name }}</option> }
         </select>
@@ -428,9 +428,31 @@
                 <section class="taskdef-edit-section taskdef-edit-params">
                   <div class="taskdef-edit-section-head">
                     <strong>{{ title }}</strong>
-                    <button class="btn-ghost-sm" type="button" (click)="addParam(rows)">+ 参数</button>
+                    <div class="taskdef-param-toolbar">
+                      <button class="btn-ghost-sm" [class.active]="taskParamView(kind) === 'list'" type="button" (click)="setTaskParamView(kind, 'list')">列表视图</button>
+                      <button class="btn-ghost-sm" [class.active]="taskParamView(kind) === 'json'" type="button" (click)="setTaskParamView(kind, 'json')">JSON 视图</button>
+                      <button class="btn-ghost-sm" type="button" (click)="addParam(rows)">+ 参数</button>
+                      <button class="btn-ghost-sm" type="button" (click)="startTaskParamPaste(kind)">粘贴</button>
+                    </div>
                   </div>
-                  @if (rows.length) {
+                  @if (taskParamView(kind) === 'json') {
+                    <div class="taskdef-param-json" [attr.data-testid]="'taskdef-param-json-' + kind">
+                      <span class="json-brace">{{ '{' }}</span>
+                      @for (row of taskParamJsonLines(rows); track row.param.uid || $index) {
+                        <div class="json-line" [style.padding-left.px]="(row.level + 1) * 16">
+                          @if (row.close) {
+                            <span class="json-brace">{{ row.close }}</span>
+                          } @else {
+                            <span class="json-key">{{ row.param.name || '未命名参数' }}</span><span>: </span><span class="json-type">{{ row.param.type || 'String' }}</span>
+                            @if (row.param.children?.length) { <span class="json-brace"> {{ taskParamOpenToken(row.param) }}</span> }
+                            @if (row.param.note || row.param.description) { <span class="json-note"> // {{ row.param.note || row.param.description }}</span> }
+                            @if (row.param.required) { <span class="json-required"> *</span> }
+                          }
+                        </div>
+                      } @empty { <div class="muted">暂无参数</div> }
+                      <span class="json-brace">{{ '}' }}</span>
+                    </div>
+                  } @else if (rows.length) {
                     <table class="taskdef-param-table">
                       <thead><tr><th>英文名称</th><th>类型</th><th>必填</th><th>中文名称</th><th>说明/示例</th><th></th></tr></thead>
                       <tbody>
@@ -514,6 +536,17 @@
           </div>
         </section>
       }
+    </div>
+  }
+
+  @if (taskParamPasteVisible()) {
+    <div class="taskdef-param-paste-backdrop" data-testid="taskdef-param-paste-dialog" (click)="cancelTaskParamPaste()">
+      <section class="taskdef-param-paste" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+        <div class="taskdef-param-paste-head"><strong>粘贴{{ taskParamPasteTarget() === 'inputs' ? '输入' : '输出' }}参数</strong></div>
+        <textarea [ngModel]="taskParamPasteText()" (ngModelChange)="taskParamPasteText.set($event)" rows="8" placeholder="支持 JSON，也支持字段: 类型 // 说明，以及缩进子字段"></textarea>
+        @if (taskParamPasteError()) { <p class="taskdef-param-paste-error">{{ taskParamPasteError() }}</p> }
+        <div class="taskdef-param-paste-actions"><button class="btn-ghost-sm" type="button" (click)="cancelTaskParamPaste()">取消</button><button class="btn-primary-sm" type="button" (click)="applyTaskParamPaste(editingTask()!)">导入</button></div>
+      </section>
     </div>
   }
 

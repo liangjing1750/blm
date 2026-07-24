@@ -196,6 +196,23 @@
 .taskdef-param-name { display: block; white-space: nowrap; }
 .taskdef-params-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 4px; }
 .taskdef-params-label .btn-ghost-sm { font-size: 10px; padding: 1px 6px; }
+.taskdef-param-toolbar { display: flex; align-items: center; gap: 4px; }
+.taskdef-param-copy { margin-left: 8px; padding: 1px 5px; font-size: 10px; }
+.taskdef-param-json { border: 1px solid #dbe5f0; border-radius: 8px; background: #fbfdff; color: #1e293b; padding: 10px 12px; font: 12px/1.65 Consolas, "Courier New", monospace; }
+.taskdef-param-json .json-line { white-space: normal; word-break: break-word; }
+.taskdef-param-json .json-brace { color: #64748b; font-weight: 800; }
+.taskdef-param-json .json-key { color: #1d4ed8; font-weight: 900; }
+.taskdef-param-json .json-type { color: #0f766e; font-weight: 800; }
+.taskdef-param-json .json-note { color: #64748b; }
+.taskdef-param-json .json-required { color: #dc2626; font-weight: 900; }
+.taskdef-filter-select { max-height: 240px; }
+.taskdef-param-paste-backdrop { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .28); }
+.taskdef-param-paste { width: min(520px, calc(100vw - 40px)); border: 1px solid #dbe5f0; border-radius: 14px; background: #fff; padding: 20px 22px; box-shadow: 0 18px 45px rgba(15, 23, 42, .22); }
+.taskdef-param-paste-head, .taskdef-param-paste-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.taskdef-param-paste-actions { justify-content: flex-end; }
+.taskdef-param-paste-actions .btn-primary-sm { border: 1px solid #2563eb; border-radius: 7px; background: #2563eb; color: #fff; cursor: pointer; padding: 6px 14px; font-weight: 700; }
+.taskdef-param-paste textarea { width: 100%; box-sizing: border-box; margin: 8px 0; border: 1px solid #dbe5f0; border-radius: 7px; padding: 8px; font: 12px/1.5 Consolas, "Courier New", monospace; resize: vertical; }
+.taskdef-param-paste-error { margin: 0 0 8px; color: #dc2626; font-size: 12px; }
 .taskdef-rich-text ::ng-deep .node-rich-label { color: #475569; font-size: 12px; }
 .taskdef-rich-text ::ng-deep .node-rich-content { min-height: 70px; padding: 8px 10px; font-size: 13px; line-height: 1.58; }
 

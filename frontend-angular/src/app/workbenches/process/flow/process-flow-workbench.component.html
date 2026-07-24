@@ -163,17 +163,19 @@
         @if (attachmentDrawerOpen()) {
           <aside class="process-attachment-drawer" data-testid="process-flow-attachment-panel">
             <div class="attachment-panel-head"><strong>&#x6d41;&#x7a0b;&#x539f;&#x578b;/&#x9644;&#x4ef6;</strong><span>{{ prototypeCount(process) }}&#x9879;</span><button type="button" aria-label="&#x5173;&#x95ed;&#x9644;&#x4ef6;" (click)="attachmentDrawerOpen.set(false)">x</button></div>
-            <input type="file" [id]="prototypeInputId(process)" data-testid="proc-prototype-input" multiple (change)="uploadPrototypeFilesImmediately(process)" />
-            <label class="attachment-add-button" [for]="prototypeInputId(process)">+ &#x6dfb;&#x52a0;&#x9644;&#x4ef6;</label>
+            @if (editing) {
+              <input type="file" [id]="prototypeInputId(process)" data-testid="proc-prototype-input" multiple (change)="uploadPrototypeFilesImmediately(process)" />
+              <label class="attachment-add-button" [for]="prototypeInputId(process)">+ &#x6dfb;&#x52a0;&#x9644;&#x4ef6;</label>
+            }
             <div class="attachment-list">
               @for (file of prototypeFiles(process); track file.uid || file.id || $index; let index = $index) {
                 <div class="attachment-card" data-testid="proc-prototype-item">
-                  <div class="attachment-card-meta"><strong>{{ prototypeFileName(file, index) }}</strong><span>{{ prototypeMeta(file) }}</span><small>{{ prototypeKind(file) }}</small></div>
+                  <div class="attachment-card-meta"><strong class="attachment-file-name" [title]="prototypeFileName(file, index)">{{ prototypeFileName(file, index) }}</strong><span>{{ prototypeMeta(file) }}</span><small>{{ prototypeKind(file) }}</small></div>
                   <div class="attachment-card-actions">
                     <button type="button" data-testid="proc-prototype-toggle" (click)="togglePrototypeVersions(process, file)">{{ isPrototypeExpanded(process, file) ? '\u6536\u8d77' : '\u5c55\u5f00' }}&#x7248;&#x672c;</button>
                     @if (canPreviewPrototype(file)) { <button type="button" data-testid="proc-prototype-preview" (click)="previewPrototype(process, file)">预览</button> }
                     <button type="button" data-testid="proc-prototype-download" (click)="downloadPrototype(process, file)">&#x4e0b;&#x8f7d;</button>
-                    <button type="button" data-testid="proc-prototype-remove" (click)="removePrototype(process, file)">&#x5220;&#x9664;</button>
+                    @if (editing) { <button type="button" data-testid="proc-prototype-remove" (click)="removePrototype(process, file)">&#x5220;&#x9664;</button> }
                   </div>
                   @if (isPrototypeExpanded(process, file) && file.versions?.length) {
                     <div class="attachment-version-list" data-testid="proc-prototype-version-list">

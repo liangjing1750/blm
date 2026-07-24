@@ -441,7 +441,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     const historyContext = this.runtime.collab.historyVersionContext;
     if (historyContext) {
       const prefix = historyContext.kind === 'history' ? '历史快照' : '本地提交';
-      return historyContext.currentSeq > 0 ? `${prefix}：v${historyContext.currentSeq}` : prefix;
+      return historyContext.currentSeq > 0 ? `${prefix} v${historyContext.currentSeq}` : prefix;
     }
     if (this.runtime.readOnly) {
       const versionId = String(this.runtime.doc?.meta?.version_id || '').trim();
@@ -704,6 +704,9 @@ export class ShellComponent implements OnInit, OnDestroy {
       await this.runBusy(async () => {
         await this.syncService.syncNow();
       });
+      // 同步成功后恢复普通版本状态：远端已追平，只保留当前版本标签。
+      this.runtime.collab.historyVersionContext = undefined;
+      this.refreshShellView();
     } catch (error) {
       if (error instanceof SyncConflictError) {
         this.waitDialog.set(null);
@@ -875,6 +878,7 @@ export class ShellComponent implements OnInit, OnDestroy {
     const nextSeq = Number(result?.seq || result?.serverSeq || result?.acceptedSeq || this.runtime.collab.seq || 0);
     this.runtime.collab.seq = nextSeq;
     this.runtime.collab.acceptedSeq = nextSeq;
+    this.runtime.collab.historyVersionContext = undefined;
     this.runtime.collab.hasRemoteUpdate = false;
     this.runtime.collab.lastError = '';
     if (result?.documentHash) {

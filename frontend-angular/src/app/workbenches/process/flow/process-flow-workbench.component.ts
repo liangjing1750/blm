@@ -676,6 +676,7 @@ export class ProcessFlowWorkbenchComponent implements OnInit, OnDestroy {
   protected removePrototype(process: LegacyProcess, file: LegacyPrototypeFile): void {
     const prototypeUid = this.prototypeUid(file);
     if (!prototypeUid) return;
+    if (!window.confirm(`确认删除附件“${this.prototypeFileName(file, 0)}”吗？`)) return;
     this.adapter.removePrototype(this.processId(process), prototypeUid);
     this.refresh();
   }

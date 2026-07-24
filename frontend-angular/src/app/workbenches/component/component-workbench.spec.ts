@@ -95,6 +95,21 @@ describe('ComponentWorkbenchComponent', () => {
     expect(inputTable?.querySelectorAll('.taskdef-param-name')[1].getAttribute('style')).toContain('padding-left: 16px');
   });
 
+  it('supports task parameter list and json views with recursive copy and paste', async () => {
+    const component = fixture.componentInstance as any;
+    const runtime = getAngularRuntimeState();
+    runtime.doc.taskDefinitions[0].parameters.inputs = [];
+    const source = { uid: 'source', name: '订单', type: 'list', required: true, note: '订单列表', children: [{ uid: 'child', name: '订单号', type: 'String', required: true, note: '唯一值' }] };
+    expect(component.taskParamView('inputs')).toBe('list');
+    component.setTaskParamView('inputs', 'json');
+    expect(component.taskParamView('inputs')).toBe('json');
+    expect(component.taskParamJsonLines([source])[1].param.children[0].name).toBe('订单号');
+    component.taskParamPasteText.set(JSON.stringify([source]));
+    component.taskParamPasteTarget.set('inputs');
+    component.applyTaskParamPaste(runtime.doc.taskDefinitions[0]);
+    expect(runtime.doc.taskDefinitions[0].parameters.inputs[0].children[0].name).toBe('订单号');
+  });
+
   it('opens construct detail from component overview and keeps context without a return button', () => {
     host.querySelector<HTMLButtonElement>('[data-testid="mind-node-construct-construct-1"]')?.click();
     fixture.detectChanges();

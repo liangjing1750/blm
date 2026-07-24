@@ -17,6 +17,7 @@ interface LegacyConstruct { uid?: string; id?: string; name?: string; note?: str
 interface LegacyEntity { uid?: string; id?: string; name?: string; fields?: any[]; businessConstructUid?: string; businessConstructId?: string; businessConstructUids?: string[]; constructUid?: string; constructId?: string; }
 interface TaskParam { uid?: string; name: string; type: string; required: boolean; code?: string; description?: string; example?: string; note: string; children?: TaskParam[]; }
 interface TaskParamDisplayRow { param: TaskParam; level: number; }
+interface TaskParamJsonLine { param: TaskParam; level: number; close?: string; }
 interface LegacyTaskDef { uid?: string; id?: string; name?: string; type?: string; querySourceKind?: string; target?: string; address?: string; desc?: string; note?: string; parameters?: { inputs?: TaskParam[]; outputs?: TaskParam[] }; constructUid?: string; businessComponentUid?: string; }
 
 @Component({
@@ -40,6 +41,11 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy, AfterView
     { value: 'ID', label: '标识ID' },
     { value: 'list', label: '列表' },
   ];
+  protected readonly taskParamViews = signal<Record<'inputs' | 'outputs', 'list' | 'json'>>({ inputs: 'list', outputs: 'list' });
+  protected readonly taskParamPasteVisible = signal(false);
+  protected readonly taskParamPasteText = signal('');
+  protected readonly taskParamPasteError = signal('');
+  protected readonly taskParamPasteTarget = signal<'inputs' | 'outputs'>('inputs');
   private readonly onRefresh = () => {
     this.syncNavigationFromRuntime();
     this.version.update((v) => v + 1);
@@ -1298,6 +1304,134 @@ export class ComponentWorkbenchComponent implements OnInit, OnDestroy, AfterView
     };
     visit(params, 0);
     return rows;
+  }
+
+  protected taskParamView(kind: 'inputs' | 'outputs'): 'list' | 'json' {
+    return this.taskParamViews()[kind];
+  }
+
+  protected setTaskParamView(kind: 'inputs' | 'outputs', view: 'list' | 'json'): void {
+    this.taskParamViews.update((views) => ({ ...views, [kind]: view }));
+  }
+
+  protected taskParamJsonLines(params: TaskParam[], level = 0): TaskParamJsonLine[] {
+    const lines: TaskParamJsonLine[] = [];
+    for (const param of params || []) {
+      lines.push({ param, level });
+      if (param.children?.length) {
+        lines.push(...this.taskParamJsonLines(param.children, level + 1));
+        const type = String(param.type || '').toLowerCase();
+        lines.push({ param, level, close: type === 'list' ? '}]' : '}' });
+      }
+    }
+    return lines;
+  }
+
+  protected taskParamOpenToken(param: TaskParam): string {
+    return String(param.type || '').toLowerCase() === 'list' ? '[{' : '{';
+  }
+
+  protected async copyTaskParam(param: TaskParam): Promise<void> {
+    const value = JSON.stringify([structuredClone(param)], null, 2);
+    await navigator.clipboard?.writeText(value);
+  }
+
+  protected startTaskParamPaste(kind: 'inputs' | 'outputs'): void {
+    if (!this.canEdit()) return;
+    this.taskParamPasteTarget.set(kind);
+    this.taskParamPasteText.set('');
+    this.taskParamPasteError.set('');
+    this.taskParamPasteVisible.set(true);
+  }
+
+  protected cancelTaskParamPaste(): void {
+    this.taskParamPasteVisible.set(false);
+    this.taskParamPasteError.set('');
+  }
+
+  protected applyTaskParamPaste(td: LegacyTaskDef): void {
+    if (!this.canEdit()) return;
+    try {
+      const imported = this.parseTaskParamPaste(this.taskParamPasteText());
+      if (!imported.length) throw new Error('empty');
+      const target = this.taskParamPasteTarget() === 'inputs' ? (td.parameters!.inputs ||= []) : (td.parameters!.outputs ||= []);
+      for (const param of imported) {
+        if (!target.some((item) => item.name === param.name)) target.push(param);
+      }
+      this.cancelTaskParamPaste();
+      this.touch();
+    } catch {
+      this.taskParamPasteError.set('未识别到有效的参数 JSON，请粘贴参数数组或对象。');
+    }
+  }
+
+  private normalizeTaskParamPaste(value: unknown): TaskParam[] {
+    const source = Array.isArray(value) ? value : (value && typeof value === 'object' ? Object.entries(value as Record<string, unknown>).map(([name, item]) => ({ name, ...(item && typeof item === 'object' ? item : { type: item }) })) : []);
+    return source.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item) => ({
+      uid: `param-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      name: String(item['name'] || '').trim(),
+      type: String(item['type'] || 'String').trim() || 'String',
+      required: Boolean(item['required']),
+      code: String(item['code'] || item['description'] || '').trim(),
+      description: String(item['description'] || item['code'] || '').trim(),
+      example: String(item['example'] || '').trim(),
+      note: String(item['note'] || item['example'] || '').trim(),
+      ...(item['dictionaryUid'] ? { dictionaryUid: String(item['dictionaryUid']) } : {}),
+      ...(Array.isArray(item['children']) ? { children: this.normalizeTaskParamPaste(item['children']) } : {}),
+    }));
+  }
+
+  /** 兼容应用接口的宽松粘贴格式：严格 JSON 优先，失败后按参数片段和缩进结构解析。 */
+  private parseTaskParamPaste(raw: string): TaskParam[] {
+    const text = raw.trim();
+    if (!text) return [];
+    try {
+      return this.normalizeTaskParamPaste(JSON.parse(text));
+    } catch {
+      return this.parseLooseTaskParamText(text);
+    }
+  }
+
+  private parseLooseTaskParamText(text: string): TaskParam[] {
+    const root: TaskParam[] = [];
+    const stack: Array<{ indent: number; children: TaskParam[] }> = [{ indent: -1, children: root }];
+    const pattern = /^\s*["']?([A-Za-z_\u4e00-\u9fff][\w.\-\u4e00-\u9fff]*)["']?\s*[:：]\s*(.*?)\s*,?$/;
+    for (const rawLine of text.split(/\r?\n/)) {
+      const withoutComment = rawLine.split('//')[0];
+      const match = withoutComment.match(pattern);
+      if (!match) continue;
+      const [, name, rawValue] = match;
+      const indent = rawLine.search(/\S|$/);
+      const value = rawValue.trim();
+      const type = this.looseTaskParamType(value);
+      const param: TaskParam = {
+        uid: `param-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        type,
+        required: rawLine.includes('*'),
+        code: '',
+        description: '',
+        example: '',
+        note: rawLine.includes('//') ? rawLine.split('//').slice(1).join('//').replace(/\*/g, '').trim() : '',
+      };
+      while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+      stack[stack.length - 1].children.push(param);
+      if (/^(\{|\[)/.test(value) || type === 'list' || type === 'Object') {
+        param.children = [];
+        stack.push({ indent, children: param.children });
+      }
+    }
+    return root;
+  }
+
+  private looseTaskParamType(value: string): string {
+    const lower = value.toLowerCase();
+    if (value.startsWith('[') || lower.includes('array') || lower.endsWith('[]') || lower.includes('list')) return 'list';
+    if (value.startsWith('{') || lower.includes('object') || lower.includes('map')) return 'Object';
+    if (/^-?\d+(\.\d+)?$/.test(value)) return 'Number';
+    if (lower === 'true' || lower === 'false') return 'Boolean';
+    if (/^(date|datetime|boolean|number|string|text|enum|money|id)$/i.test(value)) return value;
+    return 'String';
   }
 
   protected setTaskParamNote(param: TaskParam, value: string): void {
