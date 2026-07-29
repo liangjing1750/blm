@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/workbenches/process/flow/process-flow-canvas.scss"],
+  "sourcesContent": [".process-flow-canvas-shell {\n  position: relative;\n  flex: 1;\n  min-height: 240px;\n  padding: 10px;\n  overflow: auto;\n  border: 1px solid #cfe0f3;\n  border-radius: 12px;\n  background: #fff;\n  scrollbar-width: thin;\n}\n\n.process-flow-canvas-shell::-webkit-scrollbar {\n  width: 7px;\n  height: 7px;\n}\n\n.process-flow-canvas-shell::-webkit-scrollbar-thumb {\n  border-radius: 999px;\n  background: #c7d3df;\n}\n\n.process-flow-canvas {\n  position: relative;\n  min-width: 100%;\n  border: 1px solid #d8e4f2;\n  border-radius: 10px;\n  overflow: visible;\n  background:\n    linear-gradient(90deg, #f8fbff 0 116px, transparent 116px),\n    #fff;\n  background-size: 100% 100%, 100% 100%;\n}\n"],
+  "mappings": ";AAAA,CAAA;AACE,YAAA;AACA,QAAA;AACA,cAAA;AACA,WAAA;AACA,YAAA;AACA,UAAA,IAAA,MAAA;AACA,iBAAA;AACA,cAAA;AACA,mBAAA;;AAGF,CAZA,yBAYA;AACE,SAAA;AACA,UAAA;;AAGF,CAjBA,yBAiBA;AACE,iBAAA;AACA,cAAA;;AAGF,CAAA;AACE,YAAA;AACA,aAAA;AACA,UAAA,IAAA,MAAA;AACA,iBAAA;AACA,YAAA;AACA;IACE;MAAA,KAAA;MAAA,QAAA,EAAA,KAAA;MAAA,YAAA,MAAA;IAAA;AAEF,mBAAA,KAAA,IAAA,EAAA,KAAA;;",
+  "names": []
+}

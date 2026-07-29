@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/workbenches/component/shell/component-workbench-shell.component.scss"],
+  "sourcesContent": [":host {\n  display: block;\n  height: 100%;\n}\n\n.component-shell {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  height: 100%;\n  min-height: 0;\n}\n\n.component-view-toolbar {\n  background: #fff;\n}\n\n.component-shell-body {\n  min-height: 0;\n  flex: 1;\n  overflow: auto;\n}\n\n.demo-panel {\n  margin: 0;\n}\n"],
+  "mappings": ";AAAA;AACE,WAAA;AACA,UAAA;;AAGF,CAAA;AACE,WAAA;AACA,kBAAA;AACA,OAAA;AACA,UAAA;AACA,cAAA;;AAGF,CAAA;AACE,cAAA;;AAGF,CAAA;AACE,cAAA;AACA,QAAA;AACA,YAAA;;AAGF,CAAA;AACE,UAAA;;",
+  "names": []
+}

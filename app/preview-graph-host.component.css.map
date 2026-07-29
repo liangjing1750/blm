@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["angular:styles/component:css;8adf1d0339b56af9edaca9930114a0666c36d91e37695be86ff6a263d488cf59;C:/Users/Administrator/Desktop/project/blm/frontend-angular/src/app/workbenches/preview/preview-graph-host.component.ts"],
+  "sourcesContent": ["\n    :host {\n      display: block;\n      min-height: inherit;\n      overflow: visible;\n      background: #fff;\n    }\n\n    :host app-process-stage-workbench,\n    :host app-process-flow-workbench,\n    :host app-entity-design-workbench {\n      display: block;\n      min-height: inherit;\n      overflow: visible;\n    }\n  "],
+  "mappings": ";AACI;AACE,WAAS;AACT,cAAY;AACZ,YAAU;AACV,cAAY;AACd;AAEA,MAAM;AACN,MAAM;AACN,MAAM;AACJ,WAAS;AACT,cAAY;AACZ,YAAU;AACZ;",
+  "names": []
+}

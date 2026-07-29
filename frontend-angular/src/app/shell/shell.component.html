@@ -2,7 +2,9 @@
   <div class="toolbar-left">
     <span class="brand-mark">
       <span class="logo">BLM</span>
-      <span class="product-version">v{{ runtime.runtime.appVersion }}</span>
+      @if (runtime.runtime.appVersion) {
+        <span class="product-version">v{{ runtime.runtime.appVersion }}</span>
+      }
     </span>
     <span class="file-name" data-testid="current-file-name" [title]="currentDocumentLabel()">{{ currentDocumentLabel() }}</span>
     <span

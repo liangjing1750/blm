@@ -46,7 +46,7 @@
                 <span class="sb-caret-icon">▶</span>
               </button>
               <span class="sb-grp-badge">价值流</span>
-              <button class="sb-name sb-name-button" type="button" data-testid="sidebar-value-stream-name" [title]="stream.scope || stream.name" (click)="openValueDomain()">{{ stream.name }}</button>
+              <button class="sb-name sb-name-button" type="button" data-testid="sidebar-value-stream-name" data-locator-type="value-stream" [attr.data-locator-id]="stream.id" [title]="stream.scope || stream.name" (click)="openValueDomain()">{{ stream.name }}</button>
               <span class="sb-count">{{ stream.stageCount }}</span>
             </div>
             <ng-container *ngIf="!isCollapsedNode(streamKey(stream))">
@@ -88,7 +88,7 @@
                 <span class="sb-caret-icon">▶</span>
               </button>
               <span class="sb-grp-badge">业务组件</span>
-              <button class="sb-name sb-name-button" type="button" data-testid="sidebar-component-name" [title]="component.name" (click)="openComponentWorkbench(component)">{{ component.name }}</button>
+              <button class="sb-name sb-name-button" type="button" data-testid="sidebar-component-name" data-locator-type="component" [attr.data-locator-id]="component.id" [title]="component.name" (click)="openComponentWorkbench(component)">{{ component.name }}</button>
               <span class="sb-count">{{ component.constructCount }}</span>
             </div>
             <ng-container *ngIf="!isCollapsedNode(componentKey(component))">
@@ -107,7 +107,7 @@
                     <span class="sb-caret-icon">▶</span>
                   </button>
                   <span class="sb-grp-badge">业务构件</span>
-                  <button class="sb-name sb-name-button" type="button" data-testid="sidebar-construct-name" [title]="construct.name" (click)="openComponentWorkbench(component, construct, 'construct')">{{ construct.name }}</button>
+                  <button class="sb-name sb-name-button" type="button" data-testid="sidebar-construct-name" data-locator-type="construct" [attr.data-locator-id]="construct.id" [attr.data-locator-root-id]="component.id" [title]="construct.name" (click)="openComponentWorkbench(component, construct, 'construct')">{{ construct.name }}</button>
                   <span class="sb-count">实体 {{ construct.entityCount }}</span>
                   <span class="sb-count">任务 {{ construct.taskCount }}</span>
                 </div>
@@ -119,6 +119,7 @@
                       *ngFor="let entity of construct.entities"
                       type="button"
                       class="sb-asset-item sb-asset-link is-entity"
+                      data-locator-type="entity" [attr.data-locator-id]="entity.id" [attr.data-locator-parent-id]="construct.id" [attr.data-locator-root-id]="component.id"
                       (click)="openComponentWorkbench(component, construct, 'entity', entity.id)"
                     >
                       <span class="sb-asset-kind">实体</span>
@@ -134,6 +135,7 @@
                       *ngFor="let task of construct.tasks"
                       type="button"
                       class="sb-asset-item sb-asset-link is-task"
+                      data-locator-type="task" [attr.data-locator-id]="task.id" [attr.data-locator-parent-id]="construct.id" [attr.data-locator-root-id]="component.id"
                       (click)="openComponentWorkbench(component, construct, 'task', task.id)"
                     >
                       <span class="sb-asset-kind">任务</span>
@@ -149,6 +151,7 @@
                       type="button"
                       class="sb-proc-row sb-related-process-row"
                       data-testid="sidebar-construct-process-row"
+                      data-locator-type="support-process" [attr.data-locator-id]="process.id" [attr.data-locator-parent-id]="construct.id" [attr.data-locator-root-id]="component.id"
                       (click)="openProcess(process)"
                     >
                       <span class="sb-proc-kind">流程</span>
@@ -181,7 +184,7 @@
       <span class="sb-caret-icon">▶</span>
     </button>
     <span class="sb-grp-badge">阶段</span>
-    <button class="sb-name sb-name-button" type="button" data-testid="sidebar-stage-name" [title]="stage.name" (click)="openStage(stage)">{{ stage.name }}</button>
+    <button class="sb-name sb-name-button" type="button" data-testid="sidebar-stage-name" data-locator-type="stage" [attr.data-locator-id]="stage.id" [title]="stage.name" (click)="openStage(stage)">{{ stage.name }}</button>
     <span class="sb-count">{{ stage.processCount }}</span>
   </div>
   <ng-container *ngIf="!isCollapsedNode(stageKey(stage))">
@@ -197,7 +200,7 @@
           <span class="sb-caret-icon">▶</span>
         </button>
         <span class="sb-grp-badge">流程组</span>
-        <button class="sb-name sb-name-button" type="button" data-testid="sidebar-flow-group-name" [title]="group.name" (click)="openFlowGroup(stage, group)">{{ group.name }}</button>
+        <button class="sb-name sb-name-button" type="button" data-testid="sidebar-flow-group-name" data-locator-type="flow-group" [attr.data-locator-id]="group.id || group.name" [attr.data-locator-parent-id]="stage.id" [title]="group.name" (click)="openFlowGroup(stage, group)">{{ group.name }}</button>
         <span class="sb-count">{{ group.processCount }}</span>
         <span class="sb-move-btns sb-group-move-btns">
           <button
@@ -228,7 +231,7 @@
           (click)="openProcess(process)"
         >
           <span class="sb-proc-kind">流程</span>
-          <button class="sb-proc-main-button" type="button" (click)="openProcess(process); $event.stopPropagation()">
+          <button class="sb-proc-main-button" type="button" data-locator-type="process" [attr.data-locator-id]="process.id" (click)="openProcess(process); $event.stopPropagation()">
             <span class="sb-proc-name">{{ process.name }}</span>
           </button>
           <span class="sb-count">{{ process.nodeCount }}</span>

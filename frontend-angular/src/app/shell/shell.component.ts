@@ -26,6 +26,7 @@ import { ShellNotificationComponent, ShellNotificationKind } from '../core/shell
 import { OpenDocumentQuery, OpenSpaceSummary } from '../core/shell/open-document/open-document-query';
 import { routePathFromWorkbenchId, workbenchIdFromUrl } from '../core/shell/routing/main-workbench-route';
 import { SidebarDirectoryComponent } from '../core/shell/sidebar/sidebar-directory.component';
+import { buildSidebarLocatorLink, SidebarLocatorTarget } from '../core/shell/sidebar/sidebar-locator';
 import { ShellTabBarComponent } from '../core/shell/tab-bar/shell-tab-bar.component';
 import { WaitDialogComponent } from '../core/shell/wait-dialog/wait-dialog.component';
 import { SyncConflictError, SyncService } from '../core/sync/sync.service';
@@ -301,7 +302,7 @@ export class ShellComponent implements OnInit, OnDestroy {
       this.locatorMenu.set(null);
       return;
     }
-    const anchor = target?.closest?.('#tab-content, #sidebar-content, .file-name, .collab-status');
+    const anchor = target?.closest?.('#tab-content, #sidebar, #sidebar-content, .file-name, .collab-status');
     if (!anchor || !this.runtime.currentFile) {
       this.locatorMenu.set(null);
       return;
@@ -1003,6 +1004,24 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   protected locatorActions(target?: HTMLElement | null): LocatorAction[] {
     if (!this.runtime.currentFile) return [];
+    const directoryTarget = target?.closest?.('[data-locator-type]') as HTMLElement | null;
+    if (directoryTarget) {
+      const locator = buildSidebarLocatorLink({
+        type: directoryTarget.dataset['locatorType'] as SidebarLocatorTarget['type'],
+        id: directoryTarget.dataset['locatorId'] || '',
+        parentId: directoryTarget.dataset['locatorParentId'] || '',
+        rootId: directoryTarget.dataset['locatorRootId'] || '',
+        versionId: directoryTarget.dataset['locatorVersionId'] || '',
+      });
+      if (locator) {
+        return [{
+          id: `directory-${directoryTarget.dataset['locatorType']}`,
+          label: `复制${locator.label}链接`,
+          params: locator.params,
+          testId: `context-copy-directory-${directoryTarget.dataset['locatorType']}-link`,
+        }];
+      }
+    }
     const mainTab = String(this.runtime.ui['mainTab'] || 'panoramaWorkbench');
     const componentTab = String(this.runtime.ui['componentWorkbenchTab'] || '').trim();
     const inBusinessMindMap = Boolean(target?.closest?.('[data-testid="business-construct-tree-view"]'));
@@ -2216,6 +2235,16 @@ export class ShellComponent implements OnInit, OnDestroy {
     const procId = String(params.get('proc') || params.get('procId') || '').trim();
     const taskId = String(params.get('task') || params.get('taskId') || '').trim();
     const entityId = String(params.get('entity') || params.get('entityId') || '').trim();
+    const view = String(params.get('view') || '').trim();
+    const componentId = String(params.get('component') || '').trim();
+    const constructId = String(params.get('construct') || '').trim();
+    const serviceId = String(params.get('service') || '').trim();
+    const interfaceId = String(params.get('interface') || '').trim();
+    const orchestrationId = String(params.get('orchestration') || '').trim();
+    const stepId = String(params.get('step') || '').trim();
+    const stageId = String(params.get('stage') || '').trim();
+    const groupId = String(params.get('group') || '').trim();
+    const valueStreamId = String(params.get('valueStream') || '').trim();
     const mainTab = tab === 'process' || procId || taskId
       ? 'processWorkbench'
       : tab === 'data' || entityId
@@ -2225,9 +2254,27 @@ export class ShellComponent implements OnInit, OnDestroy {
     if (procId) this.runtime.ui['procId'] = procId;
     if (taskId) this.runtime.ui['taskId'] = taskId;
     if (entityId) this.runtime.ui['entityId'] = entityId;
+    if (componentId) this.runtime.ui['componentWorkbenchComponentId'] = componentId;
+    if (constructId) this.runtime.ui['componentWorkbenchConstructId'] = constructId;
+    if (serviceId) this.runtime.ui['applicationServiceUid'] = serviceId;
+    if (interfaceId) this.runtime.ui['applicationInterfaceUid'] = interfaceId;
+    if (orchestrationId) this.runtime.ui['applicationOrchestrationServiceUid'] = orchestrationId;
+    if (stepId) this.runtime.ui['applicationOrchestrationStepUid'] = stepId;
+    if (stageId) this.runtime.ui['stageId'] = stageId;
+    if (groupId) this.runtime.ui['stageFlowGroupFocus'] = { stageId, groupName: groupId };
+    if (valueStreamId) this.runtime.ui['valueStreamId'] = valueStreamId;
     if (mainTab === 'processWorkbench') {
-      this.runtime.ui['processWorkbenchView'] = taskId ? 'node' : 'flow';
-      this.runtime.ui['procView'] = taskId ? 'list' : 'flow';
+      this.runtime.ui['processWorkbenchView'] = view === 'valueDomain' ? 'valueDomain' : view === 'stage' ? 'stage' : taskId ? 'node' : 'flow';
+      this.runtime.ui['procView'] = view === 'valueDomain' ? 'valueDomain' : view === 'stage' ? 'stage' : taskId ? 'list' : 'flow';
+      if (view === 'stage') this.runtime.ui['stageViewMode'] = 'detail';
+    }
+    if (mainTab === 'constructWorkbench') {
+      this.runtime.ui['componentWorkbenchTab'] = view === 'entity' ? 'entity' : view === 'task' ? 'taskDef' : view === 'construct' ? 'businessConstruct' : 'businessComponent';
+      this.runtime.ui['componentWorkbenchFocus'] = { componentId, constructId, target: view === 'entity' ? 'entity' : view === 'task' ? 'task' : view === 'construct' ? 'construct' : 'component', assetId: entityId || taskId || constructId };
+      if (taskId) this.runtime.ui['taskDefinitionId'] = taskId;
+    }
+    if (mainTab === 'applicationWorkbench') {
+      this.runtime.ui['applicationWorkbenchTab'] = view === 'orchestration' ? 'orchestration' : 'service';
     }
     this.refreshShellView();
     void this.router.navigateByUrl(routePathFromWorkbenchId(mainTab));

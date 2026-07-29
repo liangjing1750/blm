@@ -121,7 +121,8 @@ const runtimeState: AngularRuntimeState = {
   runtime: {
     supportsCollab: true,
     agentUrl: 'http://127.0.0.1:8088',
-    appVersion: '3.1',
+    // 版本由后端读取根目录 version 文件后注入；加载前保持空值，避免显示过期版本。
+    appVersion: '',
   },
   collab: {
     seq: 0,

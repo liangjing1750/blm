@@ -566,21 +566,21 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       ui()['businessDomainFilter'] = domainId || 'all';
     },
     openValueDomain(): void {
-      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
-      else switchAngularMainTab('processWorkbench');
-      ui()['mainTab'] = 'processWorkbench';
       ui()['procView'] = 'valueDomain';
       ui()['taskId'] = null;
+      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
+      else switchAngularMainTab('processWorkbench');
+      if (typeof window !== 'undefined') emitRuntimeRefresh();
       runtime.render?.();
     },
     openStage(stageId: string): void {
-      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
-      else switchAngularMainTab('processWorkbench');
-      ui()['mainTab'] = 'processWorkbench';
       ui()['procView'] = 'stage';
       ui()['stageViewMode'] = 'detail';
       ui()['stageId'] = stageId;
       ui()['taskId'] = null;
+      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
+      else switchAngularMainTab('processWorkbench');
+      if (typeof window !== 'undefined') emitRuntimeRefresh();
       runtime.render?.();
     },
     openFlowGroup(stageId: string, groupName: string): void {
@@ -588,15 +588,15 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
       ui()['stageFlowGroupFocus'] = { stageId, groupName };
     },
     openProcess(processId: string): void {
-      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
-      else switchAngularMainTab('processWorkbench');
-      if (runtime.navigate) runtime.navigate('process', { procId: processId });
-      else navigateAngularWorkbench('process', { procId: processId });
-      ui()['mainTab'] = 'processWorkbench';
       ui()['processWorkbenchView'] = 'flow';
       ui()['procView'] = 'flow';
       ui()['procId'] = processId;
       ui()['taskId'] = null;
+      if (runtime.switchMainTab) runtime.switchMainTab('processWorkbench');
+      else switchAngularMainTab('processWorkbench');
+      if (typeof window !== 'undefined') emitRuntimeRefresh();
+      if (runtime.navigate) runtime.navigate('process', { procId: processId });
+      else navigateAngularWorkbench('process', { procId: processId });
       runtime.render?.();
     },
     moveProcessInStage,
@@ -619,4 +619,4 @@ export function createSidebarLegacyAdapter(runtime: SidebarRuntime = getAngularR
     },
   };
 }
-import { getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench, switchAngularMainTab } from '../../runtime/angular-runtime';
+import { emitRuntimeRefresh, getAngularRuntimeState, markAngularRuntimeModified, navigateAngularWorkbench, switchAngularMainTab } from '../../runtime/angular-runtime';

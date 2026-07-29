@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/app.scss"],
+  "sourcesContent": ["﻿:host {\n  display: block;\n  min-height: 100vh;\n}\n"],
+  "mappings": ";AAAC;AACC,WAAA;AACA,cAAA;;",
+  "names": []
+}
