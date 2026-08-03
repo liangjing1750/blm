@@ -5,6 +5,7 @@ import { confirmRuntimeAction, getAngularRuntimeState } from '../../../core/runt
 import { RichTextEditorComponent } from '../../../shared/rich-text/rich-text-editor.component';
 import { sanitizeRichTextHtml } from '../../../shared/rich-text/rich-text-utils';
 import { PROCESS_FORM_FIELD_TYPES, PROCESS_STEP_TYPES } from '../shared/process-node-options';
+import { NodeTextEditScheduler } from './node-text-edit-scheduler';
 import {
   LegacyEntity,
   LegacyProcess,
@@ -126,6 +127,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   @Input() editing = true;
   private autoResizeScheduled = false;
   private autoResizeVersion = -1;
+  private readonly textEditScheduler = new NodeTextEditScheduler();
   private readonly normalizedFormVersions = new WeakMap<LegacyTaskForm, number>();
   private readonly taskFormsCache = new WeakMap<LegacyProcessNode, { version: number; forms: LegacyTaskForm[] }>();
 
@@ -139,6 +141,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   ngOnDestroy(): void {
+    this.textEditScheduler.cancel();
     window.removeEventListener('blm-workbench-refresh', this.onRefresh);
   }
 
@@ -992,6 +995,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected selectProcess(processId: string): void {
+    this.flushTextEditCommit();
     this.adapter.selectProcess(processId);
     const process = this.processes().find((item) => this.processId(item) === processId) || null;
     this.adapter.selectTask(this.tasks(process)[0] ? this.taskId(this.tasks(process)[0]) : null);
@@ -1346,11 +1350,13 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected selectTask(task: LegacyProcessNode | null): void {
+    this.flushTextEditCommit();
     this.adapter.selectTask(task ? this.taskId(task) : null);
     this.refresh();
   }
 
   protected closeEditor(): void {
+    this.flushTextEditCommit();
     this.adapter.closeEditor();
   }
 
@@ -1477,7 +1483,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     task.userSteps ||= [];
     task.userSteps[index] ||= {};
     task.userSteps[index].name = value;
-    this.adapter.touch();
+    this.scheduleTextEditCommit();
   }
 
   protected setUserStepType(step: LegacyUserStep, value: string): void {
@@ -1487,7 +1493,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setUserStepNote(step: LegacyUserStep, value: string): void {
     step.note = value;
-    this.adapter.touch();
+    this.scheduleTextEditCommit();
   }
 
   protected moveUserStep(task: LegacyProcessNode, index: number, delta: number): void {
@@ -1524,7 +1530,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setFormName(task: LegacyProcessNode, form: LegacyTaskForm, value: string): void {
     if (!this.editing) return;
-    this.adapter.setFormName(task, form, value);
+    form.name = value;
+    this.scheduleTextEditCommit();
   }
 
   protected async removeForm(task: LegacyProcessNode, form: LegacyTaskForm): Promise<void> {
@@ -1608,7 +1615,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected setFormPurpose(form: LegacyTaskForm, value: string): void {
     if (!this.editing) return;
     form.purpose = value;
-    this.adapter.touch();
+    this.scheduleTextEditCommit();
   }
 
   protected toggleFormCopyMenu(form: LegacyTaskForm, event: MouseEvent): void {
@@ -1784,7 +1791,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected setFormSection(section: LegacyTaskFormSection, key: 'name' | 'note' | 'entity_id', value: string): void {
     if (!this.editing) return;
     section[key] = value;
-    this.adapter.touch();
+    if (key === 'name' || key === 'note') this.scheduleTextEditCommit();
+    else this.adapter.touch();
   }
 
   protected setFormSectionEntity(form: LegacyTaskForm, section: LegacyTaskFormSection, value: string): void {
@@ -1810,7 +1818,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   protected setFormField(field: LegacyFormField, key: 'name' | 'type' | 'note' | 'entity_field', value: string): void {
     if (!this.editing) return;
     field[key] = value;
-    this.adapter.touch();
+    if (key === 'name' || key === 'note') this.scheduleTextEditCommit();
+    else this.adapter.touch();
   }
 
   protected setFormFieldRequired(field: LegacyFormField, value: boolean): void {
@@ -1842,7 +1851,8 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
   }
 
   protected setTaskDefinition(taskDefinition: LegacyTaskDefinition, key: 'name' | 'target' | 'address', value: string): void {
-    this.adapter.setTaskDefinition(taskDefinition, key, value);
+    taskDefinition[key] = value;
+    this.scheduleTextEditCommit();
   }
 
   protected removeTaskDefinition(task: LegacyProcessNode, taskDefinition: LegacyTaskDefinition): void {
@@ -1883,8 +1893,14 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected setBusinessRule(task: LegacyProcessNode, index: number, value: string): void {
     if (!this.editing) return;
-    this.adapter.setBusinessRule(task, index, value);
-    this.adapter.touch();
+    task.businessRules ||= [];
+    const current = task.businessRules[index];
+    if (!current || typeof current === 'string') {
+      task.businessRules[index] = { id: `BR${index + 1}`, uid: `BR${index + 1}`, name: '', content: value };
+    } else {
+      current.content = value;
+    }
+    this.scheduleTextEditCommit();
   }
 
   protected setBusinessRuleName(task: LegacyProcessNode, index: number, value: string): void {
@@ -1896,7 +1912,7 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
     } else {
       current.name = value;
     }
-    this.adapter.touch();
+    this.scheduleTextEditCommit();
   }
 
   protected moveBusinessRule(task: LegacyProcessNode, index: number, delta: number): void {
@@ -1917,6 +1933,14 @@ export class ProcessEditorWorkbenchComponent implements OnInit, OnDestroy, After
 
   protected refresh(): void {
     this.version.update((value) => value + 1);
+  }
+
+  private scheduleTextEditCommit(): void {
+    this.textEditScheduler.schedule(() => this.adapter.touch());
+  }
+
+  private flushTextEditCommit(): void {
+    this.textEditScheduler.flush();
   }
 
   private pasteFormClone(task: LegacyProcessNode, form: LegacyTaskForm): void {
